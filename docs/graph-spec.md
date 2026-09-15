@@ -1,6 +1,7 @@
-# Graph Definition Schema v0 - draft
+# Graph Definition Schema v0
 
-This document is the design input for feature F0.1. It is not yet an implemented contract.
+This document defines the YAML authoring contract implemented by feature F0.1.
+Parsing produces typed Go structures but does not validate graph semantics.
 
 ## Goals
 
@@ -28,7 +29,7 @@ The graph format must be:
 
 ## Top-level shape
 
-Proposed YAML:
+YAML shape:
 
 ```yaml
 schema_version: 0
@@ -99,7 +100,12 @@ outputs:
     from: merge.outputs.stdout
 ```
 
-The exact binding syntax may change during F0.1/F0.3. If changed, record the decision in the feature spec or an ADR if it becomes a durable public contract.
+Schema v0 uses the binding reference syntax shown above. F0.1 preserves these
+references as typed strings. Reference grammar and referential integrity are
+validated by F0.2/F0.3 rather than by the parser.
+
+The top-level `graph_input_bindings` field is optional so graphs without graph
+inputs do not need to declare an empty list.
 
 ## Identifiers
 
@@ -119,9 +125,9 @@ The exact binding syntax may change during F0.1/F0.3. If changed, record the dec
 
 ## Types
 
-Schema v0 should keep the value type system deliberately small.
+Schema v0 keeps the value type system deliberately small.
 
-Initial candidates:
+Declared types:
 
 ```text
 string
@@ -153,6 +159,12 @@ nodes:
 
 The stable graph layer should distinguish declared contracts from type-specific configuration.
 
+`config` is an open mapping. The graph package preserves its nested YAML data
+without interpreting strings, expanding environment variables, executing
+commands, resolving templates, reading files, or accessing the network. A
+node-type implementation may decode the mapping into a stricter type in a
+later feature.
+
 ## Edge definition
 
 An edge maps one declared source output to one declared target input.
@@ -172,11 +184,16 @@ Validation must reject:
 - duplicate conflicting bindings;
 - cycles in the v0 DAG.
 
+These checks belong to F0.2. F0.1 accepts structurally valid documents even
+when their references or graph topology are semantically invalid.
+
 ## Graph input binding
 
 Top-level graph inputs should be mapped explicitly to node inputs rather than becoming hidden globals.
 
-The exact syntax is still open for F0.1/F0.3, but the semantic requirement is fixed: node readiness must be derivable from declared inputs and dependencies.
+Schema v0 represents each mapping with `from: inputs.INPUT_NAME` and
+`to: NODE_ID.inputs.INPUT_NAME`. F0.3 will resolve these references so node
+readiness can be derived from declared inputs and dependencies.
 
 ## Graph outputs
 
@@ -195,10 +212,30 @@ A graph output must reference an output that can be produced on every successful
 Metadata may include non-semantic fields such as description, tags, and future canvas layout.
 
 Visual layout must be excluded from any semantic graph hash introduced later.
+Metadata is therefore an open mapping and is kept separate from execution
+fields in the typed definition.
+
+## Parsing and serialization
+
+- A graph definition is exactly one YAML document.
+- `schema_version` is required, must be a YAML integer, and schema v0 is the
+  only supported version.
+- Unknown fields fail at the graph, graph input, node, port, edge, graph input
+  binding, and graph output levels.
+- Arbitrary keys are allowed only inside the explicit `metadata` and `config`
+  extension mappings.
+- Malformed YAML, an unsupported version, an unknown typed field, or multiple
+  YAML documents returns an error and no partial definition.
+- Serialization accepts only schema v0 definitions.
+- YAML formatting may be normalized during serialization.
 
 ## Secrets
 
-Raw secrets are forbidden in graph files.
+Raw secrets are forbidden in graph files. Schema v0 has no generic `secret` or
+`secrets` field, and strict parsing rejects such undeclared top-level fields.
+Because node `config` is intentionally opaque, the parser cannot reliably
+identify whether an ordinary configuration string contains sensitive data;
+authors and later node implementations must not place raw secrets there.
 
 Later graphs may reference named secrets:
 
@@ -239,4 +276,6 @@ Warnings should not block execution unless promoted by policy.
 
 Parsing and serializing a valid graph may normalize formatting but must preserve semantic meaning.
 
-Tests should compare normalized semantic structures, not byte-for-byte YAML formatting.
+Schema v0 uses the complete decoded `Definition` as its normalized round-trip
+representation. Tests compare typed structures, not byte-for-byte YAML or map
+iteration order. A semantic hash is outside F0.1.
