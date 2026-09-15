@@ -1,0 +1,28 @@
+# Build output
+/bin/
+/dist/
+/tmp/
+
+# Go
+*.test
+*.out
+coverage.out
+
+# Local AgentPlane state
+.agentplane/
+*.db
+*.db-shm
+*.db-wal
+
+# Experiment output generated locally
+experiments/out/
+
+# IDE/OS
+.DS_Store
+.idea/
+.vscode/
+
+# Environment/secrets
+.env
+.env.*
+!.env.example

@@ -1,0 +1,48 @@
+schema_version: 0
+id: hello-parallel
+name: Hello Parallel
+
+inputs: {}
+
+nodes:
+  left:
+    type: shell
+    config:
+      command: printf
+      args: ["left\\n"]
+    outputs:
+      stdout:
+        type: string
+
+  right:
+    type: shell
+    config:
+      command: printf
+      args: ["right\\n"]
+    outputs:
+      stdout:
+        type: string
+
+  merge:
+    type: shell
+    inputs:
+      left_text:
+        type: string
+      right_text:
+        type: string
+    config:
+      command: printf
+      args: ["merge placeholder\\n"]
+    outputs:
+      stdout:
+        type: string
+
+edges:
+  - from: left.outputs.stdout
+    to: merge.inputs.left_text
+  - from: right.outputs.stdout
+    to: merge.inputs.right_text
+
+outputs:
+  result:
+    from: merge.outputs.stdout

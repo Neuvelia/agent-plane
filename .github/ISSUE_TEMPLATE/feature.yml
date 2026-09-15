@@ -1,0 +1,44 @@
+name: Roadmap feature
+about: Track one feature spec through planning, implementation, and review
+title: "[FEATURE] "
+labels: ["feature"]
+body:
+  - type: input
+    id: feature_id
+    attributes:
+      label: Feature ID
+      placeholder: F0.1
+    validations:
+      required: true
+
+  - type: input
+    id: spec
+    attributes:
+      label: Feature spec
+      placeholder: docs/features/F0.1-graph-definition-schema-v0.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: Observable capability delivered by this issue.
+    validations:
+      required: true
+
+  - type: textarea
+    id: plan
+    attributes:
+      label: Approved implementation plan
+      description: Paste or link the reviewed plan.
+
+  - type: checkboxes
+    id: gates
+    attributes:
+      label: Completion gates
+      options:
+        - label: Acceptance criteria covered by tests
+        - label: make check passes
+        - label: Separate review completed
+        - label: Diff contains no unrelated scope
