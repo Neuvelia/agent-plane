@@ -1,0 +1,475 @@
+package shell
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"agentplane/internal/graph"
+	"agentplane/internal/runtime"
+)
+
+func TestHelperProcess(t *testing.T) {
+	if os.Getenv("AGENTPLANE_HELPER") != "1" {
+		return
+	}
+	var args []string
+	for i, arg := range os.Args {
+		if arg == "--" {
+			args = os.Args[i+1:]
+			break
+		}
+	}
+	if len(args) == 0 {
+		os.Exit(90)
+	}
+	switch args[0] {
+	case "echo":
+		data, _ := json.Marshal(args[1:])
+		fmt.Print(string(data))
+		fmt.Fprint(os.Stderr, "stderr only")
+	case "fail":
+		fmt.Print("partial")
+		fmt.Fprint(os.Stderr, "failure detail")
+		os.Exit(7)
+	case "cwd":
+		cwd, _ := os.Getwd()
+		fmt.Print(cwd)
+	case "env":
+		fmt.Printf("%s|%s|%s", os.Getenv("SHELL_ALLOWED"), os.Getenv("SHELL_ADDED"), os.Getenv("SHELL_SECRET"))
+	case "json":
+		fmt.Print(args[1])
+	case "wait":
+		_ = os.WriteFile(args[1], []byte("ready"), 0600)
+		for {
+			time.Sleep(time.Hour)
+		}
+	case "touch":
+		_ = os.WriteFile(args[1], []byte("ran"), 0600)
+	case "empty":
+	case "bulk":
+		data := strings.Repeat("x", 1<<20)
+		fmt.Fprint(os.Stdout, data)
+		fmt.Fprint(os.Stderr, data)
+	case "spawn-holder":
+		child := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", "pipeholder", args[1], args[2], args[3])
+		child.Env = os.Environ()
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
+			os.Exit(92)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if _, err := os.Stat(args[1]); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				os.Exit(93)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		fmt.Print("direct child exited")
+		if len(args) > 4 && args[4] == "wait" {
+			for {
+				time.Sleep(time.Hour)
+			}
+		}
+	case "pipeholder":
+		_ = os.WriteFile(args[1], []byte("ready"), 0600)
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			if _, err := os.Stat(args[2]); err == nil || time.Now().After(deadline) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		_ = os.WriteFile(args[3], []byte("done"), 0600)
+	default:
+		os.Exit(91)
+	}
+	os.Exit(0)
+}
+
+func helperNode(mode string, more ...string) graph.NodeDefinition {
+	args := append([]string{"-test.run=^TestHelperProcess$", "--", mode}, more...)
+	return graph.NodeDefinition{Type: "shell", Config: graph.NodeConfig{
+		"command": os.Args[0], "args": args, "env": map[string]string{"AGENTPLANE_HELPER": "1"},
+	}}
+}
+
+func TestExecuteCapturesSeparateStreamsAndPreservesArgv(t *testing.T) {
+	result, err := (Executor{}).Execute(context.Background(), "worker", helperNode("echo", "two words", "$HOME; $(echo unsafe)", "quote\"'\\"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.ExitCode != 0 || result.Stdout != `["two words","$HOME; $(echo unsafe)","quote\"'\\"]` || result.Stderr != "stderr only" {
+		t.Fatalf("result = %#v", result)
+	}
+	if result.StartedAt.IsZero() || result.EndedAt.Before(result.StartedAt) {
+		t.Fatalf("timestamps = %v / %v", result.StartedAt, result.EndedAt)
+	}
+}
+
+func TestExecuteNonzeroExitPreservesEvidence(t *testing.T) {
+	result, err := (Executor{}).Execute(context.Background(), "worker", helperNode("fail"), nil)
+	var executionErr *ExecutionError
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureExit || result.ExitCode != 7 || executionErr.Result.ExitCode != 7 {
+		t.Fatalf("result/error = %#v / %v", result, err)
+	}
+	if result.Stdout != "partial" || result.Stderr != "failure detail" || result.EndedAt.IsZero() {
+		t.Fatalf("evidence = %#v", result)
+	}
+}
+
+func TestExecuteCwdAndExplicitEnvironment(t *testing.T) {
+	dir := t.TempDir()
+	node := helperNode("cwd")
+	node.Config["cwd"] = dir
+	result, err := (Executor{}).Execute(context.Background(), "worker", node, nil)
+	resolvedDir, resolveErr := filepath.EvalSymlinks(dir)
+	if err != nil || resolveErr != nil || result.Stdout != resolvedDir {
+		t.Fatalf("cwd = %#v / %v", result, err)
+	}
+	t.Setenv("SHELL_ALLOWED", "inherited")
+	t.Setenv("SHELL_ADDED", "parent")
+	t.Setenv("SHELL_SECRET", "must-not-leak")
+	node = helperNode("env")
+	node.Config["env_allowlist"] = []string{"SHELL_ALLOWED", "SHELL_ADDED"}
+	node.Config["env"].(map[string]string)["SHELL_ADDED"] = "explicit"
+	result, err = (Executor{}).Execute(context.Background(), "worker", node, nil)
+	if err != nil || result.Stdout != "inherited|explicit|" {
+		t.Fatalf("environment = %#v / %v", result, err)
+	}
+}
+
+func TestExecuteResolvesRelativeCwdFromRunnerDirectory(t *testing.T) {
+	runnerDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	targetDir := t.TempDir()
+	relativeDir, err := filepath.Rel(runnerDir, targetDir)
+	if err != nil {
+		t.Skipf("runner and temp directory have no relative path: %v", err)
+	}
+	node := helperNode("cwd")
+	node.Config["cwd"] = relativeDir
+	result, err := (Executor{}).Execute(context.Background(), "worker", node, nil)
+	resolvedTarget, resolveErr := filepath.EvalSymlinks(targetDir)
+	if err != nil || resolveErr != nil || result.Stdout != resolvedTarget {
+		t.Fatalf("relative cwd %q = %#v / %v", relativeDir, result, err)
+	}
+}
+
+func TestExecuteDrainsLargeSeparateStreamsAndEmptyOutput(t *testing.T) {
+	result, err := (Executor{}).Execute(context.Background(), "worker", helperNode("bulk"), nil)
+	if err != nil || len(result.Stdout) != 1<<20 || len(result.Stderr) != 1<<20 || result.ExitCode != 0 {
+		t.Fatalf("large streams: stdout=%d stderr=%d exit=%d err=%v", len(result.Stdout), len(result.Stderr), result.ExitCode, err)
+	}
+	result, err = (Executor{}).Execute(context.Background(), "worker", helperNode("empty"), nil)
+	if err != nil || result.Stdout != "" || result.Stderr != "" || result.ExitCode != 0 {
+		t.Fatalf("empty output = %#v / %v", result, err)
+	}
+}
+
+func TestExecuteDistinguishesStartErrors(t *testing.T) {
+	missingExe := graph.NodeDefinition{Type: "shell", Config: graph.NodeConfig{"command": filepath.Join(t.TempDir(), "missing")}}
+	badCwd := helperNode("echo")
+	badCwd.Config["cwd"] = filepath.Join(t.TempDir(), "missing")
+	for _, node := range []graph.NodeDefinition{missingExe, badCwd} {
+		result, err := (Executor{}).Execute(context.Background(), "worker", node, nil)
+		var executionErr *ExecutionError
+		if !errors.As(err, &executionErr) || executionErr.Kind != FailureStart || result.ExitCode != -1 {
+			t.Fatalf("start = %#v / %v", result, err)
+		}
+	}
+}
+
+func TestExecuteCancellationTerminatesChild(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ready")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type outcome struct {
+		result Result
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := (Executor{}).Execute(ctx, "worker", helperNode("wait", marker), nil)
+		done <- outcome{result, err}
+	}()
+	deadline := time.After(5 * time.Second)
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		select {
+		case got := <-done:
+			t.Fatalf("child ended early: %#v", got)
+		case <-deadline:
+			t.Fatal("child did not start")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case got := <-done:
+		if !errors.Is(got.err, context.Canceled) || got.result.EndedAt.IsZero() {
+			t.Fatalf("cancellation = %#v", got)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("child did not terminate")
+	}
+}
+
+func TestExecuteNodeJSONThroughScheduler(t *testing.T) {
+	node := helperNode("json", `{"answer":[1,true]}`)
+	node.Config["stdout_json"] = true
+	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}, "stderr": {Type: graph.ValueTypeString}, "exit_code": {Type: graph.ValueTypeNumber}, "json": {Type: graph.ValueTypeJSON, Required: true}}
+	definition := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-test", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{"data": {From: "worker.outputs.json"}}}
+	run, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{})
+	if err != nil || run.State != runtime.RunSucceeded || run.Nodes[0].State != runtime.NodeSucceeded {
+		t.Fatalf("run = %#v / %v", run, err)
+	}
+	data, ok := run.Outputs[0].Value.AsJSON()
+	if !ok || string(data) != `{"answer":[1,true]}` {
+		t.Fatalf("json = %q, %v", data, ok)
+	}
+	if len(run.Nodes[0].Outputs) != 4 {
+		t.Fatalf("node outputs = %#v", run.Nodes[0].Outputs)
+	}
+	ports := make(map[string]graph.Value)
+	for _, output := range run.Nodes[0].Outputs {
+		ports[output.Name] = output.Value
+	}
+	stdout, stdoutOK := ports["stdout"].AsString()
+	stderr, stderrOK := ports["stderr"].AsString()
+	exitCode, exitOK := ports["exit_code"].AsNumber()
+	if !stdoutOK || stdout != `{"answer":[1,true]}` || !stderrOK || stderr != "" || !exitOK || exitCode != "0" {
+		t.Fatalf("process outputs = %#v", ports)
+	}
+}
+
+func TestExecuteNodeRejectsInvalidJSONAndConfig(t *testing.T) {
+	node := helperNode("json", `prefix {"x":1}`)
+	node.Config["stdout_json"] = true
+	node.Outputs = map[string]graph.PortDefinition{"json": {Type: graph.ValueTypeJSON, Required: true}}
+	_, err := (Executor{}).ExecuteNode(context.Background(), "worker", node, nil)
+	var executionErr *ExecutionError
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureOutput || !strings.Contains(executionErr.Result.Stdout, "prefix") {
+		t.Fatalf("JSON error = %v", err)
+	}
+	node.Config["args"] = []any{"okay", 7}
+	_, err = (Executor{}).ExecuteNode(context.Background(), "worker", node, nil)
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureConfig {
+		t.Fatalf("config error = %v", err)
+	}
+}
+
+func TestExecuteNodeRejectsUnsupportedOutputBeforeProcessStarts(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	node := helperNode("touch", marker)
+	node.Outputs = map[string]graph.PortDefinition{"unexpected": {Type: graph.ValueTypeString}}
+	_, err := (Executor{}).ExecuteNode(context.Background(), "worker", node, nil)
+	var executionErr *ExecutionError
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureConfig {
+		t.Fatalf("output config error = %v", err)
+	}
+	if _, err := os.Stat(marker); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("process ran despite invalid output config: %v", err)
+	}
+}
+
+func TestNonzeroExitFailsSchedulerWithTypedEvidence(t *testing.T) {
+	node := helperNode("fail")
+	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}}
+	definition := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-fail", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
+	run, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{})
+	var executionErr *ExecutionError
+	if err != nil || run.State != runtime.RunFailed || run.Nodes[0].State != runtime.NodeFailed || run.Failure == nil || !errors.As(run.Failure.Err, &executionErr) || executionErr.Kind != FailureExit || executionErr.Result.ExitCode != 7 || len(run.Nodes[0].Outputs) != 0 {
+		t.Fatalf("run = %#v / %v", run, err)
+	}
+}
+
+func TestParsedYAMLShellConfigRunsThroughScheduler(t *testing.T) {
+	document := fmt.Sprintf(`schema_version: 0
+id: parsed-shell
+inputs: {}
+nodes:
+  worker:
+    type: shell
+    config:
+      command: %q
+      args: ["-test.run=^TestHelperProcess$", "--", "echo", "two words"]
+      env:
+        AGENTPLANE_HELPER: "1"
+    outputs:
+      stdout:
+        type: string
+        required: true
+edges: []
+outputs:
+  text:
+    from: worker.outputs.stdout
+`, os.Args[0])
+	definition, err := graph.Parse([]byte(document))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{})
+	if err != nil || run.State != runtime.RunSucceeded {
+		t.Fatalf("parsed run = %#v / %v; failure = %v", run, err, run.Failure)
+	}
+	value, ok := run.Outputs[0].Value.AsString()
+	if !ok || value != `["two words"]` {
+		t.Fatalf("parsed output = %q, %v", value, ok)
+	}
+}
+
+type cancelAfterFirstCheck struct {
+	context.Context
+	done   chan struct{}
+	checks atomic.Int32
+}
+
+func (c *cancelAfterFirstCheck) Done() <-chan struct{} { return c.done }
+func (c *cancelAfterFirstCheck) Err() error {
+	if c.checks.Add(1) == 1 {
+		close(c.done)
+		return nil
+	}
+	return context.Canceled
+}
+
+func TestStartErrorIsNotMaskedByConcurrentCancellation(t *testing.T) {
+	ctx := &cancelAfterFirstCheck{Context: context.Background(), done: make(chan struct{})}
+	node := graph.NodeDefinition{Type: "shell", Config: graph.NodeConfig{"command": "agentplane-command-definitely-missing"}}
+	_, err := (Executor{}).Execute(ctx, "worker", node, nil)
+	var executionErr *ExecutionError
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureStart || !errors.Is(err, exec.ErrNotFound) {
+		t.Fatalf("start error after cancellation = %v", err)
+	}
+}
+
+func TestExplicitEnvironmentFollowsCaseVariantAllowlistValue(t *testing.T) {
+	t.Setenv("shell_case", "parent")
+	environment := buildEnvironment(config{envAllowlist: []string{"shell_case"}, env: map[string]string{"SHELL_CASE": "explicit"}})
+	if len(environment) != 2 || environment[0] != "shell_case=parent" || environment[1] != "SHELL_CASE=explicit" {
+		t.Fatalf("environment order = %#v", environment)
+	}
+}
+
+func TestConfigErrorsSelectStableField(t *testing.T) {
+	node := graph.NodeDefinition{Type: "shell", Config: graph.NodeConfig{"command": "ignored", "zzz": true, "aaa": true}}
+	for range 100 {
+		_, err := parseConfig(node)
+		if err == nil || !strings.Contains(err.Error(), `"aaa"`) {
+			t.Fatalf("unknown field error = %v", err)
+		}
+	}
+}
+
+func TestExecuteDoesNotWaitForeverForInheritedOutputPipes(t *testing.T) {
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "holder-ready")
+	release := filepath.Join(dir, "holder-release")
+	holderDone := filepath.Join(dir, "holder-done")
+	releaseHolder := func() { _ = os.WriteFile(release, []byte("release"), 0600) }
+	defer releaseAndWaitForHolder(t, ready, release, holderDone)
+	type outcome struct {
+		result Result
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := (Executor{}).Execute(context.Background(), "worker", helperNode("spawn-holder", ready, release, holderDone), nil)
+		done <- outcome{result, err}
+	}()
+	select {
+	case got := <-done:
+		var executionErr *ExecutionError
+		if !errors.As(got.err, &executionErr) || executionErr.Kind != FailureOutput || !errors.Is(got.err, exec.ErrWaitDelay) || got.result.ExitCode != 0 || got.result.Stdout != "direct child exited" {
+			t.Fatalf("inherited-pipe result = %#v / %v", got.result, got.err)
+		}
+	case <-time.After(3 * time.Second):
+		releaseHolder()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("executor did not return after holder released its pipes")
+		}
+		t.Fatal("executor waited for a descendant's inherited output pipes")
+	}
+}
+
+func TestExecuteCancellationReturnsWithInheritedOutputPipes(t *testing.T) {
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "holder-ready")
+	release := filepath.Join(dir, "holder-release")
+	holderDone := filepath.Join(dir, "holder-done")
+	defer releaseAndWaitForHolder(t, ready, release, holderDone)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	type outcome struct {
+		result Result
+		err    error
+	}
+	done := make(chan outcome, 1)
+	go func() {
+		result, err := (Executor{}).Execute(ctx, "worker", helperNode("spawn-holder", ready, release, holderDone, "wait"), nil)
+		done <- outcome{result, err}
+	}()
+	deadline := time.After(5 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		select {
+		case got := <-done:
+			t.Fatalf("direct child ended before cancellation: %#v", got)
+		case <-deadline:
+			t.Fatal("pipe holder did not start")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case got := <-done:
+		var executionErr *ExecutionError
+		if !errors.As(got.err, &executionErr) || executionErr.Kind != FailureCanceled || !errors.Is(got.err, context.Canceled) || got.result.EndedAt.IsZero() {
+			t.Fatalf("cancellation with inherited pipes = %#v / %v", got.result, got.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("cancellation remained blocked on inherited output pipes")
+	}
+}
+
+func releaseAndWaitForHolder(t *testing.T, ready, release, done string) {
+	t.Helper()
+	if err := os.WriteFile(release, []byte("release"), 0600); err != nil {
+		t.Errorf("release pipe holder: %v", err)
+		return
+	}
+	if _, err := os.Stat(ready); err != nil {
+		return
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(done); err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Error("pipe holder did not exit after release")
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}

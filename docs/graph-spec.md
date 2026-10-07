@@ -31,6 +31,10 @@ The graph format must be:
 
 YAML shape:
 
+The following illustrates schema and binding syntax. It is not an executable
+F0.5 data-passing example: strings such as `{{ inputs.message }}` are literal
+Shell Node arguments, and bound inputs are not interpolated into commands.
+
 ```yaml
 schema_version: 0
 id: hello-parallel
@@ -185,6 +189,55 @@ without interpreting strings, expanding environment variables, executing
 commands, resolving templates, reading files, or accessing the network. A
 node-type implementation may decode the mapping into a stricter type in a
 later feature.
+
+### Shell node configuration (F0.5)
+
+For `type: shell`, F0.5 accepts this `config` shape:
+
+```yaml
+config:
+  command: go
+  args: ["test", "./..."]
+  cwd: /path/to/workspace
+  env_allowlist: ["HOME", "PATH"]
+  env:
+    CI: "true"
+  stdout_json: false
+```
+
+`command` is a required nonempty executable name or path. `args` is an
+optional list of literal strings, defaulting to empty. `cwd` is an optional
+working directory; omission uses the runner's current directory. Bare
+executable names are resolved using the runner's PATH before launch. The
+command and arguments are never passed through a system shell and are not
+interpolated. Bound node inputs do not alter command, args, cwd, or env in
+F0.5.
+
+A relative `cwd` is resolved against the runner process's current working
+directory at execution time, not against the graph definition file. Authors
+should use an absolute path when that execution context is not fixed.
+
+The child environment starts empty (Go adds the platform-required
+`SYSTEMROOT` value on Windows). `env_allowlist` copies only named,
+currently present variables from the runner; `env` adds explicit string
+values and wins on duplicate names. Both fields default to empty. Unknown
+configuration fields, malformed types, and invalid environment names fail
+execution before the process starts. Raw secrets must not be embedded in
+graph configuration.
+
+Shell nodes may declare `stdout` and `stderr` string outputs and an
+`exit_code` number output. Only declared outputs are returned. With
+`stdout_json: true`, they may also declare a `json` output of type `json`;
+the entire stdout must then be one valid JSON value. No JSON is extracted
+from surrounding text. Invalid JSON fails the node. Output port names outside
+this set fail before process launch. The ordinary F0.4 output contract checks
+declared types. A nonzero exit fails the node; captured process evidence is
+available on the typed execution error, not as accepted graph outputs.
+After the direct child exits, the executor allows one second for inherited
+stdout/stderr pipes to drain. If another process keeps them open longer after
+an otherwise successful direct-child exit, the node fails with an output error
+and preserves any output captured before the deadline. A nonzero direct-child
+exit remains an exit failure. This does not terminate that other process.
 
 ## Edge definition
 
