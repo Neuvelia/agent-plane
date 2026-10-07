@@ -357,6 +357,22 @@ outputs:
 	}
 }
 
+func TestParseRejectsDuplicateNodeIDs(t *testing.T) {
+	definition, err := Parse([]byte(`
+schema_version: 0
+id: duplicate-nodes
+inputs: {}
+nodes:
+  worker: {type: shell}
+  worker: {type: shell}
+edges: []
+outputs: {}
+`))
+	if definition != nil || err == nil {
+		t.Fatalf("Parse() = (%#v, %v), want duplicate node ID error and no definition", definition, err)
+	}
+}
+
 func TestParseMalformedYAMLReturnsNoPartialDefinition(t *testing.T) {
 	definition, err := Parse([]byte(`
 schema_version: 0

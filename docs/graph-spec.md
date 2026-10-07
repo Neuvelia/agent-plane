@@ -101,8 +101,8 @@ outputs:
 ```
 
 Schema v0 uses the binding reference syntax shown above. F0.1 preserves these
-references as typed strings. Reference grammar and referential integrity are
-validated by F0.2/F0.3 rather than by the parser.
+references as typed strings. F0.2 validates their grammar and referential
+integrity after structural parsing; F0.3 resolves their runtime values.
 
 The top-level `graph_input_bindings` field is optional so graphs without graph
 inputs do not need to declare an empty list.
@@ -114,7 +114,7 @@ inputs do not need to declare an empty list.
 - required;
 - unique in its repository namespace;
 - stable across content edits;
-- recommended character set: lowercase ASCII letters, digits, dash.
+- must follow the identifier grammar below.
 
 ### Node ID
 
@@ -122,6 +122,27 @@ inputs do not need to declare an empty list.
 - unique within the graph;
 - stable enough to appear in events and diagnostics;
 - must not depend on visual position.
+
+### Identifier grammar
+
+Graph IDs, node IDs, graph input names, node input names, node output names,
+and graph output names must begin with a lowercase ASCII letter. Remaining
+characters may be lowercase ASCII letters, digits, hyphens, or underscores.
+Dots are not permitted because they delimit references.
+
+### Reference grammar
+
+References use identifiers defined above and have exactly one of these forms:
+
+```text
+NODE.outputs.PORT
+NODE.inputs.PORT
+inputs.INPUT
+```
+
+The first form is used by edge sources and graph outputs, the second by edge
+targets and graph-input-binding targets, and the third by graph-input-binding
+sources.
 
 ## Types
 
@@ -263,12 +284,11 @@ Examples:
 
 ### Warnings
 
-Later examples:
+F0.2 reports a warning for a declared node output that is not consumed by a
+valid, type-compatible edge or exposed as a graph output. Invalid edges do not
+count as consumers. This warning does not block execution.
 
-- suspicious dependency with no consumed output;
-- unreachable node;
-- declared output never consumed;
-- expensive serialized path that could be parallel.
+Unreachable-node analysis and parallelism suggestions are later work.
 
 Warnings should not block execution unless promoted by policy.
 
