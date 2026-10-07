@@ -9,8 +9,15 @@ import (
 type BindingPlan struct {
 	graphID      string
 	graphInputs  map[string]InputDefinition
+	graphOutputs map[string]resolvedGraphOutput
 	nodes        map[string]bindingNode
 	dependencies map[string][]string
+}
+
+type resolvedGraphOutput struct {
+	sourceNodeID string
+	sourcePortID string
+	valueType    ValueType
 }
 
 type bindingNode struct {
@@ -37,11 +44,20 @@ func CompileBindings(definition *Definition) (*BindingPlan, ValidationResult) {
 	plan := &BindingPlan{
 		graphID:      definition.ID,
 		graphInputs:  make(map[string]InputDefinition, len(definition.Inputs)),
+		graphOutputs: make(map[string]resolvedGraphOutput, len(definition.Outputs)),
 		nodes:        make(map[string]bindingNode, len(definition.Nodes)),
 		dependencies: make(map[string][]string, len(definition.Nodes)),
 	}
 	for inputID, input := range definition.Inputs {
 		plan.graphInputs[inputID] = input
+	}
+	for outputID, output := range definition.Outputs {
+		source, _ := parseNodeOutputReference(string(output.From))
+		plan.graphOutputs[outputID] = resolvedGraphOutput{
+			sourceNodeID: source.nodeID,
+			sourcePortID: source.portID,
+			valueType:    definition.Nodes[source.nodeID].Outputs[source.portID].Type,
+		}
 	}
 	for nodeID, node := range definition.Nodes {
 		inputs := make(map[string]PortDefinition, len(node.Inputs))
@@ -174,6 +190,34 @@ func (p *BindingPlan) ResolveNodeInputs(nodeID string, graphInputs map[string]Va
 		return nil, sortedValidationResult(diagnostics)
 	}
 	return inputs, ValidationResult{}
+}
+
+// ResolveGraphOutputs materializes exposed graph values after all nodes have
+// succeeded. Missing and mistyped values make the entire result unusable.
+func (p *BindingPlan) ResolveGraphOutputs(nodeOutputs map[string]map[string]Value) (map[string]Value, ValidationResult) {
+	if p == nil {
+		return nil, nilBindingPlanResult()
+	}
+	outputs := make(map[string]Value, len(p.graphOutputs))
+	var diagnostics []Diagnostic
+	for _, outputID := range sortedKeys(p.graphOutputs) {
+		binding := p.graphOutputs[outputID]
+		value, present := nodeOutputs[binding.sourceNodeID][binding.sourcePortID]
+		location := DiagnosticLocation{NodeID: binding.sourceNodeID, Path: mapPath("outputs", outputID) + ".from"}
+		if !present {
+			diagnostics = append(diagnostics, p.diagnostic("E_GRAPH_OUTPUT_VALUE_MISSING", fmt.Sprintf("graph output %q has no value from %q", outputID, binding.sourceNodeID+".outputs."+binding.sourcePortID), location, "provide the declared source output value"))
+			continue
+		}
+		if value.Type() != binding.valueType {
+			diagnostics = append(diagnostics, p.diagnostic("E_GRAPH_OUTPUT_VALUE_TYPE_MISMATCH", fmt.Sprintf("graph output %q expects %s but received %s", outputID, binding.valueType, value.Type()), location, "provide a value with the declared type"))
+			continue
+		}
+		outputs[outputID] = value.clone()
+	}
+	if len(diagnostics) > 0 {
+		return nil, sortedValidationResult(diagnostics)
+	}
+	return outputs, ValidationResult{}
 }
 
 func (p *BindingPlan) diagnostic(code, message string, location DiagnosticLocation, suggestion string) Diagnostic {

@@ -152,10 +152,14 @@ PENDING
 Phase 0 may use the smaller scheduler state set:
 
 ```text
-pending -> ready -> running -> succeeded|failed|cancelled|skipped
+pending -> ready -> running -> succeeded|failed|cancelled
+    |         |
+    |         +-----> skipped|cancelled
+    +---------------> failed|skipped|cancelled
 ```
 
-State transitions must be represented by structured events.
+F0.4 keeps ordered in-memory transition facts. F0.6 will add the structured
+execution event contract and correlation IDs.
 
 ## Events
 
