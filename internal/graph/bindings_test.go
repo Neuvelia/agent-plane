@@ -499,3 +499,50 @@ func TestUnknownGraphInputAndWrongNodeOutputTypeHaveStructuredErrors(t *testing.
 		t.Fatalf("type error location = %#v, want edge 0", diagnostic.Location)
 	}
 }
+
+func TestResolveGraphOutputsUsesDeclaredReferencesAndSortedDiagnostics(t *testing.T) {
+	definition := &Definition{
+		SchemaVersion: SchemaVersionV0,
+		ID:            "published-outputs",
+		Inputs:        map[string]InputDefinition{},
+		Nodes: map[string]NodeDefinition{
+			"worker": {Type: "shell", Outputs: map[string]PortDefinition{
+				"first": {Type: ValueTypeString},
+				"last":  {Type: ValueTypeBoolean},
+			}},
+		},
+		Edges: []EdgeDefinition{},
+		Outputs: map[string]OutputDefinition{
+			"zeta":  {From: "worker.outputs.last"},
+			"alpha": {From: "worker.outputs.first"},
+		},
+	}
+	plan, validation := CompileBindings(definition)
+	if !validation.Valid() {
+		t.Fatalf("CompileBindings() = %#v", validation.Diagnostics)
+	}
+	definition.Outputs["alpha"] = OutputDefinition{From: "worker.outputs.last"}
+	outputs, result := plan.ResolveGraphOutputs(map[string]map[string]Value{
+		"worker": {"first": NewStringValue("ready"), "last": NewBooleanValue(false)},
+	})
+	if !result.Valid() || len(outputs) != 2 {
+		t.Fatalf("ResolveGraphOutputs() = (%#v, %#v)", outputs, result)
+	}
+	if got, ok := outputs["alpha"].AsString(); !ok || got != "ready" {
+		t.Fatalf("alpha = (%q, %v), want ready", got, ok)
+	}
+	if got, ok := outputs["zeta"].AsBoolean(); !ok || got {
+		t.Fatalf("zeta = (%v, %v), want false", got, ok)
+	}
+
+	outputs, result = plan.ResolveGraphOutputs(map[string]map[string]Value{
+		"worker": {"first": NewBooleanValue(true)},
+	})
+	if outputs != nil || len(result.Diagnostics) != 2 {
+		t.Fatalf("invalid outputs = (%#v, %#v)", outputs, result)
+	}
+	if result.Diagnostics[0].Code != "E_GRAPH_OUTPUT_VALUE_TYPE_MISMATCH" || result.Diagnostics[0].Location.Path != "outputs.alpha.from" ||
+		result.Diagnostics[1].Code != "E_GRAPH_OUTPUT_VALUE_MISSING" || result.Diagnostics[1].Location.Path != "outputs.zeta.from" {
+		t.Fatalf("diagnostic order/content = %#v", result.Diagnostics)
+	}
+}
