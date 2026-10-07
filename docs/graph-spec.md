@@ -213,8 +213,47 @@ when their references or graph topology are semantically invalid.
 Top-level graph inputs should be mapped explicitly to node inputs rather than becoming hidden globals.
 
 Schema v0 represents each mapping with `from: inputs.INPUT_NAME` and
-`to: NODE_ID.inputs.INPUT_NAME`. F0.3 will resolve these references so node
+`to: NODE_ID.inputs.INPUT_NAME`. F0.3 resolves these references so node
 readiness can be derived from declared inputs and dependencies.
+
+## Binding resolution (F0.3)
+
+The YAML binding shape is unchanged. Each edge transfers exactly one value
+from a declared node output to a declared node input. Each graph input binding
+transfers one supplied graph input value to a declared node input. Values do
+not come from node configuration, environment variables, hidden shared state,
+or other undeclared sources. Bindings do not evaluate expressions or transform
+values.
+
+`graph.CompileBindings` first runs semantic validation. A definition with
+errors yields no binding plan; warnings remain available and do not block the
+plan. A plan snapshots the port contracts and parsed references so later
+changes to a caller's `Definition` cannot change its behavior. Its direct
+node dependencies are the distinct, sorted source node IDs of incoming
+edges. Graph input bindings add no node-to-node dependency. An edge to an
+optional input still declares a data dependency. There is no ordering-only
+edge in schema v0.
+
+At run entry, supplied graph input values should be checked with
+`BindingPlan.ValidateGraphInputs`: required inputs must be present, supplied
+names must be declared, and each supplied value must match its declared type.
+For a particular node, `BindingPlan.ResolveNodeInputs` maps supplied graph
+inputs and known node outputs into its declared inputs. The caller must wait
+for all direct producer nodes to succeed before treating missing node outputs
+as terminal errors; determining when that happens belongs to F0.4. A missing
+bound node output is always an error, including when the target input is
+optional. An absent optional graph input may leave an optional target input
+unset, but a required graph input or required target cannot be left unsatisfied.
+A present JSON `null` is a value, not an absent input. Resolution errors produce
+structured diagnostics and no usable partial input map.
+
+Values have the five declared types. Strings and booleans remain scalars;
+numbers use `json.Number` to preserve decimal text; `json` values contain
+validated JSON bytes, including objects and arrays. JSON bytes are copied at
+the API boundary. Artifact references are nonempty opaque handles passed
+through without reading artifact contents or validating artifact existence.
+Declared port types and supplied runtime value types must match exactly;
+there is no implicit coercion, including between JSON and scalar types.
 
 ## Graph outputs
 
