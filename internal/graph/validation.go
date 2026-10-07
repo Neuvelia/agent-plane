@@ -35,8 +35,8 @@ type Diagnostic struct {
 	Suggestion string             `json:"suggestion,omitempty"`
 }
 
-// ValidationResult is the complete result of validating one graph definition.
-// Warnings are retained even when the graph has blocking errors.
+// ValidationResult holds machine-readable definition or value diagnostics.
+// Warnings are retained even when there are blocking errors.
 type ValidationResult struct {
 	Diagnostics []Diagnostic `json:"diagnostics"`
 }
@@ -328,9 +328,9 @@ func (v *definitionValidator) parseNodeInputReferenceForBinding(reference, path 
 }
 
 func (v *definitionValidator) parseGraphInputReference(reference, path string, bindingIndex int) (string, bool) {
-	parts := strings.Split(reference, ".")
-	if len(parts) == 2 && parts[0] == "inputs" && validIdentifier(parts[1]) {
-		return parts[1], true
+	inputID, ok := parseGraphInputReference(reference)
+	if ok {
+		return inputID, true
 	}
 	v.error("E_GRAPH_INPUT_REFERENCE_INVALID", fmt.Sprintf("%q is not a valid graph input reference", reference), bindingLocation(bindingIndex, path), "use inputs.INPUT")
 	return "", false
@@ -417,8 +417,12 @@ func (v *definitionValidator) graphID() string {
 }
 
 func (v *definitionValidator) result() ValidationResult {
-	sort.SliceStable(v.diagnostics, func(i, j int) bool {
-		left, right := v.diagnostics[i], v.diagnostics[j]
+	return sortedValidationResult(v.diagnostics)
+}
+
+func sortedValidationResult(diagnostics []Diagnostic) ValidationResult {
+	sort.SliceStable(diagnostics, func(i, j int) bool {
+		left, right := diagnostics[i], diagnostics[j]
 		if left.Severity != right.Severity {
 			return left.Severity < right.Severity
 		}
@@ -427,7 +431,7 @@ func (v *definitionValidator) result() ValidationResult {
 		}
 		return left.Code < right.Code
 	})
-	return ValidationResult{Diagnostics: v.diagnostics}
+	return ValidationResult{Diagnostics: diagnostics}
 }
 
 func parseNodeOutputReference(reference string) (nodeOutputReference, bool) {
@@ -444,6 +448,14 @@ func parseNodeInputReference(reference string) (nodeInputReference, bool) {
 		return nodeInputReference{}, false
 	}
 	return nodeInputReference{nodeID: parts[0], portID: parts[2]}, true
+}
+
+func parseGraphInputReference(reference string) (string, bool) {
+	parts := strings.Split(reference, ".")
+	if len(parts) == 2 && parts[0] == "inputs" && validIdentifier(parts[1]) {
+		return parts[1], true
+	}
+	return "", false
 }
 
 func validIdentifier(identifier string) bool {
