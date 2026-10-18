@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,148 @@ import (
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 )
+
+type streamingExecutorFunc func(context.Context, string, graph.NodeDefinition, map[string]graph.Value, func(string, []byte)) (map[string]graph.Value, error)
+
+func (f streamingExecutorFunc) ExecuteNode(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+	return nil, errors.New("streaming execution was not used")
+}
+
+func (f streamingExecutorFunc) ExecuteNodeWithLogs(ctx context.Context, id string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
+	return f(ctx, id, node, inputs, observe)
+}
+
+func TestRunRedactsSplitSecretsBeforeLogEvents(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	exec := streamingExecutorFunc(func(_ context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
+		observe("stdout", []byte("before sec"))
+		observe("stderr", []byte("error sec"))
+		observe("stdout", []byte("ret after"))
+		observe("stderr", []byte("ret done"))
+		return nil, nil
+	})
+	result, err := Run(context.Background(), def, nil, exec, Options{LogRedactions: []string{"secret"}})
+	if err != nil || result.State != RunSucceeded {
+		t.Fatalf("run = %#v, %v", result, err)
+	}
+	var stdout, stderr bytes.Buffer
+	for i, event := range result.Events {
+		if event.Type != events.LogChunk {
+			continue
+		}
+		if event.NodeID != "worker" || event.NodeRunID != result.Nodes[0].NodeRunID || i == 0 || i >= len(result.Events)-2 {
+			t.Fatalf("log correlation/order = %#v", event)
+		}
+		payload := event.Payload.(events.LogChunkPayload)
+		switch payload.Stream {
+		case events.Stdout:
+			stdout.Write(payload.Data)
+		case events.Stderr:
+			stderr.Write(payload.Data)
+		default:
+			t.Fatalf("stream = %q", payload.Stream)
+		}
+	}
+	if stdout.String() != "before *** after" || stderr.String() != "error *** done" {
+		t.Fatalf("logs stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunRejectsRedactionsWithoutSafeMarkerBeforeStart(t *testing.T) {
+	allBytes := make([]byte, 256)
+	for i := range allBytes {
+		allBytes[i] = byte(i)
+	}
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		t.Fatal("executor called")
+		return nil, nil
+	})
+	result, err := Run(context.Background(), def, nil, exec, Options{LogRedactions: []string{string(allBytes)}})
+	if err == nil || result.RunID != "" || len(result.Events) != 0 {
+		t.Fatalf("invalid redactions started a run: %#v, %v", result, err)
+	}
+}
+
+func TestConcurrentRunLogCorrelation(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	started := make(chan struct{}, 2)
+	release := make(chan struct{})
+	exec := streamingExecutorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
+		started <- struct{}{}
+		<-release
+		observe("stdout", []byte(id+"-out"))
+		observe("stderr", []byte(id+"-err"))
+		return nil, nil
+	})
+	done := make(chan RunResult, 1)
+	go func() {
+		result, _ := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2})
+		done <- result
+	}()
+	<-started
+	<-started
+	close(release)
+	result := <-done
+	if result.State != RunSucceeded {
+		t.Fatalf("run = %#v", result)
+	}
+	ids := map[string]events.NodeRunID{}
+	for _, node := range result.Nodes {
+		ids[node.NodeID] = node.NodeRunID
+	}
+	logs := map[string]map[events.Stream]string{}
+	for i, event := range result.Events {
+		if event.Sequence != uint64(i+1) {
+			t.Fatalf("sequence %d = %d", i, event.Sequence)
+		}
+		if event.Type != events.LogChunk {
+			continue
+		}
+		if event.NodeRunID != ids[event.NodeID] {
+			t.Fatalf("wrong node run ID: %#v", event)
+		}
+		payload := event.Payload.(events.LogChunkPayload)
+		if logs[event.NodeID] == nil {
+			logs[event.NodeID] = map[events.Stream]string{}
+		}
+		logs[event.NodeID][payload.Stream] += string(payload.Data)
+	}
+	for _, id := range []string{"a", "b"} {
+		if logs[id][events.Stdout] != id+"-out" || logs[id][events.Stderr] != id+"-err" {
+			t.Fatalf("%s logs = %#v", id, logs[id])
+		}
+	}
+}
+
+func TestLateLogCallbackDoesNotChangeFinishedRun(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	var late func(string, []byte)
+	exec := streamingExecutorFunc(func(_ context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
+		observe("stdout", []byte("during"))
+		late = observe
+		return nil, nil
+	})
+	result, err := Run(context.Background(), def, nil, exec, Options{})
+	if err != nil || result.State != RunSucceeded {
+		t.Fatalf("run = %#v, %v", result, err)
+	}
+	var callbacks sync.WaitGroup
+	for _, stream := range []string{"stdout", "stderr"} {
+		callbacks.Add(1)
+		go func() {
+			defer callbacks.Done()
+			late(stream, []byte("after"))
+		}()
+	}
+	callbacks.Wait()
+	if got := len(result.Events); got != 6 {
+		t.Fatalf("events = %d, want 6", got)
+	}
+	if result.Events[4].Type != events.NodeFinished || result.Events[5].Type != events.RunFinished {
+		t.Fatalf("terminal events = %#v", result.Events[4:])
+	}
+}
 
 func TestRunEmitsCorrelatedLifecycleAndUniqueIDs(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})

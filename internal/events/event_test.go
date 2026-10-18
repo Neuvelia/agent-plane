@@ -81,3 +81,14 @@ func TestEveryEventPayloadRoundTrips(t *testing.T) {
 		})
 	}
 }
+
+func TestEventRejectsMismatchedPayload(t *testing.T) {
+	event := Event{SchemaVersion: SchemaVersion, Type: LogChunk, Payload: NodeFinishedPayload{Status: "failed"}}
+	if _, err := json.Marshal(event); err == nil {
+		t.Fatal("mismatched type and payload serialized")
+	}
+	var decoded Event
+	if err := json.Unmarshal([]byte(`{"event_schema_version":1,"type":"log_chunk","payload":{"status":"failed"}}`), &decoded); err == nil {
+		t.Fatal("mismatched payload JSON decoded")
+	}
+}

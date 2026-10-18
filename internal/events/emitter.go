@@ -1,13 +1,17 @@
 package events
 
 import (
+	"errors"
+	"fmt"
 	"sync"
 	"time"
 )
 
 // Sink accepts one in-process event and returns the sequenced fact. F0.6 uses
 // Collector; it does not invoke arbitrary consumer callbacks during execution.
-type Sink interface{ Append(Event) Event }
+type Sink interface{ Append(Event) (Event, error) }
+
+var ErrCollectorFinished = errors.New("event collector is finished")
 
 // Collector is a run-local, concurrency-safe in-memory event sink.
 type Collector struct {
@@ -24,14 +28,16 @@ func NewCollector(runID RunID, graphID, graphVersion string) *Collector {
 }
 
 // Append owns timestamp and sequence assignment. The caller owns lifecycle
-// meaning; Collector owns ordering and immutable storage. Append returns a
-// zero Event if the run already finished, so late observers cannot extend a
-// terminal trace.
-func (c *Collector) Append(event Event) Event {
+// meaning; Collector owns ordering and immutable storage. Invalid and late
+// appends are rejected without changing the stored stream.
+func (c *Collector) Append(event Event) (Event, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.finished {
-		return Event{}
+		return Event{}, ErrCollectorFinished
+	}
+	if err := event.Validate(); err != nil {
+		return Event{}, fmt.Errorf("append event: %w", err)
 	}
 	event.SchemaVersion = SchemaVersion
 	event.Timestamp = time.Now().UTC()
@@ -45,7 +51,7 @@ func (c *Collector) Append(event Event) Event {
 		c.finished = true
 	}
 	event.Payload = copyPayload(event.Payload)
-	return event
+	return event, nil
 }
 
 // Snapshot returns events in authoritative sequence order, detached from the

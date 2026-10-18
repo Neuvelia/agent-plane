@@ -54,7 +54,10 @@ func TestCollectorSnapshotCannotMutateDuration(t *testing.T) {
 
 func TestCollectorAppendReturnCannotMutateStoredPayload(t *testing.T) {
 	collector := NewCollector("run", "graph", "version")
-	recorded := collector.Append(Event{Type: LogChunk, Payload: LogChunkPayload{Stream: Stdout, Data: []byte("safe")}})
+	recorded, err := collector.Append(Event{Type: LogChunk, Payload: LogChunkPayload{Stream: Stdout, Data: []byte("safe")}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	recorded.Payload.(LogChunkPayload).Data[0] = 'X'
 	if got := string(collector.Snapshot()[0].Payload.(LogChunkPayload).Data); got != "safe" {
 		t.Fatalf("stored payload = %q", got)
@@ -70,5 +73,27 @@ func TestCollectorRejectsEventsAfterRunFinished(t *testing.T) {
 	events := collector.Snapshot()
 	if len(events) != 2 || events[1].Type != RunFinished {
 		t.Fatalf("events after terminal = %#v", events)
+	}
+}
+
+func TestCollectorRejectsInvalidAndLateEvents(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: LogChunk, Payload: NodeFinishedPayload{Status: "failed"}}); err == nil {
+		t.Fatal("mismatched event accepted")
+	}
+	if got := len(collector.Snapshot()); got != 0 {
+		t.Fatalf("invalid event changed collector: %d events", got)
+	}
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.Append(Event{Type: NodeReady, Payload: NodeReadyPayload{}}); err == nil {
+		t.Fatal("late event accepted without error")
+	}
+	if got := len(collector.Snapshot()); got != 2 {
+		t.Fatalf("late event changed collector: %d events", got)
 	}
 }

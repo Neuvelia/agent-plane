@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"agentplane/internal/events"
@@ -21,7 +22,8 @@ type Executor interface {
 
 // LogStreamingExecutor optionally reports bounded output chunks while a node
 // executes. The observer may be called concurrently for separate streams; all
-// callbacks must complete before ExecuteNodeWithLogs returns.
+// callbacks must complete before ExecuteNodeWithLogs returns for complete logs.
+// Calls after return are discarded once the worker closes the observer.
 type LogStreamingExecutor interface {
 	ExecuteNodeWithLogs(context.Context, string, graph.NodeDefinition, map[string]graph.Value, func(string, []byte)) (map[string]graph.Value, error)
 }
@@ -30,9 +32,9 @@ type LogStreamingExecutor interface {
 // Zero selects the conservative default of one. Negative values are invalid.
 type Options struct {
 	MaxConcurrency int
-	// LogSanitizer runs before output bytes enter the event collector. It must
-	// be safe for concurrent calls from stdout and stderr writers.
-	LogSanitizer func([]byte) []byte
+	// LogRedactions are exact byte strings replaced in log events. Redaction
+	// works across writes and is independent for stdout and stderr.
+	LogRedactions []string
 }
 
 type completedNode struct {
@@ -70,6 +72,11 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	limit := options.MaxConcurrency
 	if limit == 0 {
 		limit = 1
+	}
+	redactions := append([]string(nil), options.LogRedactions...)
+	redactionTemplate, err := newLogRedactor(redactions)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("invalid log redactions: %w", err)
 	}
 
 	plan, validation := graph.CompileBindings(definition)
@@ -147,27 +154,42 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			machine.transitionNode(id, NodeRunning)
 			node := definition.Nodes[id]
 			resolved := machine.resolved[id]
+			nodeRunID := machine.nodes[id].NodeRunID
 			go func(id string) {
 				var outputs map[string]graph.Value
 				var err error
 				if streaming, ok := executor.(LogStreamingExecutor); ok {
-					observer := func(stream string, data []byte) {
-						if stream != string(events.Stdout) && stream != string(events.Stderr) {
-							return
-						}
-						if options.LogSanitizer != nil {
-							data = options.LogSanitizer(data)
-						}
+					redactor := redactionTemplate.clone()
+					var logMu sync.Mutex
+					closed := false
+					emitLog := func(stream events.Stream, data []byte) {
 						for len(data) > 0 {
 							chunk := data
 							if len(chunk) > maxEventLogChunk {
 								chunk = chunk[:maxEventLogChunk]
 							}
-							machine.emitter.Append(events.Event{Type: events.LogChunk, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, Payload: events.LogChunkPayload{Stream: events.Stream(stream), Data: chunk}})
+							machine.appendEvent(events.Event{Type: events.LogChunk, NodeID: id, NodeRunID: nodeRunID, Payload: events.LogChunkPayload{Stream: stream, Data: chunk}})
 							data = data[len(chunk):]
 						}
 					}
+					observer := func(stream string, data []byte) {
+						if stream != string(events.Stdout) && stream != string(events.Stderr) {
+							return
+						}
+						logMu.Lock()
+						if closed {
+							logMu.Unlock()
+							return
+						}
+						emitLog(events.Stream(stream), redactor.Write(events.Stream(stream), data))
+						logMu.Unlock()
+					}
 					outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+					logMu.Lock()
+					emitLog(events.Stdout, redactor.Flush(events.Stdout))
+					emitLog(events.Stderr, redactor.Flush(events.Stderr))
+					closed = true
+					logMu.Unlock()
 				} else {
 					outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
 				}
@@ -254,6 +276,14 @@ func newRunMachine(definition *graph.Definition) (*runMachine, error) {
 	return m, nil
 }
 
+func (m *runMachine) appendEvent(event events.Event) events.Event {
+	recorded, err := m.emitter.Append(event)
+	if err != nil {
+		panic(fmt.Errorf("scheduler event invariant: %w", err))
+	}
+	return recorded
+}
+
 func (m *runMachine) record(id, from, to string) {
 	event := events.Event{NodeID: id}
 	if id == "" {
@@ -296,7 +326,7 @@ func (m *runMachine) record(id, from, to string) {
 			}
 		}
 	}
-	recorded := m.emitter.Append(event)
+	recorded := m.appendEvent(event)
 	if id == "" && from == "" {
 		m.startedAt = recorded.Timestamp
 	}

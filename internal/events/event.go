@@ -1,6 +1,7 @@
 package events
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
@@ -116,6 +117,50 @@ type Event struct {
 	Payload       Payload   `json:"payload"`
 }
 
+// Validate checks the event envelope before it becomes a serialized fact.
+func (e Event) Validate() error {
+	var payloadType Type
+	switch e.Payload.(type) {
+	case RunStartedPayload:
+		payloadType = RunStarted
+	case NodeReadyPayload:
+		payloadType = NodeReady
+	case NodeStartedPayload:
+		payloadType = NodeStarted
+	case LogChunkPayload:
+		payloadType = LogChunk
+	case NodeFinishedPayload:
+		payloadType = NodeFinished
+	case NodeTerminatedPayload:
+		payloadType = NodeTerminated
+	case RunFinishedPayload:
+		payloadType = RunFinished
+	default:
+		return fmt.Errorf("event %q has no supported payload", e.Type)
+	}
+	if e.Type != payloadType {
+		return fmt.Errorf("event %q has payload for %q", e.Type, payloadType)
+	}
+	return nil
+}
+
+func (e Event) MarshalJSON() ([]byte, error) {
+	if err := e.Validate(); err != nil {
+		return nil, err
+	}
+	type wire Event
+	return json.Marshal(wire(e))
+}
+
+func decodePayload(data json.RawMessage, target any) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return errors.New("event payload must be an object")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target)
+}
+
 func (e *Event) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		SchemaVersion int             `json:"event_schema_version"`
@@ -160,41 +205,45 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	}
 	switch p := payload.(type) {
 	case RunStartedPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	case NodeReadyPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	case NodeStartedPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	case LogChunkPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	case NodeFinishedPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	case NodeTerminatedPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	case RunFinishedPayload:
-		if err := json.Unmarshal(wire.Payload, &p); err != nil {
+		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
 		payload = p
 	}
-	*e = Event{SchemaVersion: wire.SchemaVersion, Type: wire.Type, Timestamp: wire.Timestamp, Sequence: wire.Sequence, RunID: wire.RunID, GraphID: wire.GraphID, GraphVersion: wire.GraphVersion, NodeID: wire.NodeID, NodeRunID: wire.NodeRunID, AttemptID: wire.AttemptID, Payload: payload}
+	decoded := Event{SchemaVersion: wire.SchemaVersion, Type: wire.Type, Timestamp: wire.Timestamp, Sequence: wire.Sequence, RunID: wire.RunID, GraphID: wire.GraphID, GraphVersion: wire.GraphVersion, NodeID: wire.NodeID, NodeRunID: wire.NodeRunID, AttemptID: wire.AttemptID, Payload: payload}
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*e = decoded
 	return nil
 }

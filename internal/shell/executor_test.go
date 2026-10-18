@@ -150,9 +150,7 @@ func TestFailedShellRunEmitsLogsBeforeTerminalEvents(t *testing.T) {
 	node := helperNode("fail")
 	node.Config["env"].(map[string]string)["PRIVATE_MARKER"] = "configured-private-value"
 	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-log-fail", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
-	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogSanitizer: func(data []byte) []byte {
-		return []byte(strings.ReplaceAll(string(data), "failure detail", "[REDACTED]"))
-	}})
+	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogRedactions: []string{"failure detail"}})
 	if err != nil || result.State != runtime.RunFailed {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
@@ -173,7 +171,7 @@ func TestFailedShellRunEmitsLogsBeforeTerminalEvents(t *testing.T) {
 			runFinishIndex = i
 		}
 	}
-	if stdout != "partial" || stderr != "[REDACTED]" || finishIndex == 0 || runFinishIndex != len(result.Events)-1 || finishIndex >= runFinishIndex {
+	if stdout != "partial" || stderr != "***" || finishIndex == 0 || runFinishIndex != len(result.Events)-1 || finishIndex >= runFinishIndex {
 		t.Fatalf("events = %#v", result.Events)
 	}
 	encoded, _ := json.Marshal(result.Events)
@@ -182,24 +180,35 @@ func TestFailedShellRunEmitsLogsBeforeTerminalEvents(t *testing.T) {
 	}
 }
 
-func TestSanitizedLogEventsRemainBounded(t *testing.T) {
+func TestLargeShellRunLogsAreCompleteAndBounded(t *testing.T) {
 	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-log-bound", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": helperNode("bulk")}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
-	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogSanitizer: func(data []byte) []byte { return append(append([]byte(nil), data...), data...) }})
+	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogRedactions: []string{"secret"}})
 	if err != nil || result.State != runtime.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
-	var seen int
+	var stdout, stderr strings.Builder
 	for _, event := range result.Events {
 		if event.Type != events.LogChunk {
 			continue
 		}
-		seen++
-		if got := len(event.Payload.(events.LogChunkPayload).Data); got > 16*1024 {
+		if event.NodeID != "worker" || event.NodeRunID != result.Nodes[0].NodeRunID {
+			t.Fatalf("log correlation = %#v", event)
+		}
+		payload := event.Payload.(events.LogChunkPayload)
+		if got := len(payload.Data); got > 16*1024 {
 			t.Fatalf("event chunk has %d bytes", got)
 		}
+		switch payload.Stream {
+		case events.Stdout:
+			stdout.Write(payload.Data)
+		case events.Stderr:
+			stderr.Write(payload.Data)
+		default:
+			t.Fatalf("stream = %q", payload.Stream)
+		}
 	}
-	if seen == 0 {
-		t.Fatal("no log events")
+	if stdout.String() != strings.Repeat("x", 1<<20) || stderr.String() != strings.Repeat("x", 1<<20) {
+		t.Fatalf("logs incomplete: stdout=%d stderr=%d", stdout.Len(), stderr.Len())
 	}
 }
 
