@@ -202,6 +202,8 @@ config:
   env_allowlist: ["HOME", "PATH"]
   env:
     CI: "true"
+  input_env:
+    source_text: SOURCE_TEXT
   stdout_json: false
 ```
 
@@ -210,8 +212,7 @@ optional list of literal strings, defaulting to empty. `cwd` is an optional
 working directory; omission uses the runner's current directory. Bare
 executable names are resolved using the runner's PATH before launch. The
 command and arguments are never passed through a system shell and are not
-interpolated. Bound node inputs do not alter command, args, cwd, or env in
-F0.5.
+interpolated. Bound node inputs do not alter command, args, or cwd.
 
 A relative `cwd` is resolved against the runner process's current working
 directory at execution time, not against the graph definition file. Authors
@@ -224,6 +225,19 @@ values and wins on duplicate names. Both fields default to empty. Unknown
 configuration fields, malformed types, and invalid environment names fail
 execution before the process starts. Raw secrets must not be embedded in
 graph configuration.
+
+`input_env` is an optional explicit mapping from declared string node input
+names to child environment variable names. A present resolved input is copied
+as its literal string value; an absent optional input creates no variable.
+A missing required mapped input, a value with the wrong runtime type, or a
+string value containing NUL fails the node before process launch. The mapping
+rejects undeclared or non-string ports, invalid or duplicate environment
+names, and names that conflict with
+`env` or `env_allowlist`. Name collisions are checked without regard to case
+so the same graph behaves predictably on Windows. The mapping does not read
+ambient graph inputs or evaluate expressions. Event log redaction remains an
+explicit runtime option; mapping an input does not automatically mark its
+value as a secret.
 
 Shell nodes may declare `stdout` and `stderr` string outputs and an
 `exit_code` number output. Only declared outputs are returned. With

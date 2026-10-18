@@ -191,6 +191,44 @@ func TestRunEmitsCorrelatedLifecycleAndUniqueIDs(t *testing.T) {
 	}
 }
 
+func TestRunDeliversLiveEventsInSequence(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	started := make(chan struct{})
+	release := make(chan struct{})
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		close(started)
+		<-release
+		return nil, nil
+	})
+	live := make(chan events.Event)
+	done := make(chan RunResult, 1)
+	go func() {
+		result, _ := Run(context.Background(), def, nil, exec, Options{LiveEvents: live})
+		done <- result
+	}()
+	var received []events.Event
+	for {
+		event := <-live
+		received = append(received, event)
+		if event.Type == events.NodeStarted {
+			<-started
+			close(release)
+		}
+		if event.Type == events.RunFinished {
+			result := <-done
+			if len(received) != len(result.Events) {
+				t.Fatalf("live=%d stored=%d", len(received), len(result.Events))
+			}
+			for i := range received {
+				if received[i].Sequence != result.Events[i].Sequence || received[i].Type != result.Events[i].Type {
+					t.Fatalf("event %d: live=%#v stored=%#v", i, received[i], result.Events[i])
+				}
+			}
+			return
+		}
+	}
+}
+
 func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {

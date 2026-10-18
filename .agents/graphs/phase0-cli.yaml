@@ -1,0 +1,76 @@
+schema_version: 0
+id: phase0-cli
+name: Phase 0 CLI proof
+
+inputs:
+  message:
+    type: string
+    required: true
+
+nodes:
+  left:
+    type: shell
+    inputs:
+      message:
+        type: string
+        required: true
+    config:
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, left]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+      input_env: {message: MESSAGE}
+    outputs:
+      stdout:
+        type: string
+
+  right:
+    type: shell
+    inputs:
+      message:
+        type: string
+        required: true
+    config:
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, right]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+      input_env: {message: MESSAGE}
+    outputs:
+      stdout:
+        type: string
+
+  join:
+    type: shell
+    inputs:
+      left_text:
+        type: string
+        required: true
+      right_text:
+        type: string
+        required: true
+    config:
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, join]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+      input_env: {left_text: LEFT_TEXT, right_text: RIGHT_TEXT}
+    outputs:
+      stdout:
+        type: string
+
+edges:
+  - from: left.outputs.stdout
+    to: join.inputs.left_text
+  - from: right.outputs.stdout
+    to: join.inputs.right_text
+
+graph_input_bindings:
+  - from: inputs.message
+    to: left.inputs.message
+  - from: inputs.message
+    to: right.inputs.message
+
+outputs:
+  result:
+    from: join.outputs.stdout

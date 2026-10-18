@@ -1,9 +1,37 @@
 package events
 
 import (
+	"context"
 	"sync"
 	"testing"
 )
+
+func TestLiveEventsRemainPrefixAfterCancellationDropsAnEvent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	live := make(chan Event, 1)
+	collector := NewCollectorWithLiveEvents(ctx, "run", "graph", "version", live)
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if _, err := collector.Append(Event{Type: NodeReady, Payload: NodeReadyPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := (<-live).Type; got != RunStarted {
+		t.Fatalf("first live event = %s", got)
+	}
+	if _, err := collector.Append(Event{Type: NodeStarted, Payload: NodeStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case event := <-live:
+		t.Fatalf("live sequence has a gap before %s", event.Type)
+	default:
+	}
+	if got := len(collector.Snapshot()); got != 3 {
+		t.Fatalf("retained events = %d", got)
+	}
+}
 
 func TestCollectorSequencesConcurrentEventsAndCopiesLogs(t *testing.T) {
 	collector := NewCollector("run", "graph", "sha256-v0:hash")

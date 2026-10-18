@@ -71,17 +71,18 @@ type config struct {
 	cwd          string
 	envAllowlist []string
 	env          map[string]string
+	inputEnv     map[string]string
 	stdoutJSON   bool
 }
 
 // Execute runs one local process and returns its raw result. It never treats
-// argument text as shell syntax. The resolved node inputs are reserved for a
-// later explicit input-to-process contract and are not interpolated here.
-func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, _ map[string]graph.Value) (Result, error) {
-	return execute(ctx, nodeID, node, nil)
+// argument text as shell syntax. Only inputs listed in input_env enter the
+// child process environment.
+func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
+	return execute(ctx, nodeID, node, inputs, nil)
 }
 
-func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, observe func(string, []byte)) (Result, error) {
+func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (Result, error) {
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -93,10 +94,14 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, obse
 	if err := ctx.Err(); err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureCanceled, Result: result, Cause: err}
 	}
+	inputEnvironment, err := buildInputEnvironment(cfg, node, inputs)
+	if err != nil {
+		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
+	}
 
 	cmd := exec.CommandContext(ctx, cfg.command, cfg.args...)
 	cmd.Dir = cfg.cwd
-	cmd.Env = buildEnvironment(cfg)
+	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
 	// A descendant may inherit stdout or stderr after the direct child exits.
 	// Bound the pipe drain so Wait can finish without managing the process tree.
 	cmd.WaitDelay = time.Second
@@ -176,7 +181,7 @@ func (Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node gra
 			return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: fmt.Errorf("unsupported shell output %q", name)}
 		}
 	}
-	result, err := execute(ctx, nodeID, node, observe)
+	result, err := execute(ctx, nodeID, node, inputs, observe)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +242,7 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 	sort.Strings(keys)
 	for _, key := range keys {
 		switch key {
-		case "command", "args", "cwd", "env_allowlist", "env", "stdout_json":
+		case "command", "args", "cwd", "env_allowlist", "env", "input_env", "stdout_json":
 		default:
 			return config{}, fmt.Errorf("unknown shell config field %q", key)
 		}
@@ -273,9 +278,45 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 		}
 	}
 	if value, present := node.Config["env"]; present {
-		cfg.env, err = stringMap(value)
+		cfg.env, err = stringMap(value, "env")
 		if err != nil {
 			return cfg, err
+		}
+	}
+	if value, present := node.Config["input_env"]; present {
+		cfg.inputEnv, err = stringMap(value, "input_env")
+		if err != nil {
+			return cfg, err
+		}
+		used := make(map[string]string, len(cfg.inputEnv))
+		for _, inputID := range sortedMapKeys(cfg.inputEnv) {
+			variable := cfg.inputEnv[inputID]
+			port, declared := node.Inputs[inputID]
+			if !declared {
+				return cfg, fmt.Errorf("input_env refers to undeclared input %q", inputID)
+			}
+			if port.Type != graph.ValueTypeString {
+				return cfg, fmt.Errorf("input_env input %q must be a string input", inputID)
+			}
+			if !validEnvName(variable) {
+				return cfg, fmt.Errorf("input_env input %q has invalid environment name %q", inputID, variable)
+			}
+			for usedVariable, other := range used {
+				if strings.EqualFold(usedVariable, variable) {
+					return cfg, fmt.Errorf("input_env has duplicate environment name %q for inputs %q and %q", variable, other, inputID)
+				}
+			}
+			for explicit := range cfg.env {
+				if strings.EqualFold(explicit, variable) {
+					return cfg, fmt.Errorf("input_env environment name %q conflicts with env", variable)
+				}
+			}
+			for _, allowed := range cfg.envAllowlist {
+				if strings.EqualFold(allowed, variable) {
+					return cfg, fmt.Errorf("input_env environment name %q conflicts with env_allowlist", variable)
+				}
+			}
+			used[variable] = inputID
 		}
 	}
 	if value, present := node.Config["stdout_json"]; present {
@@ -306,7 +347,7 @@ func stringList(value any, field string) ([]string, error) {
 	}
 }
 
-func stringMap(value any) (map[string]string, error) {
+func stringMap(value any, field string) (map[string]string, error) {
 	result := map[string]string{}
 	raw := map[string]any{}
 	switch entries := value.(type) {
@@ -323,7 +364,7 @@ func stringMap(value any) (map[string]string, error) {
 			raw[key] = item
 		}
 	default:
-		return nil, errors.New("env must be a mapping of string values")
+		return nil, fmt.Errorf("%s must be a mapping of string values", field)
 	}
 	keys := make([]string, 0, len(raw))
 	for key := range raw {
@@ -333,13 +374,13 @@ func stringMap(value any) (map[string]string, error) {
 	for _, key := range keys {
 		item, ok := raw[key].(string)
 		if !ok {
-			return nil, fmt.Errorf("env[%q] must be a string", key)
+			return nil, fmt.Errorf("%s[%q] must be a string", field, key)
 		}
 		if !validEnvName(key) {
-			return nil, fmt.Errorf("invalid env name %q", key)
+			return nil, fmt.Errorf("invalid %s name %q", field, key)
 		}
 		if strings.ContainsRune(item, 0) {
-			return nil, fmt.Errorf("env[%q] contains a NUL byte", key)
+			return nil, fmt.Errorf("%s[%q] contains a NUL byte", field, key)
 		}
 		result[key] = item
 	}
@@ -347,6 +388,37 @@ func stringMap(value any) (map[string]string, error) {
 }
 
 func validEnvName(name string) bool { return name != "" && !strings.ContainsAny(name, "=\x00") }
+
+func sortedMapKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func buildInputEnvironment(cfg config, node graph.NodeDefinition, inputs map[string]graph.Value) ([]string, error) {
+	environment := make([]string, 0, len(cfg.inputEnv))
+	for _, inputID := range sortedMapKeys(cfg.inputEnv) {
+		value, present := inputs[inputID]
+		if !present {
+			if node.Inputs[inputID].Required {
+				return nil, fmt.Errorf("input_env required input %q is missing", inputID)
+			}
+			continue
+		}
+		text, ok := value.AsString()
+		if !ok {
+			return nil, fmt.Errorf("input_env input %q requires a string value", inputID)
+		}
+		if strings.ContainsRune(text, 0) {
+			return nil, fmt.Errorf("input_env input %q contains a NUL byte", inputID)
+		}
+		environment = append(environment, cfg.inputEnv[inputID]+"="+text)
+	}
+	return environment, nil
+}
 
 func buildEnvironment(cfg config) []string {
 	allowed := make(map[string]string, len(cfg.envAllowlist))

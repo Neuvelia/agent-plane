@@ -8,8 +8,10 @@ nodes:
   left:
     type: shell
     config:
-      command: printf
-      args: ["left\\n"]
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, left]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
     outputs:
       stdout:
         type: string
@@ -17,8 +19,10 @@ nodes:
   right:
     type: shell
     config:
-      command: printf
-      args: ["right\\n"]
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, right]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
     outputs:
       stdout:
         type: string
@@ -31,8 +35,11 @@ nodes:
       right_text:
         type: string
     config:
-      command: printf
-      args: ["merge placeholder\\n"]
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, join]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+      input_env: {left_text: LEFT_TEXT, right_text: RIGHT_TEXT}
     outputs:
       stdout:
         type: string

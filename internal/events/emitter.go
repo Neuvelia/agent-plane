@@ -1,6 +1,7 @@
 package events
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -21,10 +22,27 @@ type Collector struct {
 	graphVersion string
 	events       []Event
 	finished     bool
+	live         chan<- Event
+	liveContext  context.Context
+	liveDropped  bool
 }
 
 func NewCollector(runID RunID, graphID, graphVersion string) *Collector {
 	return &Collector{runID: runID, graphID: graphID, graphVersion: graphVersion}
+}
+
+// NewCollectorWithLiveEvents also sends each appended fact to a caller-owned
+// channel while holding the sequence lock. The caller must consume while the
+// run is active and must not close the channel until the run returns. A slow
+// consumer applies backpressure until ctx is cancelled; after the first
+// undelivered event, live delivery stops and the retained slice contains the
+// complete tail for replay.
+// Nil live disables delivery.
+func NewCollectorWithLiveEvents(ctx context.Context, runID RunID, graphID, graphVersion string, live chan<- Event) *Collector {
+	c := NewCollector(runID, graphID, graphVersion)
+	c.live = live
+	c.liveContext = ctx
+	return c
 }
 
 // Append owns timestamp and sequence assignment. The caller owns lifecycle
@@ -51,6 +69,20 @@ func (c *Collector) Append(event Event) (Event, error) {
 		c.finished = true
 	}
 	event.Payload = copyPayload(event.Payload)
+	if c.live != nil && !c.liveDropped {
+		select {
+		case c.live <- event:
+		default:
+			select {
+			case c.live <- event:
+			case <-c.liveContext.Done():
+				// The retained event slice remains complete when a cancelled
+				// run cannot deliver to a blocked live consumer. Stop live
+				// delivery so the consumer sees a prefix it can replay.
+				c.liveDropped = true
+			}
+		}
+	}
 	return event, nil
 }
 

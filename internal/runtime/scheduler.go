@@ -32,6 +32,12 @@ type LogStreamingExecutor interface {
 // Zero selects the conservative default of one. Negative values are invalid.
 type Options struct {
 	MaxConcurrency int
+	// LiveEvents receives sequenced events during execution. The caller must
+	// consume while Run is active and must not close the channel until Run returns.
+	// Delivery is synchronous and can slow execution. Cancellation may stop
+	// delivery at a sequence prefix; RunResult.Events retains the complete tail.
+	// Nil disables live delivery.
+	LiveEvents chan<- events.Event
 	// LogRedactions are exact byte strings replaced in log events. Redaction
 	// works across writes and is independent for stdout and stderr.
 	LogRedactions []string
@@ -93,7 +99,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		graphInputs[name] = value
 	}
 
-	machine, err := newRunMachine(definition)
+	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -242,7 +248,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 }
 
-func newRunMachine(definition *graph.Definition) (*runMachine, error) {
+func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event) (*runMachine, error) {
 	version, err := graph.SemanticVersion(definition)
 	if err != nil {
 		return nil, err
@@ -262,7 +268,7 @@ func newRunMachine(definition *graph.Definition) (*runMachine, error) {
 		resolved:    make(map[string]map[string]graph.Value, len(ids)),
 		outputs:     make(map[string]map[string]graph.Value, len(ids)),
 		result:      RunResult{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: RunRunning},
-		emitter:     events.NewCollector(runID, definition.ID, version),
+		emitter:     events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live),
 		nodeStarted: make(map[string]time.Time, len(ids)),
 	}
 	for _, id := range ids {

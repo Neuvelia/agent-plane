@@ -1,19 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"context"
 	"os"
-
-	"agentplane/internal/version"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == "version" {
-		fmt.Println(version.String())
-		return
-	}
+	os.Exit(runMain())
+}
 
-	fmt.Fprintln(os.Stderr, "agentplane: execution core is not implemented yet")
-	fmt.Fprintln(os.Stderr, "usage: agentplane version")
-	os.Exit(2)
+func runMain() int {
+	// Let writes to closed stdout/stderr pipes return EPIPE so the CLI can
+	// report its documented output-error status and cancel active work.
+	signal.Ignore(syscall.SIGPIPE)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return runCommand(ctx, os.Args[1:], os.Stdout, os.Stderr)
 }
