@@ -324,9 +324,14 @@ A graph output must reference an output that can be produced on every successful
 
 Metadata may include non-semantic fields such as description, tags, and future canvas layout.
 
-Visual layout must be excluded from any semantic graph hash introduced later.
+Visual layout is excluded from the F0.6 semantic graph fingerprint.
 Metadata is therefore an open mapping and is kept separate from execution
 fields in the typed definition.
+
+F0.6 hashes a normalized schema-v0 definition with `name` and `metadata`
+removed. Edge and graph-input-binding order is normalized; sequence-valued
+node configuration such as `args` keeps its authored order. The resulting
+version uses a `sha256-v0:` prefix so a future algorithm can be distinguished.
 
 ## Parsing and serialization
 

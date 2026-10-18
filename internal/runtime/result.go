@@ -3,6 +3,7 @@ package runtime
 import (
 	"fmt"
 
+	"agentplane/internal/events"
 	"agentplane/internal/graph"
 )
 
@@ -18,7 +19,7 @@ const (
 )
 
 // Failure preserves the error cause or structured diagnostics within the
-// local run result. F0.6 will define any serialized event representation.
+// local run result. Events expose only the kind and diagnostic codes.
 type Failure struct {
 	NodeID      string
 	Kind        FailureKind
@@ -35,6 +36,7 @@ type PortValue struct {
 // NodeResult describes the terminal outcome of one node.
 type NodeResult struct {
 	NodeID     string
+	NodeRunID  events.NodeRunID
 	State      NodeState
 	Outputs    []PortValue
 	Failure    *Failure
@@ -53,12 +55,15 @@ type StateTransition struct {
 // RunResult is ordered by node ID and graph output name. A started run has
 // exactly one terminal State when Run returns.
 type RunResult struct {
-	GraphID     string
-	State       RunState
-	Nodes       []NodeResult
-	Outputs     []PortValue
-	Failure     *Failure
-	Transitions []StateTransition
+	GraphID      string
+	GraphVersion string
+	RunID        events.RunID
+	State        RunState
+	Nodes        []NodeResult
+	Outputs      []PortValue
+	Failure      *Failure
+	Transitions  []StateTransition
+	Events       []events.Event
 }
 
 // PreflightError reports definition or graph-input diagnostics before any

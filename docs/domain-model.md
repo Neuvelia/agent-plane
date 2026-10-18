@@ -19,7 +19,8 @@ Owns:
 
 An immutable semantic snapshot of a GraphDefinition used for a run.
 
-Later this should include a semantic hash and repository context.
+F0.6 identifies the schema-v0 semantic definition with a `sha256-v0:`
+fingerprint that excludes name and metadata. Repository context is later work.
 
 ### NodeDefinition
 
@@ -51,6 +52,7 @@ A Run owns NodeRuns and execution events.
 The runtime instance of a NodeDefinition inside a Run.
 
 A future NodeRun may have multiple Attempts when correction loops are enabled.
+F0.6 gives every NodeRun an opaque ID even if it never starts.
 
 ### Attempt
 
@@ -62,7 +64,8 @@ Later attempts carry check results, artifacts, changed files, and usage metadata
 
 An append-oriented fact describing an observable execution transition.
 
-Events are ordered within a run by sequence number.
+Events are ordered within a run by sequence number, starting at 1. The
+combination of run ID and sequence identifies an event.
 
 ### CheckResult
 

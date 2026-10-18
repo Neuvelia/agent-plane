@@ -78,6 +78,10 @@ type config struct {
 // argument text as shell syntax. The resolved node inputs are reserved for a
 // later explicit input-to-process contract and are not interpolated here.
 func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, _ map[string]graph.Value) (Result, error) {
+	return execute(ctx, nodeID, node, nil)
+}
+
+func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, observe func(string, []byte)) (Result, error) {
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -97,7 +101,8 @@ func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefin
 	// Bound the pipe drain so Wait can finish without managing the process tree.
 	cmd.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	cmd.Stdout = &logWriter{capture: &stdout, stream: "stdout", observe: observe}
+	cmd.Stderr = &logWriter{capture: &stderr, stream: "stderr", observe: observe}
 	var killRequested atomic.Bool
 	cmd.Cancel = func() error {
 		err := cmd.Process.Kill()
@@ -144,6 +149,13 @@ func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefin
 // ExecuteNode adapts process output to explicitly declared node output ports.
 // A failed process returns no accepted outputs; its evidence is in the error.
 func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (map[string]graph.Value, error) {
+	return e.ExecuteNodeWithLogs(ctx, nodeID, node, inputs, nil)
+}
+
+// ExecuteNodeWithLogs streams bounded chunks while retaining F0.5's complete
+// stdout and stderr result evidence. The observer must tolerate concurrent
+// calls from the two output-copy goroutines.
+func (Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
 	cfg, configErr := parseConfig(node)
 	if configErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
@@ -164,7 +176,7 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 			return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: fmt.Errorf("unsupported shell output %q", name)}
 		}
 	}
-	result, err := e.Execute(ctx, nodeID, node, inputs)
+	result, err := execute(ctx, nodeID, node, observe)
 	if err != nil {
 		return nil, err
 	}
@@ -187,6 +199,31 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 		}
 	}
 	return outputs, nil
+}
+
+const maxLogChunk = 16 * 1024
+
+type logWriter struct {
+	capture *bytes.Buffer
+	stream  string
+	observe func(string, []byte)
+}
+
+func (w *logWriter) Write(data []byte) (int, error) {
+	n, err := w.capture.Write(data)
+	if err != nil {
+		return n, err
+	}
+	if w.observe != nil {
+		for start := 0; start < n; start += maxLogChunk {
+			end := start + maxLogChunk
+			if end > n {
+				end = n
+			}
+			w.observe(w.stream, data[start:end])
+		}
+	}
+	return n, nil
 }
 
 func parseConfig(node graph.NodeDefinition) (config, error) {

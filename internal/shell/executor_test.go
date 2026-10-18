@@ -9,10 +9,12 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 )
@@ -115,6 +117,89 @@ func TestExecuteCapturesSeparateStreamsAndPreservesArgv(t *testing.T) {
 	}
 	if result.StartedAt.IsZero() || result.EndedAt.Before(result.StartedAt) {
 		t.Fatalf("timestamps = %v / %v", result.StartedAt, result.EndedAt)
+	}
+}
+
+func TestExecuteNodeReportsSeparateBoundedLogChunks(t *testing.T) {
+	node := helperNode("bulk")
+	var mu sync.Mutex
+	chunks := map[string][][]byte{}
+	_, err := (Executor{}).ExecuteNodeWithLogs(context.Background(), "worker", node, nil, func(stream string, data []byte) {
+		mu.Lock()
+		defer mu.Unlock()
+		if len(data) == 0 || len(data) > 16*1024 {
+			t.Errorf("chunk size %d", len(data))
+		}
+		chunks[stream] = append(chunks[stream], append([]byte(nil), data...))
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stream := range []string{"stdout", "stderr"} {
+		var joined []byte
+		for _, chunk := range chunks[stream] {
+			joined = append(joined, chunk...)
+		}
+		if len(joined) != 1<<20 || string(joined) != strings.Repeat("x", 1<<20) {
+			t.Fatalf("%s length = %d", stream, len(joined))
+		}
+	}
+}
+
+func TestFailedShellRunEmitsLogsBeforeTerminalEvents(t *testing.T) {
+	node := helperNode("fail")
+	node.Config["env"].(map[string]string)["PRIVATE_MARKER"] = "configured-private-value"
+	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-log-fail", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
+	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogSanitizer: func(data []byte) []byte {
+		return []byte(strings.ReplaceAll(string(data), "failure detail", "[REDACTED]"))
+	}})
+	if err != nil || result.State != runtime.RunFailed {
+		t.Fatalf("run = %#v, %v", result, err)
+	}
+	var stdout, stderr string
+	var finishIndex, runFinishIndex int
+	for i, event := range result.Events {
+		switch event.Type {
+		case events.LogChunk:
+			payload := event.Payload.(events.LogChunkPayload)
+			if payload.Stream == events.Stdout {
+				stdout += string(payload.Data)
+			} else if payload.Stream == events.Stderr {
+				stderr += string(payload.Data)
+			}
+		case events.NodeFinished:
+			finishIndex = i
+		case events.RunFinished:
+			runFinishIndex = i
+		}
+	}
+	if stdout != "partial" || stderr != "[REDACTED]" || finishIndex == 0 || runFinishIndex != len(result.Events)-1 || finishIndex >= runFinishIndex {
+		t.Fatalf("events = %#v", result.Events)
+	}
+	encoded, _ := json.Marshal(result.Events)
+	if strings.Contains(string(encoded), "failure detail") || strings.Contains(string(encoded), "AGENTPLANE_HELPER") || strings.Contains(string(encoded), "configured-private-value") {
+		t.Fatalf("secret/config leaked: %s", encoded)
+	}
+}
+
+func TestSanitizedLogEventsRemainBounded(t *testing.T) {
+	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-log-bound", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": helperNode("bulk")}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
+	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogSanitizer: func(data []byte) []byte { return append(append([]byte(nil), data...), data...) }})
+	if err != nil || result.State != runtime.RunSucceeded {
+		t.Fatalf("run = %#v, %v", result, err)
+	}
+	var seen int
+	for _, event := range result.Events {
+		if event.Type != events.LogChunk {
+			continue
+		}
+		seen++
+		if got := len(event.Payload.(events.LogChunkPayload).Data); got > 16*1024 {
+			t.Fatalf("event chunk has %d bytes", got)
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no log events")
 	}
 }
 
