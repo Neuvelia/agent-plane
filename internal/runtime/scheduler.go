@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"sync"
+	"time"
 
+	"agentplane/internal/events"
 	"agentplane/internal/graph"
 )
 
@@ -17,10 +20,21 @@ type Executor interface {
 	ExecuteNode(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error)
 }
 
+// LogStreamingExecutor optionally reports bounded output chunks while a node
+// executes. The observer may be called concurrently for separate streams; all
+// callbacks must complete before ExecuteNodeWithLogs returns for complete logs.
+// Calls after return are discarded once the worker closes the observer.
+type LogStreamingExecutor interface {
+	ExecuteNodeWithLogs(context.Context, string, graph.NodeDefinition, map[string]graph.Value, func(string, []byte)) (map[string]graph.Value, error)
+}
+
 // Options controls the maximum number of simultaneously running nodes.
 // Zero selects the conservative default of one. Negative values are invalid.
 type Options struct {
 	MaxConcurrency int
+	// LogRedactions are exact byte strings replaced in log events. Redaction
+	// works across writes and is independent for stdout and stderr.
+	LogRedactions []string
 }
 
 type completedNode struct {
@@ -29,13 +43,17 @@ type completedNode struct {
 	err     error
 }
 
+const maxEventLogChunk = 16 * 1024
+
 type runMachine struct {
-	ids      []string
-	nodes    map[string]*NodeResult
-	resolved map[string]map[string]graph.Value
-	outputs  map[string]map[string]graph.Value
-	result   RunResult
-	sequence uint64
+	ids         []string
+	nodes       map[string]*NodeResult
+	resolved    map[string]map[string]graph.Value
+	outputs     map[string]map[string]graph.Value
+	result      RunResult
+	emitter     *events.Collector
+	startedAt   time.Time
+	nodeStarted map[string]time.Time
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -55,6 +73,11 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if limit == 0 {
 		limit = 1
 	}
+	redactions := append([]string(nil), options.LogRedactions...)
+	redactionTemplate, err := newLogRedactor(redactions)
+	if err != nil {
+		return RunResult{}, fmt.Errorf("invalid log redactions: %w", err)
+	}
 
 	plan, validation := graph.CompileBindings(definition)
 	if !validation.Valid() {
@@ -70,7 +93,10 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		graphInputs[name] = value
 	}
 
-	machine := newRunMachine(definition)
+	machine, err := newRunMachine(definition)
+	if err != nil {
+		return RunResult{}, err
+	}
 	if limit > len(machine.ids) {
 		limit = len(machine.ids)
 	}
@@ -128,8 +154,45 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			machine.transitionNode(id, NodeRunning)
 			node := definition.Nodes[id]
 			resolved := machine.resolved[id]
+			nodeRunID := machine.nodes[id].NodeRunID
 			go func(id string) {
-				outputs, err := executor.ExecuteNode(ctx, id, node, resolved)
+				var outputs map[string]graph.Value
+				var err error
+				if streaming, ok := executor.(LogStreamingExecutor); ok {
+					redactor := redactionTemplate.clone()
+					var logMu sync.Mutex
+					closed := false
+					emitLog := func(stream events.Stream, data []byte) {
+						for len(data) > 0 {
+							chunk := data
+							if len(chunk) > maxEventLogChunk {
+								chunk = chunk[:maxEventLogChunk]
+							}
+							machine.appendEvent(events.Event{Type: events.LogChunk, NodeID: id, NodeRunID: nodeRunID, Payload: events.LogChunkPayload{Stream: stream, Data: chunk}})
+							data = data[len(chunk):]
+						}
+					}
+					observer := func(stream string, data []byte) {
+						if stream != string(events.Stdout) && stream != string(events.Stderr) {
+							return
+						}
+						logMu.Lock()
+						if closed {
+							logMu.Unlock()
+							return
+						}
+						emitLog(events.Stream(stream), redactor.Write(events.Stream(stream), data))
+						logMu.Unlock()
+					}
+					outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+					logMu.Lock()
+					emitLog(events.Stdout, redactor.Flush(events.Stdout))
+					emitLog(events.Stderr, redactor.Flush(events.Stderr))
+					closed = true
+					logMu.Unlock()
+				} else {
+					outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
+				}
 				completed <- completedNode{id: id, outputs: outputs, err: err}
 			}(id)
 			started++
@@ -179,29 +242,110 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 }
 
-func newRunMachine(definition *graph.Definition) *runMachine {
+func newRunMachine(definition *graph.Definition) (*runMachine, error) {
+	version, err := graph.SemanticVersion(definition)
+	if err != nil {
+		return nil, err
+	}
+	runID, err := events.NewRunID()
+	if err != nil {
+		return nil, err
+	}
 	ids := make([]string, 0, len(definition.Nodes))
 	for id := range definition.Nodes {
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	m := &runMachine{
-		ids:      ids,
-		nodes:    make(map[string]*NodeResult, len(ids)),
-		resolved: make(map[string]map[string]graph.Value, len(ids)),
-		outputs:  make(map[string]map[string]graph.Value, len(ids)),
-		result:   RunResult{GraphID: definition.ID, State: RunRunning},
+		ids:         ids,
+		nodes:       make(map[string]*NodeResult, len(ids)),
+		resolved:    make(map[string]map[string]graph.Value, len(ids)),
+		outputs:     make(map[string]map[string]graph.Value, len(ids)),
+		result:      RunResult{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: RunRunning},
+		emitter:     events.NewCollector(runID, definition.ID, version),
+		nodeStarted: make(map[string]time.Time, len(ids)),
+	}
+	for _, id := range ids {
+		nodeRunID, err := events.NewNodeRunID()
+		if err != nil {
+			return nil, err
+		}
+		m.nodes[id] = &NodeResult{NodeID: id, NodeRunID: nodeRunID, State: NodePending}
 	}
 	m.record("", "", string(RunRunning))
-	for _, id := range ids {
-		m.nodes[id] = &NodeResult{NodeID: id, State: NodePending}
+	return m, nil
+}
+
+func (m *runMachine) appendEvent(event events.Event) events.Event {
+	recorded, err := m.emitter.Append(event)
+	if err != nil {
+		panic(fmt.Errorf("scheduler event invariant: %w", err))
 	}
-	return m
+	return recorded
 }
 
 func (m *runMachine) record(id, from, to string) {
-	m.sequence++
-	m.result.Transitions = append(m.result.Transitions, StateTransition{Sequence: m.sequence, NodeID: id, From: from, To: to})
+	event := events.Event{NodeID: id}
+	if id == "" {
+		if from == "" {
+			event.Type = events.RunStarted
+			event.Payload = events.RunStartedPayload{NodeCount: len(m.ids)}
+		} else {
+			event.Type = events.RunFinished
+			counts := events.NodeCounts{}
+			for _, nodeID := range m.ids {
+				switch m.nodes[nodeID].State {
+				case NodeSucceeded:
+					counts.Succeeded++
+				case NodeFailed:
+					counts.Failed++
+				case NodeSkipped:
+					counts.Skipped++
+				case NodeCancelled:
+					counts.Cancelled++
+				}
+			}
+			failureKind, _ := eventFailure(m.result.Failure)
+			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: time.Since(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
+		}
+	} else {
+		node := m.nodes[id]
+		event.NodeRunID = node.NodeRunID
+		switch to {
+		case string(NodeReady):
+			event.Type, event.Payload = events.NodeReady, events.NodeReadyPayload{}
+		case string(NodeRunning):
+			event.Type, event.Payload = events.NodeStarted, events.NodeStartedPayload{}
+		default:
+			failureKind, codes := eventFailure(node.Failure)
+			if from == string(NodeRunning) {
+				duration := time.Since(m.nodeStarted[id]).Milliseconds()
+				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes, DurationMS: &duration}
+			} else {
+				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes}
+			}
+		}
+	}
+	recorded := m.appendEvent(event)
+	if id == "" && from == "" {
+		m.startedAt = recorded.Timestamp
+	}
+	if id != "" && to == string(NodeRunning) {
+		m.nodeStarted[id] = recorded.Timestamp
+	}
+	m.result.Transitions = append(m.result.Transitions, StateTransition{Sequence: recorded.Sequence, NodeID: id, From: from, To: to})
+}
+
+func eventFailure(failure *Failure) (string, []string) {
+	if failure == nil {
+		return "", nil
+	}
+	codes := make([]string, 0, len(failure.Diagnostics))
+	for _, diagnostic := range failure.Diagnostics {
+		codes = append(codes, diagnostic.Code)
+	}
+	sort.Strings(codes)
+	return string(failure.Kind), codes
 }
 
 func (m *runMachine) transitionNode(id string, to NodeState) {
@@ -301,6 +445,7 @@ func (m *runMachine) cancelUnstarted() {
 
 func (m *runMachine) snapshot() RunResult {
 	result := m.result
+	result.Events = m.emitter.Snapshot()
 	result.Nodes = make([]NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])

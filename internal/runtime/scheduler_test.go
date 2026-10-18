@@ -501,6 +501,15 @@ func TestRunEmptyGraphAndGraphOutputFailure(t *testing.T) {
 }
 
 func TestRunResultsAndTransitionsAreStable(t *testing.T) {
+	stable := func(result RunResult) RunResult {
+		result.RunID = ""
+		result.Events = nil // Timestamps and correlation IDs are unique per run.
+		result.Nodes = append([]NodeResult(nil), result.Nodes...)
+		for i := range result.Nodes {
+			result.Nodes[i].NodeRunID = ""
+		}
+		return result
+	}
 	def := definition(map[string]graph.NodeDefinition{
 		"zeta":  {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 		"alpha": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
@@ -518,7 +527,7 @@ func TestRunResultsAndTransitionsAreStable(t *testing.T) {
 		}
 		if i == 0 {
 			first = result
-		} else if !reflect.DeepEqual(first, result) {
+		} else if !reflect.DeepEqual(stable(first), stable(result)) {
 			t.Fatalf("run %d differs: first=%#v next=%#v", i, first, result)
 		}
 	}

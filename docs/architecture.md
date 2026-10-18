@@ -158,8 +158,8 @@ pending -> ready -> running -> succeeded|failed|cancelled
     +---------------> failed|skipped|cancelled
 ```
 
-F0.4 keeps ordered in-memory transition facts. F0.6 will add the structured
-execution event contract and correlation IDs.
+F0.4 keeps ordered in-memory transition facts. F0.6 adds structured events
+and correlation IDs from those same transitions.
 
 ## Events
 
@@ -173,8 +173,15 @@ node_ready
 node_started
 log_chunk
 node_finished
+node_terminated
 run_finished
 ```
+
+An unstarted node that fails, skips, or cancels emits `node_terminated` instead
+of `node_finished`. Events have a per-run sequence assigned by one in-memory
+collector. The sequence, rather than timestamp, is authoritative for order.
+Completed runs expose their event slice to consumers; live subscriptions and
+durable delivery are later contracts.
 
 Later events include check, correction, artifact, and approval events.
 
