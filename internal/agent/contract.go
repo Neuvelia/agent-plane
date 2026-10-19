@@ -77,3 +77,8 @@ type AgentExecutionOutput struct {
 	RawMetadata json.RawMessage `json:"raw_metadata,omitempty"`
 	Usage       *UsageMetadata  `json:"usage,omitempty"`
 }
+
+// ProgressAdapter reports only safe observable statuses; the base adapter remains compatible.
+type ProgressAdapter interface {
+	ExecuteWithProgress(context.Context, AgentExecutionInput, func(string, []byte)) (AgentExecutionOutput, error)
+}
