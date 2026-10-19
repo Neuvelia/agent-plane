@@ -78,11 +78,11 @@ func (GateCheckPayload) eventPayload() {}
 
 func (p *GateCheckPayload) UnmarshalJSON(data []byte) error {
 	type wire GateCheckPayload
-	var fields map[string]json.RawMessage
 	if !utf8.Valid(data) {
 		return errors.New("invalid check result UTF8")
 	}
-	if err := json.Unmarshal(data, &fields); err != nil {
+	fields, err := checkObjectFields(data, "check_result_version", "check_id", "kind", "verdict", "reason", "evidence", "scope", "duration_ns")
+	if err != nil {
 		return err
 	}
 	for _, key := range []string{"check_result_version", "check_id", "kind", "verdict", "reason", "evidence", "scope", "duration_ns"} {
@@ -215,8 +215,8 @@ func (r EvidenceReference) Validate() error {
 
 func (e *GateEvidence) UnmarshalJSON(data []byte) error {
 	type wire GateEvidence
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
+	fields, err := checkObjectFields(data, "kind", "source", "reference", "exit_code", "path", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted")
+	if err != nil {
 		return err
 	}
 	for _, key := range []string{"kind", "source"} {
@@ -240,8 +240,8 @@ func (e *GateEvidence) UnmarshalJSON(data []byte) error {
 }
 func (r *EvidenceReference) UnmarshalJSON(data []byte) error {
 	type wire EvidenceReference
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(data, &fields); err != nil {
+	fields, err := checkObjectFields(data, "kind", "state", "identifier", "line", "reason")
+	if err != nil {
 		return err
 	}
 	for k, v := range fields {
@@ -256,6 +256,19 @@ func (r *EvidenceReference) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	candidate := EvidenceReference(v)
+	// Presence is part of the reference union: forbidden selectors are invalid
+	// even when encoding/json would decode and later omit their empty values.
+	if candidate.State == "known" {
+		if _, present := fields["reason"]; present {
+			return errors.New("known reference forbids reason")
+		}
+	} else if candidate.State == "unavailable" || candidate.State == "invalid" {
+		for _, key := range []string{"identifier", "line"} {
+			if _, present := fields[key]; present {
+				return fmt.Errorf("diagnostic reference forbids %s", key)
+			}
+		}
+	}
 	if err := candidate.Validate(); err != nil {
 		return err
 	}
@@ -284,4 +297,52 @@ func CheckResults(trace []Event, run RunID, node NodeRunID) []CheckResult {
 		results = append(results, CloneGate(e.Payload.(CheckResult)))
 	}
 	return results
+}
+
+// checkObjectFields enforces exact JSON spellings before encoding/json's
+// case-insensitive struct matching can erase an unknown alias or its null value.
+// Legacy schema4 payloads deliberately do not use this stricter v1 decoder.
+func checkObjectFields(data []byte, allowed ...string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return nil, err
+	}
+	if fields == nil {
+		return nil, errors.New("check result object may not be null")
+	}
+	keys := make([]string, 0, len(fields))
+	for key := range fields {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		recognized := false
+		for _, name := range allowed {
+			if key == name {
+				recognized = true
+				break
+			}
+		}
+		if !recognized {
+			return nil, fmt.Errorf("unknown check result field %q", key)
+		}
+	}
+	return fields, nil
+}
+
+func (s *CheckScope) UnmarshalJSON(data []byte) error {
+	type wire CheckScope
+	fields, err := checkObjectFields(data, "checked_inputs")
+	if err != nil {
+		return err
+	}
+	if len(fields["checked_inputs"]) == 0 || bytes.Equal(bytes.TrimSpace(fields["checked_inputs"]), []byte("null")) {
+		return errors.New("scope requires checked_inputs")
+	}
+	var v wire
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	*s = CheckScope(v)
+	return nil
 }

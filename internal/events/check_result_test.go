@@ -164,3 +164,65 @@ func TestGreenMayOmitEvidenceAndRedCannot(t *testing.T) {
 		t.Fatal("red empty evidence accepted")
 	}
 }
+
+func TestFullResultRejectsCaseAliasesAndForbiddenReferenceFields(t *testing.T) {
+	good, err := json.Marshal(gateFact())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{}
+	var resultFields map[string]json.RawMessage
+	if err := json.Unmarshal(good, &resultFields); err != nil {
+		t.Fatal(err)
+	}
+	// Aliases are unknown fields even when a correctly cased field is present.
+	for _, key := range []string{"check_result_version", "check_id", "kind", "verdict", "reason", "evidence", "scope", "duration_ns"} {
+		cases["result/"+key] = strings.TrimSuffix(string(good), "}") + `,"` + strings.ToUpper(key) + `":null}`
+		cases["result valid alias/"+key] = strings.TrimSuffix(string(good), "}") + `,"` + strings.ToUpper(key) + `":` + string(resultFields[key]) + `}`
+	}
+	cases["scope/alias"] = strings.Replace(string(good), `"checked_inputs":["data"]`, `"checked_inputs":["data"],"CHECKED_INPUTS":null`, 1)
+	for _, key := range []string{"kind", "source", "reference", "exit_code", "path", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted"} {
+		cases["evidence/"+key] = strings.Replace(string(good), `"source":"json_predicate"`, `"source":"json_predicate","`+strings.ToUpper(key)+`":null`, 1)
+	}
+	cases["scope/valid alias"] = strings.Replace(string(good), `"checked_inputs":["data"]`, `"checked_inputs":["data"],"CHECKED_INPUTS":["data"]`, 1)
+	for key, value := range map[string]string{"KIND": `"json_predicate"`, "SOURCE": `"json_predicate"`, "REFERENCE": `{"kind":"file","state":"known","identifier":"file.go"}`, "PATH": `""`, "OMITTED": `0`} {
+		cases["evidence valid alias/"+key] = strings.Replace(string(good), `"source":"json_predicate"`, `"source":"json_predicate","`+key+`":`+value, 1)
+	}
+	known := `{"kind":"file","state":"known","identifier":"file.go"}`
+	for key, value := range map[string]string{"KIND": `"file"`, "STATE": `"known"`, "IDENTIFIER": `"file.go"`, "LINE": `1`, "REASON": `""`} {
+		ref := strings.TrimSuffix(known, "}") + `,"` + key + `":` + value + `}`
+		cases["reference valid alias/"+key] = strings.Replace(string(good), `"source":"json_predicate"`, `"source":"json_predicate","reference":`+ref, 1)
+	}
+	for _, key := range []string{"kind", "state", "identifier", "line", "reason"} {
+		ref := strings.TrimSuffix(known, "}") + `,"` + strings.ToUpper(key) + `":null}`
+		cases["reference/"+key] = strings.Replace(string(good), `"source":"json_predicate"`, `"source":"json_predicate","reference":`+ref, 1)
+	}
+	for name, ref := range map[string]string{
+		"known empty reason":           `{"kind":"file","state":"known","identifier":"file.go","reason":""}`,
+		"unavailable empty identifier": `{"kind":"file","state":"unavailable","reason":"missing","identifier":""}`,
+		"invalid empty identifier":     `{"kind":"file","state":"invalid","reason":"bad","identifier":""}`,
+		"unavailable null line":        `{"kind":"file","state":"unavailable","reason":"missing","line":null}`,
+		"known null identifier":        `{"kind":"file","state":"known","identifier":null}`,
+	} {
+		cases[name] = strings.Replace(string(good), `"source":"json_predicate"`, `"source":"json_predicate","reference":`+ref, 1)
+	}
+	for name, raw := range cases {
+		t.Run(name, func(t *testing.T) {
+			var result CheckResult
+			if err := json.Unmarshal([]byte(raw), &result); err == nil {
+				t.Errorf("direct decode accepted forbidden field: %s", raw)
+			}
+			var event Event
+			envelope := `{"event_schema_version":5,"type":"gate_check","payload":` + raw + `}`
+			if err := json.Unmarshal([]byte(envelope), &event); err == nil {
+				t.Errorf("event decode accepted forbidden field: %s", raw)
+			}
+		})
+	}
+	// Freeze the legacy decoder's existing case-insensitive matching behavior.
+	legacy := `{"event_schema_version":4,"type":"gate_check","payload":{"check_id":"old","kind":"json_predicate","verdict":"red","reason":"mismatch","evidence":[{"SOURCE":"json_predicate"}]}}`
+	var event Event
+	if err := json.Unmarshal([]byte(legacy), &event); err != nil {
+		t.Fatalf("legacy decoding changed: %v", err)
+	}
+}

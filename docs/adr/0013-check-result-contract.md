@@ -51,7 +51,8 @@ structure or nonpositive present line is accepted. Line belongs only to file
 reference; optional pointers preserve absent vs zero (zero line is invalid).
 The optional `reference` object uses `kind`, `state`, `identifier`, `line` and
 `reason` fields. `known` requires identifier and forbids diagnostic reason;
-`unavailable`/`invalid` require reason and forbid identifier/line. A missing
+`unavailable`/`invalid` require reason and forbid identifier/line. Forbidden
+fields are rejected by presence, including explicitly present empty values. A missing
 reference is absent; explicit null reference/line is malformed. Evidence kind
 matches the check kind; source matches it too, except `reported_file_scope`
 uses source `reported`.
@@ -60,6 +61,8 @@ an invalid result structure. Validate all new strings as UTF8 and within
 budgets; redact all reference/scope text. No artifact contents or raw provider
 metadata are embedded.
 
+Full result, scope, evidence and reference objects require exact JSON field
+names; case aliases are unknown fields.
 Unknown JSON fields, unsupported result versions, missing/null required fields,
 wrong types, negative duration, unsupported verdict/kind, invalid red results
 and oversized evidence fail before emission. Field order has no meaning.
