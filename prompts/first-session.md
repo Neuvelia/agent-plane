@@ -1,6 +1,8 @@
-# First Codex session - ready to paste
+# Historical first session - F0.1
 
-Use this after opening the repository in Codex.
+This prompt records the repository's original F0.1 kickoff. F0.1-F0.7 are
+implemented. For a current feature, use `prompts/plan.md` with its own feature
+ID and reviewed spec from `docs/features/`.
 
 ```text
 We are starting implementation of AgentPlane.

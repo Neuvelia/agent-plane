@@ -6,16 +6,20 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 
 ## Status
 
-Early repository scaffold. The active milestone is **Phase 0 - Execution Core**.
+**Phase 0 - Execution Core is implemented.** The active planning milestone is
+**Phase 1 - Agent Loop**, beginning with F1.1 Agent Adapter Contract. No Agent,
+Gate, or correction-loop implementation is present yet.
 
-The first target is a CLI-driven graph runtime that can execute independent Shell nodes concurrently, pass explicit data between nodes, emit structured events, and finish deterministically.
+The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
+passes explicit data between nodes, emits structured events, and finishes
+deterministically.
 
 ## Start here
 
 1. Read `AGENTS.md`.
 2. Read `docs/architecture.md` and `docs/graph-spec.md`.
-3. Read `docs/features/F0.1-graph-definition-schema-v0.md`.
-4. Create a branch or worktree for F0.1.
+3. Read `docs/roadmap.md` and the active feature spec under `docs/features/`.
+4. Create a branch or worktree for the selected feature.
 5. Use `prompts/plan.md` with Codex before implementation.
 6. Implement the approved plan.
 7. Run `make check`.
@@ -138,9 +142,12 @@ event slice remains complete.
 
 ## Current milestone
 
-Phase 0 features are tracked in `TASKS.md` and specified under `docs/features/`.
+`TASKS.md` records completed Phase 0 work and the Phase 1 queue. The detailed
+feature catalog is in `docs/reference/full-roadmap-features.md`; an active
+feature needs its own measurable spec under `docs/features/` before coding.
 
-Do not start the visual IDE, cloud control plane, billing, or managed execution before the runtime contracts are proven.
+Keep Phase 1 work within its active feature spec. The visual IDE, cloud control
+plane, billing, and managed execution remain later roadmap phases.
 
 ## Working with Codex
 

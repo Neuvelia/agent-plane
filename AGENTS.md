@@ -24,9 +24,13 @@ Read these files before making architectural changes:
 
 ## Current product phase
 
-The repository starts in Phase 0: Execution Core.
+Phase 0: Execution Core is implemented on `main` through F0.7. Phase 1: Agent
+Loop is the active planning phase, beginning with F1.1 Agent Adapter Contract.
+Phase 1 behavior has not been implemented. Read the active feature spec before
+changing execution contracts; do not treat the roadmap as an executable spec.
 
-The immediate objective is to prove graph/node/edge/run semantics without building the UI or cloud control plane.
+The Phase 0 objective was to prove graph/node/edge/run semantics without
+building the UI or cloud control plane.
 
 Phase 0 scope:
 
@@ -38,11 +42,12 @@ Phase 0 scope:
 6. Event Model with stable run/node/attempt identifiers.
 7. CLI runner.
 
-Phase 0 exit criterion:
+Phase 0 exit criterion, covered by the CLI integration test:
 
 A graph with three Shell nodes can run two independent branches concurrently, pass data to a dependent node, emit a reconstructable event stream, and terminate with a deterministic result.
 
-Do not implement later phases unless the active feature spec explicitly requires a compatibility seam.
+Implement only the active feature scope. Do not add later-phase behavior unless
+its spec explicitly requires a compatibility seam.
 
 ## Non-negotiable architecture rules
 

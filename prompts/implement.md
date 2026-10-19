@@ -20,7 +20,8 @@ Rules:
 - Keep public contracts explicit and minimal.
 - Add or update tests for every acceptance criterion.
 - Test failure behavior, not only happy paths.
-- Do not add cloud/UI dependencies to the Phase 0 runtime.
+- Preserve local-first execution; do not add cloud/UI dependencies to the core
+  runtime unless the active feature spec explicitly requires a compatibility seam.
 - Do not use an LLM for deterministic behavior.
 - Treat graph/process/path inputs as untrusted.
 - Do not log or serialize secrets.

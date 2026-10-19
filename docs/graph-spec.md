@@ -253,6 +253,52 @@ an otherwise successful direct-child exit, the node fails with an output error
 and preserves any output captured before the deadline. A nonzero direct-child
 exit remains an exit failure. This does not terminate that other process.
 
+### Agent node configuration (F1.1 contract)
+
+`type: agent` uses the existing schema-v0 `config` mapping. This convention is
+specified for F1.1; Agent execution is not yet implemented. For example:
+
+```yaml
+nodes:
+  implement:
+    type: agent
+    inputs:
+      task: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: /absolute/path/to/repository
+      allowed_paths: ["src/"]
+      context_refs: ["docs/architecture.md"]
+      environment_refs: ["CODEX_HOME"]
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+```
+
+The `adapter` ID and absolute local `workspace` path are required. Exactly one
+task source is required: a nonempty literal `config.task` or a declared string
+`task` input resolved by a graph binding. Both sources or neither source fail
+before adapter invocation. `allowed_paths`, `context_refs`, and
+`environment_refs` are optional lists of nonempty strings. They identify
+intent and references only; F1.1 does not expand them, read referenced files,
+resolve secrets, or copy named environment variables into a child process.
+Unknown Agent configuration fields and wrong types fail at the Agent executor
+boundary. The generic graph validator does not yet interpret Agent config.
+
+An Agent node may declare only these output ports: `summary` as `string`, and
+`changed_files`, `artifacts`, `raw_metadata`, and `usage` as `json`.
+`changed_files` and `artifacts` are JSON arrays; `raw_metadata` is validated
+provider JSON; `usage` is structured JSON with only known values present.
+Unknown optional data yields no output value; authors must not mark a port
+`required: true` unless their adapter guarantees it. The runtime rejects
+missing required values and wrong types as it does for Shell nodes. Values
+become graph data only through declared ports. Provider metadata and task
+text are not included in F1.1 lifecycle event payloads.
+
+`allowed_paths` is advisory in F1.1, not a sandbox or a changed-files check.
+F1.4 adds a check over explicit reported paths; F1.8 adds Git-derived scope
+enforcement. See ADR-0009 for the adapter and identity decisions.
+
 ## Edge definition
 
 An edge maps one declared source output to one declared target input.
