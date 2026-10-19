@@ -29,8 +29,10 @@ Adapter Contract and F1.2 installed-Codex execution are implemented, including
 Git-derived evidence and a verified real CLI smoke. F1.3 adds bounded normalized
 progress and live delivery (ADR-0011). F1.4 adds deterministic read-only Gates
 (ADR-0012). F1.5 adds versioned Check Results with typed references,
-checked-input scope, duration and typed trace lookup (ADR-0013). Later Phase 1 Agent Loop features
-remain unimplemented; F1.6 is the next planning candidate. Read the
+checked-input scope, duration and typed trace lookup (ADR-0013). F1.6 adds bounded
+node-local correction attempts with embedded Gates, typed feedback,
+and schema-6 attempt trace (ADR-0014). Later Phase 1 features remain unimplemented;
+F1.7 is the next planning candidate. Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without

@@ -170,3 +170,9 @@ func normalize(p string) (string, error) {
 	}
 	return q, nil
 }
+
+// ValidateNodeConfig checks Gate configuration without evaluating inputs.
+func (Executor) ValidateNodeConfig(_ string, n graph.NodeDefinition) error {
+	_, err := parse(n)
+	return err
+}

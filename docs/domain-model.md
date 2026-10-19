@@ -33,7 +33,8 @@ A node has:
 - declared inputs;
 - declared outputs;
 - type-specific configuration;
-- later: timeout, permission, loop, and policy configuration.
+- optional node-local correction loop (F1.6);
+- later: timeout, permission and policy configuration.
 
 ### EdgeDefinition
 
@@ -82,8 +83,7 @@ duration_ns: required nonnegative integer
 
 A red Gate fails and exposes no accepted output; its result remains retrievable
 by run ID and node-run ID with `events.CheckResults`. Operational errors do not
-invent results. No attempt exists yet; correction scope is a separate future
-input. A reference is absent, known (identifier supplied), unavailable or invalid
+invent results. F1.6 adds attempts and a separate original intended correction scope. A reference is absent, known (identifier supplied), unavailable or invalid
 (with diagnostic reason). File references may carry a positive line; test, diff
 and artifact identifiers are opaque. References are never resolved here.
 Legacy schema-4 minimal Gate payloads remain distinct and retain unknown scope
@@ -135,3 +135,20 @@ Attempt         1 --- N CheckResult
 8. A correction attempt never overwrites the trace of a previous attempt.
 9. Unknown usage/cost is represented as unknown, never as zero.
 10. Runtime state must be reconstructable from durable events once persistence is introduced.
+
+### F1.6 attempts and accepted candidates
+
+A loop-enabled Agent has one stable NodeRunID and up to ten scheduler-created
+AttemptIDs (default three). Each attempt executes one producer and embedded
+Gate cycle. A successful producer may emit attempt-correlated `node_evidence`
+even when its candidate is subsequently rejected; this is producer observation,
+not acceptance or a certification of repository state. Only an `accepted`
+attempt publishes candidate values. Old evidence without an AttemptID retains
+its success-only meaning.
+
+`agent.AgentExecutionInput.Feedback` optionally carries typed previous AttemptID,
+the exact detached sanitized CheckResult retained in trace, and the original
+intended scope. The original task stays unchanged. Gate checked-input names do
+not redefine correction scope. Codex places explicitly untrusted feedback on
+stdin with the original process/environment/permission policy. The capability
+reports transport support, not model obedience.

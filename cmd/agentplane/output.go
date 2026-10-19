@@ -82,6 +82,17 @@ func (r *eventRenderer) Event(event events.Event) error {
 	case events.RunStarted:
 		_, err := fmt.Fprintf(r.stderr, "Run started: %s\n", event.RunID)
 		return err
+	case events.AttemptStarted:
+		p := event.Payload.(events.AttemptStartedPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s attempt %d/%d started: %s\n", event.NodeID, p.Number, p.MaxAttempts, event.AttemptID)
+		return err
+	case events.AttemptFinished:
+		if err := r.flushNode(event.NodeID); err != nil {
+			return err
+		}
+		p := event.Payload.(events.AttemptFinishedPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s attempt %s: %s\n", event.NodeID, event.AttemptID, p.Outcome)
+		return err
 	case events.NodeReady:
 		_, err := fmt.Fprintf(r.stderr, "%s ready\n", event.NodeID)
 		return err
@@ -152,7 +163,11 @@ func (r *eventRenderer) Event(event events.Event) error {
 		}
 	case events.NodeEvidence:
 		p := event.Payload.(events.NodeEvidencePayload)
-		if _, err := fmt.Fprintf(r.stderr, "%s evidence: %s %s (%d changed paths)\n", event.NodeID, p.AdapterID, p.AdapterVersion, len(p.ChangedFiles)); err != nil {
+		label := event.NodeID
+		if event.AttemptID != "" {
+			label += " attempt " + string(event.AttemptID) + " producer"
+		}
+		if _, err := fmt.Fprintf(r.stderr, "%s evidence: %s %s (%d changed paths)\n", label, p.AdapterID, p.AdapterVersion, len(p.ChangedFiles)); err != nil {
 			return err
 		}
 		for _, file := range p.ChangedFiles {

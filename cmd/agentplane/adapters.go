@@ -28,3 +28,13 @@ func (e nodeExecutor) ExecuteNodeObserved(ctx context.Context, id string, n grap
 	values, err := (shell.Executor{}).ExecuteNodeWithLogs(ctx, id, n, in, o.Log)
 	return values, nil, err
 }
+
+func (e nodeExecutor) ValidateNodeConfig(id string, n graph.NodeDefinition) error {
+	if n.Type == "gate" {
+		return (gate.Executor{}).ValidateNodeConfig(id, n)
+	}
+	return e.agents.ValidateNodeConfig(id, n)
+}
+func (e nodeExecutor) PreflightNode(ctx context.Context, id string, n graph.NodeDefinition) error {
+	return e.agents.PreflightNode(ctx, id, n)
+}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 
 	"agentplane/internal/events"
+	"agentplane/internal/runtime"
 )
 
 type AdapterID string
@@ -20,26 +21,28 @@ type AgentAdapter interface {
 
 // Optional capability flags use nil for unknown and non-nil false for known lack of support.
 type CapabilityReport struct {
-	Available      bool    `json:"available"`
-	DisplayName    string  `json:"display_name,omitempty"`
-	Version        *string `json:"version,omitempty"`
-	Cancellation   *bool   `json:"cancellation,omitempty"`
-	Streaming      *bool   `json:"streaming,omitempty"`
-	UsageReporting *bool   `json:"usage_reporting,omitempty"`
-	Workspace      *bool   `json:"workspace,omitempty"`
+	CorrectionFeedback *bool   `json:"correction_feedback,omitempty"`
+	Available          bool    `json:"available"`
+	DisplayName        string  `json:"display_name,omitempty"`
+	Version            *string `json:"version,omitempty"`
+	Cancellation       *bool   `json:"cancellation,omitempty"`
+	Streaming          *bool   `json:"streaming,omitempty"`
+	UsageReporting     *bool   `json:"usage_reporting,omitempty"`
+	Workspace          *bool   `json:"workspace,omitempty"`
 }
 
 // AgentExecutionInput contains only explicitly authored references, not resolved
 // files, environment values, secrets, or hidden repository context.
 type AgentExecutionInput struct {
-	Task            string           `json:"task"`
-	Workspace       string           `json:"workspace"`
-	AllowedPaths    []string         `json:"allowed_paths,omitempty"`
-	ContextRefs     []string         `json:"context_refs,omitempty"`
-	EnvironmentRefs []string         `json:"environment_refs,omitempty"`
-	RunID           events.RunID     `json:"run_id,omitempty"`
-	NodeRunID       events.NodeRunID `json:"node_run_id,omitempty"`
-	AttemptID       events.AttemptID `json:"attempt_id,omitempty"`
+	Feedback        *runtime.CorrectionFeedback `json:"feedback,omitempty"`
+	Task            string                      `json:"task"`
+	Workspace       string                      `json:"workspace"`
+	AllowedPaths    []string                    `json:"allowed_paths,omitempty"`
+	ContextRefs     []string                    `json:"context_refs,omitempty"`
+	EnvironmentRefs []string                    `json:"environment_refs,omitempty"`
+	RunID           events.RunID                `json:"run_id,omitempty"`
+	NodeRunID       events.NodeRunID            `json:"node_run_id,omitempty"`
+	AttemptID       events.AttemptID            `json:"attempt_id,omitempty"`
 }
 
 type FileProvenance string
