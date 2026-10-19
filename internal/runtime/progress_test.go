@@ -211,3 +211,99 @@ func TestProgressSourceStateBoundAndRecovery(t *testing.T) {
 		t.Fatal("completed sources accumulated")
 	}
 }
+
+func TestNormalizedRedactionRejectsUnsafeUTF8BeforeExecution(t *testing.T) {
+	ascii := make([]byte, 128)
+	for i := range ascii {
+		ascii[i] = byte(i)
+	}
+	for _, tc := range []struct {
+		redactions []string
+		text       string
+	}{{[]string{string(ascii), "SENSITIVE", "\uFFFD"}, "SENSITIVE"}, {[]string{string([]byte{0xa9}), "\uFFFD"}, "é"}} {
+		called := false
+		ex := typedExecutor{func(o ExecutionObservation) {
+			called = true
+			o.Progress(events.TextDelta, events.TextDeltaPayload{Text: tc.text})
+		}}
+		result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{LogRedactions: tc.redactions})
+		if err == nil {
+			encoded, marshalErr := json.Marshal(result.Events)
+			if marshalErr != nil {
+				t.Fatal(marshalErr)
+			}
+			var decoded []events.Event
+			if decodeErr := json.Unmarshal(encoded, &decoded); decodeErr != nil {
+				t.Fatal(decodeErr)
+			}
+			for _, e := range decoded {
+				if v, ok := e.Payload.(events.TextDeltaPayload); ok && strings.Contains(v.Text, "\uFFFD") {
+					t.Fatalf("JSON conversion disclosed configured U+FFFD secret: %q", v.Text)
+				}
+			}
+			t.Fatal("unsafe normalized redactions accepted")
+		}
+		if called || result.RunID != "" || len(result.Events) != 0 {
+			t.Fatal("unsafe configuration started execution")
+		}
+	}
+}
+
+func TestLegacyByteLogsKeepNonUTF8MarkerCompatibility(t *testing.T) {
+	ascii := make([]byte, 128)
+	for i := range ascii {
+		ascii[i] = byte(i)
+	}
+	ex := streamingExecutorFunc(func(_ context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value, log func(string, []byte)) (map[string]graph.Value, error) {
+		log("stdout", []byte("SENSITIVE"))
+		return nil, nil
+	})
+	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{LogRedactions: []string{string(ascii), "SENSITIVE", "\uFFFD"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(result.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded []events.Event
+	if err = json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	var data []byte
+	for _, e := range decoded {
+		if v, ok := e.Payload.(events.LogChunkPayload); ok {
+			data = append(data, v.Data...)
+		}
+	}
+	if string(data) != string([]byte{0x80, 0x80, 0x80}) {
+		t.Fatalf("legacy byte marker changed: %x", data)
+	}
+}
+
+func TestNormalizedUTF8SecretsStayRedactedAfterJSON(t *testing.T) {
+	ex := typedExecutor{func(o ExecutionObservation) {
+		o.Progress(events.TextDelta, events.TextDeltaPayload{Text: "before é and SENSITIVE \uFFFD after"})
+	}}
+	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{LogRedactions: []string{"SENSITIVE", "\uFFFD"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(result.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded []events.Event
+	if err = json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	var text string
+	for _, e := range decoded {
+		if v, ok := e.Payload.(events.TextDeltaPayload); ok {
+			text += v.Text
+		}
+	}
+	if text != "before é and *** *** after" {
+		t.Fatalf("serialized redaction changed: %q", text)
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
@@ -108,6 +109,19 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	redactionTemplate, err := newLogRedactor(redactions)
 	if err != nil {
 		return RunResult{}, fmt.Errorf("invalid log redactions: %w", err)
+	}
+
+	// Byte logs serialize as base64, but normalized/evidence string observation
+	// must not let JSON manufacture replacement runes after secret redaction.
+	if _, observed := executor.(ObservedExecutor); observed {
+		for _, value := range redactions {
+			if !utf8.ValidString(value) {
+				return RunResult{}, errors.New("invalid observed redactions: values must be valid UTF-8")
+			}
+		}
+		if !utf8.Valid(redactionTemplate.marker) {
+			return RunResult{}, errors.New("invalid observed redactions: no UTF-8-safe secret-absent marker is available")
+		}
 	}
 
 	plan, validation := graph.CompileBindings(definition)

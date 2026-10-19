@@ -152,3 +152,26 @@ func TestLegacySchemasDecodeExistingShapes(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizedProgressRejectsInvalidUTF8Strings(t *testing.T) {
+	bad := string([]byte{0x80})
+	for _, e := range []Event{
+		{Type: TextDelta, Payload: TextDeltaPayload{Text: bad}},
+		{Type: TextDelta, Payload: TextDeltaPayload{SourceID: bad, Text: "safe"}},
+		{Type: ToolCallStarted, Payload: ToolCallPayload{CallID: bad, Name: "tool", Status: "in_progress"}},
+		{Type: ToolCallFinished, Payload: ToolCallPayload{CallID: "c", Name: bad, Status: "completed"}},
+		{Type: CommandStarted, Payload: CommandPayload{CommandID: bad, Status: "in_progress"}},
+		{Type: CommandFinished, Payload: CommandPayload{CommandID: "c", Status: bad}},
+		{Type: FileChanged, Payload: FileChangedPayload{Path: bad, Action: "add", Provenance: "reported"}},
+		{Type: FileChanged, Payload: FileChangedPayload{Path: "a", Action: bad, Provenance: "reported"}},
+		{Type: FileChanged, Payload: FileChangedPayload{Path: "a", Action: "add", Provenance: bad}},
+		{Type: Status, Payload: StatusPayload{Code: bad}},
+	} {
+		if err := e.Validate(); err == nil || !strings.Contains(err.Error(), "UTF-8") {
+			t.Fatalf("missing UTF-8 validation: %v", err)
+		}
+		if _, err := json.Marshal(e); err == nil {
+			t.Fatal("invalid string silently normalized during JSON encoding")
+		}
+	}
+}

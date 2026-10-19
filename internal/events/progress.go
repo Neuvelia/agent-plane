@@ -1,6 +1,9 @@
 package events
 
-import "fmt"
+import (
+	"fmt"
+	"unicode/utf8"
+)
 
 const (
 	TextDelta          Type = "text_delta"
@@ -65,25 +68,34 @@ func IsProgress(t Type) bool { return t == LogChunk || IsNormalized(t) }
 func validateProgress(kind Type, p Payload) error {
 	var size int
 	valid := true
+	validUTF8 := true
 	switch v := p.(type) {
 	case TextDeltaPayload:
 		size = len(v.SourceID) + len(v.Text)
+		validUTF8 = utf8.ValidString(v.SourceID) && utf8.ValidString(v.Text)
 	case ToolCallPayload:
 		size = len(v.CallID) + len(v.Name) + len(v.Status)
+		validUTF8 = utf8.ValidString(v.CallID) && utf8.ValidString(v.Name) && utf8.ValidString(v.Status)
 		valid = v.CallID != "" && v.Name != "" && validWorkStatus(v.Status)
 	case CommandPayload:
 		size = len(v.CommandID) + len(v.Status)
+		validUTF8 = utf8.ValidString(v.CommandID) && utf8.ValidString(v.Status)
 		valid = v.CommandID != "" && validWorkStatus(v.Status)
 	case FileChangedPayload:
 		size = len(v.Path) + len(v.Action) + len(v.Provenance)
+		validUTF8 = utf8.ValidString(v.Path) && utf8.ValidString(v.Action) && utf8.ValidString(v.Provenance)
 		valid = v.Path != "" && v.Provenance == "reported" && (v.Action == "add" || v.Action == "update" || v.Action == "delete")
 	case StatusPayload:
 		size = len(v.Code)
+		validUTF8 = utf8.ValidString(v.Code)
 		switch v.Code {
 		case "session_started", "turn_started", "turn_completed", "working", "progress_limited":
 		default:
 			valid = false
 		}
+	}
+	if !validUTF8 {
+		return fmt.Errorf("normalized %s requires valid UTF-8 strings", kind)
 	}
 	if size > MaxProgressContent {
 		return fmt.Errorf("progress content exceeds %d bytes", MaxProgressContent)

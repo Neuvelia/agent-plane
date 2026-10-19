@@ -62,6 +62,14 @@ and emit one finite `progress_limited` status; never retain a rejected-ID map.
 Structural invalid/oversize records and admission-limited callbacks are
 normalization omissions, distinct from collector counters for validated
 admitted facts. Legacy Shell redaction/capture semantics remain unchanged.
+Normalized string observation requires UTF-8-safe redaction configuration.
+For an observed executor, reject invalid UTF-8 secret values or an invalid
+UTF-8 replacement marker at run preflight, before any execution/event. A
+byte absent from every secret remains the marker invariant; if that byte
+cannot form valid UTF-8, fail safely rather than let JSON replace it with
+U+FFFD (which could itself be a configured secret). Reject invalid UTF-8
+normalized payload strings before serialization. Legacy byte-only log
+executors retain arbitrary-byte redaction and base64 log serialization.
 Scheduler remains provider neutral.
 
 Codex maps verified supported item messages to normalized payloads. Completed

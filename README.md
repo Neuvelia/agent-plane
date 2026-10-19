@@ -221,6 +221,11 @@ argv/output, tool arguments/results, provider errors, unknown records and
 private reasoning are excluded. Reported file progress is distinct from final
 Git-derived observed evidence.
 
+Observed executors require UTF-8-safe redaction values and a UTF-8-safe
+secret-absent marker; unsafe configurations fail before execution. Normalized
+string fields reject invalid UTF-8 before JSON encoding. Legacy byte-only log
+executors retain arbitrary-byte redaction and base64 serialization.
+
 Normalized content is capped at 16 KiB; public text is redacted before splitting
 on UTF-8 boundaries. Structured records exceeding that cap are ignored.
 Redaction holds only undecidable secret-prefix tails, with at most 16 active
