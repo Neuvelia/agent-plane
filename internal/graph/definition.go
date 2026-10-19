@@ -31,6 +31,7 @@ type GraphInputReference string
 
 // Definition is the typed representation of a graph definition document.
 type Definition struct {
+	Units              []string                      `yaml:"units,omitempty"`
 	SchemaVersion      SchemaVersion                 `yaml:"schema_version"`
 	ID                 string                        `yaml:"id"`
 	Name               string                        `yaml:"name,omitempty"`

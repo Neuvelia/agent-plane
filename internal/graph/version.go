@@ -13,6 +13,8 @@ func SemanticVersion(definition *Definition) (string, error) {
 		return "", fmt.Errorf("semantic graph version: definition is nil")
 	}
 	semantic := *definition
+	semantic.Units = append([]string(nil), definition.Units...)
+	sort.Strings(semantic.Units)
 	semantic.Name = ""
 	semantic.Metadata = nil
 	semantic.Edges = append([]EdgeDefinition(nil), definition.Edges...)
