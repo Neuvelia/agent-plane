@@ -10,7 +10,8 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 **Phase 1 - Agent Loop**. F1.1 provides the adapter contract and F1.2 adds
 explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
 normalized progress and live delivery. F1.4 adds deterministic read-only Gates;
-F1.5 Check Result normalization is the next planning candidate.
+F1.5 adds versioned Check Results with checked-input scope, duration and typed
+evidence references. F1.6 bounded correction attempts remain outside this scope.
 
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
@@ -107,7 +108,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 4 (old schema 1–3 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 5 (old schema 1–4 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
@@ -257,3 +258,12 @@ omissions, and labels reported scope explicitly. See
 
 Try `go run ./cmd/agentplane run docs/examples/gate.yaml --input 'candidate={"ready":true}'`.
 Use `false` to see red block the dependent Shell.
+
+F1.5 results use `check_result_version: 1`, required `duration_ns` (zero is
+known zero), and `scope.checked_inputs` listing the actual checked port names.
+This scope does not grant correction permissions. Each evidence item has a
+kind/source and may include a file (optional positive line), test, diff or
+opaque artifact reference. Reference state `known` means an identifier was
+supplied; `unavailable` and `invalid` carry diagnostic reasons. No resource
+lookup is performed. Schema 4 minimal Gate facts decode separately without
+invented scope/duration. See [ADR-0013](docs/adr/0013-check-result-contract.md).

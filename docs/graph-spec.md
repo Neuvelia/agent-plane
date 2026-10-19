@@ -532,12 +532,18 @@ This is a restricted read-only operation trusting OS binary integrity, not a
 sandbox against hostile concurrent filesystem changes.
 
 Green publishes only the declared `verdict: green` and runs dependents once;
-red fails and blocks dependents with no accepted outputs. Both emit schema-4
-`gate_check` before `node_finished`, with check ID/kind/verdict/reason and typed
-evidence. Each stream retains at most 8192 bytes after streaming redaction,
+red fails and blocks dependents with no accepted outputs. Both emit schema-5
+`gate_check` before `node_finished`, with version-1 check result identity,
+kind/verdict/reason, typed evidence, required nonnegative `duration_ns` and
+`scope.checked_inputs` containing actual checked port names. Each stream
+retains at most 8192 bytes after streaming redaction,
 with omitted safe-byte counts; byte evidence serializes as base64. Facts have
 at most 32 evidence items and 32768 encoded payload bytes, are validated and
 copied before retention, and remain available after progress/live omissions.
-Readers accept event schemas 1–4, reject Gate facts under older schemas, and
-keep CLI envelope version 1. Full Check Result scope/duration/references are
-reserved to F1.5. See ADR-0012 and `docs/examples/gate.yaml`.
+Readers accept event schemas 1–5; schema-4 Gate facts decode as distinct legacy
+minimal payloads without invented duration/scope. Full results require schema 5;
+CLI envelope remains version 1. Optional evidence references distinguish known
+identifiers, unavailable or invalid diagnostic references, and absence. File
+references may include positive lines; test/diff/artifact identifiers are opaque.
+No reference lookup or correction permission is inferred from these fields.
+See ADR-0012, ADR-0013 and `docs/examples/gate.yaml`.

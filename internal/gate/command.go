@@ -100,7 +100,7 @@ func command(ctx context.Context, c config, in map[string]graph.Value, o run.Exe
 	if err != nil {
 		return p, err
 	}
-	p = events.GateCheckPayload{CheckID: c.CheckID, Kind: c.Kind, Verdict: "green", Reason: "files match", Evidence: []events.GateEvidence{{Source: "command", ExitCode: &exit, Stdout: out, Stderr: errs, StdoutOmitted: no, StderrOmitted: ne}}}
+	p = events.GateCheckPayload{CheckID: c.CheckID, Kind: events.CheckKind(c.Kind), Verdict: "green", Reason: "files match", Evidence: []events.GateEvidence{{Source: "command", ExitCode: &exit, Stdout: out, Stderr: errs, StdoutOmitted: no, StderrOmitted: ne}}}
 	if exit == 1 {
 		p.Verdict = "red"
 		p.Reason = "files differ"

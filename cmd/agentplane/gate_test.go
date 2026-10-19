@@ -95,6 +95,12 @@ outputs: {}
 				if e.Type == events.GateCheck {
 					checks++
 					p := e.Payload.(events.GateCheckPayload)
+					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != 5 || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
+						t.Fatal("full result contract/correlation")
+					}
+					if len(events.CheckResults(doc.Events, e.RunID, e.NodeRunID)) != 1 {
+						t.Fatal("typed retrieval")
+					}
 					if (p.Verdict == "green") != green || p.Evidence[0].Source != "reported" {
 						t.Fatal("gate evidence")
 					}
@@ -147,6 +153,12 @@ func TestCLILocalGateWorksWithoutAdapter(t *testing.T) {
 				if e.Type == events.GateCheck {
 					found = true
 					p := e.Payload.(events.GateCheckPayload)
+					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != 5 || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
+						t.Fatal("full result contract/correlation")
+					}
+					if len(events.CheckResults(doc.Events, e.RunID, e.NodeRunID)) != 1 {
+						t.Fatal("typed retrieval")
+					}
 					ev := p.Evidence[0]
 					if strings.Contains(string(ev.Stdout), "SECRET") || (!green && ev.StdoutOmitted == 0) || (*ev.ExitCode == 0) != green {
 						t.Fatal("unsafe/incorrect bounded diff evidence")

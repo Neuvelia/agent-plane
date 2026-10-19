@@ -206,6 +206,8 @@ func (c *Collector) Snapshot() []Event {
 
 func copyPayload(payload Payload) Payload {
 	switch p := payload.(type) {
+	case LegacyGateCheckPayload:
+		return CloneLegacyGate(p)
 	case GateCheckPayload:
 		return CloneGate(p)
 	case CommandPayload:

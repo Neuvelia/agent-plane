@@ -41,7 +41,12 @@ func jsonValue(t *testing.T, s string) graph.Value {
 func evaluate(t *testing.T, n graph.NodeDefinition, in map[string]graph.Value) (*events.GateCheckPayload, error) {
 	t.Helper()
 	var p *events.GateCheckPayload
-	_, _, e := (Executor{}).ExecuteNodeObserved(context.Background(), "gate", n, in, runtime.ExecutionObservation{Check: func(v events.GateCheckPayload) { p = &v }})
+	_, _, e := (Executor{}).ExecuteNodeObserved(context.Background(), "gate", n, in, runtime.ExecutionObservation{Check: func(v events.GateCheckPayload) {
+		if v.Version != 1 || v.DurationNS < 0 || len(v.Scope.CheckedInputs) == 0 || v.Validate() != nil {
+			t.Errorf("invalid full check result: %+v", v)
+		}
+		p = &v
+	}})
 	return p, e
 }
 func TestPredicateContracts(t *testing.T) {
@@ -406,5 +411,81 @@ func TestReportedScopeEvidenceBudgetIncludesJSONEscaping(t *testing.T) {
 	b, _ = json.Marshal(p)
 	if len(b) > events.MaxGatePayload || p.Evidence[len(p.Evidence)-1].Omitted == 0 {
 		t.Fatal("escaped evidence missing bounded omission marker")
+	}
+}
+
+type gatedSink struct {
+	Executor
+	started bool
+}
+
+func (e *gatedSink) ExecuteNodeObserved(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+	if n.Type == "shell" {
+		e.started = true
+		return map[string]graph.Value{}, nil, nil
+	}
+	return e.Executor.ExecuteNodeObserved(ctx, id, n, in, o)
+}
+func TestEveryGateKindTypedTraceAndDownstream(t *testing.T) {
+	for _, kind := range []string{"command", "json_predicate", "reported_file_scope"} {
+		for _, green := range []bool{true, false} {
+			t.Run(fmt.Sprintf("%s/%t", kind, green), func(t *testing.T) {
+				n := jsonNode()
+				in := map[string]graph.Value{"data": jsonValue(t, fmt.Sprintf(`{"result":%t}`, green))}
+				switch kind {
+				case "command":
+					n = diffNode(t)
+					in = paths()
+					cwd := n.Config["cwd"].(string)
+					os.WriteFile(filepath.Join(cwd, "left"), []byte("left"), 0600)
+					right := "right"
+					if green {
+						right = "left"
+					}
+					os.WriteFile(filepath.Join(cwd, "right"), []byte(right), 0600)
+				case "reported_file_scope":
+					n = node(kind)
+					n.Config["input"] = "files"
+					n.Config["allowed_paths"] = []string{"allowed"}
+					n.Inputs["files"] = graph.PortDefinition{Type: graph.ValueTypeJSON, Required: true}
+					path := "outside"
+					if green {
+						path = "allowed"
+					}
+					in = map[string]graph.Value{"files": jsonValue(t, fmt.Sprintf(`[{"path":%q}]`, path))}
+				}
+				d := &graph.Definition{ID: "full-check", Outputs: map[string]graph.OutputDefinition{}, Nodes: map[string]graph.NodeDefinition{"gate": n, "sink": {Type: "shell", Inputs: map[string]graph.PortDefinition{"accepted": {Type: graph.ValueTypeString, Required: true}}}}, Inputs: map[string]graph.InputDefinition{}, Edges: []graph.EdgeDefinition{{From: "gate.outputs.verdict", To: "sink.inputs.accepted"}}}
+				for name, port := range n.Inputs {
+					d.Inputs[name] = graph.InputDefinition{Type: port.Type, Required: true}
+					d.GraphInputBindings = append(d.GraphInputBindings, graph.GraphInputBindingDefinition{From: graph.GraphInputReference("inputs." + name), To: graph.NodeInputReference("gate.inputs." + name)})
+				}
+				exec := &gatedSink{}
+				r, err := runtime.Run(context.Background(), d, in, exec, runtime.Options{})
+				if err != nil || (r.State == runtime.RunSucceeded) != green || exec.started != green {
+					t.Fatalf("state/downstream: %+v %v", r, err)
+				}
+				var gateRun events.NodeRunID
+				for _, node := range r.Nodes {
+					if node.NodeID == "gate" {
+						gateRun = node.NodeRunID
+						if !green && len(node.Outputs) != 0 {
+							t.Fatal("accepted red")
+						}
+					}
+				}
+				got := events.CheckResults(r.Events, r.RunID, gateRun)
+				if len(got) != 1 || got[0].Version != 1 || got[0].DurationNS < 0 || (got[0].Verdict == events.CheckGreen) != green || got[0].Reason == "" || len(got[0].Evidence) == 0 {
+					t.Fatal("missing typed result")
+				}
+				if len(got[0].Scope.CheckedInputs) != len(in) {
+					t.Fatal("checked input scope")
+				}
+				for _, name := range got[0].Scope.CheckedInputs {
+					if _, ok := in[name]; !ok {
+						t.Fatal("invented scope")
+					}
+				}
+			})
+		}
 	}
 }

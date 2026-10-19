@@ -10,6 +10,7 @@ import (
 	"math/big"
 	"sort"
 	"strings"
+	"time"
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
@@ -41,7 +42,16 @@ func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Va
 	if err != nil {
 		return nil, err
 	}
-	p := events.GateCheckPayload{CheckID: c.CheckID, Kind: c.Kind, Verdict: "green", Reason: "check matched", Evidence: []events.GateEvidence{{Source: c.Kind}}}
+	started := time.Now()
+	scopeInputs := []string{c.Input}
+	if c.Kind == "command" {
+		scopeInputs = []string{c.Left}
+		if c.Right != c.Left {
+			scopeInputs = append(scopeInputs, c.Right)
+		}
+		sort.Strings(scopeInputs)
+	}
+	p := events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: scopeInputs}, CheckID: c.CheckID, Kind: events.CheckKind(c.Kind), Verdict: "green", Reason: "check matched", Evidence: []events.GateEvidence{{Kind: events.EvidenceKind(c.Kind), Source: events.EvidenceSource(c.Kind)}}}
 	switch c.Kind {
 	case "command":
 		p, err = command(ctx, c, in, o)
@@ -55,6 +65,12 @@ func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Va
 	}
 	if err = ctx.Err(); err != nil {
 		return nil, err
+	}
+	p.Version = 1
+	p.Scope = events.CheckScope{CheckedInputs: scopeInputs}
+	p.DurationNS = time.Since(started).Nanoseconds()
+	for i := range p.Evidence {
+		p.Evidence[i].Kind = events.EvidenceKind(c.Kind)
 	}
 	if err = p.Validate(); err != nil {
 		return nil, err
@@ -176,7 +192,7 @@ func scope(c config, in map[string]graph.Value, p *events.GateCheckPayload) erro
 			bad[q] = true
 		}
 	}
-	p.Evidence = []events.GateEvidence{{Source: "reported"}}
+	p.Evidence = []events.GateEvidence{{Kind: "reported_file_scope", Source: "reported"}}
 	if len(bad) == 0 {
 		return nil
 	}
@@ -189,14 +205,14 @@ func scope(c config, in map[string]graph.Value, p *events.GateCheckPayload) erro
 	sort.Strings(keys)
 	p.Evidence = nil
 	base, _ := json.Marshal(p)
-	budget := events.MaxGatePayload - len(base) - 128
+	budget := events.MaxGatePayload - len(base) - 256
 	used := 0
 	for i, k := range keys {
-		item := events.GateEvidence{Source: "reported", Path: k}
+		item := events.GateEvidence{Kind: "reported_file_scope", Source: "reported", Path: k}
 		encoded, _ := json.Marshal(item)
 		// Reserve envelope and final omission marker space; count encoded escaping.
 		if i >= 30 || len(k) > 512 || used+len(encoded)+1 > budget {
-			p.Evidence = append(p.Evidence, events.GateEvidence{Source: "reported", Omitted: uint64(len(keys) - i)})
+			p.Evidence = append(p.Evidence, events.GateEvidence{Kind: "reported_file_scope", Source: "reported", Omitted: uint64(len(keys) - i)})
 			break
 		}
 		p.Evidence = append(p.Evidence, item)

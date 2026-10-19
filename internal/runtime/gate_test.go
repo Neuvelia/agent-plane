@@ -25,6 +25,16 @@ func (redCheck) Error() string       { return "red" }
 func (redCheck) GateVerdict() string { return "red" }
 func (p checkProbe) ExecuteNodeObserved(_ context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value, o ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
 	f := p.fact
+	switch p.mode {
+	case "invalid version":
+		f.Version = 2
+	case "invalid duration":
+		f.DurationNS = -1
+	case "invalid reference":
+		f.Evidence[0].Reference = &events.EvidenceReference{Kind: "file", State: "known"}
+	case "invalid scope":
+		f.Scope.CheckedInputs = []string{""}
+	}
 	if p.mode == "invalid" {
 		f.Verdict = "bad"
 	}
@@ -47,9 +57,9 @@ func (p checkProbe) ExecuteNodeObserved(_ context.Context, _ string, _ graph.Nod
 	return map[string]graph.Value{"verdict": graph.NewStringValue("green")}, nil, nil
 }
 func TestGateObservationFailsClosedAndOrdersFact(t *testing.T) {
-	for _, mode := range []string{"green", "red", "duplicate", "invalid", "missing", "error green", "success red", "operational red", "outputs red", "identity mismatch"} {
+	for _, mode := range []string{"green", "red", "duplicate", "invalid", "missing", "error green", "success red", "operational red", "outputs red", "identity mismatch", "invalid version", "invalid duration", "invalid reference", "invalid scope"} {
 		t.Run(mode, func(t *testing.T) {
-			f := events.GateCheckPayload{CheckID: "SECRET-check", Kind: "json_predicate", Verdict: "green", Reason: "SECRET reason", Evidence: []events.GateEvidence{{Source: "json_predicate"}}}
+			f := events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: []string{"data"}}, CheckID: "SECRET-check", Kind: "json_predicate", Verdict: "green", Reason: "SECRET reason", Evidence: []events.GateEvidence{{Kind: "json_predicate", Source: "json_predicate"}}}
 			if strings.Contains(mode, "red") || mode == "red" {
 				f.Verdict = "red"
 			}
@@ -94,5 +104,37 @@ func TestGateCaptureRedactsBeforeTruncation(t *testing.T) {
 	again, _ := c.Finish()
 	if again[0] != 'x' {
 		t.Fatal("capture alias")
+	}
+}
+
+func TestGateResultRedactsAndDetachesScopeAndReferences(t *testing.T) {
+	for _, state := range []events.ReferenceState{"known", "unavailable", "invalid"} {
+		t.Run(string(state), func(t *testing.T) {
+			line := 9
+			ref := &events.EvidenceReference{Kind: "file", State: state}
+			if state == "known" {
+				ref.Identifier = "SECRET-file"
+				ref.Line = &line
+			} else {
+				ref.Reason = "SECRET diagnostic"
+			}
+			p := events.CheckResult{Version: 1, Scope: events.CheckScope{CheckedInputs: []string{"SECRET-input"}}, CheckID: "check", Kind: "json_predicate", Verdict: events.CheckGreen, Reason: "matched", Evidence: []events.GateEvidence{{Kind: "json_predicate", Source: "json_predicate", Reference: ref}}}
+			d := definition(map[string]graph.NodeDefinition{"gate": {Type: "gate", Config: graph.NodeConfig{"check_id": "check", "kind": "json_predicate"}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}})
+			r, err := Run(context.Background(), d, nil, checkProbe{"green", p}, Options{LogRedactions: []string{"SECRET"}})
+			if err != nil || r.State != RunSucceeded {
+				t.Fatalf("%+v %v", r, err)
+			}
+			got := events.CheckResults(r.Events, r.RunID, r.Nodes[0].NodeRunID)
+			if len(got) != 1 || strings.Contains(got[0].Scope.CheckedInputs[0]+got[0].Evidence[0].Reference.Identifier+got[0].Evidence[0].Reference.Reason, "SECRET") {
+				t.Fatal("new fields leaked secret")
+			}
+			p.Scope.CheckedInputs[0] = "mutated"
+			ref.Identifier = "mutated"
+			line = 1
+			again := events.CheckResults(r.Events, r.RunID, r.Nodes[0].NodeRunID)
+			if again[0].Scope.CheckedInputs[0] == "mutated" || again[0].Evidence[0].Reference.Identifier == "mutated" || state == "known" && *again[0].Evidence[0].Reference.Line != 9 {
+				t.Fatal("new fields aliased")
+			}
+		})
 	}
 }

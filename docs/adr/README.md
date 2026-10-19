@@ -17,3 +17,5 @@ Do not create ADRs for ordinary implementation details.
 Number ADRs sequentially and keep superseded decisions rather than rewriting history.
 
 F1.4: [ADR-0012 - Deterministic Gate node and restricted comparison command](0012-gate-node-contract.md).
+
+F1.5: [ADR-0013 - Versioned Check Result and typed trace retrieval](0013-check-result-contract.md).

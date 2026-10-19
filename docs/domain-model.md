@@ -69,16 +69,25 @@ combination of run ID and sequence identifies an event.
 
 ### CheckResult
 
-Later contract returned by deterministic gates:
+F1.5 version-1 contract returned by deterministic Gates and retained as a
+schema-5 `gate_check` fact on green and red:
 
 ```text
-verdict
-reason
-evidence[]
-scope
-check_id
-duration
+check_result_version: 1
+check_id, kind, verdict, reason
+evidence[]: typed kind/source, optional typed reference
+scope.checked_inputs[]: sorted unique checked port names
+duration_ns: required nonnegative integer
 ```
+
+A red Gate fails and exposes no accepted output; its result remains retrievable
+by run ID and node-run ID with `events.CheckResults`. Operational errors do not
+invent results. No attempt exists yet; correction scope is a separate future
+input. A reference is absent, known (identifier supplied), unavailable or invalid
+(with diagnostic reason). File references may carry a positive line; test, diff
+and artifact identifiers are opaque. References are never resolved here.
+Legacy schema-4 minimal Gate payloads remain distinct and retain unknown scope
+and duration. See ADR-0013.
 
 ### Artifact
 
