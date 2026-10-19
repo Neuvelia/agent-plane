@@ -17,7 +17,7 @@ dependent Shell node, ordered events, and a deterministic terminal result.
 
 ## Phase 1 - Agent Loop
 
-- [ ] F1.1 Agent Adapter Contract (spec and ADR before implementation)
+- [ ] F1.1 Agent Adapter Contract (spec, ADR and plan ready; code pending)
 - [ ] F1.2 First coding-agent adapter
 - [ ] F1.3 Unified Streaming
 - [ ] F1.4 Gate Node
@@ -26,9 +26,9 @@ dependent Shell node, ordered events, and a deterministic terminal result.
 - [ ] F1.7 Return Envelope / scoped retry
 - [ ] F1.8 Changed-files Scope Check (P1)
 
-Create and review each feature spec before implementing it. F1.1 is the first
-active documentation task. See `docs/roadmap.md` for dependencies and phase
-exit criteria.
+Review each feature spec before implementing it. F1.1 is the first active
+implementation task; F1.2-F1.7 specs are drafts for review. See
+`docs/roadmap.md` for dependencies and phase exit criteria.
 
 ## Phase 0 milestone demo (achieved)
 
