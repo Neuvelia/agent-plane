@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 6
+const SchemaVersion = 7
 
 type RunID string
 type NodeRunID string
@@ -132,7 +132,7 @@ type Event struct {
 
 // Validate checks the event envelope before it becomes a serialized fact.
 func (e Event) Validate() error {
-	if e.SchemaVersion != 0 && e.SchemaVersion != 1 && e.SchemaVersion != 2 && e.SchemaVersion != 3 && e.SchemaVersion != 4 && e.SchemaVersion != 5 && e.SchemaVersion != 6 {
+	if e.SchemaVersion != 0 && e.SchemaVersion != 1 && e.SchemaVersion != 2 && e.SchemaVersion != 3 && e.SchemaVersion != 4 && e.SchemaVersion != 5 && e.SchemaVersion != 6 && e.SchemaVersion != 7 {
 		return fmt.Errorf("unsupported event schema version %d", e.SchemaVersion)
 	}
 	if e.SchemaVersion > 0 && e.SchemaVersion < 3 && (IsNormalized(e.Type) || e.Type == ProgressOmitted) {
@@ -146,6 +146,26 @@ func (e Event) Validate() error {
 	}
 	var payloadType Type
 	switch p := e.Payload.(type) {
+	case ReturnEnvelopePayload:
+		payloadType = ReturnEnvelope
+		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
+			return errors.New("return envelope requires schema 7")
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+		if p.SourceRunID != e.RunID || p.SourceNodeID != e.NodeID || p.SourceNodeRunID != e.NodeRunID || p.AttemptID != e.AttemptID || p.SourceGraphVersion != e.GraphVersion {
+			return errors.New("return envelope source does not match event")
+		}
+	case DeclaredScopeConflictsPayload:
+		payloadType = DeclaredScopeConflicts
+		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
+			return errors.New("declared conflicts require schema 7")
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+
 	case AttemptStartedPayload:
 		payloadType = AttemptStarted
 		if err := validateAttempt(e); err != nil {
@@ -170,7 +190,7 @@ func (e Event) Validate() error {
 			return err
 		}
 	case GateCheckPayload:
-		if e.SchemaVersion != 0 && e.SchemaVersion != 5 && e.SchemaVersion != 6 {
+		if e.SchemaVersion != 0 && e.SchemaVersion != 5 && e.SchemaVersion != 6 && e.SchemaVersion != 7 {
 			return errors.New("full check result requires schema 5")
 		}
 		payloadType = GateCheck
@@ -252,7 +272,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	if wire.SchemaVersion != 1 && wire.SchemaVersion != 2 && wire.SchemaVersion != 3 && wire.SchemaVersion != 4 && wire.SchemaVersion != 5 && wire.SchemaVersion != SchemaVersion {
+	if wire.SchemaVersion != 1 && wire.SchemaVersion != 2 && wire.SchemaVersion != 3 && wire.SchemaVersion != 4 && wire.SchemaVersion != 5 && wire.SchemaVersion != 6 && wire.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unsupported event schema version %d", wire.SchemaVersion)
 	}
 	if len(wire.Payload) == 0 {
@@ -263,6 +283,10 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return errors.New("node_evidence requires event schema 2")
 	}
 	switch wire.Type {
+	case ReturnEnvelope:
+		payload = ReturnEnvelopePayload{}
+	case DeclaredScopeConflicts:
+		payload = DeclaredScopeConflictsPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -307,6 +331,16 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unknown event type %q", wire.Type)
 	}
 	switch p := payload.(type) {
+	case ReturnEnvelopePayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case DeclaredScopeConflictsPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
 	case AttemptStartedPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err

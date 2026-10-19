@@ -108,6 +108,17 @@ func Parse(data []byte) (*Definition, error) {
 		return nil
 	}
 	if len(document.Content) > 0 {
+		if units := field(document.Content[0], "units"); units != nil {
+			if units.Kind != yaml.SequenceNode || len(units.Content) == 0 {
+				return nil, errors.New("parse graph definition: units must be a nonempty list of loop Agent node IDs")
+			}
+			for _, unit := range units.Content {
+				unit = resolve(unit)
+				if unit.Kind != yaml.ScalarNode || unit.ShortTag() != "!!str" {
+					return nil, errors.New("parse graph definition: unit IDs must be strings")
+				}
+			}
+		}
 		nodes := field(document.Content[0], "nodes")
 		if nodes != nil && nodes.Kind == yaml.MappingNode {
 			for _, id := range sortedNodeIDs(definition.Nodes) {

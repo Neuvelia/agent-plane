@@ -193,7 +193,7 @@ F1.4 schema 4 adds a bounded typed `gate_check` fact, retained independently
 of progress budgets on green and red before terminal lifecycle. Operational
 failures have no verdict. F1.5 emits schema 5 with the full version-1 CheckResult,
 including required nonnegative duration_ns, checked-input scope and typed
-references. Readers accept schemas 1–6; schema 4 Gate facts remain a distinct
+references. Readers accept schemas 1–7; schema 4 Gate facts remain a distinct
 legacy payload with no invented metadata. Full results require schema 5.
 `events.CheckResults(trace, runID, nodeRunID)` returns detached current results
 in sequence order, including red; legacy inspection uses
@@ -216,7 +216,7 @@ callbacks arriving later are discarded. Logs, progress, checks and producer
 evidence carry the current AttemptID. Attempt lifecycle and checks are retained
 independently of progress limits.
 
-Readers accept schemas 1–6. Full CheckResults in both schema 5 and 6 remain
+Readers accept schemas 1–7. Full CheckResults in schema 5, 6 and 7 remain
 available through `events.CheckResults`; `events.AttemptCheckResults` adds a
 detached attempt filter and does not invent attempts for older facts. Graph
 schema 0 remains additive, nil-loop hashes stay unchanged, and CLI envelope
@@ -273,3 +273,24 @@ Cloud features are a later layer for:
 - managed runners.
 
 The local engine must remain useful without them.
+
+## Static-unit acceptance (F1.7)
+
+Explicit optional `units` enrolls static loop Agent nodes. The coordinator owns
+registration, current attempts, ReturnEnvelope v1 derivation and accept-once
+runtime port values/provenance. CheckResult → ReturnEnvelope → attempt_finished
+are retained schema7 facts; operational errors invent no verdict. Existing
+bindings read only accepted values. Rejected units retry within F1.6 budgets;
+accepted siblings remain unchanged, including when another unit exhausts.
+
+Unit-mode schedules every Agent's producer plus check as a protected cycle.
+Only bounded controlled-environment read-only Git inspection can prove distinct
+physical workspaces for concurrent Agent cycles. Shared/nested/aliased or
+unknown identities serialize; distinct linked worktrees keep concurrency.
+Declared-scope disjointness is insufficient. Potential conflicts are retained
+as at most 64 structured details plus an omission count, outside progress limits.
+Shell/external writers, concurrent hostile path changes and filesystem rollback
+are outside this in-run rule. Accepted runtime values can stay fixed while
+shared repository files change; F1.8 and F3.1 own enforcement/isolation.
+See ADR-0015. Graph 0 and CLI 1 remain additive; absent units preserves legacy
+hashes, large authored scopes and F1.6 scheduling behavior.

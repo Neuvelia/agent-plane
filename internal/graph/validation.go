@@ -68,6 +68,7 @@ func Validate(definition *Definition) ValidationResult {
 
 	validator.validateDefinition()
 	validator.validateLoops()
+	validator.validateUnits()
 	validator.validateEdges()
 	validator.validateGraphInputBindings()
 	validator.validateGraphOutputs()
@@ -533,4 +534,25 @@ func bindingLocation(bindingIndex int, path string) DiagnosticLocation {
 
 func intPointer(value int) *int {
 	return &value
+}
+
+func (v *definitionValidator) validateUnits() {
+	if v.definition.Units == nil {
+		return
+	}
+	seen := map[string]bool{}
+	if len(v.definition.Units) == 0 {
+		v.error("E_UNIT_INVALID", "units must be a nonempty set of loop Agent node IDs", DiagnosticLocation{Path: "units"}, "omit units or enroll loop Agent nodes")
+	}
+	for i, id := range v.definition.Units {
+		n, ok := v.definition.Nodes[id]
+		if len(id) > 256 {
+			v.error("E_UNIT_INVALID", "enrolled unit/node ID exceeds 256 UTF-8 bytes", DiagnosticLocation{NodeID: id, Path: fmt.Sprintf("units[%d]", i)}, "use an enrolled node ID of at most 256 UTF-8 bytes")
+			continue
+		}
+		if id == "" || !ok || seen[id] || n.Type != "agent" || n.Loop == nil {
+			v.error("E_UNIT_INVALID", fmt.Sprintf("unit %q must uniquely reference an existing loop Agent node", id), DiagnosticLocation{NodeID: id, Path: fmt.Sprintf("units[%d]", i)}, "use each loop Agent node ID at most once")
+		}
+		seen[id] = true
+	}
 }

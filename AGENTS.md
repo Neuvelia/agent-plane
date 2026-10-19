@@ -31,8 +31,11 @@ progress and live delivery (ADR-0011). F1.4 adds deterministic read-only Gates
 (ADR-0012). F1.5 adds versioned Check Results with typed references,
 checked-input scope, duration and typed trace lookup (ADR-0013). F1.6 adds bounded
 node-local correction attempts with embedded Gates, typed feedback,
-and schema-6 attempt trace (ADR-0014). Later Phase 1 features remain unimplemented;
-F1.7 is the next planning candidate. Read the
+and schema-6 attempt trace (ADR-0014). F1.7 adds explicit static units,
+Return Envelopes, immutable accepted runtime values/provenance and conservative
+shared-workspace Agent scheduling (ADR-0015; event schema 7). Shared files are
+not isolated. Later Phase 1 features remain unimplemented; F1.8 is the next
+planning candidate. Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without

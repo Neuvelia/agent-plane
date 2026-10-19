@@ -32,10 +32,10 @@ Goal: execute one real coding agent behind an adapter and add deterministic corr
 | F1.1 | Agent Adapter Contract | P0 | F0 exit | Implemented; ADR-0009 |
 | F1.2 | First coding-agent adapter | P0 | F1.1 | Implemented; ADR-0010; real smoke verified |
 | F1.3 | Unified Streaming | P0 | F1.1, F1.2 | Implemented; ADR-0011 |
-| F1.4 | Gate Node | P0 | F0 exit; F1.2 for Agent demo | Draft |
-| F1.5 | Check Result Contract | P0 | F1.4 | Draft |
-| F1.6 | Correction Loop + maxAttempts | P0 | F1.1, F1.4, F1.5 | Draft |
-| F1.7 | Return Envelope / scoped retry | P0 | F1.5, F1.6 | Draft |
+| F1.4 | Gate Node | P0 | F0 exit; F1.2 for Agent demo | Implemented; ADR-0012 |
+| F1.5 | Check Result Contract | P0 | F1.4 | Implemented; ADR-0013 |
+| F1.6 | Correction Loop + maxAttempts | P0 | F1.1, F1.4, F1.5 | Implemented; ADR-0014 |
+| F1.7 | Return Envelope / scoped retry | P0 | F1.5, F1.6 | Implemented; ADR-0015 |
 | F1.8 | Changed-files Scope Check | P1 | F1.2, F1.4 | Create spec on activation |
 
 Exit: an agent modifies a repository, a deterministic check rejects a bad

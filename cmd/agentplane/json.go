@@ -16,10 +16,11 @@ type cliError struct {
 }
 
 type cliNode struct {
-	NodeID      string              `json:"node_id"`
-	NodeRunID   events.NodeRunID    `json:"node_run_id"`
-	Status      runtime.NodeState   `json:"status"`
-	FailureKind runtime.FailureKind `json:"failure_kind,omitempty"`
+	AcceptedAttemptID events.AttemptID    `json:"accepted_attempt_id,omitempty"`
+	NodeID            string              `json:"node_id"`
+	NodeRunID         events.NodeRunID    `json:"node_run_id"`
+	Status            runtime.NodeState   `json:"status"`
+	FailureKind       runtime.FailureKind `json:"failure_kind,omitempty"`
 }
 
 type cliOutput struct {
@@ -72,7 +73,7 @@ func documentForRun(result runtime.RunResult, diagnostics []graph.Diagnostic) cl
 	events := result.Events
 	doc := cliDocument{Command: "run", Status: string(result.State), GraphID: result.GraphID, GraphVersion: result.GraphVersion, RunID: result.RunID, Diagnostics: nonNilDiagnostics(diagnostics), Nodes: &nodes, Outputs: &outputs, Events: &events}
 	for _, node := range result.Nodes {
-		entry := cliNode{NodeID: node.NodeID, NodeRunID: node.NodeRunID, Status: node.State}
+		entry := cliNode{NodeID: node.NodeID, NodeRunID: node.NodeRunID, AcceptedAttemptID: node.AcceptedAttemptID, Status: node.State}
 		if node.Failure != nil {
 			entry.FailureKind = node.Failure.Kind
 		}

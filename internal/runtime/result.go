@@ -30,18 +30,20 @@ type Failure struct {
 
 // PortValue keeps externally presented values in a stable name order.
 type PortValue struct {
-	Name  string
-	Value graph.Value
+	Provenance *AcceptedProvenance
+	Name       string
+	Value      graph.Value
 }
 
 // NodeResult describes the terminal outcome of one node.
 type NodeResult struct {
-	NodeID     string
-	NodeRunID  events.NodeRunID
-	State      NodeState
-	Outputs    []PortValue
-	Failure    *Failure
-	SkipReason string
+	AcceptedAttemptID events.AttemptID
+	NodeID            string
+	NodeRunID         events.NodeRunID
+	State             NodeState
+	Outputs           []PortValue
+	Failure           *Failure
+	SkipReason        string
 }
 
 // StateTransition records an observable in-memory state change. An empty

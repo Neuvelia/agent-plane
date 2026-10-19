@@ -147,6 +147,21 @@ func (r *eventRenderer) Event(event events.Event) error {
 		p := event.Payload.(events.ProgressOmittedPayload)
 		_, err := fmt.Fprintf(r.stderr, "Progress omitted: retained %d events / %d bytes; live %d events / %d bytes (stopped=%t)\n", p.RetainedEvents, p.RetainedBytes, p.LiveEvents, p.LiveBytes, p.LiveStopped)
 		return err
+	case events.ReturnEnvelope:
+		p := event.Payload.(events.ReturnEnvelopePayload)
+		_, err := fmt.Fprintf(r.stderr, "unit %s return_envelope: %s attempt=%s check=%s\n", p.UnitID, p.Verdict, p.AttemptID, p.CheckID)
+		return err
+	case events.DeclaredScopeConflicts:
+		p := event.Payload.(events.DeclaredScopeConflictsPayload)
+		for _, d := range p.Details {
+			if _, err := fmt.Fprintf(r.stderr, "Potential declared conflict %s / %s: %s (advisory; no filesystem isolation)\n", d.LeftNodeID, d.RightNodeID, d.Reason); err != nil {
+				return err
+			}
+		}
+		if p.Omitted > 0 {
+			_, err := fmt.Fprintf(r.stderr, "Potential declared conflicts omitted: %d\n", p.Omitted)
+			return err
+		}
 	case events.GateCheck:
 		p := event.Payload.(events.GateCheckPayload)
 		if _, err := fmt.Fprintf(r.stderr, "%s gate %s: %s (%s)\n", event.NodeID, p.CheckID, p.Verdict, p.Reason); err != nil {
