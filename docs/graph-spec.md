@@ -255,8 +255,8 @@ exit remains an exit failure. This does not terminate that other process.
 
 ### Agent node configuration (F1.1 contract)
 
-`type: agent` uses the existing schema-v0 `config` mapping. This convention is
-specified for F1.1; Agent execution is not yet implemented. For example:
+`type: agent` uses the existing schema-v0 `config` mapping. F1.1 implements
+this convention through the provider-neutral Agent executor. For example:
 
 ```yaml
 nodes:
@@ -287,8 +287,15 @@ boundary. The generic graph validator does not yet interpret Agent config.
 
 An Agent node may declare only these output ports: `summary` as `string`, and
 `changed_files`, `artifacts`, `raw_metadata`, and `usage` as `json`.
-`changed_files` and `artifacts` are JSON arrays; `raw_metadata` is validated
-provider JSON; `usage` is structured JSON with only known values present.
+`changed_files` is a JSON array of `{path, provenance}` records, with a
+nonempty path and provenance `reported` or `observed`. `artifacts` is a JSON
+array of `{ref, name?}` records with a nonempty opaque reference. Nil slices
+omit their ports; explicit empty slices produce `[]`. `raw_metadata` accepts
+any valid opaque provider JSON, including `null`; the core does not interpret
+its contents. `usage` contains only known `input_tokens`, `output_tokens`,
+`model_name`, `provider_cost`, and `currency` fields. Token counts are integers;
+cost and currency are provider-reported strings. Reported zero remains zero;
+absent usage omits the port, while a present empty usage record produces `{}`.
 Unknown optional data yields no output value; authors must not mark a port
 `required: true` unless their adapter guarantees it. The runtime rejects
 missing required values and wrong types as it does for Shell nodes. Values

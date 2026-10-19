@@ -20,6 +20,19 @@ type Executor interface {
 	ExecuteNode(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error)
 }
 
+// ExecutionCorrelation is created by the scheduler and passed to executors
+// that need to associate external work with the run's lifecycle facts.
+type ExecutionCorrelation struct {
+	RunID     events.RunID
+	NodeRunID events.NodeRunID
+	AttemptID events.AttemptID
+}
+
+// CorrelatedExecutor is optional; legacy executors keep the F0.4 API.
+type CorrelatedExecutor interface {
+	ExecuteNodeWithCorrelation(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionCorrelation) (map[string]graph.Value, error)
+}
+
 // LogStreamingExecutor optionally reports bounded output chunks while a node
 // executes. The observer may be called concurrently for separate streams; all
 // callbacks must complete before ExecuteNodeWithLogs returns for complete logs.
@@ -196,6 +209,8 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					emitLog(events.Stderr, redactor.Flush(events.Stderr))
 					closed = true
 					logMu.Unlock()
+				} else if correlated, ok := executor.(CorrelatedExecutor); ok {
+					outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID})
 				} else {
 					outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
 				}
