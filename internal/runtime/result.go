@@ -11,11 +11,12 @@ import (
 type FailureKind string
 
 const (
-	FailureExecutor       FailureKind = "executor"
-	FailureBinding        FailureKind = "binding"
-	FailureOutputContract FailureKind = "output_contract"
-	FailureGraphOutput    FailureKind = "graph_output"
-	FailureScheduler      FailureKind = "scheduler"
+	FailureNeedsIntervention FailureKind = "needs_intervention"
+	FailureExecutor          FailureKind = "executor"
+	FailureBinding           FailureKind = "binding"
+	FailureOutputContract    FailureKind = "output_contract"
+	FailureGraphOutput       FailureKind = "graph_output"
+	FailureScheduler         FailureKind = "scheduler"
 )
 
 // Failure preserves the error cause or structured diagnostics within the

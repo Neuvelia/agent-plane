@@ -193,7 +193,7 @@ F1.4 schema 4 adds a bounded typed `gate_check` fact, retained independently
 of progress budgets on green and red before terminal lifecycle. Operational
 failures have no verdict. F1.5 emits schema 5 with the full version-1 CheckResult,
 including required nonnegative duration_ns, checked-input scope and typed
-references. Readers accept schemas 1–5; schema 4 Gate facts remain a distinct
+references. Readers accept schemas 1–6; schema 4 Gate facts remain a distinct
 legacy payload with no invented metadata. Full results require schema 5.
 `events.CheckResults(trace, runID, nodeRunID)` returns detached current results
 in sequence order, including red; legacy inspection uses
@@ -202,6 +202,35 @@ independent of progress budgets. See ADR-0012 and ADR-0013. Later events include
 correction, artifact, and approval events.
 
 The event stream is an observable record of execution, not a container for hidden model reasoning.
+
+F1.6 emits schema 6 and adds retained `attempt_started`, `attempt_input`, and
+`attempt_finished` facts for node-local loops. Input summaries contain the
+SHA-256 task fingerprint, a redacted bounded intended scope, reference-presence
+and omission flags, and previous-result linkage. They omit raw tasks, reference
+contents, environment values and private reasoning; they do not promise replay.
+Scope summaries retain at most 32 entries, 512 bytes per entry and 1024 total
+unescaped bytes; the event payload is bounded to 8192 encoded bytes.
+Attempt outcomes are accepted, rejected, needs_intervention, execution_error
+or cancelled. Each invocation closes and flushes observers before returning;
+callbacks arriving later are discarded. Logs, progress, checks and producer
+evidence carry the current AttemptID. Attempt lifecycle and checks are retained
+independently of progress limits.
+
+Readers accept schemas 1–6. Full CheckResults in both schema 5 and 6 remain
+available through `events.CheckResults`; `events.AttemptCheckResults` adds a
+detached attempt filter and does not invent attempts for older facts. Graph
+schema 0 remains additive, nil-loop hashes stay unchanged, and CLI envelope
+schema remains 1. Exhausted loops fail with needs_intervention and CLI exit 4.
+Cancellation prevents later correction dispatch; unrelated racing failures
+retain their error cause. F1.6 adds no workspace isolation, rollback, scope
+enforcement, sibling envelopes or recovery. See ADR-0014.
+
+The new untrusted CheckResult feedback is bounded by the existing 32 KiB check
+payload limit and is sanitized once before both retention and detached transport.
+Original authored Task, allowed paths, and references keep their existing Agent
+input contract and are copied without narrowing; total authored input memory and
+the full feedback object including authored scope have no new global size cap.
+The trace limits above apply only to its observable summary.
 
 ## Persistence direction
 

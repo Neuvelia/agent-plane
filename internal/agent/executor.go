@@ -23,16 +23,16 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 }
 
 func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
-	return e.execute(ctx, nodeID, node, inputs, ids, nil, nil, nil)
+	return e.execute(ctx, nodeID, node, inputs, ids, nil, nil, nil, nil)
 }
 
 func (e Executor) ExecuteNodeObserved(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, obs runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
 	var evidence *events.NodeEvidencePayload
-	values, err := e.execute(ctx, nodeID, node, inputs, obs.Correlation, obs.Log, obs.Progress, &evidence)
+	values, err := e.execute(ctx, nodeID, node, inputs, obs.Correlation, obs.Log, obs.Progress, &evidence, obs.Feedback)
 	return values, evidence, err
 }
 
-func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation, log func(string, []byte), normalized func(events.Type, events.Payload), evidence **events.NodeEvidencePayload) (map[string]graph.Value, error) {
+func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation, log func(string, []byte), normalized func(events.Type, events.Payload), evidence **events.NodeEvidencePayload, feedback *runtime.CorrectionFeedback) (map[string]graph.Value, error) {
 	if ctx == nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: ErrorInvalidInput, Cause: errors.New("execution context is nil")}
 	}
@@ -62,7 +62,10 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 	if report.Workspace != nil && !*report.Workspace {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnsupported, Cause: errors.New("adapter does not support workspace execution")}
 	}
-	request := AgentExecutionInput{Task: cfg.task, Workspace: cfg.workspace, AllowedPaths: cfg.allowedPaths, ContextRefs: cfg.contextRefs, EnvironmentRefs: cfg.environmentRefs, RunID: ids.RunID, NodeRunID: ids.NodeRunID, AttemptID: ids.AttemptID}
+	if node.Loop != nil && (report.CorrectionFeedback == nil || !*report.CorrectionFeedback) {
+		return nil, &ExecutionError{NodeID: nodeID, Kind: ErrorUnsupported, Cause: errors.New("adapter does not affirm correction feedback transport")}
+	}
+	request := AgentExecutionInput{Feedback: runtime.CloneFeedback(feedback), Task: cfg.task, Workspace: cfg.workspace, AllowedPaths: cfg.allowedPaths, ContextRefs: cfg.contextRefs, EnvironmentRefs: cfg.environmentRefs, RunID: ids.RunID, NodeRunID: ids.NodeRunID, AttemptID: ids.AttemptID}
 	var output AgentExecutionOutput
 	if progress, ok := adapter.(NormalizedProgressAdapter); ok && normalized != nil {
 		output, err = progress.ExecuteWithNormalizedProgress(ctx, request, normalized)
@@ -161,4 +164,29 @@ func jsonGraphValue(value any) (graph.Value, error) {
 		return graph.Value{}, err
 	}
 	return graph.NewJSONValue(data)
+}
+
+// ValidateNodeConfig is side-effect free, including for a task bound at runtime.
+func (e Executor) ValidateNodeConfig(_ string, n graph.NodeDefinition) error {
+	in := map[string]graph.Value{}
+	if _, ok := n.Config["task"]; !ok {
+		in["task"] = graph.NewStringValue("preflight unresolved task")
+	}
+	_, err := parseNode(n, in)
+	return err
+}
+func (e Executor) PreflightNode(ctx context.Context, _ string, n graph.NodeDefinition) error {
+	id, _ := n.Config["adapter"].(string)
+	a := e.Adapters[AdapterID(id)]
+	if a == nil || a.ID() != AdapterID(id) {
+		return errors.New("loop adapter is unavailable")
+	}
+	r, err := a.Detect(ctx)
+	if err != nil {
+		return err
+	}
+	if !r.Available || (r.Workspace != nil && !*r.Workspace) || r.CorrectionFeedback == nil || !*r.CorrectionFeedback {
+		return errors.New("loop requires available workspace adapter with affirmative correction-feedback transport capability")
+	}
+	return nil
 }

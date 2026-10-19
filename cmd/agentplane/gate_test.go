@@ -95,7 +95,7 @@ outputs: {}
 				if e.Type == events.GateCheck {
 					checks++
 					p := e.Payload.(events.GateCheckPayload)
-					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != 5 || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
+					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != events.SchemaVersion || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
 						t.Fatal("full result contract/correlation")
 					}
 					if len(events.CheckResults(doc.Events, e.RunID, e.NodeRunID)) != 1 {
@@ -153,7 +153,7 @@ func TestCLILocalGateWorksWithoutAdapter(t *testing.T) {
 				if e.Type == events.GateCheck {
 					found = true
 					p := e.Payload.(events.GateCheckPayload)
-					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != 5 || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
+					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != events.SchemaVersion || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
 						t.Fatal("full result contract/correlation")
 					}
 					if len(events.CheckResults(doc.Events, e.RunID, e.NodeRunID)) != 1 {

@@ -206,6 +206,9 @@ func (c *Collector) Snapshot() []Event {
 
 func copyPayload(payload Payload) Payload {
 	switch p := payload.(type) {
+	case AttemptInputPayload:
+		p.IntendedScope = append([]string{}, p.IntendedScope...)
+		return p
 	case LegacyGateCheckPayload:
 		return CloneLegacyGate(p)
 	case GateCheckPayload:

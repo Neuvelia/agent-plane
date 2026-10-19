@@ -67,6 +67,7 @@ func Validate(definition *Definition) ValidationResult {
 	}
 
 	validator.validateDefinition()
+	validator.validateLoops()
 	validator.validateEdges()
 	validator.validateGraphInputBindings()
 	validator.validateGraphOutputs()

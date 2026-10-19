@@ -47,6 +47,7 @@ type LogStreamingExecutor interface {
 // observes at most one validated Gate fact, retained for green and red. Capture
 // capabilities redact before truncation without exposing configured secrets.
 type ExecutionObservation struct {
+	Feedback        *CorrectionFeedback
 	Correlation     ExecutionCorrelation
 	Log             func(string, []byte)
 	Progress        func(events.Type, events.Payload)
@@ -74,10 +75,12 @@ type Options struct {
 
 type completedNode struct {
 	id           string
+	attemptID    events.AttemptID
 	outputs      map[string]graph.Value
 	evidence     *events.NodeEvidencePayload
 	check        *events.GateCheckPayload
 	checkInvalid bool
+	diagnostics  []graph.Diagnostic
 	err          error
 }
 
@@ -144,6 +147,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		graphInputs[name] = value
 	}
 
+	if err := preflightLoops(ctx, definition, executor); err != nil {
+		return RunResult{}, err
+	}
 	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
 	if err != nil {
 		return RunResult{}, err
@@ -194,188 +200,162 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			return machine.snapshot(), nil
 		}
 
-		// Only workers run concurrently; the coordinator owns every state and
-		// output map. Buffering lets all workers return before result collection.
-		completed := make(chan completedNode, len(batch))
-		started := 0
-		for _, id := range batch {
-			if ctx.Err() != nil {
+		attempts := map[string]events.AttemptID{}
+		numbers := map[string]int{}
+		feedbacks := map[string]*CorrectionFeedback{}
+		for len(batch) > 0 {
+			// Only workers run concurrently; the coordinator owns every state and
+			// output map. Buffering lets all workers return before result collection.
+			completed := make(chan completedNode, len(batch))
+			started := 0
+			for _, id := range batch {
+				if ctx.Err() != nil {
+					break
+				}
+				if machine.nodes[id].State == NodeReady {
+					machine.transitionNode(id, NodeRunning)
+				}
+				if l := definition.Nodes[id].Loop; l != nil {
+					aid, e := events.NewAttemptID()
+					if e != nil {
+						machine.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
+						machine.transitionNode(id, NodeFailed)
+						continue
+					}
+					attempts[id] = aid
+					numbers[id]++
+					machine.appendEvent(events.Event{Type: events.AttemptStarted, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: events.AttemptStartedPayload{Number: numbers[id], MaxAttempts: l.Attempts()}})
+					machine.appendEvent(events.Event{Type: events.AttemptInput, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: attemptInput(definition.Nodes[id], machine.resolved[id], feedbacks[id], redactionTemplate)})
+				}
+				node := definition.Nodes[id]
+				resolved := machine.resolved[id]
+				aid, feedback := attempts[id], feedbacks[id]
+				go func(id string) {
+					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, feedback, redactionTemplate)
+				}(id)
+				started++
+			}
+			results := make([]completedNode, 0, started)
+			for range started {
+				results = append(results, <-completed)
+			}
+			sort.Slice(results, func(i, j int) bool { return results[i].id < results[j].id })
+			var retry []string
+			for _, work := range results {
+				nodeResult := machine.nodes[work.id]
+				if definition.Nodes[work.id].Loop != nil {
+					outcome := "execution_error"
+					if work.err != nil && ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
+						outcome = "cancelled"
+					}
+					if work.check != nil && !work.checkInvalid {
+						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check)})
+						if work.check.Verdict == "red" {
+							outcome = "rejected"
+							if numbers[work.id] >= definition.Nodes[work.id].Loop.Attempts() {
+								outcome = "needs_intervention"
+							}
+							if ctx.Err() != nil {
+								outcome = "cancelled"
+								work.err = ctx.Err()
+							}
+						}
+						if work.check.Verdict == "green" {
+							outcome = "accepted"
+						}
+					}
+					if work.evidence != nil {
+						machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: *work.evidence})
+						work.evidence = nil
+					}
+					checkID := ""
+					if work.check != nil {
+						checkID = work.check.CheckID
+					}
+					machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}})
+					if outcome == "rejected" && ctx.Err() == nil {
+						feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
+						retry = append(retry, work.id)
+						continue
+					}
+					if outcome == "needs_intervention" {
+						nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureNeedsIntervention, Err: interventionError{}}
+						machine.transitionNode(work.id, NodeFailed)
+						continue
+					}
+					if outcome == "rejected" {
+						work.err = ctx.Err()
+					}
+					work.check = nil
+					work.checkInvalid = false
+				}
+				if work.check != nil || work.checkInvalid {
+					valid := !work.checkInvalid && work.check != nil && definition.Nodes[work.id].Type == "gate" && work.evidence == nil
+					if valid && work.check.Verdict == "red" {
+						var verdict interface{ GateVerdict() string }
+						valid = errors.As(work.err, &verdict) && verdict.GateVerdict() == "red" && len(work.outputs) == 0 && !errors.Is(work.err, context.Canceled) && !errors.Is(work.err, context.DeadlineExceeded)
+					}
+					if valid && work.check.Verdict == "green" {
+						valid = work.err == nil && len(validateNodeOutputs(definition.ID, work.id, definition.Nodes[work.id].Outputs, work.outputs)) == 0
+						for k, v := range work.outputs {
+							t, ok := v.AsString()
+							valid = valid && k == "verdict" && ok && t == "green"
+						}
+					}
+					if !valid {
+						work.err = errors.New("invalid or inconsistent gate observation")
+						work.outputs = nil
+					} else {
+						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.check})
+					}
+				} else if definition.Nodes[work.id].Type == "gate" && work.err == nil {
+					work.err = errors.New("gate execution missing check observation")
+					work.outputs = nil
+				}
+				if work.err != nil {
+					if ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
+						machine.transitionNode(work.id, NodeCancelled)
+					} else {
+						nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureExecutor, Err: work.err}
+						if len(work.diagnostics) > 0 {
+							nodeResult.Failure.Kind = FailureOutputContract
+							nodeResult.Failure.Diagnostics = work.diagnostics
+						}
+						machine.transitionNode(work.id, NodeFailed)
+					}
+					continue
+				}
+				diagnostics := validateNodeOutputs(definition.ID, work.id, definition.Nodes[work.id].Outputs, work.outputs)
+				if len(diagnostics) > 0 {
+					nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureOutputContract, Diagnostics: diagnostics}
+					machine.transitionNode(work.id, NodeFailed)
+					continue
+				}
+				machine.outputs[work.id] = copyValues(work.outputs)
+				nodeResult.Outputs = sortedPortValues(work.outputs)
+				if work.evidence != nil {
+					machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
+				}
+				machine.transitionNode(work.id, NodeSucceeded)
+			}
+			failed := false
+			for _, id := range machine.ids {
+				if machine.nodes[id].State == NodeFailed {
+					failed = true
+				}
+			}
+			if failed || ctx.Err() != nil {
+				for _, id := range retry {
+					machine.transitionNode(id, NodeCancelled)
+				}
 				break
 			}
-			machine.transitionNode(id, NodeRunning)
-			node := definition.Nodes[id]
-			resolved := machine.resolved[id]
-			nodeRunID := machine.nodes[id].NodeRunID
-			go func(id string) {
-				var outputs map[string]graph.Value
-				var err error
-				var evidence *events.NodeEvidencePayload
-				var check *events.GateCheckPayload
-				checkInvalid := false
-				streaming, hasLogs := executor.(LogStreamingExecutor)
-				observed, hasObserved := executor.(ObservedExecutor)
-				if hasLogs || hasObserved {
-					redactor := redactionTemplate.clone()
-					var logMu sync.Mutex
-					closed := false
-					emitLog := func(stream events.Stream, data []byte) {
-						for len(data) > 0 {
-							chunk := data
-							if len(chunk) > maxEventLogChunk {
-								chunk = chunk[:maxEventLogChunk]
-							}
-							machine.appendEvent(events.Event{Type: events.LogChunk, NodeID: id, NodeRunID: nodeRunID, Payload: events.LogChunkPayload{Stream: stream, Data: chunk}})
-							data = data[len(chunk):]
-						}
-					}
-					progress := newProgressRedactor(redactionTemplate, func(kind events.Type, payload events.Payload) {
-						machine.appendEvent(events.Event{Type: kind, NodeID: id, NodeRunID: nodeRunID, Payload: payload})
-					})
-					observerProgress := func(kind events.Type, payload events.Payload) {
-						logMu.Lock()
-						defer logMu.Unlock()
-						if !closed {
-							progress.write(kind, payload)
-						}
-					}
-					observer := func(stream string, data []byte) {
-						if stream != string(events.Stdout) && stream != string(events.Stderr) {
-							return
-						}
-						logMu.Lock()
-						if closed {
-							logMu.Unlock()
-							return
-						}
-						emitLog(events.Stream(stream), redactor.Write(events.Stream(stream), data))
-						logMu.Unlock()
-					}
-					observeCheck := func(p events.GateCheckPayload) {
-						logMu.Lock()
-						defer logMu.Unlock()
-						if closed {
-							return
-						}
-						if check != nil || p.Validate() != nil || p.CheckID != node.Config["check_id"] || string(p.Kind) != node.Config["kind"] {
-							checkInvalid = true
-							return
-						}
-						snapshot := events.CloneGate(p)
-						redact := func(s string) string { return progress.redact(s) }
-						snapshot.CheckID = redact(snapshot.CheckID)
-						snapshot.Reason = redact(snapshot.Reason)
-						for i := range snapshot.Scope.CheckedInputs {
-							snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
-						}
-						sort.Strings(snapshot.Scope.CheckedInputs)
-						for i := range snapshot.Evidence {
-							e := &snapshot.Evidence[i]
-							e.Path = redact(e.Path)
-							if e.Reference != nil {
-								e.Reference.Identifier = redact(e.Reference.Identifier)
-								e.Reference.Reason = redact(e.Reference.Reason)
-							}
-							// Byte evidence is redacted again at the trust boundary for custom executors.
-							r := redactionTemplate.clone()
-							b := append([]byte(nil), r.Write(events.Stdout, e.Stdout)...)
-							e.Stdout = append(b, r.Flush(events.Stdout)...)
-							r = redactionTemplate.clone()
-							b = append([]byte(nil), r.Write(events.Stderr, e.Stderr)...)
-							e.Stderr = append(b, r.Flush(events.Stderr)...)
-						}
-						if snapshot.Validate() != nil {
-							checkInvalid = true
-							return
-						}
-						check = &snapshot
-					}
-					if hasObserved {
-						outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Correlation: ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
-					} else {
-						outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
-					}
-					logMu.Lock()
-					emitLog(events.Stdout, redactor.Flush(events.Stdout))
-					emitLog(events.Stderr, redactor.Flush(events.Stderr))
-					progress.flush()
-					closed = true
-					logMu.Unlock()
-				} else if correlated, ok := executor.(CorrelatedExecutor); ok {
-					outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID})
-				} else {
-					outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
-				}
-				if evidence != nil {
-					snapshot := *evidence
-					snapshot.ChangedFiles = append([]events.ChangedFile{}, evidence.ChangedFiles...)
-					redact := func(s string) string {
-						r := redactionTemplate.clone()
-						data := append([]byte{}, r.Write(events.Stdout, []byte(s))...)
-						data = append(data, r.Flush(events.Stdout)...)
-						return string(data)
-					}
-					snapshot.AdapterID = redact(snapshot.AdapterID)
-					snapshot.AdapterVersion = redact(snapshot.AdapterVersion)
-					for i := range snapshot.ChangedFiles {
-						snapshot.ChangedFiles[i].Path = redact(snapshot.ChangedFiles[i].Path)
-					}
-					evidence = &snapshot
-				}
-				completed <- completedNode{id: id, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err}
-			}(id)
-			started++
+			batch = retry
 		}
-		results := make([]completedNode, 0, started)
-		for range started {
-			results = append(results, <-completed)
-		}
-		sort.Slice(results, func(i, j int) bool { return results[i].id < results[j].id })
-		for _, work := range results {
-			nodeResult := machine.nodes[work.id]
-			if work.check != nil || work.checkInvalid {
-				valid := !work.checkInvalid && work.check != nil && definition.Nodes[work.id].Type == "gate" && work.evidence == nil
-				if valid && work.check.Verdict == "red" {
-					var verdict interface{ GateVerdict() string }
-					valid = errors.As(work.err, &verdict) && verdict.GateVerdict() == "red" && len(work.outputs) == 0 && !errors.Is(work.err, context.Canceled) && !errors.Is(work.err, context.DeadlineExceeded)
-				}
-				if valid && work.check.Verdict == "green" {
-					valid = work.err == nil && len(validateNodeOutputs(definition.ID, work.id, definition.Nodes[work.id].Outputs, work.outputs)) == 0
-					for k, v := range work.outputs {
-						t, ok := v.AsString()
-						valid = valid && k == "verdict" && ok && t == "green"
-					}
-				}
-				if !valid {
-					work.err = errors.New("invalid or inconsistent gate observation")
-					work.outputs = nil
-				} else {
-					machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.check})
-				}
-			} else if definition.Nodes[work.id].Type == "gate" && work.err == nil {
-				work.err = errors.New("gate execution missing check observation")
-				work.outputs = nil
+		for _, id := range machine.ids {
+			if machine.nodes[id].State == NodeRunning {
+				machine.transitionNode(id, NodeCancelled)
 			}
-			if work.err != nil {
-				if ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
-					machine.transitionNode(work.id, NodeCancelled)
-				} else {
-					nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureExecutor, Err: work.err}
-					machine.transitionNode(work.id, NodeFailed)
-				}
-				continue
-			}
-			diagnostics := validateNodeOutputs(definition.ID, work.id, definition.Nodes[work.id].Outputs, work.outputs)
-			if len(diagnostics) > 0 {
-				nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureOutputContract, Diagnostics: diagnostics}
-				machine.transitionNode(work.id, NodeFailed)
-				continue
-			}
-			machine.outputs[work.id] = copyValues(work.outputs)
-			nodeResult.Outputs = sortedPortValues(work.outputs)
-			if work.evidence != nil {
-				machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
-			}
-			machine.transitionNode(work.id, NodeSucceeded)
 		}
 		for _, id := range machine.ids {
 			if node := machine.nodes[id]; node.State == NodeFailed {
@@ -664,4 +644,123 @@ func validateNodeOutputs(graphID, nodeID string, declared map[string]graph.PortD
 		diagnostics = append(diagnostics, graph.Diagnostic{Severity: graph.SeverityError, Code: "E_NODE_OUTPUT_UNDECLARED", GraphID: graphID, Location: graph.DiagnosticLocation{NodeID: nodeID, Path: fmt.Sprintf("nodes.%s.outputs[%q]", nodeID, name)}, Message: fmt.Sprintf("node %q returned undeclared output %q", nodeID, name), Suggestion: "declare the output or stop returning it"})
 	}
 	return diagnostics
+}
+
+func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, feedback *CorrectionFeedback, redactionTemplate *logRedactor) completedNode {
+	nodeRunID := m.nodes[id].NodeRunID
+	var outputs map[string]graph.Value
+	var err error
+	var evidence *events.NodeEvidencePayload
+	var check *events.GateCheckPayload
+	checkInvalid := false
+	streaming, hasLogs := executor.(LogStreamingExecutor)
+	observed, hasObserved := executor.(ObservedExecutor)
+	if hasLogs || hasObserved {
+		redactor := redactionTemplate.clone()
+		var logMu sync.Mutex
+		closed := false
+		emitLog := func(stream events.Stream, data []byte) {
+			for len(data) > 0 {
+				chunk := data
+				if len(chunk) > maxEventLogChunk {
+					chunk = chunk[:maxEventLogChunk]
+				}
+				m.appendEvent(events.Event{Type: events.LogChunk, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: events.LogChunkPayload{Stream: stream, Data: chunk}})
+				data = data[len(chunk):]
+			}
+		}
+		progress := newProgressRedactor(redactionTemplate, func(kind events.Type, payload events.Payload) {
+			m.appendEvent(events.Event{Type: kind, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: payload})
+		})
+		observerProgress := func(kind events.Type, payload events.Payload) {
+			logMu.Lock()
+			defer logMu.Unlock()
+			if !closed {
+				progress.write(kind, payload)
+			}
+		}
+		observer := func(stream string, data []byte) {
+			if stream != string(events.Stdout) && stream != string(events.Stderr) {
+				return
+			}
+			logMu.Lock()
+			if closed {
+				logMu.Unlock()
+				return
+			}
+			emitLog(events.Stream(stream), redactor.Write(events.Stream(stream), data))
+			logMu.Unlock()
+		}
+		observeCheck := func(p events.GateCheckPayload) {
+			logMu.Lock()
+			defer logMu.Unlock()
+			if closed {
+				return
+			}
+			if check != nil || p.Validate() != nil || p.CheckID != node.Config["check_id"] || string(p.Kind) != node.Config["kind"] || (attemptID != "" && !checkScopeMatches(node, p)) {
+				checkInvalid = true
+				return
+			}
+			snapshot := events.CloneGate(p)
+			redact := func(s string) string { return progress.redact(s) }
+			snapshot.CheckID = redact(snapshot.CheckID)
+			snapshot.Reason = redact(snapshot.Reason)
+			for i := range snapshot.Scope.CheckedInputs {
+				snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
+			}
+			sort.Strings(snapshot.Scope.CheckedInputs)
+			for i := range snapshot.Evidence {
+				e := &snapshot.Evidence[i]
+				e.Path = redact(e.Path)
+				if e.Reference != nil {
+					e.Reference.Identifier = redact(e.Reference.Identifier)
+					e.Reference.Reason = redact(e.Reference.Reason)
+				}
+				// Byte evidence is redacted again at the trust boundary for custom executors.
+				r := redactionTemplate.clone()
+				b := append([]byte(nil), r.Write(events.Stdout, e.Stdout)...)
+				e.Stdout = append(b, r.Flush(events.Stdout)...)
+				r = redactionTemplate.clone()
+				b = append([]byte(nil), r.Write(events.Stderr, e.Stderr)...)
+				e.Stderr = append(b, r.Flush(events.Stderr)...)
+			}
+			if snapshot.Validate() != nil {
+				checkInvalid = true
+				return
+			}
+			check = &snapshot
+		}
+		if hasObserved {
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+		} else {
+			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+		}
+		logMu.Lock()
+		emitLog(events.Stdout, redactor.Flush(events.Stdout))
+		emitLog(events.Stderr, redactor.Flush(events.Stderr))
+		progress.flush()
+		closed = true
+		logMu.Unlock()
+	} else if correlated, ok := executor.(CorrelatedExecutor); ok {
+		outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
+	} else {
+		outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
+	}
+	if evidence != nil {
+		snapshot := *evidence
+		snapshot.ChangedFiles = append([]events.ChangedFile{}, evidence.ChangedFiles...)
+		redact := func(s string) string {
+			r := redactionTemplate.clone()
+			data := append([]byte{}, r.Write(events.Stdout, []byte(s))...)
+			data = append(data, r.Flush(events.Stdout)...)
+			return string(data)
+		}
+		snapshot.AdapterID = redact(snapshot.AdapterID)
+		snapshot.AdapterVersion = redact(snapshot.AdapterVersion)
+		for i := range snapshot.ChangedFiles {
+			snapshot.ChangedFiles[i].Path = redact(snapshot.ChangedFiles[i].Path)
+		}
+		evidence = &snapshot
+	}
+	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err}
 }
