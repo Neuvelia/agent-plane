@@ -1,6 +1,8 @@
 # Product roadmap - compact repository version
 
-The detailed product roadmap lives outside this starter repository. This file keeps the engineering phases visible to coding agents and contributors.
+This is the repository's compact engineering roadmap. The detailed feature
+catalog is in `docs/reference/full-roadmap-features.md`, based on the product
+roadmap PDF. An active feature still needs a reviewed spec in `docs/features/`.
 
 ## Phase 0 - Execution Core
 
@@ -20,14 +22,14 @@ Exit: a three-node graph runs independent branches concurrently, joins them, pas
 
 Goal: execute one real coding agent behind an adapter and add deterministic correction.
 
-- agent adapter contract;
-- first coding-agent adapter, expected first target: Codex CLI;
-- normalized streaming events;
-- deterministic Gate Node;
-- Check Result contract;
-- bounded correction loop;
-- return envelope / scoped retry;
-- changed-files scope check.
+- F1.1 Agent Adapter Contract (P0);
+- F1.2 First coding-agent adapter (P0; expected first target: Codex CLI);
+- F1.3 Unified Streaming (P0);
+- F1.4 Gate Node (P0);
+- F1.5 Check Result Contract (P0);
+- F1.6 Correction Loop + maxAttempts (P0);
+- F1.7 Return Envelope / scoped retry (P0);
+- F1.8 Changed-files Scope Check (P1).
 
 Exit: an agent modifies a repository, a deterministic check rejects a bad result with reason/evidence/scope, and only the failed unit is corrected within a bounded attempt count.
 

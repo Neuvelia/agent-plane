@@ -4,7 +4,7 @@ A feature spec is the executable contract for one roadmap item.
 
 Implementation should not begin for a non-trivial roadmap feature until its spec has measurable acceptance criteria.
 
-## Phase 0
+## Phase 0 - implemented
 
 - `F0.1-graph-definition-schema-v0.md`
 - `F0.2-graph-validator-and-lint.md`
@@ -13,6 +13,20 @@ Implementation should not begin for a non-trivial roadmap feature until its spec
 - `F0.5-shell-node.md`
 - `F0.6-event-model.md`
 - `F0.7-cli-runner.md`
+
+## Phase 1 - Agent Loop
+
+F1.1 Agent Adapter Contract is the first active documentation task. F1.2-F1.7
+are P0 features; F1.8 is P1. See `docs/roadmap.md` and
+`docs/reference/full-roadmap-features.md` for the ID catalog, dependencies, and
+phase exit criteria. Add each implementation spec here when its feature is
+activated; do not treat a roadmap entry as an executable feature contract.
+
+## Later phases
+
+F2-F6 remain roadmap scope. Their IDs and priorities are tracked in
+`docs/roadmap.md`; implementation specs are created when a feature becomes
+active.
 
 ## Rules
 

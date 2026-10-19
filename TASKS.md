@@ -1,43 +1,36 @@
-# Initial implementation queue
+# Implementation queue
 
 The ordering below is intentional. Complete one vertical contract before moving to the next.
 
-## Phase 0 - Execution Core
+## Phase 0 - Execution Core (implemented)
 
-- [ ] F0.1 Graph Definition Schema v0
-- [ ] F0.2 Graph Validator and lint
-- [ ] F0.3 Explicit data bindings
-- [ ] F0.4 In-memory DAG scheduler
-- [ ] F0.5 Shell Node
-- [ ] F0.6 Event model and run/node IDs
-- [ ] F0.7 CLI runner
+- [x] F0.1 Graph Definition Schema v0
+- [x] F0.2 Graph Validator and lint
+- [x] F0.3 Explicit data bindings
+- [x] F0.4 In-memory DAG scheduler
+- [x] F0.5 Shell Node
+- [x] F0.6 Event model and run/node IDs
+- [x] F0.7 CLI runner
 
-## Recommended first work sessions
+The CLI integration test proves independent branch overlap, bound values in a
+dependent Shell node, ordered events, and a deterministic terminal result.
 
-### Session 1 - F0.1 plan
+## Phase 1 - Agent Loop
 
-Use `prompts/plan.md` with:
+- [ ] F1.1 Agent Adapter Contract (spec and ADR before implementation)
+- [ ] F1.2 First coding-agent adapter
+- [ ] F1.3 Unified Streaming
+- [ ] F1.4 Gate Node
+- [ ] F1.5 Check Result Contract
+- [ ] F1.6 Correction Loop + maxAttempts
+- [ ] F1.7 Return Envelope / scoped retry
+- [ ] F1.8 Changed-files Scope Check (P1)
 
-```text
-FEATURE_ID=F0.1
-FEATURE_SPEC=docs/features/F0.1-graph-definition-schema-v0.md
-```
+Create and review each feature spec before implementing it. F1.1 is the first
+active documentation task. See `docs/roadmap.md` for dependencies and phase
+exit criteria.
 
-Plan only. Do not modify files.
-
-### Session 2 - F0.1 implementation
-
-Implement the approved plan. Run `make check`.
-
-### Session 3 - F0.1 review
-
-Use `prompts/review.md` in a separate Codex session. Review against the spec and `AGENTS.md`.
-
-### Session 4 - F0.2
-
-Repeat the same flow for `docs/features/F0.2-graph-validator-and-lint.md`.
-
-## Phase 0 milestone demo
+## Phase 0 milestone demo (achieved)
 
 The phase is complete when an example graph equivalent to:
 
