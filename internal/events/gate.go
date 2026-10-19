@@ -61,7 +61,7 @@ func (p GateCheckPayload) Validate() error {
 			if e.ExitCode == nil || (*e.ExitCode != 0 && *e.ExitCode != 1) || (p.Verdict == "green") != (*e.ExitCode == 0) {
 				return errors.New("inconsistent gate command verdict")
 			}
-		} else if e.ExitCode != nil || len(e.Stdout)+len(e.Stderr) > 0 || e.StdoutOmitted+e.StderrOmitted > 0 {
+		} else if e.ExitCode != nil || len(e.Stdout)+len(e.Stderr) > 0 || e.StdoutOmitted != 0 || e.StderrOmitted != 0 {
 			return errors.New("unexpected gate process evidence")
 		}
 	}

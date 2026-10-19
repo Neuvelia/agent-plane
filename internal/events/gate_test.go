@@ -103,3 +103,30 @@ func TestCommandGateFactDetachesBytesAndExitCode(t *testing.T) {
 		t.Fatal("snapshot evidence aliased")
 	}
 }
+
+func TestNonCommandGateRejectsProcessOmissionCountersWithoutOverflow(t *testing.T) {
+	for _, kind := range []string{"json_predicate", "reported_file_scope"} {
+		for _, counts := range [][2]uint64{{^uint64(0), 1}, {1, ^uint64(0)}, {^uint64(0), 0}, {0, ^uint64(0)}} {
+			p := gateFact()
+			p.Kind = kind
+			p.Evidence[0].Source = kind
+			if kind == "reported_file_scope" {
+				p.Evidence[0].Source = "reported"
+			}
+			p.Evidence[0].StdoutOmitted = counts[0]
+			p.Evidence[0].StderrOmitted = counts[1]
+			if p.Validate() == nil {
+				t.Errorf("%s accepted forbidden process counters %v", kind, counts)
+			}
+			// Bypass Event.MarshalJSON validation to exercise the untrusted decoder.
+			raw, err := json.Marshal(map[string]any{"event_schema_version": SchemaVersion, "type": GateCheck, "payload": p})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var event Event
+			if json.Unmarshal(raw, &event) == nil {
+				t.Errorf("%s decoder accepted forbidden process counters %v", kind, counts)
+			}
+		}
+	}
+}
