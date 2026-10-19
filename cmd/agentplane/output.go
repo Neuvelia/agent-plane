@@ -136,6 +136,20 @@ func (r *eventRenderer) Event(event events.Event) error {
 		p := event.Payload.(events.ProgressOmittedPayload)
 		_, err := fmt.Fprintf(r.stderr, "Progress omitted: retained %d events / %d bytes; live %d events / %d bytes (stopped=%t)\n", p.RetainedEvents, p.RetainedBytes, p.LiveEvents, p.LiveBytes, p.LiveStopped)
 		return err
+	case events.GateCheck:
+		p := event.Payload.(events.GateCheckPayload)
+		if _, err := fmt.Fprintf(r.stderr, "%s gate %s: %s (%s)\n", event.NodeID, p.CheckID, p.Verdict, p.Reason); err != nil {
+			return err
+		}
+		for _, e := range p.Evidence {
+			exit := "absent"
+			if e.ExitCode != nil {
+				exit = fmt.Sprint(*e.ExitCode)
+			}
+			if _, err := fmt.Fprintf(r.stderr, "  source=%s path=%q exit=%s stdout=%q stderr=%q omitted=%d/%d/%d\n", e.Source, e.Path, exit, e.Stdout, e.Stderr, e.StdoutOmitted, e.StderrOmitted, e.Omitted); err != nil {
+				return err
+			}
+		}
 	case events.NodeEvidence:
 		p := event.Payload.(events.NodeEvidencePayload)
 		if _, err := fmt.Fprintf(r.stderr, "%s evidence: %s %s (%d changed paths)\n", event.NodeID, p.AdapterID, p.AdapterVersion, len(p.ChangedFiles)); err != nil {

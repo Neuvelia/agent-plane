@@ -1,0 +1,30 @@
+schema_version: 0
+id: local-gate
+inputs:
+  candidate: {type: json, required: true}
+nodes:
+  accept:
+    type: gate
+    config:
+      check_id: candidate-ready
+      kind: json_predicate
+      input: candidate
+      field: [ready]
+      operator: eq
+      expected: true
+    inputs:
+      candidate: {type: json, required: true}
+    outputs:
+      verdict: {type: string, required: true}
+  report:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["accepted\n"]
+    inputs:
+      verdict: {type: string, required: true}
+graph_input_bindings:
+  - {from: inputs.candidate, to: accept.inputs.candidate}
+edges:
+  - {from: accept.outputs.verdict, to: report.inputs.verdict}
+outputs: {}

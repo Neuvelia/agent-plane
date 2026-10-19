@@ -43,11 +43,15 @@ type LogStreamingExecutor interface {
 }
 
 // ExecutionObservation combines correlation and safe logs without provider types.
-// Evidence is returned separately from graph outputs and committed only on success.
+// Agent evidence is returned separately and committed only on success. Check
+// observes at most one validated Gate fact, retained for green and red. Capture
+// capabilities redact before truncation without exposing configured secrets.
 type ExecutionObservation struct {
-	Correlation ExecutionCorrelation
-	Log         func(string, []byte)
-	Progress    func(events.Type, events.Payload)
+	Correlation     ExecutionCorrelation
+	Log             func(string, []byte)
+	Progress        func(events.Type, events.Payload)
+	Check           func(events.GateCheckPayload)
+	NewCheckCapture func() *CheckCapture
 }
 type ObservedExecutor interface {
 	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)
@@ -69,10 +73,12 @@ type Options struct {
 }
 
 type completedNode struct {
-	id       string
-	outputs  map[string]graph.Value
-	evidence *events.NodeEvidencePayload
-	err      error
+	id           string
+	outputs      map[string]graph.Value
+	evidence     *events.NodeEvidencePayload
+	check        *events.GateCheckPayload
+	checkInvalid bool
+	err          error
 }
 
 const maxEventLogChunk = 16 * 1024
@@ -204,6 +210,8 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				var outputs map[string]graph.Value
 				var err error
 				var evidence *events.NodeEvidencePayload
+				var check *events.GateCheckPayload
+				checkInvalid := false
 				streaming, hasLogs := executor.(LogStreamingExecutor)
 				observed, hasObserved := executor.(ObservedExecutor)
 				if hasLogs || hasObserved {
@@ -242,8 +250,39 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						emitLog(events.Stream(stream), redactor.Write(events.Stream(stream), data))
 						logMu.Unlock()
 					}
+					observeCheck := func(p events.GateCheckPayload) {
+						logMu.Lock()
+						defer logMu.Unlock()
+						if closed {
+							return
+						}
+						if check != nil || p.Validate() != nil || p.CheckID != node.Config["check_id"] || p.Kind != node.Config["kind"] {
+							checkInvalid = true
+							return
+						}
+						snapshot := events.CloneGate(p)
+						redact := func(s string) string { return progress.redact(s) }
+						snapshot.CheckID = redact(snapshot.CheckID)
+						snapshot.Reason = redact(snapshot.Reason)
+						for i := range snapshot.Evidence {
+							e := &snapshot.Evidence[i]
+							e.Path = redact(e.Path)
+							// Byte evidence is redacted again at the trust boundary for custom executors.
+							r := redactionTemplate.clone()
+							b := append([]byte(nil), r.Write(events.Stdout, e.Stdout)...)
+							e.Stdout = append(b, r.Flush(events.Stdout)...)
+							r = redactionTemplate.clone()
+							b = append([]byte(nil), r.Write(events.Stderr, e.Stderr)...)
+							e.Stderr = append(b, r.Flush(events.Stderr)...)
+						}
+						if snapshot.Validate() != nil {
+							checkInvalid = true
+							return
+						}
+						check = &snapshot
+					}
 					if hasObserved {
-						outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Correlation: ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID}, Log: observer, Progress: observerProgress})
+						outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Correlation: ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
 					} else {
 						outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 					}
@@ -274,7 +313,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					}
 					evidence = &snapshot
 				}
-				completed <- completedNode{id: id, outputs: outputs, evidence: evidence, err: err}
+				completed <- completedNode{id: id, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err}
 			}(id)
 			started++
 		}
@@ -285,6 +324,29 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		sort.Slice(results, func(i, j int) bool { return results[i].id < results[j].id })
 		for _, work := range results {
 			nodeResult := machine.nodes[work.id]
+			if work.check != nil || work.checkInvalid {
+				valid := !work.checkInvalid && work.check != nil && definition.Nodes[work.id].Type == "gate" && work.evidence == nil
+				if valid && work.check.Verdict == "red" {
+					var verdict interface{ GateVerdict() string }
+					valid = errors.As(work.err, &verdict) && verdict.GateVerdict() == "red" && len(work.outputs) == 0 && !errors.Is(work.err, context.Canceled) && !errors.Is(work.err, context.DeadlineExceeded)
+				}
+				if valid && work.check.Verdict == "green" {
+					valid = work.err == nil && len(validateNodeOutputs(definition.ID, work.id, definition.Nodes[work.id].Outputs, work.outputs)) == 0
+					for k, v := range work.outputs {
+						t, ok := v.AsString()
+						valid = valid && k == "verdict" && ok && t == "green"
+					}
+				}
+				if !valid {
+					work.err = errors.New("invalid or inconsistent gate observation")
+					work.outputs = nil
+				} else {
+					machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.check})
+				}
+			} else if definition.Nodes[work.id].Type == "gate" && work.err == nil {
+				work.err = errors.New("gate execution missing check observation")
+				work.outputs = nil
+			}
 			if work.err != nil {
 				if ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
 					machine.transitionNode(work.id, NodeCancelled)
