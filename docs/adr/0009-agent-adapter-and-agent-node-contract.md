@@ -1,6 +1,6 @@
 # ADR-0009 - Agent adapter and Agent node contract
 
-**Status:** accepted for F1.1 planning
+**Status:** accepted
 **Date:** 2026-10-19
 
 ## Context
@@ -34,7 +34,9 @@ lifecycle events. A caller-owned Agent executor resolves adapters by logical
 ID from an explicit registry and converts graph values to typed adapter
 input. The runtime never branches on a provider name. A narrow optional
 correlated-executor interface passes the existing `RunID` and `NodeRunID` to
-compatible executors; legacy Shell execution remains valid. `AttemptID` stays
+compatible executors; legacy Shell execution remains valid. Existing log-streaming dispatch takes
+precedence for an executor implementing both optional interfaces; F1.1 adds
+no combined correlation/streaming API. `AttemptID` stays
 empty until F1.6 actually creates attempts. The adapter cannot mint or replace
 these IDs.
 
@@ -57,8 +59,17 @@ validation alone cannot certify Agent configuration in F1.1.
 
 ### Result and evidence
 
-The adapter returns a typed normalized result: summary, changed-file paths,
+The adapter returns a typed normalized result: summary, changed-file records,
 artifact references, opaque JSON provider metadata and optional usage values.
+Changed files are `{path, provenance}` records; provenance is `reported` or
+`observed`, and path is nonempty. Artifact records contain a nonempty `ref`
+and optional `name`. Neither reference existence nor changed-file scope is
+verified here. A nil changed-files/artifacts slice is unknown and omits the
+port; an explicitly empty slice is the known empty JSON array `[]`.
+Usage fields are optional `input_tokens`, `output_tokens`, `model_name`,
+`provider_cost` and `currency`; token values are integers and cost/currency
+are provider-reported strings. A present empty usage record is `{}`.
+Raw metadata may be any valid JSON value, including explicit JSON `null`.
 Unknown usage is absent, distinguishable from a reported zero. Provider
 metadata is validated JSON and not interpreted by the runtime. Only explicitly
 declared output ports become accepted graph values; mismatched or unsupported

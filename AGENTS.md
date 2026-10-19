@@ -24,10 +24,10 @@ Read these files before making architectural changes:
 
 ## Current product phase
 
-Phase 0: Execution Core is implemented on `main` through F0.7. Phase 1: Agent
-Loop is the active planning phase, beginning with F1.1 Agent Adapter Contract.
-Phase 1 behavior has not been implemented. Read the active feature spec before
-changing execution contracts; do not treat the roadmap as an executable spec.
+Phase 0: Execution Core is implemented on `main` through F0.7. F1.1 Agent
+Adapter Contract is implemented with a test-only mock and generic runtime dispatch. Later Phase 1 Agent Loop
+features remain unimplemented; F1.2 is the next planning candidate. Read the
+active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without
 building the UI or cloud control plane.

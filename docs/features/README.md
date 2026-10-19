@@ -16,8 +16,8 @@ Implementation should not begin for a non-trivial roadmap feature until its spec
 
 ## Phase 1 - Agent Loop
 
-F1.1 is the active implementation candidate, with its contract decisions in
-ADR-0009 and an approved plan under `docs/superpowers/plans/`. F1.2-F1.7 have
+F1.1 is implemented with a test-only mock and generic runtime dispatch; its
+contract decisions are in ADR-0009. CLI routing remains Shell-only. F1.2-F1.7 have
 draft P0 specs to review in dependency order. F1.8 is P1 and receives its own
 spec when activated. See `docs/roadmap.md` for the complete ID catalog,
 dependencies and phase exit criteria. A roadmap entry is not an executable
@@ -25,7 +25,7 @@ feature contract.
 
 | Feature | Spec status |
 | --- | --- |
-| `F1.1-agent-adapter-contract.md` | Ready for implementation; no F1 code yet |
+| `F1.1-agent-adapter-contract.md` | Implemented; contract mock only |
 | `F1.2-first-coding-agent-adapter.md` | Draft for review |
 | `F1.3-unified-streaming.md` | Draft for review |
 | `F1.4-gate-node.md` | Draft for review |

@@ -1,9 +1,9 @@
 # F1.1 Agent Adapter Contract Implementation Plan
 
-**Status:** approved implementation plan; implementation has not started.
+**Status:** implemented; final verification recorded below.
 ADR-0009 and `docs/graph-spec.md` record the durable contract.
 
-> **For agentic workers:** Use `superpowers:executing-plans` to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use `superpowers:executing-plans` to implement this plan task by task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Add a provider-neutral agent contract and prove that a graph Agent node can execute through a deterministic mock without changing Phase 0 Shell behavior.
 
@@ -31,10 +31,10 @@ the interface, schema-v0 Agent config, correlation and event boundary.
 
 ## Scope and proposed decisions
 
-- Define `AgentAdapter` with `ID() string`, `Detect(context.Context) (Capabilities, error)`, and `Execute(context.Context, ExecutionInput) (ExecutionOutput, error)`. Preparation remains inside `Execute`; cancellation uses its context. Add an explicit cancellation method only if F1.2 provides a concrete process/session need.
-- `Capabilities` reports availability, optional version, and tri-state cancellation, streaming, usage reporting, and workspace support (`*bool` or an equivalent explicit unknown type). Unavailable and detection failure are distinct.
-- `ExecutionInput` carries task, workspace, allowed paths, context references, environment references, and run/node/attempt correlation. References remain inert identifiers; no secret or file resolution happens in the contract.
-- `ExecutionOutput` carries summary, changed files, artifact references, `json.RawMessage` provider metadata, and optional usage values with pointer fields so unknown differs from zero. Validate raw JSON before accepting it as a graph value.
+- Define `AgentAdapter` with `ID() AdapterID`, `Detect(context.Context) (CapabilityReport, error)`, and `Execute(context.Context, AgentExecutionInput) (AgentExecutionOutput, error)`. Preparation remains inside `Execute`; cancellation uses its context. Add an explicit cancellation method only if F1.2 provides a concrete process/session need.
+- `CapabilityReport` reports availability, optional version, and tri-state cancellation, streaming, usage reporting, and workspace support (`*bool` or an equivalent explicit unknown type). Unavailable and detection failure are distinct.
+- `AgentExecutionInput` carries task, workspace, allowed paths, context references, environment references, and run/node/attempt correlation. References remain inert identifiers; no secret or file resolution happens in the contract.
+- `AgentExecutionOutput` carries summary, changed files, artifact references, `json.RawMessage` provider metadata, and optional usage values with pointer fields so unknown differs from zero. Validate raw JSON before accepting it as a graph value.
 - For a graph Agent node, use `config.adapter` for explicit local lookup,
   an absolute local path in `config.workspace`, and an explicitly declared
   string `task` input or literal `config.task` (reject both together and
@@ -68,7 +68,7 @@ the interface, schema-v0 Agent config, correlation and event boundary.
 | `internal/agent/contract.go` | Adapter, capability, input, output, reference, usage, and error types. |
 | `internal/agent/executor.go` | Typed Agent node configuration, adapter lookup, input construction, output-port mapping. |
 | `internal/agent/contract_test.go` and `internal/agent/executor_test.go` | Contract and executor behavior, including failure cases. |
-| `internal/agent/agenttest/mock.go` and `internal/agent/agenttest/conformance.go` | Test-only mock and reusable conformance suite; no production package imports. |
+| `internal/agent/adaptertest/mock.go` and `internal/agent/adaptertest/conformance.go` | Test-only mock and reusable conformance suite; no production package imports. |
 | `internal/runtime/scheduler.go` and `internal/runtime/scheduler_test.go` | Optional correlated executor dispatch and compatibility tests. |
 | `internal/graph/yaml_test.go`, `internal/graph/version_test.go` | Agent config round trip, strict top-level fields, semantic hash changes. |
 | `docs/graph-spec.md` and a new ADR | Public Agent node and execution contract decisions. |
@@ -86,40 +86,58 @@ the interface, schema-v0 Agent config, correlation and event boundary.
 
 ### Task 2: Define the provider-neutral adapter contract
 
-- [ ] Write failing tests for identity, available/unavailable/unknown capabilities, known versus unknown usage (including a reported zero), and JSON metadata round trip.
-- [ ] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/agent/...`; expect the new tests to fail before implementation.
-- [ ] Add the small typed API to `internal/agent/contract.go`; avoid maps at the stable boundary except opaque raw JSON.
-- [ ] Run the targeted tests until they pass.
+- [x] Write failing tests for identity, available/unavailable/unknown capabilities, known versus unknown usage (including a reported zero), and JSON metadata round trip.
+- [x] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/agent/...`; expect the new tests to fail before implementation.
+- [x] Add the small typed API to `internal/agent/contract.go`; avoid maps at the stable boundary except opaque raw JSON.
+- [x] Run the targeted tests until they pass.
 
 ### Task 3: Prove the contract with a reusable mock suite
 
-- [ ] Add a deterministic mock and exported conformance test helper under `internal/agent/agenttest`; tests configure capabilities, output, execution error, and a channel-controlled cancellation path.
-- [ ] Add a consumer test that runs the conformance suite against the mock. Assert propagation of task, workspace, scope, context references, environment references, IDs, raw metadata, and usage.
-- [ ] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/agent/...`; expect the conformance tests to pass.
+- [x] Add a deterministic mock and exported conformance test helper under `internal/agent/adaptertest`; tests configure capabilities, output, execution error, and a channel-controlled cancellation path.
+- [x] Add a consumer test that runs the conformance suite against the mock. Assert propagation of task, workspace, scope, context references, environment references, IDs, raw metadata, and usage.
+- [x] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/agent/...`; expect the conformance tests to pass.
 
 ### Task 4: Pass scheduler-owned correlation to compatible executors
 
-- [ ] Add a failing runtime test with one legacy executor and one executor implementing the optional correlated interface. Assert both execute, and the correlated executor receives exactly the IDs present in `RunResult` and emitted events; `AttemptID` remains empty.
-- [ ] Add the typed identity and optional interface in `internal/runtime/scheduler.go`, with one dispatch point inside the worker. Preserve the existing `Executor` signature and Shell path.
-- [ ] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/runtime ./internal/shell` and `GOCACHE=/tmp/agentplane-go-cache go test -race ./internal/runtime`.
+- [x] Add a failing runtime test with one legacy executor and one executor implementing the optional correlated interface. Assert both execute, and the correlated executor receives exactly the IDs present in `RunResult` and emitted events; `AttemptID` remains empty.
+- [x] Add the typed identity and optional interface in `internal/runtime/scheduler.go`, with one dispatch point inside the worker. Preserve the existing `Executor` signature and Shell path.
+- [x] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/runtime ./internal/shell` and `GOCACHE=/tmp/agentplane-go-cache go test -race ./internal/runtime`.
 
 ### Task 5: Execute Agent nodes through explicit lookup
 
-- [ ] Add failing tests for valid config, bound or literal task, task conflict, bad types, unknown adapter, unavailable adapter, detection failure, unsupported capability, execution/start failure, cancellation, and unsupported/mismatched output ports.
-- [ ] Implement a caller-owned agent executor that decodes only `type: agent`, validates configuration before execution, looks up an adapter, detects capabilities, and passes typed input and correlation to `Execute`.
-- [ ] Map normalized output only to declared graph ports. Preserve distinction between absent and zero usage. Ensure errors keep node and adapter identity while redacting task/environment values.
-- [ ] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/agent/...`.
+- [x] Add failing tests for valid config, bound or literal task, task conflict, bad types, unknown adapter, unavailable adapter, detection failure, unsupported capability, execution/start failure, cancellation, and unsupported/mismatched output ports.
+- [x] Implement a caller-owned agent executor that decodes only `type: agent`, validates configuration before execution, looks up an adapter, detects capabilities, and passes typed input and correlation to `Execute`.
+- [x] Map normalized output only to declared graph ports. Preserve distinction between absent and zero usage. Ensure errors keep node and adapter identity while redacting task/environment values.
+- [x] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/agent/...`.
 
 ### Task 6: Integrate without changing Phase 0 behavior
 
-- [ ] Add a runtime integration test using a small test composite executor that routes an Agent node to the mock-backed agent executor and a downstream test node to a deterministic executor. Prove explicit graph binding of the Agent summary; assert lifecycle IDs/events and accepted outputs.
-- [ ] Add an integration failure test proving an Agent error skips downstream while an already accepted sibling result remains available in the run result.
-- [ ] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/runtime ./internal/agent/... ./internal/shell ./cmd/agentplane`.
-- [ ] Run `GOCACHE=/tmp/agentplane-go-race-cache go test -race ./...` and `GOCACHE=/tmp/agentplane-go-cache make check`.
-- [ ] Inspect `git diff --stat`, `git diff`, and `git status --short`; verify only F1.1 files changed, the user-owned spec was preserved, and no generated files are included.
+- [x] Add a runtime integration test using a small test composite executor that routes an Agent node to the mock-backed agent executor and a downstream test node to a deterministic executor. Prove explicit graph binding of the Agent summary; assert lifecycle IDs/events and accepted outputs.
+- [x] Add an integration failure test proving an Agent error skips downstream while an already accepted sibling result remains available in the run result.
+- [x] Run `GOCACHE=/tmp/agentplane-go-cache go test ./internal/runtime ./internal/agent/... ./internal/shell ./cmd/agentplane`.
+- [x] Run `GOCACHE=/tmp/agentplane-go-race-cache go test -race ./...` and `GOCACHE=/tmp/agentplane-go-cache make check`.
+- [x] Inspect `git diff --stat`, `git diff`, and `git status --short`; verify only F1.1 files changed, the user-owned spec was preserved, and no generated files are included.
 
 ## Contracts and limits
 
 The graph definition gains an Agent node convention inside the existing opaque `config` map; no top-level schema field or version bump is proposed. The runtime gains a compatible optional executor interface, not a new scheduler state. Event schema v1 retains its existing lifecycle payloads and correlation; attempts remain absent until F1.6. Agent output becomes graph data only through declared ports. CLI execution remains Shell-only in F1.1, because the only F1.1 adapter is test-only.
 
 The main implementation risk is that a real F1.2 CLI may reveal a missing process-level capability. Keep the adapter interface narrow and use F1.2 to justify any addition. The current in-memory result and log retention are unbounded; F1.3 owns streaming/backpressure and F3.x owns durable artifacts. `allowed_paths` cannot prevent writes in F1.1, so user-facing documentation must call it an intended scope rather than enforcement.
+
+## Completion evidence (2026-10-19)
+
+The approved completion plan expanded conformance and executor boundary tests,
+scheduler legacy/correlation/log-precedence tests, explicit summary-edge
+integration, retained sibling output on failure, safe lifecycle events, and
+Agent YAML round-trip/semantic hash coverage. YAML/hash tests live in
+`internal/agent/integration_test.go` so the parsed fixture executes through
+the mock without introducing graph-package dependencies on Agent execution.
+The completion pass also corrected loss of the already decoded adapter ID
+in invalid-config errors, demonstrated by a failing then passing regression
+test. Other additional tests passed against the preserved behavior. The original
+"failing tests" steps above describe the planned initial implementation; this
+pass does not claim retrospective red/green evidence for preserved code.
+
+With `GOCACHE=/tmp/agentplane-go-cache`, targeted Agent/runtime/graph/Shell/CLI
+tests, `make check`, and `go test -race ./...` passed on 2026-10-19. The
+implementation report contains the complete acceptance-to-tests matrix.
