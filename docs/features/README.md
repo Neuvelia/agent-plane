@@ -16,11 +16,15 @@ Implementation should not begin for a non-trivial roadmap feature until its spec
 
 ## Phase 1 - Agent Loop
 
-F1.1 Agent Adapter Contract is the first active documentation task. F1.2-F1.7
-are P0 features; F1.8 is P1. See `docs/roadmap.md` and
+F1.1 Agent Adapter Contract is the active implementation candidate, with its
+contract decisions in ADR-0009 and an approved plan under
+`docs/superpowers/plans/`. F1.2-F1.7 are P0 features; F1.8 is P1. See
+`docs/roadmap.md` and
 `docs/reference/full-roadmap-features.md` for the ID catalog, dependencies, and
 phase exit criteria. Add each implementation spec here when its feature is
 activated; do not treat a roadmap entry as an executable feature contract.
+
+- `F1.1-agent-adapter-contract.md` — ready for implementation; no F1 code yet.
 
 ## Later phases
 
