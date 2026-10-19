@@ -23,16 +23,16 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 }
 
 func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
-	return e.execute(ctx, nodeID, node, inputs, ids, nil, nil)
+	return e.execute(ctx, nodeID, node, inputs, ids, nil, nil, nil)
 }
 
 func (e Executor) ExecuteNodeObserved(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, obs runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
 	var evidence *events.NodeEvidencePayload
-	values, err := e.execute(ctx, nodeID, node, inputs, obs.Correlation, obs.Log, &evidence)
+	values, err := e.execute(ctx, nodeID, node, inputs, obs.Correlation, obs.Log, obs.Progress, &evidence)
 	return values, evidence, err
 }
 
-func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation, log func(string, []byte), evidence **events.NodeEvidencePayload) (map[string]graph.Value, error) {
+func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation, log func(string, []byte), normalized func(events.Type, events.Payload), evidence **events.NodeEvidencePayload) (map[string]graph.Value, error) {
 	if ctx == nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: ErrorInvalidInput, Cause: errors.New("execution context is nil")}
 	}
@@ -64,7 +64,9 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 	}
 	request := AgentExecutionInput{Task: cfg.task, Workspace: cfg.workspace, AllowedPaths: cfg.allowedPaths, ContextRefs: cfg.contextRefs, EnvironmentRefs: cfg.environmentRefs, RunID: ids.RunID, NodeRunID: ids.NodeRunID, AttemptID: ids.AttemptID}
 	var output AgentExecutionOutput
-	if progress, ok := adapter.(ProgressAdapter); ok {
+	if progress, ok := adapter.(NormalizedProgressAdapter); ok && normalized != nil {
+		output, err = progress.ExecuteWithNormalizedProgress(ctx, request, normalized)
+	} else if progress, ok := adapter.(ProgressAdapter); ok {
 		output, err = progress.ExecuteWithProgress(ctx, request, log)
 	} else {
 		output, err = adapter.Execute(ctx, request)

@@ -180,8 +180,14 @@ run_finished
 An unstarted node that fails, skips, or cancels emits `node_terminated` instead
 of `node_finished`. Events have a per-run sequence assigned by one in-memory
 collector. The sequence, rather than timestamp, is authoritative for order.
-Completed runs expose their event slice to consumers; live subscriptions and
-durable delivery are later contracts.
+Completed runs expose complete lifecycle/evidence plus bounded progress and
+omission evidence. F1.3 schema 3 adds normalized public progress and a bounded
+live FIFO prefix; an absent reader cannot block scheduling. Retained progress
+is limited to 4 MiB encoded event JSON / 4096 items and live delivery to 1 MiB /
+1024 items including its in-flight head. Finalization joins the delivery pump
+before retaining omissions and run_finished for replay. Lifecycle/evidence and
+legacy Shell capture are outside these progress budgets; total memory is not
+constant. Durable delivery remains later work. See ADR-0011.
 
 Later events include check, correction, artifact, and approval events.
 

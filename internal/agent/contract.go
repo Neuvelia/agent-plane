@@ -82,3 +82,9 @@ type AgentExecutionOutput struct {
 type ProgressAdapter interface {
 	ExecuteWithProgress(context.Context, AgentExecutionInput, func(string, []byte)) (AgentExecutionOutput, error)
 }
+
+// NormalizedProgressAdapter supplies public observable progress, with runtime
+// correlation/redaction and no provider-specific fields. Legacy adapters remain valid.
+type NormalizedProgressAdapter interface {
+	ExecuteWithNormalizedProgress(context.Context, AgentExecutionInput, func(events.Type, events.Payload)) (AgentExecutionOutput, error)
+}
