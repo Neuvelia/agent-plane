@@ -19,3 +19,7 @@ Number ADRs sequentially and keep superseded decisions rather than rewriting his
 F1.4: [ADR-0012 - Deterministic Gate node and restricted comparison command](0012-gate-node-contract.md).
 
 F1.5: [ADR-0013 - Versioned Check Result and typed trace retrieval](0013-check-result-contract.md).
+
+F1.6: [ADR-0014 - Bounded node-local correction attempts](0014-bounded-node-correction-loop.md).
+
+F1.7: [ADR-0015 - Static units, Return Envelopes and immutable acceptance](0015-return-envelope-and-unit-acceptance.md).

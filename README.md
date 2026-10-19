@@ -11,7 +11,9 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
 normalized progress and live delivery. F1.4 adds deterministic read-only Gates;
 F1.5 adds versioned Check Results with checked-input scope, duration and typed
-evidence references. F1.6 bounded correction attempts remain outside this scope.
+evidence references. F1.6 adds bounded node-local correction attempts. F1.7 adds
+explicit static units, Return Envelopes and immutable accepted runtime values/
+provenance (ADR-0015). Shared files remain outside the immutability guarantee.
 
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
@@ -108,7 +110,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 5 (old schema 1–4 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 7 (old schema 1–6 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
@@ -267,3 +269,25 @@ opaque artifact reference. Reference state `known` means an identifier was
 supplied; `unavailable` and `invalid` carry diagnostic reasons. No resource
 lookup is performed. Schema 4 minimal Gate facts decode separately without
 invented scope/duration. See [ADR-0013](docs/adr/0013-check-result-contract.md).
+
+## Scoped unit retry (F1.7)
+
+Opt in with top-level `units: [a, b, c, d]`, an unordered set of loop Agent
+node IDs (at most 256 UTF-8 bytes per enrolled ID). Each sibling node is one
+static retryable unit. Existing bindings select accepted green values; red
+candidates stay private and only their unit receives another bounded attempt.
+The coordinator accepts each unit once and preserves accepted port provenance.
+CLI nodes expose accepted_attempt_id, and retained schema7 Return Envelopes link
+the exact sanitized check/attempt/source. Absent units preserves F1.6 behavior.
+
+All Agent producer/check cycles sharing a checkout serialize in unit-mode.
+Distinct proven physical Git worktrees can run concurrently; advisory disjoint
+paths do not grant concurrency in a shared checkout. Bounded declared conflict
+facts describe potential overlap/unknown scope or identity. Scope is advisory:
+accepted runtime values remain immutable even if another unit changes their
+files. Enforcement and filesystem isolation remain F1.8/F3.1 work.
+
+See [the example graph](docs/examples/scoped-retry.yaml),
+[ADR-0015](docs/adr/0015-return-envelope-and-unit-acceptance.md) and the
+[prepared after-merge real-Codex demo](docs/validation/F1.7-real-codex-demo.md).
+The recipe is not a record of a completed real-provider validation.

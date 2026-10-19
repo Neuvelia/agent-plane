@@ -52,7 +52,7 @@ A Run owns NodeRuns and execution events.
 
 The runtime instance of a NodeDefinition inside a Run.
 
-A future NodeRun may have multiple Attempts when correction loops are enabled.
+A loop-enabled NodeRun has bounded Attempts (F1.6).
 F0.6 gives every NodeRun an opaque ID even if it never starts.
 
 ### Attempt
@@ -152,3 +152,25 @@ intended scope. The original task stays unchanged. Gate checked-input names do
 not redefine correction scope. Codex places explicitly untrusted feedback on
 stdin with the original process/environment/permission policy. The capability
 reports transport support, not model obedience.
+
+### F1.7 units and Return Envelopes
+
+Optional graph `units` enrolls an unordered set of loop Agent node IDs. One
+static sibling node is one retryable unit; `unit_id = node_id`. An absent
+membership list preserves F1.6 behavior. No dynamic batch fanout is implied.
+
+A version-1 Return Envelope derives verdict/reason/evidence from the exact
+retained sanitized CheckResult, with source RunID/NodeID/NodeRunID/GraphVersion,
+AttemptID and CheckID. Its separate complete intended scope is normalized
+original allowed_paths, with an explicit scope_redacted flag. It never
+substitutes checked-input names or model-reported changes for authored intent.
+
+The coordinator registers each unit and attempt, rejects all second publication
+and source/check/scope mismatches, and accepts green once. Accepted runtime
+ports carry RunID, NodeRunID, accepted AttemptID and port provenance. Reads are
+detached. NodeResult.AcceptedAttemptID and the matching envelope expose the
+same correlation in CLI JSON without copying port values into more events.
+Red candidates do not enter bindings; retries/exhaustion cannot invalidate
+accepted siblings. Schema7 retains checks, envelopes and attempt completion in
+that order, plus bounded declared conflict facts independent of progress.
+This immutability does not extend to shared files. See ADR-0015.

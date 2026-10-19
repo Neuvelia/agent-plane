@@ -591,3 +591,42 @@ operational errors and inconsistent observations stop the node without retry.
 Exhaustion uses failed node/run states with `needs_intervention` failure kind,
 `E_LOOP_NEEDS_INTERVENTION`, and the existing CLI run-failure exit code 4.
 See ADR-0014.
+
+### Explicit static units (F1.7)
+
+Optional top-level `units: [a, b, c, d]` enrolls an unordered set of existing
+loop-enabled Agent node IDs. UnitID equals NodeID. Reject null, empty lists,
+non-string/missing/unknown/duplicate/non-Agent/nonloop references before adapter
+detection. Unit IDs fit 256 UTF-8 bytes. Membership order never adds execution
+ordering and is sorted only for semantic hashing. Absent membership preserves
+prior graph bytes/hashes and F1.6 scope behavior. Split opaque multi-item
+producers into static nodes to retry them separately; no dynamic fanout exists.
+Existing `NODE.outputs.PORT` edges and graph outputs read accepted values only.
+
+Enrolled `allowed_paths` normalize complete portable relative paths and directory
+prefixes. `./` means the whole workspace. Reject absolute/drive paths, NUL,
+backslashes and any parent-traversal segment. Preserve all normalized entries:
+maximum 32, maximum 512 UTF-8 bytes each, maximum 8192 encoded JSON bytes for the
+complete scope. Validate these bounds after configured redaction too; never
+silently truncate enrolled intent. A Return Envelope's scope_redacted flag makes
+sanitized opaque path text distinguishable from literal normalized paths.
+Unenrolled Agent input/feedback contracts remain unchanged.
+
+In unit-mode all Agent producer/check cycles, including unenrolled Agents,
+serialize unless bounded read-only Git inspection proves distinct canonical
+physical workspaces/worktrees with nonnested writable roots. Equal roots,
+nested roots, sibling directories within one checkout, symlink aliases and
+unknown identities serialize. Distinct linked Git worktrees retain concurrency
+despite a shared common Git directory. Advisory disjoint scopes cannot authorize
+parallel writers in one checkout. Stable ordering, logical batch barriers and
+Shell semantics remain unchanged. No cross-run or external-writer lock exists.
+
+Schema7 `declared_scope_conflicts` reports potential declared overlap, unknown
+scope or unknown identity, capped at 64 details plus an omitted count. It is
+retained independently of progress limits and makes no assertion of actual
+file changes or filesystem isolation. Green `return_envelope` freezes accepted
+runtime values/provenance once; red retries only that unit within its existing
+budget. Operational failures produce no envelope. Readers retain schemas1–6,
+typed CheckResults/attempt lookup support5/6/7, CLI schema stays1. See ADR-0015,
+[static-unit example](examples/scoped-retry.yaml) and the
+[prepared real-Codex recipe](validation/F1.7-real-codex-demo.md).

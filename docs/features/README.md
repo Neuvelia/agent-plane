@@ -19,7 +19,10 @@ Implementation should not begin for a non-trivial roadmap feature until its spec
 F1.1 is implemented with a test-only mock and generic runtime dispatch; its
 contract decisions are in ADR-0009. F1.2 adds explicit Codex CLI routing and
 Git-derived evidence (ADR-0010), verified by a real disposable-repository smoke.
-F1.3 adds bounded normalized progress (ADR-0011). F1.4 adds deterministic Gate checks (ADR-0012). F1.5-F1.7 have draft P0 specs to review in dependency order. F1.8 is P1 and
+F1.3 adds bounded normalized progress (ADR-0011). F1.4 adds deterministic Gate checks (ADR-0012). F1.5 adds versioned Check Results (ADR-0013), F1.6 bounded correction
+attempts (ADR-0014), and F1.7 static-unit envelopes/immutable runtime acceptance
+(ADR-0015). Shared files remain mutable; the after-merge real-Codex demo is
+prepared but has not been executed in this implementation. F1.8 is P1 and
 receives its own spec when activated. See `docs/roadmap.md` for the complete ID catalog,
 dependencies and phase exit criteria. A roadmap entry is not an executable
 feature contract.
@@ -30,9 +33,9 @@ feature contract.
 | `F1.2-first-coding-agent-adapter.md` | Implemented; real Codex smoke verified |
 | `F1.3-unified-streaming.md` | Implemented; ADR-0011 |
 | `F1.4-gate-node.md` | Implemented; ADR-0012 |
-| `F1.5-check-result-contract.md` | Draft for review |
-| `F1.6-correction-loop.md` | Draft for review |
-| `F1.7-return-envelope-scoped-retry.md` | Draft for review |
+| `F1.5-check-result-contract.md` | Implemented; ADR-0013 |
+| `F1.6-correction-loop.md` | Implemented; ADR-0014 |
+| `F1.7-return-envelope-scoped-retry.md` | Implemented; ADR-0015 |
 
 ## Later phases
 
