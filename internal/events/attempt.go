@@ -92,7 +92,7 @@ func validateAttempt(e Event) error {
 	return nil
 }
 
-// AttemptCheckResults filters detached schema5/6 results without inventing old attempts.
+// AttemptCheckResults filters detached schema5/6/7 results without inventing old attempts.
 func AttemptCheckResults(trace []Event, run RunID, node NodeRunID, attempt AttemptID) []CheckResult {
 	if attempt == "" {
 		return nil

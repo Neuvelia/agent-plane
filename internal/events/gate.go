@@ -285,7 +285,7 @@ func CheckResults(trace []Event, run RunID, node NodeRunID) []CheckResult {
 	}
 	selected := make([]Event, 0)
 	for _, e := range trace {
-		if e.RunID == run && e.NodeRunID == node && e.Type == GateCheck && (e.SchemaVersion == 5 || e.SchemaVersion == 6) {
+		if e.RunID == run && e.NodeRunID == node && e.Type == GateCheck && (e.SchemaVersion == 5 || e.SchemaVersion == 6 || e.SchemaVersion == 7) {
 			if _, ok := e.Payload.(CheckResult); ok {
 				selected = append(selected, e)
 			}

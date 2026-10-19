@@ -87,6 +87,9 @@ type completedNode struct {
 const maxEventLogChunk = 16 * 1024
 
 type runMachine struct {
+	units       unitRegistry
+	workspaces  map[string]workspaceIdentity
+	definition  *graph.Definition
 	ids         []string
 	nodes       map[string]*NodeResult
 	resolved    map[string]map[string]graph.Value
@@ -147,12 +150,26 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		graphInputs[name] = value
 	}
 
+	scopes, scopeRedacted, err := unitScopes(definition, redactionTemplate)
+	if err != nil {
+		return RunResult{}, err
+	}
 	if err := preflightLoops(ctx, definition, executor); err != nil {
 		return RunResult{}, err
 	}
 	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
 	if err != nil {
 		return RunResult{}, err
+	}
+	machine.definition = definition
+	for _, id := range definition.Units {
+		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, scopes[id], scopeRedacted[id]); err != nil {
+			return RunResult{}, err
+		}
+	}
+	if definition.Units != nil {
+		machine.workspaces = inspectWorkspaces(ctx, definition)
+		machine.reportScopeConflicts(definition)
 	}
 	if limit > len(machine.ids) {
 		limit = len(machine.ids)
@@ -222,6 +239,13 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						machine.transitionNode(id, NodeFailed)
 						continue
 					}
+					if machine.units[id] != nil {
+						if e := machine.units.begin(id, aid); e != nil {
+							machine.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
+							machine.transitionNode(id, NodeFailed)
+							continue
+						}
+					}
 					attempts[id] = aid
 					numbers[id]++
 					machine.appendEvent(events.Event{Type: events.AttemptStarted, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: events.AttemptStartedPayload{Number: numbers[id], MaxAttempts: l.Attempts()}})
@@ -250,7 +274,21 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					}
 					if work.check != nil && !work.checkInvalid {
 						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check)})
-						if work.check.Verdict == "red" {
+						if machine.units[work.id] != nil {
+							envelope, err := machine.units.envelope(work.id, work.attemptID, *work.check)
+							if err == nil {
+								err = machine.units.publish(envelope, *work.check, work.outputs)
+							}
+							if err != nil {
+								work.err = err
+								work.outputs = nil
+								work.check = nil
+								work.checkInvalid = true
+							} else {
+								machine.appendEvent(events.Event{Type: events.ReturnEnvelope, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: envelope})
+							}
+						}
+						if work.check != nil && work.check.Verdict == "red" {
 							outcome = "rejected"
 							if numbers[work.id] >= definition.Nodes[work.id].Loop.Attempts() {
 								outcome = "needs_intervention"
@@ -260,7 +298,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 								work.err = ctx.Err()
 							}
 						}
-						if work.check.Verdict == "green" {
+						if work.check != nil && work.check.Verdict == "green" {
 							outcome = "accepted"
 						}
 					}
@@ -333,6 +371,17 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				}
 				machine.outputs[work.id] = copyValues(work.outputs)
 				nodeResult.Outputs = sortedPortValues(work.outputs)
+				if u := machine.units[work.id]; u != nil {
+					values, ports, err := machine.units.acceptedValues(work.id)
+					if err != nil {
+						nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureScheduler, Err: err}
+						machine.transitionNode(work.id, NodeFailed)
+						continue
+					}
+					machine.outputs[work.id] = values
+					nodeResult.Outputs = ports
+					nodeResult.AcceptedAttemptID = u.accepted
+				}
 				if work.evidence != nil {
 					machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
 				}
@@ -392,6 +441,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<
 	sort.Strings(ids)
 	m := &runMachine{
 		ids:         ids,
+		units:       unitRegistry{},
 		nodes:       make(map[string]*NodeResult, len(ids)),
 		resolved:    make(map[string]map[string]graph.Value, len(ids)),
 		outputs:     make(map[string]map[string]graph.Value, len(ids)),
@@ -547,6 +597,18 @@ func (m *runMachine) nextBatch(limit int) []string {
 	batch := make([]string, 0, limit)
 	for _, id := range m.ids {
 		if m.nodes[id].State == NodeReady {
+			conflict := false
+			if m.workspaces != nil && m.definition.Nodes[id].Type == "agent" {
+				for _, other := range batch {
+					if m.definition.Nodes[other].Type == "agent" && workspaceConflict(m.workspaces[id], m.workspaces[other]) {
+						conflict = true
+						break
+					}
+				}
+			}
+			if conflict {
+				continue
+			}
 			batch = append(batch, id)
 			if len(batch) == limit {
 				break

@@ -105,6 +105,9 @@ func (c *Collector) Append(event Event) (Event, error) {
 		return Event{}, ErrCollectorFinished
 	}
 	event.SchemaVersion = SchemaVersion
+	event.RunID = c.runID
+	event.GraphID = c.graphID
+	event.GraphVersion = c.graphVersion
 	if err := event.Validate(); err != nil {
 		c.mu.Unlock()
 		return Event{}, fmt.Errorf("append event: %w", err)
@@ -211,6 +214,11 @@ func copyPayload(payload Payload) Payload {
 		return p
 	case LegacyGateCheckPayload:
 		return CloneLegacyGate(p)
+	case ReturnEnvelopePayload:
+		return CloneEnvelope(p)
+	case DeclaredScopeConflictsPayload:
+		p.Details = append([]DeclaredScopeConflict{}, p.Details...)
+		return p
 	case GateCheckPayload:
 		return CloneGate(p)
 	case CommandPayload:
