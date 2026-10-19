@@ -26,8 +26,9 @@ Read these files before making architectural changes:
 
 Phase 0: Execution Core is implemented on `main` through F0.7. F1.1 Agent
 Adapter Contract and F1.2 installed-Codex execution are implemented, including
-Git-derived evidence and a verified real CLI smoke. Later Phase 1 Agent Loop
-features remain unimplemented; F1.3 is the next planning candidate. Read the
+Git-derived evidence and a verified real CLI smoke. F1.3 adds bounded normalized
+progress and live delivery (ADR-0011). Later Phase 1 Agent Loop features remain
+unimplemented; F1.4 is the next planning candidate. Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without

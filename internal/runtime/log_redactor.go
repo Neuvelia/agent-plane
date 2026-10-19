@@ -13,6 +13,7 @@ import (
 type logRedactor struct {
 	secrets [][]byte
 	maxLen  int
+	eager   bool
 	marker  []byte
 	pending map[events.Stream][]byte
 }
@@ -91,7 +92,19 @@ func (r *logRedactor) resolve(stream events.Stream, final bool) []byte {
 	data := r.pending[stream]
 	var output []byte
 	i := 0
-	for i < len(data) && (final || len(data)-i >= r.maxLen) {
+	for i < len(data) && (final || r.eager || len(data)-i >= r.maxLen) {
+		if r.eager && !final {
+			undecidable := false
+			for _, secret := range r.secrets {
+				if len(data)-i < len(secret) && bytes.HasPrefix(secret, data[i:]) {
+					undecidable = true
+					break
+				}
+			}
+			if undecidable {
+				break
+			}
+		}
 		matched := false
 		for _, secret := range r.secrets {
 			if bytes.HasPrefix(data[i:], secret) {

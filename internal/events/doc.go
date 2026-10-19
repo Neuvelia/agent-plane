@@ -1,8 +1,9 @@
 // Package events owns structured execution event contracts.
 //
-// Events describe observable execution facts in one run-local sequence. The
-// in-memory Collector is the F0.6 consumer surface; it has no persistence or
-// live subscription semantics. Event builders omit environments, values, and
-// raw errors. Shell output is untrusted; configured redaction strings are
-// removed from each stream before a LogChunk is appended.
+// Events describe observable facts in an authoritative run-local sequence.
+// Collector retains lifecycle/evidence and bounded logs/progress; gaps and
+// separate live/retention omissions are explicit. Bounded asynchronous live
+// delivery is a prefix; terminal facts replay after pump shutdown. No durable
+// storage or private reasoning is included. Configured secrets are redacted
+// by runtime before progress is stored or delivered.
 package events

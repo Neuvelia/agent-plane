@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
+	"agentplane/internal/events"
 )
 
 const maxRecord = 1 << 20
@@ -154,6 +155,12 @@ func (a Adapter) Execute(ctx context.Context, in agent.AgentExecutionInput) (age
 	return a.ExecuteWithProgress(ctx, in, nil)
 }
 func (a Adapter) ExecuteWithProgress(ctx context.Context, in agent.AgentExecutionInput, log func(string, []byte)) (agent.AgentExecutionOutput, error) {
+	return a.execute(ctx, in, log, nil)
+}
+func (a Adapter) ExecuteWithNormalizedProgress(ctx context.Context, in agent.AgentExecutionInput, normalized func(events.Type, events.Payload)) (agent.AgentExecutionOutput, error) {
+	return a.execute(ctx, in, nil, normalized)
+}
+func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, log func(string, []byte), normalized func(events.Type, events.Payload)) (agent.AgentExecutionOutput, error) {
 	var out agent.AgentExecutionOutput
 	env, err := environment(in.EnvironmentRefs)
 	if err != nil {
@@ -184,7 +191,7 @@ func (a Adapter) ExecuteWithProgress(ctx context.Context, in agent.AgentExecutio
 	task := in.Task + "\n\nAdvisory allowed paths (not enforcement):\n" + strings.Join(in.AllowedPaths, "\n") + "\nContext references (not automatically loaded):\n" + strings.Join(in.ContextRefs, "\n") + "\n"
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stream := progress{log: log, cancel: cancel}
+	stream := progress{log: log, normalized: normalized, cancel: cancel}
 	err = runProcess(pctx, a.Binary, args, env, workspace, strings.NewReader(task), &stream)
 	if stream.err != nil {
 		return out, stream.err
@@ -280,11 +287,13 @@ func readResult(path string) (agent.AgentExecutionOutput, error) {
 
 // progress is a bounded private JSONL parser. Only constant strings reach logs.
 type progress struct {
-	pending []byte
-	emitted int
-	log     func(string, []byte)
-	cancel  context.CancelFunc
-	err     error
+	pending    []byte
+	draining   bool
+	normalized func(events.Type, events.Payload)
+	emitted    int
+	log        func(string, []byte)
+	cancel     context.CancelFunc
+	err        error
 }
 
 func statusMessage(kind string) string {
@@ -312,15 +321,20 @@ func (p *progress) Write(data []byte) (int, error) {
 	for len(data) > 0 {
 		line, rest, found := bytes.Cut(data, []byte{'\n'})
 		if len(p.pending)+len(line) > maxRecord {
-			p.reject("progress record exceeds 1 MiB")
-			return n, nil
+			p.pending = nil
+			p.draining = true
 		}
-		p.pending = append(p.pending, line...)
+		if !p.draining {
+			p.pending = append(p.pending, line...)
+		}
 		if !found {
 			break
 		}
-		p.record(p.pending)
+		if !p.draining {
+			p.record(p.pending)
+		}
 		p.pending = nil
+		p.draining = false
 		if p.err != nil {
 			return n, nil
 		}
@@ -336,18 +350,15 @@ func (p *progress) reject(message string) {
 }
 func (p *progress) record(line []byte) {
 	if uniqueJSON(line) != nil {
-		p.reject("malformed progress record")
 		return
 	}
 	var record map[string]json.RawMessage
 	if err := json.Unmarshal(line, &record); err != nil || record == nil {
-		p.reject("malformed progress record")
 		return
 	}
 	var kind string
 	if raw, ok := record["type"]; ok {
 		if json.Unmarshal(raw, &kind) != nil {
-			p.reject("malformed progress type")
 			return
 		}
 	}
@@ -355,6 +366,7 @@ func (p *progress) record(line []byte) {
 		p.reject("Codex reported execution failure; details withheld")
 		return
 	}
+	p.normalize(kind, record)
 	status := statusMessage(kind)
 	if status != "" && p.emitted+len(status) <= 64<<10 {
 		p.emitted += len(status)
@@ -364,7 +376,7 @@ func (p *progress) record(line []byte) {
 	}
 }
 func (p *progress) finish() error {
-	if len(p.pending) > 0 {
+	if len(p.pending) > 0 && !p.draining {
 		p.record(p.pending)
 		p.pending = nil
 	}

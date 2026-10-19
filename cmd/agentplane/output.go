@@ -112,6 +112,30 @@ func (r *eventRenderer) Event(event events.Event) error {
 			}
 			delete(r.pending, key)
 		}
+	case events.TextDelta:
+		p := event.Payload.(events.TextDeltaPayload)
+		_, err := fmt.Fprintf(r.stdout, "[%s text] %s\n", event.NodeID, p.Text)
+		return err
+	case events.ToolCallStarted, events.ToolCallFinished:
+		p := event.Payload.(events.ToolCallPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s %s: %s %s\n", event.NodeID, event.Type, p.Name, p.Status)
+		return err
+	case events.CommandStarted, events.CommandFinished:
+		p := event.Payload.(events.CommandPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s %s: %s %s\n", event.NodeID, event.Type, p.CommandID, p.Status)
+		return err
+	case events.FileChanged:
+		p := event.Payload.(events.FileChangedPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s file_changed: %q %s (%s)\n", event.NodeID, p.Path, p.Action, p.Provenance)
+		return err
+	case events.Status:
+		p := event.Payload.(events.StatusPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s status: %s\n", event.NodeID, p.Code)
+		return err
+	case events.ProgressOmitted:
+		p := event.Payload.(events.ProgressOmittedPayload)
+		_, err := fmt.Fprintf(r.stderr, "Progress omitted: retained %d events / %d bytes; live %d events / %d bytes (stopped=%t)\n", p.RetainedEvents, p.RetainedBytes, p.LiveEvents, p.LiveBytes, p.LiveStopped)
+		return err
 	case events.NodeEvidence:
 		p := event.Payload.(events.NodeEvidencePayload)
 		if _, err := fmt.Fprintf(r.stderr, "%s evidence: %s %s (%d changed paths)\n", event.NodeID, p.AdapterID, p.AdapterVersion, len(p.ChangedFiles)); err != nil {

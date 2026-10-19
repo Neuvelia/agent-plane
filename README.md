@@ -8,8 +8,8 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 
 **Phase 0 - Execution Core is implemented.** The active planning milestone is
 **Phase 1 - Agent Loop**. F1.1 provides the adapter contract and F1.2 adds
-explicit installed-Codex execution with Git-derived evidence. F1.3 streaming is
-the next planning candidate; gates and correction loops remain unimplemented.
+explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
+normalized progress and live delivery; gates and correction loops remain unimplemented.
 
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
@@ -97,8 +97,8 @@ executable and do not require Go at execution time.
 
 Human status and diagnostics go to stderr. Node stdout goes to stdout and
 node stderr goes to stderr, each labeled with node ID and stream. Default mode
-renders the completed F0.6 event stream; `--watch` renders the same sequenced
-events as they occur. Labels are presentation and do not preserve the exact
+renders retained events after completion; `--watch` renders a live sequence
+prefix immediately and replays its retained tail after completion. Labels are presentation and do not preserve the exact
 original byte stream. `--watch` displays partial log chunks immediately and
 cannot be combined with `--json`.
 
@@ -106,22 +106,30 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use F0.6's event
-schema, including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 3 (old schema 1/2 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
-current value of each named environment variable from F0.6 event logs and
-human log display, without putting the value in CLI arguments. The variable
+current value of each named environment variable from event logs, normalized
+progress string fields, evidence and their human display, without putting the value in CLI arguments. The variable
 must be set. Redaction does not alter graph output values explicitly exposed
 by the graph.
 
 If a human-output write fails, the CLI reports the error on stderr when
 possible and exits 1. A closed stdout or stderr pipe also returns exit 1;
 `--watch` cancels an active run when rendering fails. With unblocked output,
-`--watch` presents the complete event sequence, including cancellation,
-through replay of any retained tail. A slow or blocked output pipe may miss
-late presentation when the CLI exits after cancellation.
+`--watch` presents retained lifecycle/evidence, including cancellation, through
+replay without duplicates. Progress can be omitted: retained logs/progress are
+bounded to 4 MiB encoded whole-event JSON / 4096 items; the live FIFO is bounded
+to 1 MiB / 1024 items including its in-flight head. Retention drops new progress
+when full; first live overflow seals admission so delivered events form a
+sequence prefix. Sequence gaps are expected. A final `progress_omitted` marker
+reports separate retained/live omitted events and encoded bytes. The marker and
+`run_finished` are replay-only after the delivery pump stops and joins. Slow
+readers cannot block the scheduler. A blocked CLI output pipe can still block
+presentation. Lifecycle/evidence memory remains proportional to the graph and
+evidence size; legacy Shell output capture is unchanged. These are progress
+bounds, not a constant-total-memory guarantee.
 
 If JSON cannot be written, the CLI reports the write error on stderr and
 exits 1; stdout may contain an incomplete document in that case.
@@ -139,7 +147,7 @@ On Ctrl+C or SIGTERM, the CLI cancels the run context and waits for the
 scheduler. The current Shell executor terminates its direct child;
 process-tree termination is outside Phase 0. If a watch output pipe stops
 reading, cancellation may omit late live presentation, while the retained
-event slice remains complete.
+lifecycle/evidence remains complete and progress loss is explicit.
 
 ## Current milestone
 
@@ -189,7 +197,7 @@ changes, not authorship. Keep the workspace otherwise idle. Ignored/outside
 contents are excluded. Baseline paths remain observable if newly ignored;
 newly exposed initially ignored files/directories fail safely because their
 pre-run contents are unknown. Set ignore rules before execution and rerun.
-`allowed_paths` is advisory. A schema-2 `node_evidence`
+`allowed_paths` is advisory. A schema-3 `node_evidence`
 event records adapter/version and paths even without a `changed_files` output
 port. Event decoding retains schema-1 compatibility; CLI envelope stays v1.
 
@@ -199,3 +207,33 @@ closed. Progress is bounded static status text; summaries/artifacts are graph
 outputs only, with usage and raw provider metadata absent. See
 [ADR-0010](docs/adr/0010-codex-process-and-observed-evidence.md) and the
 [real smoke evidence](docs/validation/F1.2-codex-smoke.md).
+
+## Normalized Agent progress (F1.3)
+
+Schema 3 adds `text_delta`, `tool_call_started/finished`,
+`command_started/finished`, `file_changed`, `status` and `progress_omitted`.
+Runtime-owned run/node IDs correlate progress; attempt IDs remain empty. The
+optional normalized adapter interface preserves legacy adapters and callbacks.
+Codex projects supported JSONL public item fields: completed assistant text,
+tool names/statuses, command IDs/statuses/exit codes, reported changed paths,
+and finite statuses. Completed text does not imply token streaming. Command
+argv/output, tool arguments/results, provider errors, unknown records and
+private reasoning are excluded. Reported file progress is distinct from final
+Git-derived observed evidence.
+
+Observed executors require UTF-8-safe redaction values and a UTF-8-safe
+secret-absent marker; unsafe configurations fail before execution. Normalized
+string fields reject invalid UTF-8 before JSON encoding. Legacy byte-only log
+executors retain arbitrary-byte redaction and base64 serialization.
+
+Normalized content is capped at 16 KiB; public text is redacted before splitting
+on UTF-8 boundaries. Structured records exceeding that cap are ignored.
+Redaction holds only undecidable secret-prefix tails, with at most 16 active
+text source IDs; completed tails release their slots. If malicious/interleaved
+sources exhaust those slots, new sources are ignored while full and a finite
+`progress_limited` status is emitted once. The memory for secret tails depends
+on configured secret lengths. Malformed, duplicate-key and oversized optional
+Codex records are skipped, draining oversized lines with bounded storage. Valid
+following progress and final results still succeed; explicit provider failure,
+process failure and invalid required final results still fail. See
+[ADR-0011](docs/adr/0011-bounded-normalized-progress.md).

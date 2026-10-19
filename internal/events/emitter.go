@@ -2,105 +2,216 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 	"time"
 )
 
-// Sink accepts one in-process event and returns the sequenced fact. F0.6 uses
-// Collector; it does not invoke arbitrary consumer callbacks during execution.
 type Sink interface{ Append(Event) (Event, error) }
 
 var ErrCollectorFinished = errors.New("event collector is finished")
 
-// Collector is a run-local, concurrency-safe in-memory event sink.
+const (
+	MaxRetainedProgressBytes = 4 << 20
+	MaxRetainedProgressItems = 4096
+	MaxLiveBytes             = 1 << 20
+	MaxLiveItems             = 1024
+)
+
+// DeliveryStats counts encoded whole-event JSON bytes, not Go heap usage.
+type DeliveryStats struct {
+	RetainedPeakBytes, RetainedPeakItems        int
+	LivePeakBytes, LivePeakItems                int
+	RetainedOmittedEvents, RetainedOmittedBytes uint64
+	LiveOmittedEvents, LiveOmittedBytes         uint64
+	LiveStopped                                 bool
+}
+type queuedEvent struct {
+	event Event
+	bytes int
+}
+
+// Collector retains lifecycle/evidence independently from bounded progress.
+// Live delivery is a bounded FIFO prefix, including the in-flight head.
 type Collector struct {
-	mu           sync.Mutex
-	runID        RunID
-	graphID      string
-	graphVersion string
-	events       []Event
-	finished     bool
-	live         chan<- Event
-	liveContext  context.Context
-	liveDropped  bool
+	mu                           sync.Mutex
+	runID                        RunID
+	graphID, graphVersion        string
+	events                       []Event
+	sequence                     uint64
+	finished, finalizing         bool
+	retainedBytes, retainedItems int
+	stats                        DeliveryStats
+	live                         chan<- Event
+	queue                        []queuedEvent
+	queueBytes                   int
+	wake, stop, done             chan struct{}
 }
 
 func NewCollector(runID RunID, graphID, graphVersion string) *Collector {
 	return &Collector{runID: runID, graphID: graphID, graphVersion: graphVersion}
 }
 
-// NewCollectorWithLiveEvents also sends each appended fact to a caller-owned
-// channel while holding the sequence lock. The caller must consume while the
-// run is active and must not close the channel until the run returns. A slow
-// consumer applies backpressure until ctx is cancelled; after the first
-// undelivered event, live delivery stops and the retained slice contains the
-// complete tail for replay.
-// Nil live disables delivery.
+// The caller owns live and may close it only after finalization returns.
+// Append never waits for a reader. Final run/omission facts are replay-only.
 func NewCollectorWithLiveEvents(ctx context.Context, runID RunID, graphID, graphVersion string, live chan<- Event) *Collector {
 	c := NewCollector(runID, graphID, graphVersion)
 	c.live = live
-	c.liveContext = ctx
+	if live != nil {
+		c.wake = make(chan struct{}, 1)
+		c.stop = make(chan struct{})
+		c.done = make(chan struct{})
+		go c.pump(ctx)
+	}
 	return c
 }
-
-// Append owns timestamp and sequence assignment. The caller owns lifecycle
-// meaning; Collector owns ordering and immutable storage. Invalid and late
-// appends are rejected without changing the stored stream.
+func (c *Collector) pump(ctx context.Context) {
+	defer close(c.done)
+	for {
+		c.mu.Lock()
+		if len(c.queue) == 0 {
+			c.mu.Unlock()
+			select {
+			case <-c.wake:
+				continue
+			case <-c.stop:
+				return
+			case <-ctx.Done():
+				return
+			}
+		}
+		q := c.queue[0]
+		c.mu.Unlock()
+		select {
+		case c.live <- q.event:
+			c.mu.Lock()
+			c.queue[0] = queuedEvent{}
+			c.queue = c.queue[1:]
+			c.queueBytes -= q.bytes
+			c.mu.Unlock()
+		case <-c.stop:
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+}
 func (c *Collector) Append(event Event) (Event, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.finished {
+	if c.finished || c.finalizing {
+		c.mu.Unlock()
 		return Event{}, ErrCollectorFinished
 	}
+	event.SchemaVersion = SchemaVersion
 	if err := event.Validate(); err != nil {
+		c.mu.Unlock()
 		return Event{}, fmt.Errorf("append event: %w", err)
 	}
-	event.SchemaVersion = SchemaVersion
-	event.Timestamp = time.Now().UTC()
-	event.Sequence = uint64(len(c.events) + 1)
-	event.RunID = c.runID
-	event.GraphID = c.graphID
-	event.GraphVersion = c.graphVersion
-	event.Payload = copyPayload(event.Payload)
-	c.events = append(c.events, event)
 	if event.Type == RunFinished {
+		c.finalizing = true
+		if c.stop != nil {
+			close(c.stop)
+		}
+		c.mu.Unlock()
+		if c.done != nil {
+			<-c.done
+		}
+		c.mu.Lock()
+		for _, q := range c.queue {
+			c.stats.LiveOmittedEvents++
+			c.stats.LiveOmittedBytes += uint64(q.bytes)
+		}
+		if len(c.queue) > 0 {
+			c.stats.LiveStopped = true
+		}
+		c.queue = nil
+		c.queueBytes = 0
+		if c.stats.RetainedOmittedEvents > 0 || c.stats.LiveOmittedEvents > 0 {
+			marker := c.prepare(Event{Type: ProgressOmitted, Payload: ProgressOmittedPayload{RetainedEvents: c.stats.RetainedOmittedEvents, RetainedBytes: c.stats.RetainedOmittedBytes, LiveEvents: c.stats.LiveOmittedEvents, LiveBytes: c.stats.LiveOmittedBytes, LiveStopped: c.stats.LiveStopped}})
+			c.events = append(c.events, marker)
+		}
+		event = c.prepare(event)
+		c.events = append(c.events, event)
 		c.finished = true
+		c.mu.Unlock()
+		return event, nil
 	}
-	event.Payload = copyPayload(event.Payload)
-	if c.live != nil && !c.liveDropped {
-		select {
-		case c.live <- event:
-		default:
+	event = c.prepare(event)
+	encoded, _ := json.Marshal(event)
+	size := len(encoded)
+	if IsProgress(event.Type) {
+		if c.retainedItems >= MaxRetainedProgressItems || c.retainedBytes+size > MaxRetainedProgressBytes {
+			c.stats.RetainedOmittedEvents++
+			c.stats.RetainedOmittedBytes += uint64(size)
+		} else {
+			c.events = append(c.events, event)
+			c.retainedBytes += size
+			c.retainedItems++
+			c.stats.RetainedPeakBytes = c.retainedBytes
+			c.stats.RetainedPeakItems = c.retainedItems
+		}
+	} else {
+		c.events = append(c.events, event)
+	}
+	if c.live != nil {
+		if c.stats.LiveStopped || len(c.queue) >= MaxLiveItems || c.queueBytes+size > MaxLiveBytes {
+			c.stats.LiveStopped = true
+			c.stats.LiveOmittedEvents++
+			c.stats.LiveOmittedBytes += uint64(size)
+		} else {
+			delivered := event
+			delivered.Payload = copyPayload(event.Payload)
+			c.queue = append(c.queue, queuedEvent{delivered, size})
+			c.queueBytes += size
+			if c.queueBytes > c.stats.LivePeakBytes {
+				c.stats.LivePeakBytes = c.queueBytes
+			}
+			if len(c.queue) > c.stats.LivePeakItems {
+				c.stats.LivePeakItems = len(c.queue)
+			}
 			select {
-			case c.live <- event:
-			case <-c.liveContext.Done():
-				// The retained event slice remains complete when a cancelled
-				// run cannot deliver to a blocked live consumer. Stop live
-				// delivery so the consumer sees a prefix it can replay.
-				c.liveDropped = true
+			case c.wake <- struct{}{}:
+			default:
 			}
 		}
 	}
+	event.Payload = copyPayload(event.Payload)
+	c.mu.Unlock()
 	return event, nil
 }
-
-// Snapshot returns events in authoritative sequence order, detached from the
-// collector's mutable storage.
+func (c *Collector) prepare(e Event) Event {
+	c.sequence++
+	e.SchemaVersion = SchemaVersion
+	e.Sequence = c.sequence
+	e.Timestamp = time.Now().UTC()
+	e.RunID = c.runID
+	e.GraphID = c.graphID
+	e.GraphVersion = c.graphVersion
+	e.Payload = copyPayload(e.Payload)
+	return e
+}
+func (c *Collector) Stats() DeliveryStats { c.mu.Lock(); defer c.mu.Unlock(); return c.stats }
 func (c *Collector) Snapshot() []Event {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	result := make([]Event, len(c.events))
-	for i, event := range c.events {
-		event.Payload = copyPayload(event.Payload)
-		result[i] = event
+	out := make([]Event, len(c.events))
+	for i, e := range c.events {
+		e.Payload = copyPayload(e.Payload)
+		out[i] = e
 	}
-	return result
+	return out
 }
 
 func copyPayload(payload Payload) Payload {
 	switch p := payload.(type) {
+	case CommandPayload:
+		if p.ExitCode != nil {
+			v := *p.ExitCode
+			p.ExitCode = &v
+		}
+		return p
 	case NodeEvidencePayload:
 		p.ChangedFiles = append([]ChangedFile{}, p.ChangedFiles...)
 		return p

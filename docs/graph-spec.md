@@ -334,7 +334,8 @@ always come from Git with `observed` provenance. Known-empty changes are `[]`;
 usage/raw metadata remain absent. Schema-2 `node_evidence` records adapter ID,
 version and changes before successful `node_finished`, independently of graph
 output declarations. Existing event shapes decode under schema 1 or 2;
-`node_evidence` requires schema 2. Failed invocations accept no outputs or
+`node_evidence` requires schema >=2. New F1.3 progress requires schema 3;
+older schema 1/2 facts remain readable (ADR-0011). Failed invocations accept no outputs or
 success evidence. See ADR-0010 for process ownership and protocol limits.
 
 ## Edge definition

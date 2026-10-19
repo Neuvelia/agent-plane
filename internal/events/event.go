@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 type RunID string
 type NodeRunID string
@@ -132,11 +132,33 @@ type Event struct {
 
 // Validate checks the event envelope before it becomes a serialized fact.
 func (e Event) Validate() error {
+	if e.SchemaVersion != 0 && e.SchemaVersion != 1 && e.SchemaVersion != 2 && e.SchemaVersion != 3 {
+		return fmt.Errorf("unsupported event schema version %d", e.SchemaVersion)
+	}
+	if e.SchemaVersion > 0 && e.SchemaVersion < 3 && (IsNormalized(e.Type) || e.Type == ProgressOmitted) {
+		return errors.New("progress requires event schema 3")
+	}
 	if e.SchemaVersion == 1 && e.Type == NodeEvidence {
 		return errors.New("node_evidence requires event schema 2")
 	}
 	var payloadType Type
 	switch e.Payload.(type) {
+	case TextDeltaPayload:
+		payloadType = TextDelta
+	case ToolCallPayload:
+		if e.Type == ToolCallStarted || e.Type == ToolCallFinished {
+			payloadType = e.Type
+		}
+	case CommandPayload:
+		if e.Type == CommandStarted || e.Type == CommandFinished {
+			payloadType = e.Type
+		}
+	case FileChangedPayload:
+		payloadType = FileChanged
+	case StatusPayload:
+		payloadType = Status
+	case ProgressOmittedPayload:
+		payloadType = ProgressOmitted
 	case NodeEvidencePayload:
 		payloadType = NodeEvidence
 	case RunStartedPayload:
@@ -159,7 +181,7 @@ func (e Event) Validate() error {
 	if e.Type != payloadType {
 		return fmt.Errorf("event %q has payload for %q", e.Type, payloadType)
 	}
-	return nil
+	return validateProgress(e.Type, e.Payload)
 }
 
 func (e Event) MarshalJSON() ([]byte, error) {
@@ -196,7 +218,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	if wire.SchemaVersion != 1 && wire.SchemaVersion != SchemaVersion {
+	if wire.SchemaVersion != 1 && wire.SchemaVersion != 2 && wire.SchemaVersion != SchemaVersion {
 		return fmt.Errorf("unsupported event schema version %d", wire.SchemaVersion)
 	}
 	if len(wire.Payload) == 0 {
@@ -207,6 +229,18 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return errors.New("node_evidence requires event schema 2")
 	}
 	switch wire.Type {
+	case TextDelta:
+		payload = TextDeltaPayload{}
+	case ToolCallStarted, ToolCallFinished:
+		payload = ToolCallPayload{}
+	case CommandStarted, CommandFinished:
+		payload = CommandPayload{}
+	case FileChanged:
+		payload = FileChangedPayload{}
+	case Status:
+		payload = StatusPayload{}
+	case ProgressOmitted:
+		payload = ProgressOmittedPayload{}
 	case NodeEvidence:
 		payload = NodeEvidencePayload{}
 	case RunStarted:
@@ -227,6 +261,36 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unknown event type %q", wire.Type)
 	}
 	switch p := payload.(type) {
+	case ProgressOmittedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case StatusPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case FileChangedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case CommandPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ToolCallPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case TextDeltaPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
 	case NodeEvidencePayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
