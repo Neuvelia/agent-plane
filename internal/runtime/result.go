@@ -55,15 +55,16 @@ type StateTransition struct {
 // RunResult is ordered by node ID and graph output name. A started run has
 // exactly one terminal State when Run returns.
 type RunResult struct {
-	GraphID      string
-	GraphVersion string
-	RunID        events.RunID
-	State        RunState
-	Nodes        []NodeResult
-	Outputs      []PortValue
-	Failure      *Failure
-	Transitions  []StateTransition
-	Events       []events.Event
+	GraphID       string
+	GraphVersion  string
+	RunID         events.RunID
+	State         RunState
+	Nodes         []NodeResult
+	Outputs       []PortValue
+	Failure       *Failure
+	Transitions   []StateTransition
+	Events        []events.Event
+	ProgressStats events.DeliveryStats
 }
 
 // PreflightError reports definition or graph-input diagnostics before any

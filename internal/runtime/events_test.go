@@ -207,26 +207,24 @@ func TestRunDeliversLiveEventsInSequence(t *testing.T) {
 		done <- result
 	}()
 	var received []events.Event
-	for {
-		event := <-live
+	go func() { result := <-done; close(live); done <- result }()
+	for event := range live {
 		received = append(received, event)
 		if event.Type == events.NodeStarted {
 			<-started
 			close(release)
 		}
-		if event.Type == events.RunFinished {
-			result := <-done
-			if len(received) != len(result.Events) {
-				t.Fatalf("live=%d stored=%d", len(received), len(result.Events))
-			}
-			for i := range received {
-				if received[i].Sequence != result.Events[i].Sequence || received[i].Type != result.Events[i].Type {
-					t.Fatalf("event %d: live=%#v stored=%#v", i, received[i], result.Events[i])
-				}
-			}
-			return
+	}
+	result := <-done
+	for i, e := range received {
+		if e.Sequence != result.Events[i].Sequence || e.Type != result.Events[i].Type {
+			t.Fatal("live prefix mismatch")
 		}
 	}
+	if result.Events[len(result.Events)-1].Type != events.RunFinished {
+		t.Fatal("terminal fact missing")
+	}
+
 }
 
 func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {

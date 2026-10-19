@@ -13,24 +13,32 @@ func TestLiveEventsRemainPrefixAfterCancellationDropsAnEvent(t *testing.T) {
 	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
 		t.Fatal(err)
 	}
+	if got := (<-live).Type; got != RunStarted {
+		t.Fatalf("first live event = %s", got)
+	}
 	cancel()
 	if _, err := collector.Append(Event{Type: NodeReady, Payload: NodeReadyPayload{}}); err != nil {
 		t.Fatal(err)
 	}
-	if got := (<-live).Type; got != RunStarted {
-		t.Fatalf("first live event = %s", got)
-	}
 	if _, err := collector.Append(Event{Type: NodeStarted, Payload: NodeStartedPayload{}}); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case event := <-live:
-		t.Fatalf("live sequence has a gap before %s", event.Type)
-	default:
+	if _, err := collector.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "cancelled"}}); err != nil {
+		t.Fatal(err)
 	}
-	if got := len(collector.Snapshot()); got != 3 {
-		t.Fatalf("retained events = %d", got)
+	close(live)
+	last := uint64(1)
+	for e := range live {
+		if e.Sequence != last+1 {
+			t.Fatal("live delivery gap")
+		}
+		last = e.Sequence
 	}
+	es := collector.Snapshot()
+	if es[len(es)-1].Type != RunFinished {
+		t.Fatal("terminal fact missing")
+	}
+
 }
 
 func TestCollectorSequencesConcurrentEventsAndCopiesLogs(t *testing.T) {

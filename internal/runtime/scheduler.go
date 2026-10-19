@@ -46,6 +46,7 @@ type LogStreamingExecutor interface {
 type ExecutionObservation struct {
 	Correlation ExecutionCorrelation
 	Log         func(string, []byte)
+	Progress    func(events.Type, events.Payload)
 }
 type ObservedExecutor interface {
 	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)
@@ -57,8 +58,8 @@ type Options struct {
 	MaxConcurrency int
 	// LiveEvents receives sequenced events during execution. The caller must
 	// consume while Run is active and must not close the channel until Run returns.
-	// Delivery is synchronous and can slow execution. Cancellation may stop
-	// delivery at a sequence prefix; RunResult.Events retains the complete tail.
+	// Delivery uses a bounded FIFO and never blocks execution. RunResult.Events
+	// retains lifecycle/evidence and bounded progress with explicit omissions.
 	// Nil disables live delivery.
 	LiveEvents chan<- events.Event
 	// LogRedactions are exact byte strings replaced in log events. Redaction
@@ -205,6 +206,16 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 							data = data[len(chunk):]
 						}
 					}
+					progress := newProgressRedactor(redactionTemplate, func(kind events.Type, payload events.Payload) {
+						machine.appendEvent(events.Event{Type: kind, NodeID: id, NodeRunID: nodeRunID, Payload: payload})
+					})
+					observerProgress := func(kind events.Type, payload events.Payload) {
+						logMu.Lock()
+						defer logMu.Unlock()
+						if !closed {
+							progress.write(kind, payload)
+						}
+					}
 					observer := func(stream string, data []byte) {
 						if stream != string(events.Stdout) && stream != string(events.Stderr) {
 							return
@@ -218,13 +229,14 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						logMu.Unlock()
 					}
 					if hasObserved {
-						outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Correlation: ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID}, Log: observer})
+						outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Correlation: ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID}, Log: observer, Progress: observerProgress})
 					} else {
 						outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 					}
 					logMu.Lock()
 					emitLog(events.Stdout, redactor.Flush(events.Stdout))
 					emitLog(events.Stderr, redactor.Flush(events.Stderr))
+					progress.flush()
 					closed = true
 					logMu.Unlock()
 				} else if correlated, ok := executor.(CorrelatedExecutor); ok {
@@ -320,7 +332,6 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<
 		resolved:    make(map[string]map[string]graph.Value, len(ids)),
 		outputs:     make(map[string]map[string]graph.Value, len(ids)),
 		result:      RunResult{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: RunRunning},
-		emitter:     events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live),
 		nodeStarted: make(map[string]time.Time, len(ids)),
 	}
 	for _, id := range ids {
@@ -330,6 +341,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<
 		}
 		m.nodes[id] = &NodeResult{NodeID: id, NodeRunID: nodeRunID, State: NodePending}
 	}
+	m.emitter = events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live)
 	m.record("", "", string(RunRunning))
 	return m, nil
 }
@@ -511,6 +523,7 @@ func (m *runMachine) cancelUnstarted() {
 func (m *runMachine) snapshot() RunResult {
 	result := m.result
 	result.Events = m.emitter.Snapshot()
+	result.ProgressStats = m.emitter.Stats()
 	result.Nodes = make([]NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])
