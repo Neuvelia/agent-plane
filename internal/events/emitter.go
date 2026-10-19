@@ -206,6 +206,8 @@ func (c *Collector) Snapshot() []Event {
 
 func copyPayload(payload Payload) Payload {
 	switch p := payload.(type) {
+	case GateCheckPayload:
+		return CloneGate(p)
 	case CommandPayload:
 		if p.ExitCode != nil {
 			v := *p.ExitCode

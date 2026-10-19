@@ -495,3 +495,49 @@ Parsing and serializing a valid graph may normalize formatting but must preserve
 Schema v0 uses the complete decoded `Definition` as its normalized round-trip
 representation. Tests compare typed structures, not byte-for-byte YAML or map
 iteration order. A semantic hash is outside F0.1.
+
+## Gate node (F1.4)
+
+Each `type: gate` has one nonempty `check_id` (at most 256 UTF-8 bytes) and
+`kind`. Unknown or irrelevant config fields are rejected in stable key order
+with the node ID. Referenced ports must be declared required with the types
+below. Only `verdict: {type: string}` may be declared as an output.
+
+| Kind | Config and bound inputs |
+| --- | --- |
+| `command` | `command: /usr/bin/diff`, canonical absolute `cwd`, `left_input` and `right_input` name required string ports containing relative file paths |
+| `json_predicate` | `input` names a required JSON object port; `field` is a nonempty list of literal object keys, `operator: eq` or `ne`, exactly one of `expected` scalar/null or `expected_json` containing a JSON scalar/null literal string |
+| `reported_file_scope` | `input` names a required JSON array port of `{path, provenance?}` records, `allowed_paths` is an explicit list of exact file paths or directory prefixes ending in `/` |
+
+Numeric equality is mathematical without float rounding (1 equals 1.0,
+numbers differ from strings). For decimal/exponent values or integers beyond
+the native YAML integer range, use `expected_json: '1.00000000000000000001'`.
+Floating-point `expected` shorthand is rejected because opaque YAML decoding
+may already lose precision. Generic config parsing and graph hashing do not
+change. Missing predicate fields give red even for `ne`; malformed/traversed
+non-object or non-scalar values are errors.
+
+Paths reject absolute/drive paths, NUL, backslashes and any parent traversal
+segment. Dot/repeated separators normalize; directory prefixes match segment
+boundaries. Scope evidence is always `source: reported`, sorted/deduplicated,
+and bounded with an omitted count; it does not assert Git verification.
+
+Command checks support Darwin/Linux trusted `/usr/bin/diff` only. No args,
+options, alternate binary, scripts, shell or caller environment may be supplied.
+Both files must be regular and confined under a symlink-free explicit cwd.
+The implementation preopens them read-only and supplies only `/dev/fd/3` and
+`/dev/fd/4` operands, `LC_ALL=C`, context termination and a one-second pipe-drain
+limit. Exit 0 is green, 1 red; other exits/start/cancellation are errors.
+This is a restricted read-only operation trusting OS binary integrity, not a
+sandbox against hostile concurrent filesystem changes.
+
+Green publishes only the declared `verdict: green` and runs dependents once;
+red fails and blocks dependents with no accepted outputs. Both emit schema-4
+`gate_check` before `node_finished`, with check ID/kind/verdict/reason and typed
+evidence. Each stream retains at most 8192 bytes after streaming redaction,
+with omitted safe-byte counts; byte evidence serializes as base64. Facts have
+at most 32 evidence items and 32768 encoded payload bytes, are validated and
+copied before retention, and remain available after progress/live omissions.
+Readers accept event schemas 1–4, reject Gate facts under older schemas, and
+keep CLI envelope version 1. Full Check Result scope/duration/references are
+reserved to F1.5. See ADR-0012 and `docs/examples/gate.yaml`.

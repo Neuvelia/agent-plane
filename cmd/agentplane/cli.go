@@ -192,6 +192,12 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 	}
 	var executor runtime.Executor = shell.Executor{}
+	for _, node := range def.Nodes {
+		if node.Type != "shell" {
+			executor = nodeExecutor{}
+			break
+		}
+	}
 	if *adapterID == "codex" {
 		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
 	}

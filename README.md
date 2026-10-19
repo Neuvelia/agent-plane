@@ -9,7 +9,8 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 **Phase 0 - Execution Core is implemented.** The active planning milestone is
 **Phase 1 - Agent Loop**. F1.1 provides the adapter contract and F1.2 adds
 explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
-normalized progress and live delivery; gates and correction loops remain unimplemented.
+normalized progress and live delivery. F1.4 adds deterministic read-only Gates;
+F1.5 Check Result normalization is the next planning candidate.
 
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
@@ -106,7 +107,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 3 (old schema 1/2 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 4 (old schema 1–3 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
@@ -237,3 +238,22 @@ Codex records are skipped, draining oversized lines with bounded storage. Valid
 following progress and final results still succeed; explicit provider failure,
 process failure and invalid required final results still fail. See
 [ADR-0011](docs/adr/0011-bounded-normalized-progress.md).
+
+## Deterministic Gates (F1.4)
+
+Gate nodes accept explicit bound data and emit a typed `gate_check` fact before
+finishing. Green publishes the declared `verdict: green`; red fails the Gate
+and skips dependents without publishing accepted outputs. Operational errors
+and cancellation never manufacture a verdict. Gate and Shell work without
+an installed agent or remote service.
+
+Checks support exact JSON scalar predicates, advisory reported-file scope,
+and fixed `/usr/bin/diff` comparisons of confined regular files. Arbitrary
+commands, options and environment injection are rejected. The trusted system
+diff reads preopened descriptors; this narrow operation is not a general
+process sandbox. Evidence captures 8192 redacted bytes per stream, counts
+omissions, and labels reported scope explicitly. See
+[Gate contract](docs/graph-spec.md#gate-node-f14) and [ADR-0012](docs/adr/0012-gate-node-contract.md).
+
+Try `go run ./cmd/agentplane run docs/examples/gate.yaml --input 'candidate={"ready":true}'`.
+Use `false` to see red block the dependent Shell.

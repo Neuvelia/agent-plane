@@ -5,6 +5,7 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/events"
+	"agentplane/internal/gate"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
@@ -18,6 +19,9 @@ func (e nodeExecutor) ExecuteNode(ctx context.Context, id string, n graph.NodeDe
 	return values, err
 }
 func (e nodeExecutor) ExecuteNodeObserved(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+	if n.Type == "gate" {
+		return (gate.Executor{}).ExecuteNodeObserved(ctx, id, n, in, o)
+	}
 	if n.Type == "agent" {
 		return e.agents.ExecuteNodeObserved(ctx, id, n, in, o)
 	}

@@ -189,7 +189,10 @@ before retaining omissions and run_finished for replay. Lifecycle/evidence and
 legacy Shell capture are outside these progress budgets; total memory is not
 constant. Durable delivery remains later work. See ADR-0011.
 
-Later events include check, correction, artifact, and approval events.
+F1.4 schema 4 adds a bounded typed `gate_check` fact, retained independently
+of progress budgets on green and red before terminal lifecycle. Operational
+failures have no verdict. Readers accept schemas 1–4; Gate facts require 4.
+See ADR-0012. Later events include correction, artifact, and approval events.
 
 The event stream is an observable record of execution, not a container for hidden model reasoning.
 
