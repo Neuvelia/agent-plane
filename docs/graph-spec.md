@@ -306,6 +306,37 @@ text are not included in F1.1 lifecycle event payloads.
 F1.4 adds a check over explicit reported paths; F1.8 adds Git-derived scope
 enforcement. See ADR-0009 for the adapter and identity decisions.
 
+### Installed Codex execution (F1.2)
+
+CLI selection requires `--adapter codex --codex-bin /absolute/path/to/codex`.
+For this real adapter, `environment_refs` resolves only the named present
+variables; invalid names or missing values fail before launch. Authentication
+is owned by Codex using explicit references such as HOME or CODEX_HOME.
+No ambient environment is forwarded. Context references and allowed paths
+enter stdin as advisory data; neither is automatically read or enforced.
+
+Workspace must canonicalize to a non-bare initialized Git worktree root with
+HEAD. Unresolved stages, submodules and unsupported filesystem entries fail.
+Git evidence compares index blob/mode/stage and working-file existence/mode/
+content, including nonignored untracked files. Symlinks are hashed by link
+text; symlink ancestors and unsafe paths fail. Unchanged baseline dirt is
+omitted, further edits and index changes are included, and reverted edits
+are omitted. Baseline paths remain in the after comparison even if newly
+ignored. Initially ignored contents are not hashed; a bounded ignored-name/
+directory-prefix inventory identifies newly exposed paths with unknown initial
+state. Those transitions fail `codex_git` with no accepted outputs/evidence,
+including new descendants beneath initially ignored directories. Establish
+ignore rules before invocation and rerun. Keep other writers out of the
+workspace during execution.
+
+The final bounded JSON supplies summary and artifact references. Changed files
+always come from Git with `observed` provenance. Known-empty changes are `[]`;
+usage/raw metadata remain absent. Schema-2 `node_evidence` records adapter ID,
+version and changes before successful `node_finished`, independently of graph
+output declarations. Existing event shapes decode under schema 1 or 2;
+`node_evidence` requires schema 2. Failed invocations accept no outputs or
+success evidence. See ADR-0010 for process ownership and protocol limits.
+
 ## Edge definition
 
 An edge maps one declared source output to one declared target input.

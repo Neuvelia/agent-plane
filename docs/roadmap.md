@@ -29,8 +29,8 @@ Goal: execute one real coding agent behind an adapter and add deterministic corr
 
 | ID | Feature | Priority | Proposed dependencies | Spec |
 | --- | --- | --- | --- | --- |
-| F1.1 | Agent Adapter Contract | P0 | F0 exit | Ready; ADR-0009 |
-| F1.2 | First coding-agent adapter | P0 | F1.1 | Draft |
+| F1.1 | Agent Adapter Contract | P0 | F0 exit | Implemented; ADR-0009 |
+| F1.2 | First coding-agent adapter | P0 | F1.1 | Implemented; ADR-0010; real smoke verified |
 | F1.3 | Unified Streaming | P0 | F1.1, F1.2 | Draft |
 | F1.4 | Gate Node | P0 | F0 exit; F1.2 for Agent demo | Draft |
 | F1.5 | Check Result Contract | P0 | F1.4 | Draft |

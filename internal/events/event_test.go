@@ -31,7 +31,7 @@ func TestEventJSONRoundTripsTypedPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"type":"log_chunk"`) || !strings.Contains(string(data), `"event_schema_version":1`) || strings.Contains(string(data), "attempt_id") {
+	if !strings.Contains(string(data), `"type":"log_chunk"`) || !strings.Contains(string(data), `"event_schema_version":2`) || strings.Contains(string(data), "attempt_id") {
 		t.Fatalf("JSON = %s", data)
 	}
 	var got Event

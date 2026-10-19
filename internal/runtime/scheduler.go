@@ -41,6 +41,16 @@ type LogStreamingExecutor interface {
 	ExecuteNodeWithLogs(context.Context, string, graph.NodeDefinition, map[string]graph.Value, func(string, []byte)) (map[string]graph.Value, error)
 }
 
+// ExecutionObservation combines correlation and safe logs without provider types.
+// Evidence is returned separately from graph outputs and committed only on success.
+type ExecutionObservation struct {
+	Correlation ExecutionCorrelation
+	Log         func(string, []byte)
+}
+type ObservedExecutor interface {
+	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)
+}
+
 // Options controls the maximum number of simultaneously running nodes.
 // Zero selects the conservative default of one. Negative values are invalid.
 type Options struct {
@@ -57,9 +67,10 @@ type Options struct {
 }
 
 type completedNode struct {
-	id      string
-	outputs map[string]graph.Value
-	err     error
+	id       string
+	outputs  map[string]graph.Value
+	evidence *events.NodeEvidencePayload
+	err      error
 }
 
 const maxEventLogChunk = 16 * 1024
@@ -177,7 +188,10 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			go func(id string) {
 				var outputs map[string]graph.Value
 				var err error
-				if streaming, ok := executor.(LogStreamingExecutor); ok {
+				var evidence *events.NodeEvidencePayload
+				streaming, hasLogs := executor.(LogStreamingExecutor)
+				observed, hasObserved := executor.(ObservedExecutor)
+				if hasLogs || hasObserved {
 					redactor := redactionTemplate.clone()
 					var logMu sync.Mutex
 					closed := false
@@ -203,7 +217,11 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						emitLog(events.Stream(stream), redactor.Write(events.Stream(stream), data))
 						logMu.Unlock()
 					}
-					outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+					if hasObserved {
+						outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Correlation: ExecutionCorrelation{RunID: machine.result.RunID, NodeRunID: nodeRunID}, Log: observer})
+					} else {
+						outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+					}
 					logMu.Lock()
 					emitLog(events.Stdout, redactor.Flush(events.Stdout))
 					emitLog(events.Stderr, redactor.Flush(events.Stderr))
@@ -214,7 +232,23 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				} else {
 					outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
 				}
-				completed <- completedNode{id: id, outputs: outputs, err: err}
+				if evidence != nil {
+					snapshot := *evidence
+					snapshot.ChangedFiles = append([]events.ChangedFile{}, evidence.ChangedFiles...)
+					redact := func(s string) string {
+						r := redactionTemplate.clone()
+						data := append([]byte{}, r.Write(events.Stdout, []byte(s))...)
+						data = append(data, r.Flush(events.Stdout)...)
+						return string(data)
+					}
+					snapshot.AdapterID = redact(snapshot.AdapterID)
+					snapshot.AdapterVersion = redact(snapshot.AdapterVersion)
+					for i := range snapshot.ChangedFiles {
+						snapshot.ChangedFiles[i].Path = redact(snapshot.ChangedFiles[i].Path)
+					}
+					evidence = &snapshot
+				}
+				completed <- completedNode{id: id, outputs: outputs, evidence: evidence, err: err}
 			}(id)
 			started++
 		}
@@ -242,6 +276,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			}
 			machine.outputs[work.id] = copyValues(work.outputs)
 			nodeResult.Outputs = sortedPortValues(work.outputs)
+			if work.evidence != nil {
+				machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
+			}
 			machine.transitionNode(work.id, NodeSucceeded)
 		}
 		for _, id := range machine.ids {
@@ -364,6 +401,13 @@ func eventFailure(failure *Failure) (string, []string) {
 	codes := make([]string, 0, len(failure.Diagnostics))
 	for _, diagnostic := range failure.Diagnostics {
 		codes = append(codes, diagnostic.Code)
+	}
+	// Executors may expose a fixed safe code; raw error text is never an event.
+	var diagnostic interface{ DiagnosticCode() string }
+	if errors.As(failure.Err, &diagnostic) {
+		if code := diagnostic.DiagnosticCode(); code != "" {
+			codes = append(codes, code)
+		}
 	}
 	sort.Strings(codes)
 	return string(failure.Kind), codes

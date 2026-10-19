@@ -112,6 +112,16 @@ func (r *eventRenderer) Event(event events.Event) error {
 			}
 			delete(r.pending, key)
 		}
+	case events.NodeEvidence:
+		p := event.Payload.(events.NodeEvidencePayload)
+		if _, err := fmt.Fprintf(r.stderr, "%s evidence: %s %s (%d changed paths)\n", event.NodeID, p.AdapterID, p.AdapterVersion, len(p.ChangedFiles)); err != nil {
+			return err
+		}
+		for _, file := range p.ChangedFiles {
+			if _, err := fmt.Fprintf(r.stderr, "  %q (%s)\n", file.Path, file.Provenance); err != nil {
+				return err
+			}
+		}
 	case events.NodeFinished:
 		if err := r.flushNode(event.NodeID); err != nil {
 			return err

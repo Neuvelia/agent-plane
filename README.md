@@ -7,8 +7,9 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 ## Status
 
 **Phase 0 - Execution Core is implemented.** The active planning milestone is
-**Phase 1 - Agent Loop**, beginning with F1.1 Agent Adapter Contract. No Agent,
-Gate, or correction-loop implementation is present yet.
+**Phase 1 - Agent Loop**. F1.1 provides the adapter contract and F1.2 adds
+explicit installed-Codex execution with Git-derived evidence. F1.3 streaming is
+the next planning candidate; gates and correction loops remain unimplemented.
 
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
@@ -166,3 +167,35 @@ feature spec
 ```
 
 See `docs/development-workflow.md` for the full process.
+
+## Installed Codex adapter (F1.2)
+
+Opt in explicitly to authenticated Codex execution:
+
+```bash
+agentplane run graph.yaml --adapter codex --codex-bin /absolute/path/to/codex --json
+```
+
+The Agent node uses `adapter: codex`, an absolute Git worktree root with HEAD,
+and explicit `environment_refs` such as `[HOME, PATH]` for authentication and
+tools. Only referenced variables are forwarded. The supported protocol was
+verified against Codex CLI `0.163.0-alpha.10.2`; required flags are detected at
+run time. Codex uses `workspace-write`, approval policy `never`, no shared
+daemon, and ignored personal configuration while retaining execution rules.
+
+Changed paths compare working-file and index snapshots before/after execution;
+unchanged dirty/staged/untracked files are omitted. Evidence records observed
+changes, not authorship. Keep the workspace otherwise idle. Ignored/outside
+contents are excluded. Baseline paths remain observable if newly ignored;
+newly exposed initially ignored files/directories fail safely because their
+pre-run contents are unknown. Set ignore rules before execution and rerun.
+`allowed_paths` is advisory. A schema-2 `node_evidence`
+event records adapter/version and paths even without a `changed_files` output
+port. Event decoding retains schema-1 compatibility; CLI envelope stays v1.
+
+Darwin/Linux process groups cover ordinary descendants with bounded shutdown;
+deliberately escaped groups are outside this guarantee. Other platforms fail
+closed. Progress is bounded static status text; summaries/artifacts are graph
+outputs only, with usage and raw provider metadata absent. See
+[ADR-0010](docs/adr/0010-codex-process-and-observed-evidence.md) and the
+[real smoke evidence](docs/validation/F1.2-codex-smoke.md).

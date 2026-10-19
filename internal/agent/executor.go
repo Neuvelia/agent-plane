@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 )
@@ -22,6 +23,16 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 }
 
 func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
+	return e.execute(ctx, nodeID, node, inputs, ids, nil, nil)
+}
+
+func (e Executor) ExecuteNodeObserved(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, obs runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+	var evidence *events.NodeEvidencePayload
+	values, err := e.execute(ctx, nodeID, node, inputs, obs.Correlation, obs.Log, &evidence)
+	return values, evidence, err
+}
+
+func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation, log func(string, []byte), evidence **events.NodeEvidencePayload) (map[string]graph.Value, error) {
 	if ctx == nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: ErrorInvalidInput, Cause: errors.New("execution context is nil")}
 	}
@@ -38,7 +49,12 @@ func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string,
 	}
 	report, err := adapter.Detect(ctx)
 	if err != nil {
-		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorDetection, Cause: err}
+		kind := ErrorDetection
+		var typed *ExecutionError
+		if errors.As(err, &typed) {
+			kind = typed.Kind
+		}
+		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: kind, Cause: err}
 	}
 	if !report.Available {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: errors.New("adapter reported unavailable")}
@@ -47,7 +63,12 @@ func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string,
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnsupported, Cause: errors.New("adapter does not support workspace execution")}
 	}
 	request := AgentExecutionInput{Task: cfg.task, Workspace: cfg.workspace, AllowedPaths: cfg.allowedPaths, ContextRefs: cfg.contextRefs, EnvironmentRefs: cfg.environmentRefs, RunID: ids.RunID, NodeRunID: ids.NodeRunID, AttemptID: ids.AttemptID}
-	output, err := adapter.Execute(ctx, request)
+	var output AgentExecutionOutput
+	if progress, ok := adapter.(ProgressAdapter); ok {
+		output, err = progress.ExecuteWithProgress(ctx, request, log)
+	} else {
+		output, err = adapter.Execute(ctx, request)
+	}
 	if err != nil {
 		var executionErr *ExecutionError
 		if errors.As(err, &executionErr) {
@@ -58,6 +79,16 @@ func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string,
 	values, err := outputValues(node, output)
 	if err != nil {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorExecution, Cause: err}
+	}
+	if evidence != nil && output.ChangedFiles != nil {
+		p := events.NodeEvidencePayload{AdapterID: string(cfg.adapter), ChangedFiles: []events.ChangedFile{}}
+		if report.Version != nil {
+			p.AdapterVersion = *report.Version
+		}
+		for _, f := range output.ChangedFiles {
+			p.ChangedFiles = append(p.ChangedFiles, events.ChangedFile{Path: f.Path, Provenance: string(f.Provenance)})
+		}
+		*evidence = &p
 	}
 	return values, nil
 }

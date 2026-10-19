@@ -101,6 +101,9 @@ func (c *Collector) Snapshot() []Event {
 
 func copyPayload(payload Payload) Payload {
 	switch p := payload.(type) {
+	case NodeEvidencePayload:
+		p.ChangedFiles = append([]ChangedFile{}, p.ChangedFiles...)
+		return p
 	case LogChunkPayload:
 		p.Data = append([]byte(nil), p.Data...)
 		return p

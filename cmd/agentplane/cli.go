@@ -7,8 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"time"
 
+	"agentplane/internal/agent"
+	"agentplane/internal/agent/codex"
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
@@ -104,6 +107,8 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return usageError("run", err, wantsJSON(args), stdout, stderr)
 	}
 	jsonMode := fs.Bool("json", false, "emit one JSON document")
+	adapterID := fs.String("adapter", "", "explicit installed adapter (codex)")
+	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path")
 	watch := fs.Bool("watch", false, "show events as they occur")
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes")
 	var inputs inputFlags
@@ -112,6 +117,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
 		return usageError("run", err, wantsJSON(args), stdout, stderr)
+	}
+	if (*adapterID != "" && *adapterID != "codex") || (*adapterID == "codex" && !filepath.IsAbs(*codexBin)) || (*adapterID == "" && *codexBin != "") {
+		return usageError("run", errors.New("use --adapter codex with --codex-bin ABSOLUTE_PATH"), *jsonMode, stdout, stderr)
 	}
 	if *jsonMode && *watch {
 		return usageError("run", errors.New("--json and --watch cannot be combined"), true, stdout, stderr)
@@ -183,7 +191,11 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			}
 		}
 	}
-	result, err := runtime.Run(runCtx, def, values, shell.Executor{}, opts)
+	var executor runtime.Executor = shell.Executor{}
+	if *adapterID == "codex" {
+		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
+	}
+	result, err := runtime.Run(runCtx, def, values, executor, opts)
 	if finishWatch != nil {
 		if writeErr := finishWatch(result.Events); writeErr != nil {
 			return presentationError(writeErr, stderr)

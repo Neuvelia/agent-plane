@@ -1,6 +1,9 @@
 package agent
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 type ErrorKind string
 
@@ -29,3 +32,18 @@ func (e *ExecutionError) Error() string {
 	return fmt.Sprintf("agent node %q adapter %q: %s: %v", e.NodeID, e.AdapterID, e.Kind, e.Cause)
 }
 func (e *ExecutionError) Unwrap() error { return e.Cause }
+
+// DiagnosticCode exposes a finite safe vocabulary to generic event consumers.
+// Unknown provider-supplied kinds cannot enter the trace as diagnostic text.
+func (e *ExecutionError) DiagnosticCode() string {
+	var diagnostic interface{ DiagnosticCode() string }
+	if errors.As(e.Cause, &diagnostic) {
+		return diagnostic.DiagnosticCode()
+	}
+	switch e.Kind {
+	case ErrorUnavailable, ErrorDetection, ErrorInvalidInput, ErrorStart, ErrorExecution, ErrorUnsupported:
+		return "agent_" + string(e.Kind)
+	default:
+		return "agent_execution"
+	}
+}

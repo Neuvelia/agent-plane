@@ -17,16 +17,17 @@ Implementation should not begin for a non-trivial roadmap feature until its spec
 ## Phase 1 - Agent Loop
 
 F1.1 is implemented with a test-only mock and generic runtime dispatch; its
-contract decisions are in ADR-0009. CLI routing remains Shell-only. F1.2-F1.7 have
-draft P0 specs to review in dependency order. F1.8 is P1 and receives its own
-spec when activated. See `docs/roadmap.md` for the complete ID catalog,
+contract decisions are in ADR-0009. F1.2 adds explicit Codex CLI routing and
+Git-derived evidence (ADR-0010), verified by a real disposable-repository smoke.
+F1.3-F1.7 have draft P0 specs to review in dependency order. F1.8 is P1 and
+receives its own spec when activated. See `docs/roadmap.md` for the complete ID catalog,
 dependencies and phase exit criteria. A roadmap entry is not an executable
 feature contract.
 
 | Feature | Spec status |
 | --- | --- |
 | `F1.1-agent-adapter-contract.md` | Implemented; contract mock only |
-| `F1.2-first-coding-agent-adapter.md` | Draft for review |
+| `F1.2-first-coding-agent-adapter.md` | Implemented; real Codex smoke verified |
 | `F1.3-unified-streaming.md` | Draft for review |
 | `F1.4-gate-node.md` | Draft for review |
 | `F1.5-check-result-contract.md` | Draft for review |
