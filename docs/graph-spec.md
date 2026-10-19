@@ -321,7 +321,13 @@ Git evidence compares index blob/mode/stage and working-file existence/mode/
 content, including nonignored untracked files. Symlinks are hashed by link
 text; symlink ancestors and unsafe paths fail. Unchanged baseline dirt is
 omitted, further edits and index changes are included, and reverted edits
-are omitted. Keep other writers out of the workspace during execution.
+are omitted. Baseline paths remain in the after comparison even if newly
+ignored. Initially ignored contents are not hashed; a bounded ignored-name/
+directory-prefix inventory identifies newly exposed paths with unknown initial
+state. Those transitions fail `codex_git` with no accepted outputs/evidence,
+including new descendants beneath initially ignored directories. Establish
+ignore rules before invocation and rerun. Keep other writers out of the
+workspace during execution.
 
 The final bounded JSON supplies summary and artifact references. Changed files
 always come from Git with `observed` provenance. Known-empty changes are `[]`;

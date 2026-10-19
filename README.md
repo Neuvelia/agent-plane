@@ -186,7 +186,10 @@ daemon, and ignored personal configuration while retaining execution rules.
 Changed paths compare working-file and index snapshots before/after execution;
 unchanged dirty/staged/untracked files are omitted. Evidence records observed
 changes, not authorship. Keep the workspace otherwise idle. Ignored/outside
-paths are excluded; `allowed_paths` is advisory. A schema-2 `node_evidence`
+contents are excluded. Baseline paths remain observable if newly ignored;
+newly exposed initially ignored files/directories fail safely because their
+pre-run contents are unknown. Set ignore rules before execution and rerun.
+`allowed_paths` is advisory. A schema-2 `node_evidence`
 event records adapter/version and paths even without a `changed_files` output
 port. Event decoding retains schema-1 compatibility; CLI envelope stays v1.
 

@@ -58,10 +58,21 @@ configured hooks or filters for content hashing.
 Return sorted unique changed records with observed provenance when either
 representation changes. Unchanged dirty/staged/untracked files are omitted;
 further changes, creation/deletion/rename and index transitions are included.
-Completely reverted edits are omitted. Model claims cannot add paths. This
-records changes observed during the invocation, not authorship. An otherwise
-idle workspace is required; ignored/outside paths are outside this evidence
-contract. Advisory scope is not enforced.
+Completely reverted edits are omitted. Baseline tracked/nonignored paths stay
+in the comparison set even if they become ignored: unchanged state is omitted,
+while real modifications/deletions remain evidence. Initially ignored contents
+are not hashed. Before execution, record Git's ignored file/directory names
+using a bounded `ls-files --others --ignored --exclude-standard --directory -z`
+listing. If a newly visible after-path matches an initially ignored file or
+falls beneath an initially ignored directory, fail closed with `codex_git`:
+its pre-run content baseline is unknown. This also conservatively rejects new
+files beneath such a directory after ignore removal. Establish the desired
+ignore rules before running, then rerun to obtain a known baseline. Unknown
+initially ignored paths never become accepted outputs or success evidence.
+Model claims cannot add paths. This records changes observed during the invocation, not authorship. An otherwise
+idle workspace is required; initially ignored/outside contents are outside
+this evidence contract, with the fail-closed visibility transition rule above.
+Advisory scope is not enforced.
 
 ### Process ownership
 

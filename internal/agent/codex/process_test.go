@@ -99,3 +99,18 @@ func processState(pid int) string {
 	b, _ := exec.Command("/bin/ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
 	return strings.TrimSpace(string(b))
 }
+
+func TestInitiallyIgnoredSpecialEntryIsNotRead(t *testing.T) {
+	d := repo(t)
+	os.WriteFile(filepath.Join(d, ".gitignore"), []byte("ignored-pipe\n"), 0600)
+	if err := syscall.Mkfifo(filepath.Join(d, "ignored-pipe"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a := Adapter{Binary: fake(t, `printf '{"summary":"ok","artifacts":[]}' >"$result"`)}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, err := a.Execute(ctx, agent.AgentExecutionInput{Workspace: d, Task: "no edit"})
+	if err != nil || len(out.ChangedFiles) != 0 {
+		t.Fatalf("out=%+v error=%v", out, err)
+	}
+}

@@ -167,6 +167,10 @@ func (a Adapter) ExecuteWithProgress(ctx context.Context, in agent.AgentExecutio
 	if err != nil {
 		return out, err
 	}
+	ignored, err := ignoredInventory(ctx, workspace)
+	if err != nil {
+		return out, err
+	}
 	private, err := os.MkdirTemp("", "agentplane-codex-")
 	if err != nil {
 		return out, fail("start", "cannot create private result directory", err)
@@ -202,7 +206,7 @@ func (a Adapter) ExecuteWithProgress(ctx context.Context, in agent.AgentExecutio
 	if err != nil {
 		return out, err
 	}
-	after, err := snapshot(ctx, workspace)
+	after, err := snapshotAfter(ctx, workspace, before, ignored)
 	if err != nil {
 		return out, err
 	}

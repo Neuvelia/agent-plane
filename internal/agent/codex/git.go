@@ -65,6 +65,31 @@ func canonicalWorkspace(ctx context.Context, workspace string) (string, error) {
 	return root, nil
 }
 func snapshot(ctx context.Context, dir string) (gitSnapshot, error) {
+	return snapshotAfter(ctx, dir, nil, nil)
+}
+
+// Ignored contents stay unread. Directory prefixes make unknown initial state
+// explicit without enumerating or hashing the contents of ignored trees.
+func ignoredInventory(ctx context.Context, dir string) (map[string]bool, error) {
+	data, err := git(ctx, dir, "ls-files", "--others", "--ignored", "--exclude-standard", "--directory", "-z")
+	if err != nil {
+		return nil, err
+	}
+	paths := map[string]bool{}
+	for _, raw := range bytes.Split(data, []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		path := string(raw)
+		if _, err := confinedPath(dir, strings.TrimSuffix(path, "/")); err != nil {
+			return nil, err
+		}
+		paths[path] = true
+	}
+	return paths, nil
+}
+
+func snapshotAfter(ctx context.Context, dir string, baseline gitSnapshot, ignored map[string]bool) (gitSnapshot, error) {
 	entries, err := git(ctx, dir, "ls-files", "--stage", "-z")
 	if err != nil {
 		return nil, err
@@ -90,6 +115,32 @@ func snapshot(ctx context.Context, dir string) (gitSnapshot, error) {
 			if _, ok := result[string(path)]; !ok {
 				result[string(path)] = fileState{}
 			}
+		}
+	}
+	// Listing membership can change solely through ignore rules. Unknown initial
+	// ignored contents cannot safely become apparent creations; reject them.
+	for path := range result {
+		if _, known := baseline[path]; known {
+			continue
+		}
+		unknown := ignored[path]
+		for ancestor := path; !unknown; {
+			separator := strings.LastIndexByte(ancestor, '/')
+			if separator < 0 {
+				break
+			}
+			ancestor = ancestor[:separator]
+			unknown = ignored[ancestor+"/"]
+		}
+		if unknown {
+			return nil, fail("git", "newly exposed ignored path has unknown baseline; set ignore rules before execution and rerun", nil)
+		}
+	}
+	// Re-observe baseline files even if Git no longer lists them. Keep current
+	// index state when present; absence here means no after-index entry.
+	for path := range baseline {
+		if _, present := result[path]; !present {
+			result[path] = fileState{}
 		}
 	}
 	for path, state := range result {

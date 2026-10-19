@@ -277,3 +277,57 @@ func TestCaptureLimitCannotBeBypassedByIOCopy(t *testing.T) {
 		t.Fatalf("capture length=%d overflow=%v", b.Len(), b.overflow)
 	}
 }
+
+func TestInvocationIgnoreTransitions(t *testing.T) {
+	for _, action := range []string{"unchanged", "modified", "deleted"} {
+		t.Run("newly ignored/"+action, func(t *testing.T) {
+			d := repo(t)
+			os.WriteFile(filepath.Join(d, "preexisting.txt"), []byte("baseline"), 0600)
+			body := "printf 'preexisting.txt\\n' >.gitignore\n"
+			if action == "modified" {
+				body += "printf changed >preexisting.txt\n"
+			}
+			if action == "deleted" {
+				body += "rm preexisting.txt\n"
+			}
+			body += `printf '{"summary":"ok","artifacts":[]}' >"$result"`
+			out, err := (Adapter{Binary: fake(t, body)}).Execute(context.Background(), agent.AgentExecutionInput{Workspace: d, Task: "edit"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			want := []agent.ChangedFile{{Path: ".gitignore", Provenance: agent.ProvenanceObserved}}
+			if action != "unchanged" {
+				want = append(want, agent.ChangedFile{Path: "preexisting.txt", Provenance: agent.ProvenanceObserved})
+			}
+			if !reflect.DeepEqual(out.ChangedFiles, want) {
+				t.Fatalf("changed=%v want=%v", out.ChangedFiles, want)
+			}
+		})
+	}
+	for _, setup := range []string{"ignored file", "ignored directory", "new descendant in ignored directory"} {
+		t.Run("newly exposed/"+setup, func(t *testing.T) {
+			d := repo(t)
+			pattern := "hidden.txt"
+			if setup != "ignored file" {
+				pattern = "hidden/"
+				os.Mkdir(filepath.Join(d, "hidden"), 0700)
+			}
+			os.WriteFile(filepath.Join(d, ".gitignore"), []byte(pattern+"\n"), 0600)
+			path := "hidden.txt"
+			if setup != "ignored file" {
+				path = "hidden/old.txt"
+			}
+			os.WriteFile(filepath.Join(d, path), []byte("untouched baseline"), 0600)
+			body := ": >.gitignore\n"
+			if setup == "new descendant in ignored directory" {
+				body += "printf new >hidden/new.txt\n"
+			}
+			body += `printf '{"summary":"ok","artifacts":[]}' >"$result"`
+			out, err := (Adapter{Binary: fake(t, body)}).Execute(context.Background(), agent.AgentExecutionInput{Workspace: d, Task: "edit"})
+			var typed *agent.ExecutionError
+			if !errors.As(err, &typed) || typed.Kind != "codex_git" || out.Summary != "" || out.ChangedFiles != nil {
+				t.Fatalf("out=%+v error=%v", out, err)
+			}
+		})
+	}
+}
