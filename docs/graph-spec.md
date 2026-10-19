@@ -547,3 +547,47 @@ identifiers, unavailable or invalid diagnostic references, and absence. File
 references may include positive lines; test/diff/artifact identifiers are opaque.
 No reference lookup or correction permission is inferred from these fields.
 See ADR-0012, ADR-0013 and `docs/examples/gate.yaml`.
+
+### Node-local correction loop (F1.6)
+
+An Agent may declare `loop` alongside `config`. The embedded Gate is not a
+DAG node and exports no outputs. `max_attempts` is an integer from 1 through
+10, including the initial produce call; omission defaults to 3. Explicit null,
+zero, fractions and out-of-range values are invalid. The Agent must explicitly
+author `config.allowed_paths`; an empty list means no intended changes. This
+scope remains advisory, without filesystem enforcement or rollback.
+
+```yaml
+loop:
+  max_attempts: 3
+  gate:
+    inputs:
+      candidate: {type: json, required: true}
+    config:
+      check_id: candidate-quality
+      kind: json_predicate
+      input: candidate
+      field: [ok]
+      operator: eq
+      expected: true
+  bindings:
+    - from: candidate.outputs.raw_metadata
+      to: gate.inputs.candidate
+```
+
+Bindings select declared `candidate.outputs.PORT` or `node.inputs.PORT` and
+supply declared `gate.inputs.PORT` of exactly the same type. Targets are unique,
+required Gate inputs must be bound, and at least one binding must consume a
+candidate output. External values first enter the producer's ordinary inputs
+through ordinary graph bindings. Gate `type`, `outputs`, and nested `loop` fields
+are invalid. Ordinary DAG edges remain acyclic and publish only green candidate
+outputs. Accepted peers do not rerun; the existing batch barrier remains.
+
+Composition must implement optional runtime `LoopPreflight` and observed
+execution. All loop Agent/Gate static configuration is validated before any
+adapter detection; detection must affirm correction-feedback transport. Only
+valid red results retry. Invalid candidates, provider/process failures, Gate
+operational errors and inconsistent observations stop the node without retry.
+Exhaustion uses failed node/run states with `needs_intervention` failure kind,
+`E_LOOP_NEEDS_INTERVENTION`, and the existing CLI run-failure exit code 4.
+See ADR-0014.

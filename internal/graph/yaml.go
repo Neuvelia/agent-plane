@@ -68,6 +68,65 @@ func Parse(data []byte) (*Definition, error) {
 	if err := decodeOneDocument(data, &definition, true); err != nil {
 		return nil, fmt.Errorf("parse graph definition: %w", err)
 	}
+	// Inspect presence separately: YAML null otherwise erases optional pointers.
+	var document yaml.Node
+	if err := yaml.Unmarshal(data, &document); err != nil {
+		return nil, err
+	}
+
+	resolve := func(n *yaml.Node) *yaml.Node {
+		for n != nil && n.Kind == yaml.AliasNode {
+			n = n.Alias
+		}
+		return n
+	}
+	var field func(*yaml.Node, string) *yaml.Node
+	field = func(n *yaml.Node, key string) *yaml.Node {
+		n = resolve(n)
+		if n != nil && n.Kind == yaml.MappingNode {
+			for i := 0; i < len(n.Content); i += 2 {
+				if n.Content[i].Value == key {
+					return resolve(n.Content[i+1])
+				}
+			}
+			// YAML merge keys participate in presence and budget validation too.
+			for i := 0; i < len(n.Content); i += 2 {
+				if n.Content[i].Value == "<<" {
+					merged := resolve(n.Content[i+1])
+					if merged.Kind == yaml.SequenceNode {
+						for _, entry := range merged.Content {
+							if found := field(entry, key); found != nil {
+								return found
+							}
+						}
+					} else if found := field(merged, key); found != nil {
+						return found
+					}
+				}
+			}
+		}
+		return nil
+	}
+	if len(document.Content) > 0 {
+		nodes := field(document.Content[0], "nodes")
+		if nodes != nil && nodes.Kind == yaml.MappingNode {
+			for _, id := range sortedNodeIDs(definition.Nodes) {
+				loop := field(field(nodes, id), "loop")
+				if loop == nil {
+					continue
+				}
+				if loop.ShortTag() == "!!null" {
+					return nil, errors.New("parse graph definition: loop may not be null")
+				}
+				if budget := field(loop, "max_attempts"); budget != nil {
+					var n int
+					if budget.Kind != yaml.ScalarNode || budget.ShortTag() != "!!int" || budget.Decode(&n) != nil || n < 1 || n > 10 {
+						return nil, errors.New("parse graph definition: max_attempts must be an integer from 1 to 10")
+					}
+				}
+			}
+		}
+	}
 	return &definition, nil
 }
 

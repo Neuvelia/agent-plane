@@ -52,6 +52,7 @@ type InputDefinition struct {
 // under Definition.Nodes.
 type NodeDefinition struct {
 	Type    string                    `yaml:"type"`
+	Loop    *LoopDefinition           `yaml:"loop,omitempty"`
 	Inputs  map[string]PortDefinition `yaml:"inputs,omitempty"`
 	Config  NodeConfig                `yaml:"config,omitempty"`
 	Outputs map[string]PortDefinition `yaml:"outputs,omitempty"`
@@ -80,4 +81,29 @@ type GraphInputBindingDefinition struct {
 // OutputDefinition exposes a node output as a graph output.
 type OutputDefinition struct {
 	From NodeOutputReference `yaml:"from"`
+}
+
+// LoopDefinition checks each candidate before publishing any producer outputs.
+type LoopDefinition struct {
+	MaxAttempts int                `yaml:"max_attempts,omitempty"`
+	Gate        LoopGateDefinition `yaml:"gate"`
+	Bindings    []LoopBinding      `yaml:"bindings"`
+}
+type LoopGateDefinition struct {
+	Inputs map[string]PortDefinition `yaml:"inputs,omitempty"`
+	Config NodeConfig                `yaml:"config,omitempty"`
+}
+type LoopBinding struct {
+	From string `yaml:"from"`
+	To   string `yaml:"to"`
+}
+
+func (l *LoopDefinition) Attempts() int {
+	if l.MaxAttempts == 0 {
+		return 3
+	}
+	return l.MaxAttempts
+}
+func (l *LoopDefinition) GateNode() NodeDefinition {
+	return NodeDefinition{Type: "gate", Inputs: l.Gate.Inputs, Config: l.Gate.Config}
 }
