@@ -47,6 +47,8 @@ func TestHelperProcess(t *testing.T) {
 		fmt.Print(cwd)
 	case "env":
 		fmt.Printf("%s|%s|%s", os.Getenv("SHELL_ALLOWED"), os.Getenv("SHELL_ADDED"), os.Getenv("SHELL_SECRET"))
+	case "mapped-env":
+		fmt.Printf("%s|%s", os.Getenv("LEFT_TEXT"), os.Getenv("RIGHT_TEXT"))
 	case "json":
 		fmt.Print(args[1])
 	case "wait":
@@ -117,6 +119,81 @@ func TestExecuteCapturesSeparateStreamsAndPreservesArgv(t *testing.T) {
 	}
 	if result.StartedAt.IsZero() || result.EndedAt.Before(result.StartedAt) {
 		t.Fatalf("timestamps = %v / %v", result.StartedAt, result.EndedAt)
+	}
+}
+
+func TestBoundStringInputsReachExplicitChildEnvironment(t *testing.T) {
+	node := helperNode("mapped-env")
+	node.Inputs = map[string]graph.PortDefinition{
+		"left":  {Type: graph.ValueTypeString, Required: true},
+		"right": {Type: graph.ValueTypeString, Required: true},
+	}
+	node.Config["input_env"] = map[string]string{"left": "LEFT_TEXT", "right": "RIGHT_TEXT"}
+	result, err := (Executor{}).Execute(context.Background(), "join", node, map[string]graph.Value{
+		"left": graph.NewStringValue("from-left"), "right": graph.NewStringValue("from-right"),
+	})
+	if err != nil || result.Stdout != "from-left|from-right" {
+		t.Fatalf("mapped inputs: result=%#v err=%v", result, err)
+	}
+}
+
+func TestInputEnvironmentRejectsInvalidMappingsBeforeProcessStart(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*graph.NodeDefinition)
+		inputs  map[string]graph.Value
+		message string
+	}{
+		{"undeclared", func(n *graph.NodeDefinition) { n.Config["input_env"] = map[string]string{"absent": "MAPPED"} }, nil, "undeclared input"},
+		{"non-string", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"count": {Type: graph.ValueTypeNumber}}
+			n.Config["input_env"] = map[string]string{"count": "MAPPED"}
+		}, nil, "string input"},
+		{"duplicate-target", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString}, "second": {Type: graph.ValueTypeString}}
+			n.Config["input_env"] = map[string]string{"first": "MAPPED", "second": "MAPPED"}
+		}, nil, "duplicate"},
+		{"duplicate-case-variant", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString}, "second": {Type: graph.ValueTypeString}}
+			n.Config["input_env"] = map[string]string{"first": "MAPPED", "second": "mapped"}
+		}, nil, "duplicate"},
+		{"conflict", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString}}
+			n.Config["input_env"] = map[string]string{"first": "AGENTPLANE_HELPER"}
+		}, nil, "conflicts"},
+		{"conflict-case-variant", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString}}
+			n.Config["input_env"] = map[string]string{"first": "agentplane_helper"}
+		}, nil, "conflicts"},
+		{"missing-required", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString, Required: true}}
+			n.Config["input_env"] = map[string]string{"first": "MAPPED"}
+		}, nil, "missing"},
+		{"wrong-runtime-type", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString}}
+			n.Config["input_env"] = map[string]string{"first": "MAPPED"}
+		}, map[string]graph.Value{"first": graph.NewBooleanValue(true)}, "string value"},
+		{"nul-value", func(n *graph.NodeDefinition) {
+			n.Inputs = map[string]graph.PortDefinition{"first": {Type: graph.ValueTypeString}}
+			n.Config["input_env"] = map[string]string{"first": "MAPPED"}
+		}, map[string]graph.Value{"first": graph.NewStringValue("bad\x00value")}, "NUL"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := helperNode("touch", filepath.Join(t.TempDir(), "started"))
+			started := node.Config["args"].([]string)[3]
+			tc.mutate(&node)
+			_, err := (Executor{}).Execute(context.Background(), "worker", node, tc.inputs)
+			if err == nil || !strings.Contains(err.Error(), tc.message) {
+				t.Fatalf("error=%v, want %q", err, tc.message)
+			}
+			var executionErr *ExecutionError
+			if !errors.As(err, &executionErr) || executionErr.Kind != FailureConfig {
+				t.Fatalf("mapping error kind=%v, want config", err)
+			}
+			if _, statErr := os.Stat(started); !os.IsNotExist(statErr) {
+				t.Fatalf("process started: %v", statErr)
+			}
+		})
 	}
 }
 
@@ -468,6 +545,15 @@ func TestConfigErrorsSelectStableField(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), `"aaa"`) {
 			t.Fatalf("unknown field error = %v", err)
 		}
+	}
+}
+
+func TestMalformedInputEnvErrorNamesInputEnv(t *testing.T) {
+	node := helperNode("echo")
+	node.Config["input_env"] = []string{"not-a-map"}
+	_, err := parseConfig(node)
+	if err == nil || !strings.Contains(err.Error(), "input_env must be a mapping of string values") || strings.Contains(err.Error(), "input_env: env must") {
+		t.Fatalf("input_env configuration error = %v", err)
 	}
 }
 
