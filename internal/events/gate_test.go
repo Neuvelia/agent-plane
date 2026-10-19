@@ -8,13 +8,13 @@ import (
 )
 
 func gateFact() GateCheckPayload {
-	return GateCheckPayload{CheckID: "check", Kind: "json_predicate", Verdict: "red", Reason: "mismatch", Evidence: []GateEvidence{{Source: "json_predicate"}}}
+	return GateCheckPayload{Version: 1, Scope: CheckScope{CheckedInputs: []string{"data"}}, CheckID: "check", Kind: "json_predicate", Verdict: "red", Reason: "mismatch", Evidence: []GateEvidence{{Kind: "json_predicate", Source: "json_predicate"}}}
 }
 func TestGateSchemaCompatibilityAndValidation(t *testing.T) {
-	for version := 1; version <= 4; version++ {
+	for version := 1; version <= 5; version++ {
 		e := Event{SchemaVersion: version, Type: GateCheck, Payload: gateFact()}
 		b, err := json.Marshal(e)
-		if version < 4 {
+		if version < 5 {
 			if err == nil {
 				t.Fatal("old schema accepted gate")
 			}
@@ -25,7 +25,7 @@ func TestGateSchemaCompatibilityAndValidation(t *testing.T) {
 			t.Fatal("gate roundtrip failed")
 		}
 	}
-	for version := 1; version <= 4; version++ {
+	for version := 1; version <= 5; version++ {
 		e := Event{SchemaVersion: version, Type: RunStarted, Payload: RunStartedPayload{}}
 		b, err := json.Marshal(e)
 		var got Event
@@ -80,7 +80,7 @@ func TestGateRetentionAndDeepCopies(t *testing.T) {
 
 func TestCommandGateFactDetachesBytesAndExitCode(t *testing.T) {
 	exit := 1
-	p := GateCheckPayload{CheckID: "diff", Kind: "command", Verdict: "red", Reason: "files differ", Evidence: []GateEvidence{{Source: "command", ExitCode: &exit, Stdout: []byte{0, 255, 'x'}, Stderr: []byte("stderr"), StdoutOmitted: 99}}}
+	p := GateCheckPayload{Version: 1, Scope: CheckScope{CheckedInputs: []string{"data"}}, CheckID: "diff", Kind: "command", Verdict: "red", Reason: "files differ", Evidence: []GateEvidence{{Kind: "command", Source: "command", ExitCode: &exit, Stdout: []byte{0, 255, 'x'}, Stderr: []byte("stderr"), StdoutOmitted: 99}}}
 	c := NewCollector("run", "graph", "version")
 	if _, e := c.Append(Event{Type: GateCheck, Payload: p}); e != nil {
 		t.Fatal(e)
@@ -108,8 +108,9 @@ func TestNonCommandGateRejectsProcessOmissionCountersWithoutOverflow(t *testing.
 	for _, kind := range []string{"json_predicate", "reported_file_scope"} {
 		for _, counts := range [][2]uint64{{^uint64(0), 1}, {1, ^uint64(0)}, {^uint64(0), 0}, {0, ^uint64(0)}} {
 			p := gateFact()
-			p.Kind = kind
-			p.Evidence[0].Source = kind
+			p.Kind = CheckKind(kind)
+			p.Evidence[0].Source = EvidenceSource(kind)
+			p.Evidence[0].Kind = EvidenceKind(kind)
 			if kind == "reported_file_scope" {
 				p.Evidence[0].Source = "reported"
 			}

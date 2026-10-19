@@ -191,8 +191,15 @@ constant. Durable delivery remains later work. See ADR-0011.
 
 F1.4 schema 4 adds a bounded typed `gate_check` fact, retained independently
 of progress budgets on green and red before terminal lifecycle. Operational
-failures have no verdict. Readers accept schemas 1–4; Gate facts require 4.
-See ADR-0012. Later events include correction, artifact, and approval events.
+failures have no verdict. F1.5 emits schema 5 with the full version-1 CheckResult,
+including required nonnegative duration_ns, checked-input scope and typed
+references. Readers accept schemas 1–5; schema 4 Gate facts remain a distinct
+legacy payload with no invented metadata. Full results require schema 5.
+`events.CheckResults(trace, runID, nodeRunID)` returns detached current results
+in sequence order, including red; legacy inspection uses
+`events.LegacyGateCheckPayload` from the event payload. Gate facts remain
+independent of progress budgets. See ADR-0012 and ADR-0013. Later events include
+correction, artifact, and approval events.
 
 The event stream is an observable record of execution, not a container for hidden model reasoning.
 

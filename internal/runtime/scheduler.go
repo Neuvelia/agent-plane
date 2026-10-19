@@ -256,7 +256,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						if closed {
 							return
 						}
-						if check != nil || p.Validate() != nil || p.CheckID != node.Config["check_id"] || p.Kind != node.Config["kind"] {
+						if check != nil || p.Validate() != nil || p.CheckID != node.Config["check_id"] || string(p.Kind) != node.Config["kind"] {
 							checkInvalid = true
 							return
 						}
@@ -264,9 +264,17 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						redact := func(s string) string { return progress.redact(s) }
 						snapshot.CheckID = redact(snapshot.CheckID)
 						snapshot.Reason = redact(snapshot.Reason)
+						for i := range snapshot.Scope.CheckedInputs {
+							snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
+						}
+						sort.Strings(snapshot.Scope.CheckedInputs)
 						for i := range snapshot.Evidence {
 							e := &snapshot.Evidence[i]
 							e.Path = redact(e.Path)
+							if e.Reference != nil {
+								e.Reference.Identifier = redact(e.Reference.Identifier)
+								e.Reference.Reason = redact(e.Reference.Reason)
+							}
 							// Byte evidence is redacted again at the trust boundary for custom executors.
 							r := redactionTemplate.clone()
 							b := append([]byte(nil), r.Write(events.Stdout, e.Stdout)...)

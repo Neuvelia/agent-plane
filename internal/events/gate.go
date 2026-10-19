@@ -1,8 +1,11 @@
 package events
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
@@ -11,26 +14,107 @@ const GateCheck Type = "gate_check"
 const MaxGatePayload = 32768
 const MaxGateStream = 8192
 
-type GateEvidence struct {
-	Source        string `json:"source"`
-	Path          string `json:"path,omitempty"`
-	ExitCode      *int   `json:"exit_code,omitempty"`
-	Stdout        []byte `json:"stdout,omitempty"`
-	Stderr        []byte `json:"stderr,omitempty"`
-	StdoutOmitted uint64 `json:"stdout_omitted,omitempty"`
-	StderrOmitted uint64 `json:"stderr_omitted,omitempty"`
-	Omitted       uint64 `json:"omitted,omitempty"`
-}
-type GateCheckPayload struct {
-	CheckID  string         `json:"check_id"`
-	Kind     string         `json:"kind"`
-	Verdict  string         `json:"verdict"`
-	Reason   string         `json:"reason"`
-	Evidence []GateEvidence `json:"evidence"`
+type CheckKind string
+
+const (
+	CheckCommand           CheckKind = "command"
+	CheckJSONPredicate     CheckKind = "json_predicate"
+	CheckReportedFileScope CheckKind = "reported_file_scope"
+)
+
+type CheckVerdict string
+
+const (
+	CheckGreen CheckVerdict = "green"
+	CheckRed   CheckVerdict = "red"
+)
+
+type EvidenceKind string
+type EvidenceSource string
+
+type ReferenceKind string
+type ReferenceState string
+
+// EvidenceReference describes supplied metadata, without resolving a resource.
+type EvidenceReference struct {
+	Kind       ReferenceKind  `json:"kind"`
+	State      ReferenceState `json:"state"`
+	Identifier string         `json:"identifier,omitempty"`
+	Line       *int           `json:"line,omitempty"`
+	Reason     string         `json:"reason,omitempty"`
 }
 
+type CheckScope struct {
+	CheckedInputs []string `json:"checked_inputs"`
+}
+
+type GateEvidence struct {
+	Kind          EvidenceKind       `json:"kind"`
+	Reference     *EvidenceReference `json:"reference,omitempty"`
+	Source        EvidenceSource     `json:"source"`
+	Path          string             `json:"path,omitempty"`
+	ExitCode      *int               `json:"exit_code,omitempty"`
+	Stdout        []byte             `json:"stdout,omitempty"`
+	Stderr        []byte             `json:"stderr,omitempty"`
+	StdoutOmitted uint64             `json:"stdout_omitted,omitempty"`
+	StderrOmitted uint64             `json:"stderr_omitted,omitempty"`
+	Omitted       uint64             `json:"omitted,omitempty"`
+}
+type GateCheckPayload struct {
+	Version    int            `json:"check_result_version"`
+	Scope      CheckScope     `json:"scope"`
+	DurationNS int64          `json:"duration_ns"`
+	CheckID    string         `json:"check_id"`
+	Kind       CheckKind      `json:"kind"`
+	Verdict    CheckVerdict   `json:"verdict"`
+	Reason     string         `json:"reason"`
+	Evidence   []GateEvidence `json:"evidence"`
+}
+
+// CheckResult is the full versioned Gate result.
+type CheckResult = GateCheckPayload
+
 func (GateCheckPayload) eventPayload() {}
+
+func (p *GateCheckPayload) UnmarshalJSON(data []byte) error {
+	type wire GateCheckPayload
+	var fields map[string]json.RawMessage
+	if !utf8.Valid(data) {
+		return errors.New("invalid check result UTF8")
+	}
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, key := range []string{"check_result_version", "check_id", "kind", "verdict", "reason", "evidence", "scope", "duration_ns"} {
+		if len(fields[key]) == 0 || bytes.Equal(bytes.TrimSpace(fields[key]), []byte("null")) {
+			return fmt.Errorf("check result requires %s", key)
+		}
+	}
+	var v wire
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&v); err != nil {
+		return err
+	}
+	candidate := GateCheckPayload(v)
+	if err := candidate.Validate(); err != nil {
+		return err
+	}
+	*p = candidate
+	return nil
+}
 func (p GateCheckPayload) Validate() error {
+	if p.Version != 1 || p.DurationNS < 0 {
+		return errors.New("unsupported check result version or invalid duration")
+	}
+	if len(p.Scope.CheckedInputs) == 0 || len(p.Scope.CheckedInputs) > 32 || !sort.StringsAreSorted(p.Scope.CheckedInputs) {
+		return errors.New("invalid checked input scope")
+	}
+	for i, input := range p.Scope.CheckedInputs {
+		if !validText(input, 256) || i > 0 && input == p.Scope.CheckedInputs[i-1] {
+			return errors.New("invalid checked input scope")
+		}
+	}
 	if strings.TrimSpace(p.CheckID) == "" || len(p.CheckID) > 256 || !utf8.ValidString(p.CheckID) || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 512 || !utf8.ValidString(p.Reason) {
 		return errors.New("invalid gate identity/reason")
 	}
@@ -40,13 +124,21 @@ func (p GateCheckPayload) Validate() error {
 	if p.Verdict != "green" && p.Verdict != "red" {
 		return errors.New("invalid gate verdict")
 	}
-	if len(p.Evidence) == 0 || len(p.Evidence) > 32 {
+	if p.Evidence == nil || p.Verdict == CheckRed && len(p.Evidence) == 0 || len(p.Evidence) > 32 {
 		return errors.New("invalid gate evidence count")
 	}
 	if p.Kind == "command" && len(p.Evidence) != 1 {
 		return errors.New("command requires exactly one evidence item")
 	}
 	for _, e := range p.Evidence {
+		if e.Kind != EvidenceKind(p.Kind) {
+			return errors.New("invalid evidence kind")
+		}
+		if e.Reference != nil {
+			if err := e.Reference.Validate(); err != nil {
+				return err
+			}
+		}
 		if !utf8.ValidString(e.Path) || len(e.Stdout) > MaxGateStream || len(e.Stderr) > MaxGateStream {
 			return errors.New("invalid gate evidence")
 		}
@@ -54,7 +146,7 @@ func (p GateCheckPayload) Validate() error {
 		if p.Kind == "reported_file_scope" {
 			source = "reported"
 		}
-		if e.Source != source {
+		if string(e.Source) != string(source) {
 			return errors.New("invalid gate evidence source")
 		}
 		if p.Kind == "command" {
@@ -72,9 +164,20 @@ func (p GateCheckPayload) Validate() error {
 	return nil
 }
 func CloneGate(p GateCheckPayload) GateCheckPayload {
-	p.Evidence = append([]GateEvidence(nil), p.Evidence...)
+	p.Scope.CheckedInputs = append([]string(nil), p.Scope.CheckedInputs...)
+	if p.Evidence != nil {
+		p.Evidence = append([]GateEvidence{}, p.Evidence...)
+	}
 	for i := range p.Evidence {
 		e := &p.Evidence[i]
+		if e.Reference != nil {
+			r := *e.Reference
+			e.Reference = &r
+			if r.Line != nil {
+				v := *r.Line
+				e.Reference.Line = &v
+			}
+		}
 		e.Stdout = append([]byte(nil), e.Stdout...)
 		e.Stderr = append([]byte(nil), e.Stderr...)
 		if e.ExitCode != nil {
@@ -83,4 +186,102 @@ func CloneGate(p GateCheckPayload) GateCheckPayload {
 		}
 	}
 	return p
+}
+
+func validText(s string, limit int) bool {
+	return strings.TrimSpace(s) != "" && len(s) <= limit && utf8.ValidString(s)
+}
+func (r EvidenceReference) Validate() error {
+	if r.Kind != "file" && r.Kind != "test" && r.Kind != "diff" && r.Kind != "artifact" {
+		return errors.New("invalid reference kind")
+	}
+	if r.Line != nil && (r.Kind != "file" || *r.Line <= 0 || r.State != "known") {
+		return errors.New("invalid reference line")
+	}
+	switch r.State {
+	case "known":
+		if !validText(r.Identifier, 512) || r.Reason != "" {
+			return errors.New("invalid known reference")
+		}
+	case "unavailable", "invalid":
+		if r.Identifier != "" || !validText(r.Reason, 512) {
+			return errors.New("invalid reference diagnostic")
+		}
+	default:
+		return errors.New("invalid reference state")
+	}
+	return nil
+}
+
+func (e *GateEvidence) UnmarshalJSON(data []byte) error {
+	type wire GateEvidence
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for _, key := range []string{"kind", "source"} {
+		if len(fields[key]) == 0 || bytes.Equal(bytes.TrimSpace(fields[key]), []byte("null")) {
+			return fmt.Errorf("evidence requires %s", key)
+		}
+	}
+	for _, key := range []string{"reference", "exit_code", "path", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted"} {
+		if bytes.Equal(bytes.TrimSpace(fields[key]), []byte("null")) {
+			return fmt.Errorf("evidence %s may not be null", key)
+		}
+	}
+	var v wire
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&v); err != nil {
+		return err
+	}
+	*e = GateEvidence(v)
+	return nil
+}
+func (r *EvidenceReference) UnmarshalJSON(data []byte) error {
+	type wire EvidenceReference
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	for k, v := range fields {
+		if bytes.Equal(bytes.TrimSpace(v), []byte("null")) {
+			return fmt.Errorf("reference %s may not be null", k)
+		}
+	}
+	var v wire
+	d := json.NewDecoder(bytes.NewReader(data))
+	d.DisallowUnknownFields()
+	if err := d.Decode(&v); err != nil {
+		return err
+	}
+	candidate := EvidenceReference(v)
+	if err := candidate.Validate(); err != nil {
+		return err
+	}
+	*r = candidate
+	return nil
+}
+
+// CheckResults selects current full results only. Legacy schema4 facts remain
+// available through Event.Payload as LegacyGateCheckPayload, without upgrading.
+// Empty identities match nothing; results are detached and sequence ordered.
+func CheckResults(trace []Event, run RunID, node NodeRunID) []CheckResult {
+	if run == "" || node == "" {
+		return nil
+	}
+	selected := make([]Event, 0)
+	for _, e := range trace {
+		if e.RunID == run && e.NodeRunID == node && e.Type == GateCheck && e.SchemaVersion == SchemaVersion {
+			if _, ok := e.Payload.(CheckResult); ok {
+				selected = append(selected, e)
+			}
+		}
+	}
+	sort.SliceStable(selected, func(i, j int) bool { return selected[i].Sequence < selected[j].Sequence })
+	var results []CheckResult
+	for _, e := range selected {
+		results = append(results, CloneGate(e.Payload.(CheckResult)))
+	}
+	return results
 }
