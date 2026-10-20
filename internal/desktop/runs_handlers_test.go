@@ -52,7 +52,11 @@ func TestRunHandlerStartsSavedPreflightAndReattachesWithFreshToken(t *testing.T)
 	}
 	const runID = events.RunID("00000000-0000-4000-8000-000000000099")
 	runner := func(_ context.Context, definition *graph.Definition, _ map[string]graph.Value, _ runtime.Executor, options runtime.Options) (runtime.RunResult, error) {
-		options.OnRunReady(runID, events.NewCollector(runID, definition.ID, first.GraphVersion))
+		collector := events.NewCollector(runID, definition.ID, first.GraphVersion)
+		if _, err := collector.Append(events.Event{Type: events.RunStarted, Payload: events.RunStartedPayload{}}); err != nil {
+			return runtime.RunResult{}, err
+		}
+		options.OnRunReady(runID, collector)
 		return runtime.RunResult{RunID: runID, GraphID: definition.ID, GraphVersion: first.GraphVersion, State: runtime.RunSucceeded}, nil
 	}
 	runs := NewRunService(context.Background(), preflight.PrepareStart, runner)
@@ -74,6 +78,10 @@ func TestRunHandlerStartsSavedPreflightAndReattachesWithFreshToken(t *testing.T)
 	reattached, serviceErr := handlers["runs.start"](context.Background(), startParams(second.PreflightToken))
 	if serviceErr != nil || reattached.(RunStartResult).RunID != runID {
 		t.Fatalf("reattach = %#v, %v", reattached, serviceErr)
+	}
+	page, serviceErr := handlers["runs.events"](context.Background(), json.RawMessage(`{"run_id":"00000000-0000-4000-8000-000000000099","after_sequence":0,"limit":8}`))
+	if serviceErr != nil || len(page.(RunEventsPage).Events) != 1 || page.(RunEventsPage).Events[0].Type != events.RunStarted {
+		t.Fatalf("replay after reattach = %#v, %v", page, serviceErr)
 	}
 	cancelled, serviceErr := handlers["runs.cancel"](context.Background(), json.RawMessage(`{"run_id":"00000000-0000-4000-8000-000000000099"}`))
 	if serviceErr != nil || cancelled.(RunCancelResult).RunID != runID || cancelled.(RunCancelResult).State != runtime.RunSucceeded {

@@ -342,13 +342,7 @@ func runSnapshotLocked(record *ownedRun) (RunSnapshot, *ServiceError) {
 			return RunSnapshot{}, protocolError("unavailable", "Run trace is unavailable")
 		}
 		snapshot.TraceWatermark = page.Watermark
-		snapshot.DeliveryStats = RunDeliveryStats{
-			RetainedOmittedEvents: page.Stats.RetainedOmittedEvents,
-			RetainedOmittedBytes:  page.Stats.RetainedOmittedBytes,
-			LiveOmittedEvents:     page.Stats.LiveOmittedEvents,
-			LiveOmittedBytes:      page.Stats.LiveOmittedBytes,
-			LiveStopped:           page.Stats.LiveStopped,
-		}
+		snapshot.DeliveryStats = runDeliveryStats(page.Stats)
 		record.watermark = page.Watermark
 	}
 	if record.finished {

@@ -13,6 +13,7 @@ import (
 type Sink interface{ Append(Event) (Event, error) }
 
 var ErrCollectorFinished = errors.New("event collector is finished")
+var ErrTraceEventTooLarge = errors.New("retained event exceeds page byte limit")
 
 const (
 	MaxRetainedProgressBytes = 4 << 20
@@ -38,6 +39,7 @@ type TracePage struct {
 // TraceReader exposes retained facts without allowing a caller to append them.
 type TraceReader interface {
 	Page(after uint64, limit int) (TracePage, error)
+	PageBounded(after uint64, limit, maxEventBytes int) (TracePage, error)
 }
 
 // DeliveryStats counts encoded whole-event JSON bytes, not Go heap usage.
@@ -60,6 +62,7 @@ type Collector struct {
 	runID                        RunID
 	graphID, graphVersion        string
 	events                       []Event
+	eventSizes                   []int
 	sequence                     uint64
 	finished, finalizing         bool
 	retainedBytes, retainedItems int
@@ -154,9 +157,11 @@ func (c *Collector) Append(event Event) (Event, error) {
 		if c.stats.RetainedOmittedEvents > 0 || c.stats.LiveOmittedEvents > 0 {
 			marker := c.prepare(Event{Type: ProgressOmitted, Payload: ProgressOmittedPayload{RetainedEvents: c.stats.RetainedOmittedEvents, RetainedBytes: c.stats.RetainedOmittedBytes, LiveEvents: c.stats.LiveOmittedEvents, LiveBytes: c.stats.LiveOmittedBytes, LiveStopped: c.stats.LiveStopped}})
 			c.events = append(c.events, marker)
+			c.eventSizes = append(c.eventSizes, eventJSONSize(marker))
 		}
 		event = c.prepare(event)
 		c.events = append(c.events, event)
+		c.eventSizes = append(c.eventSizes, eventJSONSize(event))
 		c.finished = true
 		c.mu.Unlock()
 		return event, nil
@@ -170,6 +175,7 @@ func (c *Collector) Append(event Event) (Event, error) {
 			c.stats.RetainedOmittedBytes += uint64(size)
 		} else {
 			c.events = append(c.events, event)
+			c.eventSizes = append(c.eventSizes, size)
 			c.retainedBytes += size
 			c.retainedItems++
 			c.stats.RetainedPeakBytes = c.retainedBytes
@@ -177,6 +183,7 @@ func (c *Collector) Append(event Event) (Event, error) {
 		}
 	} else {
 		c.events = append(c.events, event)
+		c.eventSizes = append(c.eventSizes, size)
 	}
 	if c.live != nil {
 		if c.stats.LiveStopped || len(c.queue) >= MaxLiveItems || c.queueBytes+size > MaxLiveBytes {
@@ -203,6 +210,10 @@ func (c *Collector) Append(event Event) (Event, error) {
 	event.Payload = copyPayload(event.Payload)
 	c.mu.Unlock()
 	return event, nil
+}
+func eventJSONSize(event Event) int {
+	encoded, _ := json.Marshal(event)
+	return len(encoded)
 }
 func (c *Collector) prepare(e Event) Event {
 	c.sequence++
@@ -231,6 +242,19 @@ func (c *Collector) Snapshot() []Event {
 // gaps can be omitted progress; callers must follow NextAfter until HasMore is
 // false before treating Watermark as fully read.
 func (c *Collector) Page(after uint64, limit int) (TracePage, error) {
+	return c.page(after, limit, 0)
+}
+
+// PageBounded selects the largest retained prefix whose encoded event objects
+// and array commas fit maxEventBytes. It never copies excluded payloads.
+func (c *Collector) PageBounded(after uint64, limit, maxEventBytes int) (TracePage, error) {
+	if maxEventBytes < 1 {
+		return TracePage{}, errors.New("trace page byte limit must be positive")
+	}
+	return c.page(after, limit, maxEventBytes)
+}
+
+func (c *Collector) page(after uint64, limit, maxEventBytes int) (TracePage, error) {
 	if limit < 1 || limit > MaxTracePageItems {
 		return TracePage{}, fmt.Errorf("trace page limit must be from 1 to %d", MaxTracePageItems)
 	}
@@ -244,6 +268,23 @@ func (c *Collector) Page(after uint64, limit int) (TracePage, error) {
 	end := start + limit
 	if end > len(c.events) {
 		end = len(c.events)
+	}
+	if maxEventBytes > 0 {
+		used := 0
+		for i := start; i < end; i++ {
+			next := c.eventSizes[i]
+			if i > start {
+				next++ // JSON array comma
+			}
+			if next > maxEventBytes-used {
+				if i == start {
+					return TracePage{}, ErrTraceEventTooLarge
+				}
+				end = i
+				break
+			}
+			used += next
+		}
 	}
 	page.Events = make([]Event, 0, end-start)
 	for _, event := range c.events[start:end] {

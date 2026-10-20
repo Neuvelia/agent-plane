@@ -21,7 +21,8 @@ import (
 
 type fixedTrace struct{ page events.TracePage }
 
-func (f fixedTrace) Page(uint64, int) (events.TracePage, error) { return f.page, nil }
+func (f fixedTrace) Page(uint64, int) (events.TracePage, error)             { return f.page, nil }
+func (f fixedTrace) PageBounded(uint64, int, int) (events.TracePage, error) { return f.page, nil }
 
 func runRequest() RunStartRequest {
 	return RunStartRequest{IdempotencyKey: "11111111-1111-4111-8111-111111111111",

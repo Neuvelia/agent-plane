@@ -2,6 +2,8 @@ package events
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -39,6 +41,30 @@ func TestLiveEventsRemainPrefixAfterCancellationDropsAnEvent(t *testing.T) {
 		t.Fatal("terminal fact missing")
 	}
 
+}
+
+func TestCollectorPageBoundedSelectsLargeFactsBeforeCopying(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	largePath := strings.Repeat("x", 4<<20)
+	for i := 0; i < 3; i++ {
+		if _, err := collector.Append(Event{Type: NodeEvidence,
+			Payload: NodeEvidencePayload{ChangedFiles: []ChangedFile{{Path: largePath}}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	const budget = (7 << 20) - 4096
+	first, err := collector.PageBounded(0, 3, budget)
+	if err != nil || len(first.Events) != 1 || first.NextAfter != 1 || !first.HasMore || first.Watermark != 3 {
+		t.Fatalf("first bounded page = %d facts, cursor %d, more %t, watermark %d, %v",
+			len(first.Events), first.NextAfter, first.HasMore, first.Watermark, err)
+	}
+	second, err := collector.PageBounded(first.NextAfter, 3, budget)
+	if err != nil || len(second.Events) != 1 || second.Events[0].Sequence != 2 || second.NextAfter != 2 || !second.HasMore {
+		t.Fatalf("second bounded page = %+v, %v", second, err)
+	}
+	if _, err := collector.PageBounded(0, 1, 1); !errors.Is(err, ErrTraceEventTooLarge) {
+		t.Fatalf("single oversized event = %v", err)
+	}
 }
 
 func TestCollectorSequencesConcurrentEventsAndCopiesLogs(t *testing.T) {

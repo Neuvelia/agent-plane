@@ -26,6 +26,17 @@ Subscribers attach to a captured watermark before replay/tailing; deduplicate
 sequence identities and reconcile final snapshots. Transport never renumbers
 runtime events or claims omitted progress was retained.
 
+`runs.events` accepts an exact RunID, an unsigned `after_sequence` cursor and
+limit 1–256. It echoes the cursor and returns one atomic retained page with
+`next_after`, `has_more`, watermark, `finished` and the five omission counters
+also exposed by `runs.snapshot`. Clients follow `next_after` while `has_more`
+and may then advance to the watermark across omitted progress. A page shrinks
+to fit a 7 MiB result budget within the 8 MiB frame; a single fact that cannot
+fit returns `response_too_large` without skipping it. A `finished` trace page
+can precede the run owner's terminal snapshot by a brief scheduling interval;
+the client reconciles until the snapshot reports its final state or explicit
+`unknown`. Full output values require a separate bounded F2.9 contract.
+
 The service owns a revisioned document buffer and atomic save/conflict detection,
 plus preflight tokens bound to exact launch payloads. Start idempotency is keyed
 by payload digest and explicit client key. One desktop run is active at a time.

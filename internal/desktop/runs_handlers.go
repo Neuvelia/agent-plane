@@ -15,6 +15,7 @@ func NewRunHandlers(runs *RunService) map[string]Handler {
 		"runs.start":    set.start,
 		"runs.cancel":   set.cancel,
 		"runs.snapshot": set.snapshot,
+		"runs.events":   set.events,
 	}
 }
 
@@ -73,6 +74,29 @@ func (h runHandlerSet) snapshot(_ context.Context, raw json.RawMessage) (any, *S
 		return nil, err
 	}
 	result, serviceErr := h.runs.Snapshot(runID)
+	if serviceErr != nil {
+		return nil, serviceErr
+	}
+	return result, nil
+}
+
+func (h runHandlerSet) events(_ context.Context, raw json.RawMessage) (any, *ServiceError) {
+	if h.runs == nil {
+		return nil, protocolError("unavailable", "Run service is unavailable")
+	}
+	fields, err := strictParams(raw, "run_id", "after_sequence", "limit")
+	if err != nil {
+		return nil, err
+	}
+	var id string
+	var after uint64
+	var limit int
+	if requiredField(fields, "run_id", &id) != nil || !validSaveID(id) ||
+		requiredField(fields, "after_sequence", &after) != nil ||
+		requiredField(fields, "limit", &limit) != nil || limit < 1 || limit > events.MaxTracePageItems {
+		return nil, protocolError("invalid_request", "Invalid event page selection")
+	}
+	result, serviceErr := h.runs.Events(events.RunID(id), after, limit)
 	if serviceErr != nil {
 		return nil, serviceErr
 	}

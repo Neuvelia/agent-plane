@@ -75,7 +75,8 @@ func TestSidecarStdioHandshake(t *testing.T) {
 		!bytes.Contains(responses[1].Result, []byte(`"runs.preflight"`)) ||
 		!bytes.Contains(responses[1].Result, []byte(`"runs.start"`)) ||
 		!bytes.Contains(responses[1].Result, []byte(`"runs.cancel"`)) ||
-		!bytes.Contains(responses[1].Result, []byte(`"runs.snapshot"`)) {
+		!bytes.Contains(responses[1].Result, []byte(`"runs.snapshot"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"runs.events"`)) {
 		t.Fatalf("hello response = %#v", responses[1])
 	}
 	if responses[2].RequestID != "validation" || responses[2].Error == nil || responses[2].Error.Code != "not_found" {
