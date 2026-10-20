@@ -4,9 +4,30 @@ import (
 	"bytes"
 	"errors"
 	"sort"
+	"unicode/utf8"
 
 	"agentplane/internal/events"
 )
+
+// ValidateLogRedactions performs the same static safety check as Run before
+// any node dispatch. Desktop preflight uses it before issuing a Start token.
+func ValidateLogRedactions(values []string, observed bool) error {
+	r, err := newLogRedactor(values)
+	if err != nil {
+		return err
+	}
+	if observed {
+		for _, value := range values {
+			if !utf8.ValidString(value) {
+				return errors.New("redaction value is not valid UTF-8")
+			}
+		}
+		if !utf8.Valid(r.marker) {
+			return errors.New("no UTF-8-safe redaction marker is available")
+		}
+	}
+	return nil
+}
 
 // logRedactor keeps the undecidable tail of each byte stream until a later
 // write or final flush can rule out a secret spanning the boundary.

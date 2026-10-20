@@ -22,7 +22,12 @@ const maxRecord = 1 << 20
 const resultSchema = `{"type":"object","additionalProperties":false,"required":["summary","artifacts"],"properties":{"summary":{"type":"string"},"artifacts":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["ref","name"],"properties":{"ref":{"type":"string"},"name":{"type":"string"}}}}}}`
 
 // Adapter never forwards the ambient environment. Binary must be absolute.
-type Adapter struct{ Binary string }
+// A non-nil FrozenEnvironment restricts environment_refs to values captured
+// before the run; nil preserves the CLI's existing explicit ambient lookup.
+type Adapter struct {
+	Binary            string
+	FrozenEnvironment map[string]string
+}
 
 func (Adapter) ID() agent.AdapterID { return "codex" }
 
@@ -134,6 +139,20 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func environment(refs []string) ([]string, error) {
+	return environmentValues(refs, os.LookupEnv)
+}
+
+func (a Adapter) environment(refs []string) ([]string, error) {
+	if a.FrozenEnvironment == nil {
+		return environment(refs)
+	}
+	return environmentValues(refs, func(name string) (string, bool) {
+		value, ok := a.FrozenEnvironment[name]
+		return value, ok
+	})
+}
+
+func environmentValues(refs []string, lookup func(string) (string, bool)) ([]string, error) {
 	env := make([]string, 0, len(refs))
 	seen := map[string]bool{}
 	for _, name := range refs {
@@ -144,7 +163,7 @@ func environment(refs []string) ([]string, error) {
 			continue
 		}
 		seen[name] = true
-		value, ok := os.LookupEnv(name)
+		value, ok := lookup(name)
 		if !ok || strings.ContainsRune(value, 0) {
 			return nil, fail("environment", "referenced environment variable is missing or invalid", nil)
 		}
@@ -163,7 +182,7 @@ func (a Adapter) ExecuteWithNormalizedProgress(ctx context.Context, in agent.Age
 }
 func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, log func(string, []byte), normalized func(events.Type, events.Payload)) (agent.AgentExecutionOutput, error) {
 	var out agent.AgentExecutionOutput
-	env, err := environment(in.EnvironmentRefs)
+	env, err := a.environment(in.EnvironmentRefs)
 	if err != nil {
 		return out, err
 	}

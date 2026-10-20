@@ -109,6 +109,34 @@ func helperNode(mode string, more ...string) graph.NodeDefinition {
 	}}
 }
 
+func TestFrozenAllowlistDoesNotReadAmbientAtExecution(t *testing.T) {
+	t.Setenv("SHELL_ALLOWED", "ambient")
+	node := helperNode("env")
+	node.Config["env_allowlist"] = []string{"SHELL_ALLOWED"}
+	executor := Executor{FrozenEnvironment: map[string]string{"SHELL_ALLOWED": "pinned"}}
+	first, err := executor.Execute(context.Background(), "node", node, nil)
+	if err != nil || first.Stdout != "pinned||" {
+		t.Fatalf("first frozen execution = %#v, %v", first, err)
+	}
+	t.Setenv("SHELL_ALLOWED", "changed-after-start")
+	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}}
+	second, err := executor.ExecuteNode(context.Background(), "node", node, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, _ := second["stdout"].AsString()
+	if got != "pinned||" {
+		t.Fatalf("node execution reread ambient value: %q", got)
+	}
+	if _, err := (Executor{FrozenEnvironment: map[string]string{}}).Execute(context.Background(), "node", node, nil); err == nil || strings.Contains(err.Error(), "changed-after-start") {
+		t.Fatalf("missing frozen value fell back or leaked: %v", err)
+	}
+	legacy, err := (Executor{}).Execute(context.Background(), "node", node, nil)
+	if err != nil || legacy.Stdout != "changed-after-start||" {
+		t.Fatalf("legacy ambient execution changed: %#v, %v", legacy, err)
+	}
+}
+
 func TestExecuteCapturesSeparateStreamsAndPreservesArgv(t *testing.T) {
 	result, err := (Executor{}).Execute(context.Background(), "worker", helperNode("echo", "two words", "$HOME; $(echo unsafe)", "quote\"'\\"), nil)
 	if err != nil {

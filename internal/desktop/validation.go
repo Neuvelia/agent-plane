@@ -100,6 +100,10 @@ func safeDiagnosticText(code string, severity graph.Severity) (string, string) {
 		return "Node or loop configuration is invalid", "Correct the indicated node configuration"
 	case "E_ADAPTER_UNAVAILABLE", "E_ADAPTER_UNSUPPORTED", "E_GIT_UNAVAILABLE":
 		return "Required local tool is unavailable or unsupported", "Check the configured executable and workspace"
+	case "E_ENVIRONMENT_UNAVAILABLE":
+		return "A referenced environment value is unavailable or invalid", "Configure the named local value before preflight"
+	case "E_REDACTION_LIMIT":
+		return "Launch redaction values exceed local limits", "Reduce environment or graph input values"
 	case "E_NODE_TYPE_UNSUPPORTED":
 		return "Node type is unsupported by the desktop service", "Use a supported node type"
 	case "E_INPUT_VALUE_INVALID":

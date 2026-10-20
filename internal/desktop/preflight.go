@@ -93,14 +93,18 @@ type PreflightService struct {
 	ordinal   uint64
 	bytes     int
 	now       func() time.Time
+	sealKey   [32]byte
+	sealErr   error
 }
 
 func NewPreflightService(registry *Registry, documents *DocumentStore, detector CapabilityDetector) *PreflightService {
 	if detector == nil {
 		detector = installedCapabilities{}
 	}
-	return &PreflightService{registry: registry, documents: documents, detector: detector,
+	s := &PreflightService{registry: registry, documents: documents, detector: detector,
 		tokens: make(map[string]PreflightTicket), now: time.Now}
+	_, s.sealErr = rand.Read(s.sealKey[:])
+	return s
 }
 
 func (s *PreflightService) Preflight(ctx context.Context, request PreflightRequest) (PreflightResult, error) {
@@ -108,6 +112,9 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 		return PreflightResult{}, errors.New("preflight context is nil")
 	}
 	if s == nil || s.registry == nil || s.documents == nil || s.detector == nil {
+		return PreflightResult{}, ErrRegistryUnavailable
+	}
+	if s.sealErr != nil {
 		return PreflightResult{}, ErrRegistryUnavailable
 	}
 	doc, err := s.documents.Get(request.DocumentID, request.Revision)
@@ -157,8 +164,13 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() {
 		return PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}, nil
 	}
-	capabilityHash, checks := s.checkNodes(ctx, definition, workspace, settings)
+	capabilityHash, environment, checks := s.checkNodesWithEnvironment(ctx, definition, workspace, settings)
 	findings = append(findings, checks...)
+	if !(graph.ValidationResult{Diagnostics: findings}).HasErrors() {
+		if _, err := launchRedactions(environment, request.Inputs); err != nil {
+			findings = append(findings, preflightDiagnostic(definition.ID, "", "inputs", "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
+		}
+	}
 	result := PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}
 	if result.HasErrors {
 		return result, nil
@@ -191,6 +203,12 @@ func preflightDiagnostic(graphID, nodeID, path, code, message string) graph.Diag
 }
 
 func (s *PreflightService) checkNodes(ctx context.Context, definition *graph.Definition, workspace ResolvedWorkspace, settings LocalSettings) (string, []graph.Diagnostic) {
+	hash, _, findings := s.checkNodesWithEnvironment(ctx, definition, workspace, settings)
+	return hash, findings
+}
+
+func (s *PreflightService) checkNodesWithEnvironment(ctx context.Context, definition *graph.Definition, workspace ResolvedWorkspace, settings LocalSettings) (string, LaunchEnvironment, []graph.Diagnostic) {
+	var empty LaunchEnvironment
 	ids := make([]string, 0, len(definition.Nodes))
 	for id := range definition.Nodes {
 		ids = append(ids, id)
@@ -231,42 +249,80 @@ func (s *PreflightService) checkNodes(ctx context.Context, definition *graph.Def
 		}
 	}
 	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() {
-		return "", findings
+		return "", empty, findings
 	}
 	if err := runtime.ValidateLoopConfigs(definition, loopCapabilityExecutor{}); err != nil {
 		findings = append(findings, preflightDiagnostic(definition.ID, "", "nodes", "E_LOOP_PREFLIGHT", "Loop configuration is invalid"))
-		return "", findings
+		return "", empty, findings
+	}
+	environment, err := CaptureLaunchEnvironment(definition)
+	if err != nil {
+		findings = append(findings, preflightDiagnostic(definition.ID, "", "nodes", "E_ENVIRONMENT_UNAVAILABLE", "A referenced environment value is unavailable or invalid"))
+		return "", empty, findings
+	}
+	environmentSeal, err := environment.Seal(s.sealKey[:])
+	if err != nil {
+		findings = append(findings, preflightDiagnostic(definition.ID, "", "nodes", "E_ENVIRONMENT_UNAVAILABLE", "A referenced environment value is unavailable or invalid"))
+		return "", empty, findings
 	}
 	var report agent.CapabilityReport
+	var codexFingerprint, gitFingerprint string
 	if needsAgent {
 		if settings.CodexBinaryPath == nil {
 			findings = append(findings, preflightDiagnostic(definition.ID, "", "settings.codex_binary_path", "E_ADAPTER_UNAVAILABLE", "Configure a supported Codex executable"))
 		} else {
-			var err error
-			report, err = s.detector.DetectCodex(ctx, *settings.CodexBinaryPath)
+			codexFingerprint, err = fingerprintTool(*settings.CodexBinaryPath)
+			if err == nil {
+				report, err = s.detector.DetectCodex(ctx, *settings.CodexBinaryPath)
+			}
+			if err == nil {
+				var after string
+				after, err = fingerprintTool(*settings.CodexBinaryPath)
+				if err == nil && after != codexFingerprint {
+					err = ErrToolUnavailable
+				}
+			}
 			if err != nil || !report.Available || report.Workspace == nil || !*report.Workspace {
 				findings = append(findings, preflightDiagnostic(definition.ID, "", "settings.codex_binary_path", "E_ADAPTER_UNAVAILABLE", "Configured Codex capability is unavailable"))
 			}
 		}
 	}
 	if needsGit {
-		if settings.GitBinaryPath == nil || s.detector.CheckGit(ctx, workspace.CanonicalPath, derefPath(settings.GitBinaryPath)) != nil {
+		if settings.GitBinaryPath != nil {
+			gitFingerprint, err = fingerprintTool(*settings.GitBinaryPath)
+			if err == nil {
+				err = s.detector.CheckGit(ctx, workspace.CanonicalPath, *settings.GitBinaryPath)
+			}
+			if err == nil {
+				var after string
+				after, err = fingerprintTool(*settings.GitBinaryPath)
+				if err == nil && after != gitFingerprint {
+					err = ErrToolUnavailable
+				}
+			}
+		} else {
+			err = ErrToolUnavailable
+		}
+		if err != nil {
 			findings = append(findings, preflightDiagnostic(definition.ID, "", "settings.git_binary_path", "E_GIT_UNAVAILABLE", "Configured Git executable or worktree is unavailable"))
 		}
 	}
 	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() {
-		return "", findings
+		return "", empty, findings
 	}
 	if err := runtime.PreflightLoops(ctx, definition, loopCapabilityExecutor{report: report}); err != nil {
 		findings = append(findings, preflightDiagnostic(definition.ID, "", "nodes", "E_LOOP_PREFLIGHT", "Loop configuration or correction capability is unavailable"))
-		return "", findings
+		return "", empty, findings
 	}
 	encoded, _ := json.Marshal(struct {
-		CodexPath *string                `json:"codex_path,omitempty"`
-		GitPath   *string                `json:"git_path,omitempty"`
-		Report    agent.CapabilityReport `json:"report"`
-	}{settings.CodexBinaryPath, settings.GitBinaryPath, report})
-	return digestBytes(encoded), findings
+		CodexPath        *string                `json:"codex_path,omitempty"`
+		GitPath          *string                `json:"git_path,omitempty"`
+		CodexFingerprint string                 `json:"codex_fingerprint"`
+		GitFingerprint   string                 `json:"git_fingerprint"`
+		EnvironmentSeal  string                 `json:"environment_seal"`
+		Report           agent.CapabilityReport `json:"report"`
+	}{settings.CodexBinaryPath, settings.GitBinaryPath, codexFingerprint, gitFingerprint, environmentSeal, report})
+	return digestBytes(encoded), environment, findings
 }
 
 func derefPath(path *string) string {

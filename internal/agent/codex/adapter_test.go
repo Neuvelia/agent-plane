@@ -26,6 +26,27 @@ func gitTest(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %v: %v %s", args, e, b)
 	}
 }
+
+func TestFrozenEnvironmentNeverFallsBackToAmbient(t *testing.T) {
+	t.Setenv("AGENTPLANE_FREEZE_ONE", "ambient")
+	t.Setenv("AGENTPLANE_FREEZE_TWO", "ambient-two")
+	a := Adapter{FrozenEnvironment: map[string]string{"AGENTPLANE_FREEZE_ONE": "captured"}}
+	got, err := a.environment([]string{"AGENTPLANE_FREEZE_ONE", "AGENTPLANE_FREEZE_ONE"})
+	if err != nil || !reflect.DeepEqual(got, []string{"AGENTPLANE_FREEZE_ONE=captured"}) {
+		t.Fatalf("frozen environment = %#v, %v", got, err)
+	}
+	if _, err := a.environment([]string{"AGENTPLANE_FREEZE_TWO"}); err == nil || strings.Contains(err.Error(), "ambient") {
+		t.Fatalf("missing frozen ref fell back or leaked ambient value: %v", err)
+	}
+	a = Adapter{FrozenEnvironment: map[string]string{}}
+	if _, err := a.environment([]string{"AGENTPLANE_FREEZE_ONE"}); err == nil {
+		t.Fatal("empty frozen map fell back to ambient")
+	}
+	legacy, err := (Adapter{}).environment([]string{"AGENTPLANE_FREEZE_ONE"})
+	if err != nil || !reflect.DeepEqual(legacy, []string{"AGENTPLANE_FREEZE_ONE=ambient"}) {
+		t.Fatalf("legacy environment changed: %#v, %v", legacy, err)
+	}
+}
 func repo(t *testing.T) string {
 	t.Helper()
 	d := t.TempDir()

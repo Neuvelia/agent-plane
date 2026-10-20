@@ -83,6 +83,36 @@ facts; a token alone does not authorize a stale launch. Recovery of pending
 document saves runs before document methods become available; ambiguous
 recovery fails the document service closed.
 
+`runs.start` supplies a UUID idempotency key, opaque preflight token, echoed
+payload digest, saved document ID/revision, workspace ID, exact typed inputs and
+max concurrency. The service binds an accepted key to the logical payload,
+excluding the token so a fresh token for identical data can reattach. A first
+launch requires a live token and repeats saved-file, workspace, settings,
+environment, executable and capability checks under the one-run owner lock.
+The configured executable fingerprint includes regular-file identity, size,
+modification time and a bounded content hash. Path-based process creation still
+has an external replacement race after that check. Shell allowlisted variables
+and Codex environment references are captured before Start and passed as frozen
+values to the desktop executors; nil frozen maps preserve the CLI behavior.
+Environment values enter a service-keyed HMAC capability seal, not a public raw
+hash. Explicit environment values and supplied string graph inputs enter the
+runtime log redactor within bounded launch limits.
+
+The run owner publishes only the RunID from `runtime.Run`'s readiness callback.
+Pre-ready errors release the reservation without a phantom run. Accepted runs
+outlive renderer requests while the sidecar remains alive. `runs.cancel` targets
+an exact RunID and joins runtime cleanup. The sidecar cancels and joins owned
+work on every protocol return, including EOF or pipe error. Cancel responds
+with the exact `{run_id,state}` after cleanup, including for an older accepted
+run whose trace has been evicted. `runs.snapshot`
+returns safe run and node facts plus the retained trace watermark and omission
+counts; raw errors, output values and input values stay out of this DTO. Until
+F2.9 persists history, the service retains at most 64 accepted key tombstones
+and the active plus most recent completed trace. Older trace lookup reports
+unavailable rather than fabricating an event stream. Sidecar death does not
+resume execution. Existing Shell output capture can still grow during one
+active run; this cap bounds cumulative retained desktop runs, not that peak.
+
 Protocol document DTOs carry exact UTF-8 text as canonical standard base64
 (`text_base64`, at most 4 MiB decoded). Plain JSON escaping can expand accepted
 document text beyond the 8 MiB frame; base64 plus the bounded diagnostics fits

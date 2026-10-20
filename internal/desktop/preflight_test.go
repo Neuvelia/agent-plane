@@ -282,6 +282,20 @@ outputs: {}
 	if err != nil || second.HasErrors || second.PayloadDigest == first.PayloadDigest {
 		t.Fatalf("changed capability = %#v, %v", second, err)
 	}
+	if err := os.WriteFile(codexPath, []byte("new fake executable"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	changedBinary, err := service.Preflight(context.Background(), request)
+	if err != nil || changedBinary.HasErrors || changedBinary.PayloadDigest == second.PayloadDigest {
+		t.Fatalf("changed executable content = %#v, %v", changedBinary, err)
+	}
+	if _, serviceErr := service.PrepareStart(context.Background(), RunStartRequest{
+		PreflightToken: second.PreflightToken, PayloadDigest: second.PayloadDigest,
+		DocumentID: saved.DocumentID, Revision: saved.Revision, WorkspaceID: workspace.WorkspaceID,
+		Inputs: request.Inputs, MaxConcurrency: 1,
+	}); serviceErr == nil || serviceErr.Code != "conflict" {
+		t.Fatalf("changed executable accepted by Start: %v", serviceErr)
+	}
 	request.MaxConcurrency = 5
 	tooHigh, err := service.Preflight(context.Background(), request)
 	if err != nil || !tooHigh.HasErrors || tooHigh.PreflightToken != "" {
@@ -383,7 +397,16 @@ func TestPreflightStaticGateAndLoopCapability(t *testing.T) {
 	fake := &fakeCapabilities{report: agent.CapabilityReport{Available: true, Workspace: &trueValue,
 		CorrectionFeedback: &falseValue}}
 	service.detector = fake
-	codexPath, gitPath := "/tmp/codex", "/tmp/git"
+	toolDir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	codexPath, gitPath := filepath.Join(toolDir, "codex"), filepath.Join(toolDir, "git")
+	for _, path := range []string{codexPath, gitPath} {
+		if err := os.WriteFile(path, []byte("fake tool"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
 	settings := defaultSettings()
 	settings.CodexBinaryPath, settings.GitBinaryPath = &codexPath, &gitPath
 	malformed := &graph.Definition{ID: "loop", Nodes: map[string]graph.NodeDefinition{
