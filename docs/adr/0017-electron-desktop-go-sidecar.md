@@ -65,6 +65,29 @@ post-replacement sync failure blocks further service mutations until restart
 because durability is uncertain. The Windows native lock, replacement and
 reparse/ACL checks must pass before Windows registry support is enabled.
 
+Graph validation returns the existing Go diagnostic codes with flat typed
+locations and fixed code-specific text, rather than echoing authored content
+inside messages. A bounded response retains at most 1,000 findings within a
+1 MiB diagnostic JSON budget and reports the
+total, omitted count and an untruncated `has_errors` flag. Current YAML parsing
+does not claim source line or column. Preflight requires a valid saved document
+whose exact bytes and file identity still match disk, plus a selected workspace
+from the same registered project. It checks typed inputs and static node
+configuration without running graph commands. Agent capability is derived from
+the configured executable and the runtime's actual Git path; Shell-only graphs
+do not need either. Green preflight creates an opaque in-memory token bound to
+document/workspace identities, input bytes, settings and detected capability.
+Tokens expire after 120 seconds and are bounded to eight entries and 16 MiB of
+retained graph text, evicting oldest entries first. Start must recheck these
+facts; a token alone does not authorize a stale launch. Recovery of pending
+document saves runs before document methods become available; ambiguous
+recovery fails the document service closed.
+
+Protocol document DTOs carry exact UTF-8 text as canonical standard base64
+(`text_base64`, at most 4 MiB decoded). Plain JSON escaping can expand accepted
+document text beyond the 8 MiB frame; base64 plus the bounded diagnostics fits
+that limit. The preload converts this encoding to renderer-facing text.
+
 ## Alternatives considered
 
 A browser UI plus localhost server is possible but conflicts with the requested

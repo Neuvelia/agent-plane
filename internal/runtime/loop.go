@@ -39,7 +39,20 @@ type LoopPreflight interface {
 	PreflightNode(context.Context, string, graph.NodeDefinition) error
 }
 
-func preflightLoops(ctx context.Context, d *graph.Definition, e Executor) error {
+// PreflightLoops applies the same static configuration and capability checks
+// that Run performs before creating a run identity or dispatching any node.
+func PreflightLoops(ctx context.Context, definition *graph.Definition, executor Executor) error {
+	return preflightLoops(ctx, definition, executor)
+}
+
+// ValidateLoopConfigs performs the loop's static checks without probing an
+// adapter. Desktop preflight uses it before any executable capability probe.
+func ValidateLoopConfigs(d *graph.Definition, e Executor) error {
+	_, _, err := validateLoopConfigs(d, e)
+	return err
+}
+
+func validateLoopConfigs(d *graph.Definition, e Executor) ([]string, LoopPreflight, error) {
 	ids := make([]string, 0)
 	for _, id := range sortedDefinitionIDs(d) {
 		if d.Nodes[id].Loop != nil {
@@ -47,31 +60,31 @@ func preflightLoops(ctx context.Context, d *graph.Definition, e Executor) error 
 		}
 	}
 	if len(ids) == 0 {
-		return nil
+		return ids, nil, nil
 	}
 	fail := func(id string, err error) error {
 		return &PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{Severity: graph.SeverityError, Code: "E_LOOP_PREFLIGHT", GraphID: d.ID, Location: graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, Message: err.Error(), Suggestion: "use valid Agent/Gate configuration and a correction-feedback-capable executor"}}}}
 	}
 	p, ok := e.(LoopPreflight)
 	if !ok {
-		return fail(ids[0], errors.New("loop executor does not support preflight"))
+		return nil, nil, fail(ids[0], errors.New("loop executor does not support preflight"))
 	}
 	if _, ok := e.(ObservedExecutor); !ok {
-		return fail(ids[0], errors.New("loop executor requires check observations"))
+		return nil, nil, fail(ids[0], errors.New("loop executor requires check observations"))
 	}
 	for _, id := range ids {
 		n := d.Nodes[id]
 		if err := p.ValidateNodeConfig(id, n); err != nil {
-			return fail(id, err)
+			return nil, nil, fail(id, err)
 		}
 		if err := p.ValidateNodeConfig(id, n.Loop.GateNode()); err != nil {
-			return fail(id, err)
+			return nil, nil, fail(id, err)
 		}
 		if n.Loop.Gate.Config["kind"] == "changed_files_scope" {
 			gateWorkspace, _ := n.Loop.Gate.Config["workspace"].(string)
 			agentWorkspace, _ := n.Config["workspace"].(string)
 			if gateWorkspace != agentWorkspace {
-				return fail(id, errors.New("changed-files Gate workspace must equal Agent workspace"))
+				return nil, nil, fail(id, errors.New("changed-files Gate workspace must equal Agent workspace"))
 			}
 			gateScope := originalScope(n.Loop.GateNode())
 			agentScope := originalScope(n)
@@ -88,9 +101,20 @@ func preflightLoops(ctx context.Context, d *graph.Definition, e Executor) error 
 			a, ea := normalize(agentScope)
 			g, eg := normalize(gateScope)
 			if ea != nil || eg != nil || !slices.Equal(a, g) {
-				return fail(id, errors.New("changed-files Gate allowed_paths must equal Agent allowed_paths"))
+				return nil, nil, fail(id, errors.New("changed-files Gate allowed_paths must equal Agent allowed_paths"))
 			}
 		}
+	}
+	return ids, p, nil
+}
+
+func preflightLoops(ctx context.Context, d *graph.Definition, e Executor) error {
+	ids, p, err := validateLoopConfigs(d, e)
+	if err != nil {
+		return err
+	}
+	fail := func(id string, err error) error {
+		return &PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{Severity: graph.SeverityError, Code: "E_LOOP_PREFLIGHT", GraphID: d.ID, Location: graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, Message: err.Error(), Suggestion: "use valid Agent/Gate configuration and a correction-feedback-capable executor"}}}}
 	}
 	for _, id := range ids {
 		if err := ctx.Err(); err != nil {

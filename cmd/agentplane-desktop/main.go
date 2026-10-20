@@ -30,6 +30,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "desktop service: handlers unavailable")
 		os.Exit(1)
 	}
+	documents := desktop.NewDocumentStore(registry, stateDir)
+	preflight := desktop.NewPreflightService(registry, documents, nil)
+	for name, handler := range desktop.NewDocumentHandlers(documents, preflight) {
+		handlers[name] = handler
+	}
 	server := desktop.NewServer(version.String(), handlers)
 	if err := server.Serve(ctx, os.Stdin, os.Stdout); err != nil {
 		// Never print a frame, graph, path, environment value or process output.

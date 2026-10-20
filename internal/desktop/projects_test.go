@@ -140,6 +140,101 @@ func TestWorkspaceAvailabilityAndNoTraversal(t *testing.T) {
 	}
 }
 
+func TestResolveWorkspacePinsRegisteredIdentity(t *testing.T) {
+	registry, _, projectDir := registryFixture(t)
+	grant, err := registry.GrantProjectFolder(projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := registry.AddProject(grant.Token, grant.PathDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspaceDir := filepath.Join(projectDir, "nested", "work area")
+	if err := os.MkdirAll(workspaceDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := registry.AddWorkspace(project.ProjectID, "nested/work area")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := registry.ResolveWorkspace(workspace.WorkspaceID)
+	if err != nil || resolved.WorkspaceID != workspace.WorkspaceID || resolved.ProjectID != project.ProjectID ||
+		resolved.CanonicalPath != filepath.Join(project.CanonicalPath, "nested", "work area") || resolved.Identity != workspace.Identity {
+		t.Fatalf("resolved workspace = %#v, %v", resolved, err)
+	}
+	if _, err := registry.ResolveWorkspace("e3ccf004-10bf-484e-9c73-321542685165"); !errors.Is(err, ErrRegistryNotFound) {
+		t.Fatalf("unknown workspace = %v", err)
+	}
+	if err := os.Rename(workspaceDir, workspaceDir+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(workspaceDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.ResolveWorkspace(workspace.WorkspaceID); !errors.Is(err, ErrRegistryUnavailable) {
+		t.Fatalf("replaced workspace = %v", err)
+	}
+}
+
+func TestResolveWorkspaceRejectsIntermediateSymlinkSwap(t *testing.T) {
+	registry, _, projectDir := registryFixture(t)
+	grant, err := registry.GrantProjectFolder(projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := registry.AddProject(grant.Token, grant.PathDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nested := filepath.Join(projectDir, "nested")
+	if err := os.MkdirAll(filepath.Join(nested, "leaf"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := registry.AddWorkspace(project.ProjectID, "nested/leaf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	registry.beforeWorkspaceOpen = func() error {
+		if err := os.Rename(nested, nested+"-moved"); err != nil {
+			return err
+		}
+		return os.Symlink(nested+"-moved", nested)
+	}
+	if _, err := registry.ResolveWorkspace(workspace.WorkspaceID); !errors.Is(err, ErrRegistryUnavailable) {
+		t.Fatalf("symlink swap on resolution = %v", err)
+	}
+}
+
+func TestResolveRootWorkspaceRejectsProjectReplacement(t *testing.T) {
+	registry, _, projectDir := registryFixture(t)
+	grant, err := registry.GrantProjectFolder(projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := registry.AddProject(grant.Token, grant.PathDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := registry.AddWorkspace(project.ProjectID, ".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := registry.ResolveWorkspace(workspace.WorkspaceID)
+	if err != nil || resolved.CanonicalPath != project.CanonicalPath || resolved.Identity != project.Identity {
+		t.Fatalf("root workspace = %#v, %v", resolved, err)
+	}
+	if err := os.Rename(projectDir, projectDir+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(projectDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := registry.ResolveWorkspace(workspace.WorkspaceID); !errors.Is(err, ErrRegistryUnavailable) {
+		t.Fatalf("replaced project root = %v", err)
+	}
+}
+
 func TestRegistryRejectsInsecureAndMalformedState(t *testing.T) {
 	base := t.TempDir()
 	stateDir := filepath.Join(base, "state")

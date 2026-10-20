@@ -165,22 +165,14 @@ func (Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node gra
 	if configErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
 	}
+	if configErr := validateOutputs(node, cfg); configErr != nil {
+		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
+	}
 	names := make([]string, 0, len(node.Outputs))
 	for name := range node.Outputs {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	for _, name := range names {
-		switch name {
-		case "stdout", "stderr", "exit_code":
-		case "json":
-			if !cfg.stdoutJSON {
-				return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: errors.New("json output requires stdout_json: true")}
-			}
-		default:
-			return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: fmt.Errorf("unsupported shell output %q", name)}
-		}
-	}
 	result, err := execute(ctx, nodeID, node, inputs, observe)
 	if err != nil {
 		return nil, err
@@ -204,6 +196,36 @@ func (Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node gra
 		}
 	}
 	return outputs, nil
+}
+
+// ValidateNodeConfig performs the same configuration/output validation as
+// execution without starting the configured command.
+func (Executor) ValidateNodeConfig(_ string, node graph.NodeDefinition) error {
+	cfg, err := parseConfig(node)
+	if err != nil {
+		return err
+	}
+	return validateOutputs(node, cfg)
+}
+
+func validateOutputs(node graph.NodeDefinition, cfg config) error {
+	names := make([]string, 0, len(node.Outputs))
+	for name := range node.Outputs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		switch name {
+		case "stdout", "stderr", "exit_code":
+		case "json":
+			if !cfg.stdoutJSON {
+				return errors.New("json output requires stdout_json: true")
+			}
+		default:
+			return fmt.Errorf("unsupported shell output %q", name)
+		}
+	}
+	return nil
 }
 
 const maxLogChunk = 16 * 1024

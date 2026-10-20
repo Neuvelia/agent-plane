@@ -24,6 +24,8 @@ var ErrDocumentConflict = errors.New("document revision conflict")
 var ErrDocumentTooLarge = errors.New("document exceeds 4 MiB")
 var ErrDocumentNotFound = errors.New("document not found")
 var ErrDocumentInvalidEncoding = errors.New("document is not UTF-8")
+var ErrDocumentInvalid = errors.New("graph document is invalid")
+var ErrDocumentUnsaved = errors.New("graph document has unsaved changes")
 
 type DocumentValidity string
 
@@ -43,6 +45,8 @@ type Document struct {
 	SemanticVersion string
 	Diagnostics     []graph.Diagnostic
 	path            string
+	rootIdentity    ProjectIdentity
+	fileIdentity    ProjectIdentity
 }
 
 type ProjectIdentity string
@@ -188,12 +192,17 @@ func (s *DocumentStore) Open(projectID, relativePath string) (Document, error) {
 	if err := verifyOpenPath(file, rootHandle, project, relativePath, filename); err != nil {
 		return Document{}, err
 	}
+	fileIdentity, err := identityOfFile(file)
+	if err != nil {
+		return Document{}, err
+	}
 	id, err := randomDocumentID()
 	if err != nil {
 		return Document{}, fmt.Errorf("create document identity: %w", err)
 	}
 	doc := &Document{DocumentID: id, ProjectID: projectID, RelativePath: relativePath,
-		Text: string(data), Revision: 1, DiskDigest: digestBytes(data), path: filename}
+		Text: string(data), Revision: 1, DiskDigest: digestBytes(data), path: filename,
+		rootIdentity: project.Identity, fileIdentity: fileIdentity}
 	validateDocument(doc)
 	s.byID[id] = doc
 	s.byPath[key] = id
@@ -214,6 +223,9 @@ func (s *DocumentStore) Update(documentID string, expectedRevision uint64, text 
 		return Document{}, ErrDocumentNotFound
 	}
 	if expectedRevision != doc.Revision {
+		return Document{}, ErrDocumentConflict
+	}
+	if doc.Revision == ^uint64(0) {
 		return Document{}, ErrDocumentConflict
 	}
 	doc.Text = text

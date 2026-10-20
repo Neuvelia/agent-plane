@@ -26,6 +26,7 @@ func TestSidecarStdioHandshake(t *testing.T) {
 	for _, request := range []json.RawMessage{
 		json.RawMessage(`{"protocol_version":1,"request_id":"wrong","method":"hello","params":{"client_protocol_version":2}}`),
 		json.RawMessage(`{"protocol_version":1,"request_id":"ready","method":"hello","params":{"client_protocol_version":1}}`),
+		json.RawMessage(`{"protocol_version":1,"request_id":"validation","method":"graphs.validate","params":{"document_id":"00000000-0000-0000-0000-000000000000","revision":1}}`),
 	} {
 		if err := desktop.WriteFrame(&input, request); err != nil {
 			t.Fatal(err)
@@ -42,7 +43,7 @@ func TestSidecarStdioHandshake(t *testing.T) {
 		t.Fatalf("unexpected diagnostics: %s", stderr.String())
 	}
 	var responses []desktop.Response
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 3; i++ {
 		frame, err := desktop.ReadFrame(&stdout)
 		if err != nil {
 			t.Fatal(err)
@@ -56,8 +57,14 @@ func TestSidecarStdioHandshake(t *testing.T) {
 	if responses[0].RequestID != "wrong" || responses[0].Error == nil || responses[0].Error.Code != "version_mismatch" {
 		t.Fatalf("version response = %#v", responses[0])
 	}
-	if responses[1].RequestID != "ready" || responses[1].Error != nil || !bytes.Contains(responses[1].Result, []byte(`"projects.grant"`)) {
+	if responses[1].RequestID != "ready" || responses[1].Error != nil ||
+		!bytes.Contains(responses[1].Result, []byte(`"projects.grant"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"graphs.validate"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"runs.preflight"`)) {
 		t.Fatalf("hello response = %#v", responses[1])
+	}
+	if responses[2].RequestID != "validation" || responses[2].Error == nil || responses[2].Error.Code != "not_found" {
+		t.Fatalf("validation response = %#v", responses[2])
 	}
 	if _, err := desktop.ReadFrame(&stdout); err != io.EOF {
 		t.Fatalf("stdout contains non-protocol data: %v", err)

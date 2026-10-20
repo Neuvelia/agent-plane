@@ -90,6 +90,9 @@ func (s *DocumentStore) Save(documentID string, expectedRevision uint64, expecte
 	if err != nil {
 		return Document{}, err
 	}
+	if originalIdentity != doc.fileIdentity || project.Identity != doc.rootIdentity {
+		return Document{}, ErrDocumentConflict
+	}
 	currentBytes, err := readBoundedDocument(original)
 	if err != nil {
 		return Document{}, err
@@ -203,6 +206,7 @@ func (s *DocumentStore) Save(documentID string, expectedRevision uint64, expecte
 	_ = parent.Remove(intent.Draft)
 	_ = syncDirectory(parent)
 	doc.DiskDigest = intent.CandidateDigest
+	doc.fileIdentity = intent.CandidateIdentity
 	return cloneDocument(doc), nil
 }
 

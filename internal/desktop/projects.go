@@ -49,6 +49,16 @@ type WorkspaceRecord struct {
 	Availability Availability    `json:"-"`
 }
 
+// ResolvedWorkspace is a current, identity-checked view of a registered local
+// workspace. Callers must resolve it again before starting execution because
+// an external process can change filesystem entries after this check.
+type ResolvedWorkspace struct {
+	WorkspaceID   string
+	ProjectID     string
+	CanonicalPath string
+	Identity      ProjectIdentity
+}
+
 type ProjectGrant struct {
 	Token      string `json:"grant_token"`
 	PathDigest string `json:"path_digest"`
@@ -258,6 +268,50 @@ func (r *Registry) ResolveProject(projectID string) (ResolvedProject, error) {
 		}
 	}
 	return ResolvedProject{}, ErrRegistryNotFound
+}
+
+func (r *Registry) ResolveWorkspace(workspaceID string) (ResolvedWorkspace, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.checkReady(); err != nil {
+		return ResolvedWorkspace{}, err
+	}
+	var workspace *WorkspaceRecord
+	for i := range r.state.Workspaces {
+		if r.state.Workspaces[i].WorkspaceID == workspaceID {
+			workspace = &r.state.Workspaces[i]
+			break
+		}
+	}
+	if workspace == nil {
+		return ResolvedWorkspace{}, ErrRegistryNotFound
+	}
+	var project *ProjectRecord
+	for i := range r.state.Projects {
+		if r.state.Projects[i].ProjectID == workspace.ProjectID {
+			project = &r.state.Projects[i]
+			break
+		}
+	}
+	if project == nil || !validWorkspaceRelative(workspace.RelativePath) {
+		return ResolvedWorkspace{}, ErrRegistryUnavailable
+	}
+	registered := ResolvedProject{CanonicalRoot: project.CanonicalPath, Identity: project.Identity}
+	root, err := openRegisteredRoot(registered)
+	if err != nil {
+		return ResolvedWorkspace{}, ErrRegistryUnavailable
+	}
+	defer root.Close()
+	identity, err := workspaceIdentity(root, registered, workspace.RelativePath, r.beforeWorkspaceOpen)
+	if err != nil || identity != workspace.Identity {
+		return ResolvedWorkspace{}, ErrRegistryUnavailable
+	}
+	canonical := registered.CanonicalRoot
+	if workspace.RelativePath != "." {
+		canonical = filepath.Join(canonical, filepath.FromSlash(workspace.RelativePath))
+	}
+	return ResolvedWorkspace{WorkspaceID: workspace.WorkspaceID, ProjectID: workspace.ProjectID,
+		CanonicalPath: canonical, Identity: identity}, nil
 }
 
 func (r *Registry) ListProjects() ([]ProjectRecord, error) {
