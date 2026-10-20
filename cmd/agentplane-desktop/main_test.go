@@ -31,7 +31,7 @@ func TestSidecarStdioHandshake(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	process := exec.Command(binary)
+	process := exec.Command(binary, "--state-dir", filepath.Join(t.TempDir(), "state"))
 	process.Stdin = &input
 	var stdout, stderr bytes.Buffer
 	process.Stdout, process.Stderr = &stdout, &stderr
@@ -56,7 +56,7 @@ func TestSidecarStdioHandshake(t *testing.T) {
 	if responses[0].RequestID != "wrong" || responses[0].Error == nil || responses[0].Error.Code != "version_mismatch" {
 		t.Fatalf("version response = %#v", responses[0])
 	}
-	if responses[1].RequestID != "ready" || responses[1].Error != nil || !bytes.Contains(responses[1].Result, []byte(`"methods":["hello"]`)) {
+	if responses[1].RequestID != "ready" || responses[1].Error != nil || !bytes.Contains(responses[1].Result, []byte(`"projects.grant"`)) {
 		t.Fatalf("hello response = %#v", responses[1])
 	}
 	if _, err := desktop.ReadFrame(&stdout); err != io.EOF {

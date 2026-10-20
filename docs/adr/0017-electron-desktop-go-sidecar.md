@@ -50,6 +50,21 @@ exchange only preserves a displaced file; it does not provide an atomic
 digest compare-and-swap. Saves need durable intent and recovery before they
 can claim conflict safety.
 
+The local project/workspace/settings registry is a version-1 JSON file in an
+absolute private app-user directory. The state directory is mode 0700 and its
+regular file is mode 0600, capped at 1 MiB; unknown fields, duplicate keys,
+invalid IDs and newer versions fail closed rather than resetting state. A
+separate stable advisory lock file is held for the service lifetime so atomic
+replacement of the JSON file cannot release cross-process exclusion. Project
+and workspace registrations persist canonical paths with pinned filesystem
+identities; a missing or replaced location becomes unavailable without
+retargeting its ID. Folder grants are short-lived, one-use memory tokens issued
+only for Electron main's native folder selection path. Registry writes sync an
+adjacent temp file, atomically replace the JSON file and sync the directory. A
+post-replacement sync failure blocks further service mutations until restart
+because durability is uncertain. The Windows native lock, replacement and
+reparse/ACL checks must pass before Windows registry support is enabled.
+
 ## Alternatives considered
 
 A browser UI plus localhost server is possible but conflicts with the requested
