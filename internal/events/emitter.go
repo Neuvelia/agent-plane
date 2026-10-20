@@ -2,6 +2,8 @@ package events
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,12 +30,13 @@ const (
 // sequence numbers consumed by omitted progress without claiming those facts
 // were retained.
 type TracePage struct {
-	Events    []Event
-	NextAfter uint64
-	HasMore   bool
-	Watermark uint64
-	Stats     DeliveryStats
-	Finished  bool
+	Events      []Event
+	EventHashes []string
+	NextAfter   uint64
+	HasMore     bool
+	Watermark   uint64
+	Stats       DeliveryStats
+	Finished    bool
 }
 
 // TraceReader exposes retained facts without allowing a caller to append them.
@@ -63,6 +66,7 @@ type Collector struct {
 	graphID, graphVersion        string
 	events                       []Event
 	eventSizes                   []int
+	eventHashes                  []string
 	sequence                     uint64
 	finished, finalizing         bool
 	retainedBytes, retainedItems int
@@ -156,12 +160,16 @@ func (c *Collector) Append(event Event) (Event, error) {
 		c.queueBytes = 0
 		if c.stats.RetainedOmittedEvents > 0 || c.stats.LiveOmittedEvents > 0 {
 			marker := c.prepare(Event{Type: ProgressOmitted, Payload: ProgressOmittedPayload{RetainedEvents: c.stats.RetainedOmittedEvents, RetainedBytes: c.stats.RetainedOmittedBytes, LiveEvents: c.stats.LiveOmittedEvents, LiveBytes: c.stats.LiveOmittedBytes, LiveStopped: c.stats.LiveStopped}})
+			markerJSON, _ := json.Marshal(marker)
 			c.events = append(c.events, marker)
-			c.eventSizes = append(c.eventSizes, eventJSONSize(marker))
+			c.eventSizes = append(c.eventSizes, len(markerJSON))
+			c.eventHashes = append(c.eventHashes, eventJSONHash(markerJSON))
 		}
 		event = c.prepare(event)
+		finalJSON, _ := json.Marshal(event)
 		c.events = append(c.events, event)
-		c.eventSizes = append(c.eventSizes, eventJSONSize(event))
+		c.eventSizes = append(c.eventSizes, len(finalJSON))
+		c.eventHashes = append(c.eventHashes, eventJSONHash(finalJSON))
 		c.finished = true
 		c.mu.Unlock()
 		return event, nil
@@ -176,6 +184,7 @@ func (c *Collector) Append(event Event) (Event, error) {
 		} else {
 			c.events = append(c.events, event)
 			c.eventSizes = append(c.eventSizes, size)
+			c.eventHashes = append(c.eventHashes, eventJSONHash(encoded))
 			c.retainedBytes += size
 			c.retainedItems++
 			c.stats.RetainedPeakBytes = c.retainedBytes
@@ -184,6 +193,7 @@ func (c *Collector) Append(event Event) (Event, error) {
 	} else {
 		c.events = append(c.events, event)
 		c.eventSizes = append(c.eventSizes, size)
+		c.eventHashes = append(c.eventHashes, eventJSONHash(encoded))
 	}
 	if c.live != nil {
 		if c.stats.LiveStopped || len(c.queue) >= MaxLiveItems || c.queueBytes+size > MaxLiveBytes {
@@ -211,9 +221,9 @@ func (c *Collector) Append(event Event) (Event, error) {
 	c.mu.Unlock()
 	return event, nil
 }
-func eventJSONSize(event Event) int {
-	encoded, _ := json.Marshal(event)
-	return len(encoded)
+func eventJSONHash(encoded []byte) string {
+	digest := sha256.Sum256(encoded)
+	return "sha256:" + hex.EncodeToString(digest[:])
 }
 func (c *Collector) prepare(e Event) Event {
 	c.sequence++
@@ -287,6 +297,7 @@ func (c *Collector) page(after uint64, limit, maxEventBytes int) (TracePage, err
 		}
 	}
 	page.Events = make([]Event, 0, end-start)
+	page.EventHashes = append([]string{}, c.eventHashes[start:end]...)
 	for _, event := range c.events[start:end] {
 		event.Payload = copyPayload(event.Payload)
 		page.Events = append(page.Events, event)

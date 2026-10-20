@@ -2,6 +2,8 @@ package desktop
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -36,7 +38,7 @@ func TestRunEventsPagesAndResumesAfterAppend(t *testing.T) {
 	service := replayFixture(t, collector)
 	first, err := service.Events(replayRunID, 0, 1)
 	if err != nil || first.RunID != replayRunID || first.AfterSequence != 0 ||
-		len(first.Events) != 1 || first.Events[0].Sequence != 1 ||
+		len(first.Events) != 1 || len(first.EventHashes) != 1 || first.Events[0].Sequence != 1 ||
 		first.NextAfter != 1 || !first.HasMore || first.Watermark != 2 || first.Finished {
 		t.Fatalf("first page = %#v, %v", first, err)
 	}
@@ -172,6 +174,14 @@ func (s sizedReplayTrace) Page(after uint64, limit int) (events.TracePage, error
 	}
 	page := events.TracePage{Events: s.values[start:end],
 		Watermark: uint64(len(s.values)), HasMore: end < len(s.values)}
+	for _, event := range page.Events {
+		encoded, err := json.Marshal(event)
+		if err != nil {
+			return events.TracePage{}, err
+		}
+		digest := sha256.Sum256(encoded)
+		page.EventHashes = append(page.EventHashes, "sha256:"+hex.EncodeToString(digest[:]))
+	}
 	if page.HasMore {
 		page.NextAfter = page.Events[len(page.Events)-1].Sequence
 	} else {
@@ -200,6 +210,7 @@ func (s sizedReplayTrace) PageBounded(after uint64, limit, maxEventBytes int) (e
 				return events.TracePage{}, events.ErrTraceEventTooLarge
 			}
 			page.Events = page.Events[:i]
+			page.EventHashes = page.EventHashes[:i]
 			page.NextAfter = page.Events[i-1].Sequence
 			page.HasMore = true
 			return page, nil

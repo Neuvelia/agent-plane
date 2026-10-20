@@ -36,6 +36,11 @@ fit returns `response_too_large` without skipping it. A `finished` trace page
 can precede the run owner's terminal snapshot by a brief scheduling interval;
 the client reconciles until the snapshot reports its final state or explicit
 `unknown`. Full output values require a separate bounded F2.9 contract.
+Each event page also carries aligned `event_hashes[]` containing SHA-256 of
+the exact retained event JSON object bytes. The collector computes hashes at
+append, so replay does not hash a large page under the execution lock. The
+renderer uses these hashes to detect conflicting `(run_id, sequence)` facts
+without depending on JavaScript object reserialization or unsafe integers.
 
 The service owns a revisioned document buffer and atomic save/conflict detection,
 plus preflight tokens bound to exact launch payloads. Start idempotency is keyed

@@ -2,6 +2,9 @@ package events
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
@@ -58,9 +61,26 @@ func TestCollectorPageBoundedSelectsLargeFactsBeforeCopying(t *testing.T) {
 		t.Fatalf("first bounded page = %d facts, cursor %d, more %t, watermark %d, %v",
 			len(first.Events), first.NextAfter, first.HasMore, first.Watermark, err)
 	}
+	encoded, err := json.Marshal(first.Events[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(encoded)
+	if len(first.EventHashes) != 1 || first.EventHashes[0] != "sha256:"+hex.EncodeToString(digest[:]) {
+		t.Fatalf("retained bytes hash = %#v", first.EventHashes)
+	}
 	second, err := collector.PageBounded(first.NextAfter, 3, budget)
 	if err != nil || len(second.Events) != 1 || second.Events[0].Sequence != 2 || second.NextAfter != 2 || !second.HasMore {
 		t.Fatalf("second bounded page = %+v, %v", second, err)
+	}
+	secondJSON, err := json.Marshal(second.Events[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondDigest := sha256.Sum256(secondJSON)
+	if len(second.EventHashes) != 1 || second.EventHashes[0] != "sha256:"+hex.EncodeToString(secondDigest[:]) ||
+		second.EventHashes[0] == first.EventHashes[0] {
+		t.Fatalf("aligned hashes = %#v", second.EventHashes)
 	}
 	if _, err := collector.PageBounded(0, 1, 1); !errors.Is(err, ErrTraceEventTooLarge) {
 		t.Fatalf("single oversized event = %v", err)
