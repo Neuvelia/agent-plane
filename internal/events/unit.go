@@ -112,6 +112,13 @@ func (p ReturnEnvelopePayload) Validate() error {
 	if len(p.Evidence) > 0 {
 		kind := CheckKind(p.Evidence[0].Kind)
 		check := GateCheckPayload{Version: 1, Scope: CheckScope{CheckedInputs: []string{"envelope"}}, CheckID: p.CheckID, Kind: kind, Verdict: p.Verdict, Reason: p.Reason, Evidence: p.Evidence}
+		if kind == CheckChangedFilesScope {
+			mode := "deny"
+			if p.Verdict == CheckGreen {
+				mode = "warn"
+			}
+			check.ChangedFiles = &ChangedFilesScopeDetails{Mode: mode, AllowedPaths: []string{}, BaselineHead: "envelope", ObservedCount: 0}
+		}
 		if err := check.Validate(); err != nil {
 			return err
 		}

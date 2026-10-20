@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -10,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	"agentplane/internal/events"
+	"agentplane/internal/gitstate"
 	"agentplane/internal/graph"
 )
 
@@ -47,12 +49,14 @@ type LogStreamingExecutor interface {
 // observes at most one validated Gate fact, retained for green and red. Capture
 // capabilities redact before truncation without exposing configured secrets.
 type ExecutionObservation struct {
-	Feedback        *CorrectionFeedback
-	Correlation     ExecutionCorrelation
-	Log             func(string, []byte)
-	Progress        func(events.Type, events.Payload)
-	Check           func(events.GateCheckPayload)
-	NewCheckCapture func() *CheckCapture
+	ScopeBaseline      *gitstate.Baseline
+	ScopeBaselineError error
+	Feedback           *CorrectionFeedback
+	Correlation        ExecutionCorrelation
+	Log                func(string, []byte)
+	Progress           func(events.Type, events.Payload)
+	Check              func(events.GateCheckPayload)
+	NewCheckCapture    func() *CheckCapture
 }
 type ObservedExecutor interface {
 	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)
@@ -74,6 +78,7 @@ type Options struct {
 }
 
 type completedNode struct {
+	baseline     *gitstate.Baseline
 	id           string
 	attemptID    events.AttemptID
 	outputs      map[string]graph.Value
@@ -220,6 +225,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		attempts := map[string]events.AttemptID{}
 		numbers := map[string]int{}
 		feedbacks := map[string]*CorrectionFeedback{}
+		baselines := map[string]*gitstate.Baseline{}
 		for len(batch) > 0 {
 			// Only workers run concurrently; the coordinator owns every state and
 			// output map. Buffering lets all workers return before result collection.
@@ -253,9 +259,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				}
 				node := definition.Nodes[id]
 				resolved := machine.resolved[id]
-				aid, feedback := attempts[id], feedbacks[id]
+				aid, feedback, baseline := attempts[id], feedbacks[id], baselines[id]
 				go func(id string) {
-					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, feedback, redactionTemplate)
+					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, feedback, baseline, redactionTemplate)
 				}(id)
 				started++
 			}
@@ -266,6 +272,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			sort.Slice(results, func(i, j int) bool { return results[i].id < results[j].id })
 			var retry []string
 			for _, work := range results {
+				if work.baseline != nil {
+					baselines[work.id] = work.baseline
+				}
 				nodeResult := machine.nodes[work.id]
 				if definition.Nodes[work.id].Loop != nil {
 					outcome := "execution_error"
@@ -708,7 +717,7 @@ func validateNodeOutputs(graphID, nodeID string, declared map[string]graph.PortD
 	return diagnostics
 }
 
-func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, feedback *CorrectionFeedback, redactionTemplate *logRedactor) completedNode {
+func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, feedback *CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
 	nodeRunID := m.nodes[id].NodeRunID
 	var outputs map[string]graph.Value
 	var err error
@@ -767,6 +776,22 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			redact := func(s string) string { return progress.redact(s) }
 			snapshot.CheckID = redact(snapshot.CheckID)
 			snapshot.Reason = redact(snapshot.Reason)
+			if snapshot.ChangedFiles != nil {
+				for i, path := range snapshot.ChangedFiles.AllowedPaths {
+					snapshot.ChangedFiles.AllowedPaths[i] = redact(path)
+					snapshot.ChangedFiles.ScopeRedacted = snapshot.ChangedFiles.ScopeRedacted || snapshot.ChangedFiles.AllowedPaths[i] != path
+				}
+				sort.Strings(snapshot.ChangedFiles.AllowedPaths)
+				if snapshot.ChangedFiles.ScopeRedacted {
+					unique := snapshot.ChangedFiles.AllowedPaths[:0]
+					for _, path := range snapshot.ChangedFiles.AllowedPaths {
+						if len(unique) == 0 || unique[len(unique)-1] != path {
+							unique = append(unique, path)
+						}
+					}
+					snapshot.ChangedFiles.AllowedPaths = unique
+				}
+			}
 			for i := range snapshot.Scope.CheckedInputs {
 				snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
 			}
@@ -786,6 +811,43 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 				b = append([]byte(nil), r.Write(events.Stderr, e.Stderr)...)
 				e.Stderr = append(b, r.Flush(events.Stderr)...)
 			}
+			if snapshot.Kind == events.CheckChangedFilesScope {
+				sort.SliceStable(snapshot.Evidence, func(i, j int) bool {
+					if snapshot.Evidence[i].Path == "" {
+						return false
+					}
+					if snapshot.Evidence[j].Path == "" {
+						return true
+					}
+					return snapshot.Evidence[i].Path < snapshot.Evidence[j].Path
+				})
+				// Redaction can expand path text after the Gate has applied its
+				// payload budget. Preserve a bounded, valid check by replacing
+				// excess path entries with a counted omission marker.
+				for {
+					encoded, marshalErr := json.Marshal(snapshot)
+					if marshalErr != nil || len(encoded) <= events.MaxGatePayload {
+						break
+					}
+					lastPath := -1
+					for i := len(snapshot.Evidence) - 1; i >= 0; i-- {
+						if snapshot.Evidence[i].Path != "" {
+							lastPath = i
+							break
+						}
+					}
+					if lastPath < 0 {
+						break
+					}
+					snapshot.Evidence = append(snapshot.Evidence[:lastPath], snapshot.Evidence[lastPath+1:]...)
+					last := len(snapshot.Evidence) - 1
+					if last >= 0 && snapshot.Evidence[last].Path == "" && snapshot.Evidence[last].Omitted > 0 {
+						snapshot.Evidence[last].Omitted++
+					} else {
+						snapshot.Evidence = append(snapshot.Evidence, events.GateEvidence{Kind: events.EvidenceKind(events.CheckChangedFilesScope), Source: "git", Omitted: 1, Reference: &events.EvidenceReference{Kind: "diff", State: "unavailable", Reason: "paths_exceed_evidence_limit"}})
+					}
+				}
+			}
 			if snapshot.Validate() != nil {
 				checkInvalid = true
 				return
@@ -793,7 +855,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
 		} else {
 			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 		}

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"agentplane/internal/events"
+	"agentplane/internal/gitstate"
 	"agentplane/internal/graph"
 )
 
@@ -65,6 +66,30 @@ func preflightLoops(ctx context.Context, d *graph.Definition, e Executor) error 
 		}
 		if err := p.ValidateNodeConfig(id, n.Loop.GateNode()); err != nil {
 			return fail(id, err)
+		}
+		if n.Loop.Gate.Config["kind"] == "changed_files_scope" {
+			gateWorkspace, _ := n.Loop.Gate.Config["workspace"].(string)
+			agentWorkspace, _ := n.Config["workspace"].(string)
+			if gateWorkspace != agentWorkspace {
+				return fail(id, errors.New("changed-files Gate workspace must equal Agent workspace"))
+			}
+			gateScope := originalScope(n.Loop.GateNode())
+			agentScope := originalScope(n)
+			normalize := func(paths []string) ([]string, error) {
+				out, err := events.NormalizeUnitScope(paths)
+				for i, p := range out {
+					if strings.HasSuffix(p, "/**") {
+						out[i] = strings.TrimSuffix(p, "**")
+					}
+				}
+				sort.Strings(out)
+				return slices.Compact(out), err
+			}
+			a, ea := normalize(agentScope)
+			g, eg := normalize(gateScope)
+			if ea != nil || eg != nil || !slices.Equal(a, g) {
+				return fail(id, errors.New("changed-files Gate allowed_paths must equal Agent allowed_paths"))
+			}
 		}
 	}
 	for _, id := range ids {
@@ -130,11 +155,25 @@ func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *Correcti
 	}
 	return p
 }
-func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, f *CorrectionFeedback, r *logRedactor) completedNode {
+func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, f *CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
 	if err := ctx.Err(); err != nil {
 		return completedNode{id: id, attemptID: aid, err: err}
 	}
-	work := m.invoke(ctx, e, id, n, in, aid, f, r)
+	var baselineError error
+	if n.Loop != nil && n.Loop.Gate.Config["kind"] == "changed_files_scope" && baseline == nil {
+		workspace, _ := n.Config["workspace"].(string)
+		captured, err := gitstate.Capture(ctx, workspace)
+		if err != nil {
+			if n.Loop.Gate.Config["mode"] != "warn" {
+				return completedNode{id: id, attemptID: aid, err: fmt.Errorf("capture changed-files baseline: %w", err)}
+			}
+			baselineError = err
+		} else {
+			baseline = &captured
+		}
+	}
+	work := m.invoke(ctx, e, id, n, in, aid, f, baseline, baselineError, r)
+	work.baseline = baseline
 	if n.Loop == nil {
 		return work
 	}
@@ -173,7 +212,7 @@ func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.N
 			return work
 		}
 	}
-	gate := m.invoke(ctx, e, id, n.Loop.GateNode(), bound, aid, nil, r)
+	gate := m.invoke(ctx, e, id, n.Loop.GateNode(), bound, aid, nil, baseline, baselineError, r)
 	valid := !gate.checkInvalid && gate.check != nil && gate.evidence == nil
 	if valid && gate.check.Verdict == "red" {
 		var v interface{ GateVerdict() string }

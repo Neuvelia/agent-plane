@@ -25,6 +25,8 @@ type config struct {
 	ExpectedJSON *string         `json:"expected_json"`
 	Expected     json.RawMessage `json:"expected"`
 	Allowed      []string        `json:"allowed_paths"`
+	Mode         string          `json:"mode"`
+	Workspace    string          `json:"workspace"`
 }
 
 func parse(n graph.NodeDefinition) (config, error) {
@@ -123,6 +125,27 @@ func parse(n graph.NodeDefinition) (config, error) {
 			c.Allowed[i] = q
 		}
 		err = port(c.Input, graph.ValueTypeJSON)
+	case "changed_files_scope":
+		for _, k := range []string{"input", "allowed_paths", "mode", "workspace"} {
+			allowed[k] = true
+		}
+		if c.Mode != "warn" && c.Mode != "deny" {
+			return c, fmt.Errorf("changed_files_scope mode must be warn or deny")
+		}
+		if !filepath.IsAbs(c.Workspace) || filepath.Clean(c.Workspace) != c.Workspace {
+			return c, fmt.Errorf("changed_files_scope workspace must be an absolute clean path")
+		}
+		if _, ok := n.Config["allowed_paths"]; !ok || c.Allowed == nil {
+			return c, fmt.Errorf("changed_files_scope allowed_paths must be a list")
+		}
+		c.Allowed, err = normalizeScopeRules(c.Allowed)
+		if err != nil {
+			return c, err
+		}
+		candidate, ok := n.Inputs[c.Input]
+		if c.Input == "" || !ok || !candidate.Required || (candidate.Type != graph.ValueTypeString && candidate.Type != graph.ValueTypeJSON) {
+			return c, fmt.Errorf("changed_files_scope input %q must be a required string or JSON port", c.Input)
+		}
 	default:
 		return c, fmt.Errorf("unsupported gate kind %q", c.Kind)
 	}
