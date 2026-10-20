@@ -20,6 +20,7 @@ const (
 	CheckCommand           CheckKind = "command"
 	CheckJSONPredicate     CheckKind = "json_predicate"
 	CheckReportedFileScope CheckKind = "reported_file_scope"
+	CheckChangedFilesScope CheckKind = "changed_files_scope"
 )
 
 type CheckVerdict string
@@ -61,14 +62,24 @@ type GateEvidence struct {
 	Omitted       uint64             `json:"omitted,omitempty"`
 }
 type GateCheckPayload struct {
-	Version    int            `json:"check_result_version"`
-	Scope      CheckScope     `json:"scope"`
-	DurationNS int64          `json:"duration_ns"`
-	CheckID    string         `json:"check_id"`
-	Kind       CheckKind      `json:"kind"`
-	Verdict    CheckVerdict   `json:"verdict"`
-	Reason     string         `json:"reason"`
-	Evidence   []GateEvidence `json:"evidence"`
+	Version      int                       `json:"check_result_version"`
+	Scope        CheckScope                `json:"scope"`
+	DurationNS   int64                     `json:"duration_ns"`
+	CheckID      string                    `json:"check_id"`
+	Kind         CheckKind                 `json:"kind"`
+	Verdict      CheckVerdict              `json:"verdict"`
+	Reason       string                    `json:"reason"`
+	Evidence     []GateEvidence            `json:"evidence"`
+	ChangedFiles *ChangedFilesScopeDetails `json:"changed_files_scope,omitempty"`
+}
+
+// ChangedFilesScopeDetails describes the Git observation and authored policy.
+type ChangedFilesScopeDetails struct {
+	Mode          string   `json:"mode"`
+	AllowedPaths  []string `json:"allowed_paths"`
+	ScopeRedacted bool     `json:"scope_redacted"`
+	BaselineHead  string   `json:"baseline_head"`
+	ObservedCount int      `json:"observed_count"`
 }
 
 // CheckResult is the full versioned Gate result.
@@ -81,7 +92,7 @@ func (p *GateCheckPayload) UnmarshalJSON(data []byte) error {
 	if !utf8.Valid(data) {
 		return errors.New("invalid check result UTF8")
 	}
-	fields, err := checkObjectFields(data, "check_result_version", "check_id", "kind", "verdict", "reason", "evidence", "scope", "duration_ns")
+	fields, err := checkObjectFields(data, "check_result_version", "check_id", "kind", "verdict", "reason", "evidence", "scope", "duration_ns", "changed_files_scope")
 	if err != nil {
 		return err
 	}
@@ -118,8 +129,35 @@ func (p GateCheckPayload) Validate() error {
 	if strings.TrimSpace(p.CheckID) == "" || len(p.CheckID) > 256 || !utf8.ValidString(p.CheckID) || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 512 || !utf8.ValidString(p.Reason) {
 		return errors.New("invalid gate identity/reason")
 	}
-	if p.Kind != "command" && p.Kind != "json_predicate" && p.Kind != "reported_file_scope" {
+	if p.Kind != "command" && p.Kind != "json_predicate" && p.Kind != "reported_file_scope" && p.Kind != CheckChangedFilesScope {
 		return errors.New("invalid gate kind")
+	}
+	if p.Kind == CheckChangedFilesScope {
+		if p.ChangedFiles == nil || (p.ChangedFiles.Mode != "warn" && p.ChangedFiles.Mode != "deny") || p.ChangedFiles.AllowedPaths == nil || p.ChangedFiles.ObservedCount < 0 || !validText(p.ChangedFiles.BaselineHead, 128) {
+			return errors.New("invalid changed-files scope details")
+		}
+		if len(p.ChangedFiles.AllowedPaths) > 32 {
+			return errors.New("too many allowed paths")
+		}
+		if !sort.StringsAreSorted(p.ChangedFiles.AllowedPaths) {
+			return errors.New("changed-files allowed paths must be sorted")
+		}
+		for i, path := range p.ChangedFiles.AllowedPaths {
+			if !validText(path, 512) {
+				return errors.New("invalid allowed path")
+			}
+			if i > 0 && path == p.ChangedFiles.AllowedPaths[i-1] {
+				return errors.New("duplicate allowed path")
+			}
+		}
+		if p.ChangedFiles.Mode == "warn" && p.Verdict != CheckGreen {
+			return errors.New("warn scope check cannot block")
+		}
+		if p.Reason == "changed_files_outside_scope" && p.ChangedFiles.Mode == "deny" && p.Verdict != CheckRed {
+			return errors.New("deny violation must be red")
+		}
+	} else if p.ChangedFiles != nil {
+		return errors.New("unexpected changed-files scope details")
 	}
 	if p.Verdict != "green" && p.Verdict != "red" {
 		return errors.New("invalid gate verdict")
@@ -146,6 +184,9 @@ func (p GateCheckPayload) Validate() error {
 		if p.Kind == "reported_file_scope" {
 			source = "reported"
 		}
+		if p.Kind == CheckChangedFilesScope {
+			source = "git"
+		}
 		if string(e.Source) != string(source) {
 			return errors.New("invalid gate evidence source")
 		}
@@ -164,6 +205,11 @@ func (p GateCheckPayload) Validate() error {
 	return nil
 }
 func CloneGate(p GateCheckPayload) GateCheckPayload {
+	if p.ChangedFiles != nil {
+		details := *p.ChangedFiles
+		details.AllowedPaths = append([]string{}, details.AllowedPaths...)
+		p.ChangedFiles = &details
+	}
 	p.Scope.CheckedInputs = append([]string(nil), p.Scope.CheckedInputs...)
 	if p.Evidence != nil {
 		p.Evidence = append([]GateEvidence{}, p.Evidence...)
@@ -285,7 +331,7 @@ func CheckResults(trace []Event, run RunID, node NodeRunID) []CheckResult {
 	}
 	selected := make([]Event, 0)
 	for _, e := range trace {
-		if e.RunID == run && e.NodeRunID == node && e.Type == GateCheck && (e.SchemaVersion == 5 || e.SchemaVersion == 6 || e.SchemaVersion == 7) {
+		if e.RunID == run && e.NodeRunID == node && e.Type == GateCheck && e.SchemaVersion >= 5 && e.SchemaVersion <= SchemaVersion {
 			if _, ok := e.Payload.(CheckResult); ok {
 				selected = append(selected, e)
 			}

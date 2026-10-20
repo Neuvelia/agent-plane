@@ -23,3 +23,5 @@ F1.5: [ADR-0013 - Versioned Check Result and typed trace retrieval](0013-check-r
 F1.6: [ADR-0014 - Bounded node-local correction attempts](0014-bounded-node-correction-loop.md).
 
 F1.7: [ADR-0015 - Static units, Return Envelopes and immutable acceptance](0015-return-envelope-and-unit-acceptance.md).
+
+F1.8: [ADR-0016 - Git-observed changed-files scope checking](0016-changed-files-scope-check.md).

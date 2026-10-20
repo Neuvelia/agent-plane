@@ -123,7 +123,7 @@ printf '{"summary":"%s.candidate","artifacts":[]}' "$unit" >"$result"
 			var aAccepted, cRed uint64
 			joins := 0
 			for _, ev := range doc.Events {
-				if ev.SchemaVersion != 7 {
+				if ev.SchemaVersion != events.SchemaVersion {
 					t.Fatal(ev.SchemaVersion)
 				}
 				switch ev.Type {

@@ -174,3 +174,15 @@ Red candidates do not enter bindings; retries/exhaustion cannot invalidate
 accepted siblings. Schema7 retains checks, envelopes and attempt completion in
 that order, plus bounded declared conflict facts independent of progress.
 This immutability does not extend to shared files. See ADR-0015.
+
+### F1.8 changed-files scope check
+
+The unit's initial Git snapshot is an ephemeral runtime baseline, not an
+accepted graph value. It survives retries for that unit. The resulting
+CheckResult identifies mode and authored allowed paths in typed details and
+out-of-scope Git paths in sorted evidence; `scope.checked_inputs` still names
+the candidate input port. A warning remains green but carries the violation
+reason. A deny violation is red and enters existing correction handling. Git
+inspection failure is explicitly indeterminate in warn mode and operational in
+deny mode. Adapter-reported files cannot determine the verdict. Detection does
+not prevent modifications or isolate the repository. See ADR-0016.

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -59,6 +60,27 @@ func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Va
 		err = predicate(c, in, &p)
 	case "reported_file_scope":
 		err = scope(c, in, &p)
+	case "changed_files_scope":
+		if _, ok := in[c.Input]; !ok {
+			err = fmt.Errorf("changed-files scope requires candidate input %q", c.Input)
+			break
+		}
+		if o.ScopeBaselineError != nil && c.Mode == "warn" {
+			p = indeterminateChangedFiles(c.Allowed, c.CheckID, "")
+			p.Scope.CheckedInputs = []string{c.Input}
+			break
+		}
+		if o.ScopeBaseline == nil {
+			err = errors.New("changed-files scope baseline unavailable")
+			break
+		}
+		root, e := filepath.EvalSymlinks(c.Workspace)
+		if e != nil || root != o.ScopeBaseline.Root {
+			err = errors.New("changed-files scope workspace differs from baseline")
+			break
+		}
+		p, err = CheckChangedFiles(ctx, *o.ScopeBaseline, c.Allowed, c.Mode, c.CheckID)
+		p.Scope.CheckedInputs = []string{c.Input}
 	}
 	if err != nil {
 		return nil, err

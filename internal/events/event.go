@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 7
+const SchemaVersion = 8
 
 type RunID string
 type NodeRunID string
@@ -132,7 +132,7 @@ type Event struct {
 
 // Validate checks the event envelope before it becomes a serialized fact.
 func (e Event) Validate() error {
-	if e.SchemaVersion != 0 && e.SchemaVersion != 1 && e.SchemaVersion != 2 && e.SchemaVersion != 3 && e.SchemaVersion != 4 && e.SchemaVersion != 5 && e.SchemaVersion != 6 && e.SchemaVersion != 7 {
+	if e.SchemaVersion < 0 || e.SchemaVersion > SchemaVersion {
 		return fmt.Errorf("unsupported event schema version %d", e.SchemaVersion)
 	}
 	if e.SchemaVersion > 0 && e.SchemaVersion < 3 && (IsNormalized(e.Type) || e.Type == ProgressOmitted) {
@@ -150,6 +150,9 @@ func (e Event) Validate() error {
 		payloadType = ReturnEnvelope
 		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
 			return errors.New("return envelope requires schema 7")
+		}
+		if len(p.Evidence) > 0 && p.Evidence[0].Kind == EvidenceKind(CheckChangedFilesScope) && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
+			return errors.New("changed-files return envelope requires schema 8")
 		}
 		if err := p.Validate(); err != nil {
 			return err
@@ -190,8 +193,11 @@ func (e Event) Validate() error {
 			return err
 		}
 	case GateCheckPayload:
-		if e.SchemaVersion != 0 && e.SchemaVersion != 5 && e.SchemaVersion != 6 && e.SchemaVersion != 7 {
+		if e.SchemaVersion != 0 && (e.SchemaVersion < 5 || e.SchemaVersion > SchemaVersion) {
 			return errors.New("full check result requires schema 5")
+		}
+		if p.Kind == CheckChangedFilesScope && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
+			return errors.New("changed-files scope requires schema 8")
 		}
 		payloadType = GateCheck
 		if err := p.Validate(); err != nil {
@@ -272,7 +278,7 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &wire); err != nil {
 		return err
 	}
-	if wire.SchemaVersion != 1 && wire.SchemaVersion != 2 && wire.SchemaVersion != 3 && wire.SchemaVersion != 4 && wire.SchemaVersion != 5 && wire.SchemaVersion != 6 && wire.SchemaVersion != SchemaVersion {
+	if wire.SchemaVersion < 1 || wire.SchemaVersion > SchemaVersion {
 		return fmt.Errorf("unsupported event schema version %d", wire.SchemaVersion)
 	}
 	if len(wire.Payload) == 0 {

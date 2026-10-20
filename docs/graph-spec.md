@@ -630,3 +630,37 @@ budget. Operational failures produce no envelope. Readers retain schemas1–6,
 typed CheckResults/attempt lookup support5/6/7, CLI schema stays1. See ADR-0015,
 [static-unit example](examples/scoped-retry.yaml) and the
 [prepared real-Codex recipe](validation/F1.7-real-codex-demo.md).
+
+### Git-observed changed-files scope (F1.8)
+
+An Agent loop may select embedded Gate `kind: changed_files_scope` with
+`check_id`, `input`, `mode: warn|deny`, `workspace`, and explicit `allowed_paths`.
+The required `input` is a string or JSON candidate port bound from a declared Agent
+output under the existing loop binding contract. Its value is a dependency,
+not a source of changed-file evidence. Gate workspace and scope must equal the
+Agent's declarations. The Gate does not trust `changed_files` output.
+
+Rules are exact repository-relative files, directory prefixes ending `/`,
+terminal `/**` as a directory-prefix alias, and `./` for the whole repository.
+No other glob syntax is supported. Dot/repeated separators normalize; absolute
+or drive paths, backslashes, NUL and every `..` segment are rejected. Prefixes
+match whole directory components (`internal/runtime/**` does not allow
+`internal/runtime2/file.go`). Empty scope permits no changes. Enabled scopes
+are bounded to 32 entries, 512 bytes each and 8192 encoded bytes.
+
+The runtime captures a Git index/working-tree snapshot immediately before the
+first Agent attempt and retains it across correction attempts. It records HEAD
+for diagnostics but compares actual snapshots, including unchanged initial
+dirt, staged changes, untracked files (including ignored paths) and deletion.
+Renames check both old and new paths as removal/addition. Warn violations emit a green
+CheckResult with `reason: changed_files_outside_scope` and Git evidence; deny
+violations emit red and use existing retry/blocking behavior. Warn Git failures
+emit a green `changed_files_scope_indeterminate` diagnostic; deny Git failures
+are operational errors with no invented verdict. Schema-8 CheckResults retain
+mode, allowed scope, baseline HEAD, observed count and bounded sorted offending
+paths. Individual offending paths are retained within the overall CheckResult
+payload budget, without a separate 512-byte cutoff. Large ignored trees can
+make inspection fail: deny remains operationally blocked and warn records an
+indeterminate result. Scope checking detects writes after they occur; it neither
+prevents nor rolls them back. External concurrent writers remain indistinguishable before
+worktree isolation. See ADR-0016.
