@@ -66,6 +66,10 @@ type ObservedExecutor interface {
 // Zero selects the conservative default of one. Negative values are invalid.
 type Options struct {
 	MaxConcurrency int
+	// OnRunReady publishes a read-only retained trace after preflight and
+	// run initialization, before any node is dispatched. It must return
+	// promptly; a blocking callback delays execution.
+	OnRunReady func(events.RunID, events.TraceReader)
 	// LiveEvents receives sequenced events during execution. The caller must
 	// consume while Run is active and must not close the channel until Run returns.
 	// Delivery uses a bounded FIFO and never blocks execution. RunResult.Events
@@ -103,6 +107,12 @@ type runMachine struct {
 	emitter     *events.Collector
 	startedAt   time.Time
 	nodeStarted map[string]time.Time
+}
+
+type retainedTraceReader struct{ collector *events.Collector }
+
+func (r retainedTraceReader) Page(after uint64, limit int) (events.TracePage, error) {
+	return r.collector.Page(after, limit)
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -175,6 +185,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if definition.Units != nil {
 		machine.workspaces = inspectWorkspaces(ctx, definition)
 		machine.reportScopeConflicts(definition)
+	}
+	if options.OnRunReady != nil {
+		options.OnRunReady(machine.result.RunID, retainedTraceReader{collector: machine.emitter})
 	}
 	if limit > len(machine.ids) {
 		limit = len(machine.ids)

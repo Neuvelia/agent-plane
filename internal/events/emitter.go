@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -18,7 +19,26 @@ const (
 	MaxRetainedProgressItems = 4096
 	MaxLiveBytes             = 1 << 20
 	MaxLiveItems             = 1024
+	MaxTracePageItems        = 256
 )
+
+// TracePage is one atomic view of retained facts and their sequence watermark.
+// NextAfter is safe to use as the next cursor. When HasMore is false, it skips
+// sequence numbers consumed by omitted progress without claiming those facts
+// were retained.
+type TracePage struct {
+	Events    []Event
+	NextAfter uint64
+	HasMore   bool
+	Watermark uint64
+	Stats     DeliveryStats
+	Finished  bool
+}
+
+// TraceReader exposes retained facts without allowing a caller to append them.
+type TraceReader interface {
+	Page(after uint64, limit int) (TracePage, error)
+}
 
 // DeliveryStats counts encoded whole-event JSON bytes, not Go heap usage.
 type DeliveryStats struct {
@@ -205,6 +225,38 @@ func (c *Collector) Snapshot() []Event {
 		out[i] = e
 	}
 	return out
+}
+
+// Page returns detached retained events from one collector snapshot. Sequence
+// gaps can be omitted progress; callers must follow NextAfter until HasMore is
+// false before treating Watermark as fully read.
+func (c *Collector) Page(after uint64, limit int) (TracePage, error) {
+	if limit < 1 || limit > MaxTracePageItems {
+		return TracePage{}, fmt.Errorf("trace page limit must be from 1 to %d", MaxTracePageItems)
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if after > c.sequence {
+		return TracePage{}, fmt.Errorf("trace cursor %d exceeds watermark %d", after, c.sequence)
+	}
+	page := TracePage{Watermark: c.sequence, Stats: c.stats, Finished: c.finished}
+	start := sort.Search(len(c.events), func(i int) bool { return c.events[i].Sequence > after })
+	end := start + limit
+	if end > len(c.events) {
+		end = len(c.events)
+	}
+	page.Events = make([]Event, 0, end-start)
+	for _, event := range c.events[start:end] {
+		event.Payload = copyPayload(event.Payload)
+		page.Events = append(page.Events, event)
+	}
+	page.HasMore = end < len(c.events)
+	if page.HasMore {
+		page.NextAfter = page.Events[len(page.Events)-1].Sequence
+	} else {
+		page.NextAfter = page.Watermark
+	}
+	return page, nil
 }
 
 func copyPayload(payload Payload) Payload {

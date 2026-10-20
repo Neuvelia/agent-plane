@@ -227,6 +227,67 @@ func TestRunDeliversLiveEventsInSequence(t *testing.T) {
 
 }
 
+func TestRunExposesActiveRetainedTraceBeforeDispatch(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	started := make(chan struct{})
+	release := make(chan struct{})
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		close(started)
+		<-release
+		return nil, nil
+	})
+	type ready struct {
+		id     events.RunID
+		reader events.TraceReader
+	}
+	readyCh := make(chan ready, 1)
+	done := make(chan RunResult, 1)
+	go func() {
+		result, _ := Run(context.Background(), def, nil, exec, Options{OnRunReady: func(id events.RunID, reader events.TraceReader) {
+			if _, canAppend := reader.(events.Sink); canAppend {
+				t.Error("read-only trace also implements event append")
+			}
+			if _, concrete := reader.(*events.Collector); concrete {
+				t.Error("read-only trace exposes the mutable collector")
+			}
+			select {
+			case <-started:
+				t.Error("node dispatched before ready callback")
+			default:
+			}
+			readyCh <- ready{id: id, reader: reader}
+		}})
+		done <- result
+	}()
+	active := <-readyCh
+	if active.id == "" || active.reader == nil {
+		t.Fatalf("active trace = %+v", active)
+	}
+	<-started
+	page, err := active.reader.Page(0, 10)
+	if err != nil || len(page.Events) != 3 || page.Events[0].Type != events.RunStarted || page.Events[2].Type != events.NodeStarted || page.Finished {
+		t.Fatalf("active page = %+v, %v", page, err)
+	}
+	close(release)
+	result := <-done
+	final, err := active.reader.Page(page.NextAfter, 10)
+	if err != nil || !final.Finished || final.Events[len(final.Events)-1].Type != events.RunFinished || result.RunID != active.id {
+		t.Fatalf("final page = %+v, run = %+v, error = %v", final, result, err)
+	}
+}
+
+func TestRunDoesNotPublishReadyTraceWhenPreflightFails(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test", Inputs: map[string]graph.PortDefinition{"required": {Type: graph.ValueTypeString, Required: true}}}})
+	called := false
+	_, err := Run(context.Background(), def, nil, executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		t.Fatal("executor called despite preflight error")
+		return nil, nil
+	}), Options{OnRunReady: func(events.RunID, events.TraceReader) { called = true }})
+	if err == nil || called {
+		t.Fatalf("preflight err = %v, ready callback called = %t", err, called)
+	}
+}
+
 func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {

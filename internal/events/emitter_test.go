@@ -133,3 +133,101 @@ func TestCollectorRejectsInvalidAndLateEvents(t *testing.T) {
 		t.Fatalf("late event changed collector: %d events", got)
 	}
 }
+
+func TestCollectorPageContinuesWithoutSkippingRetainedFacts(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	for _, event := range []Event{
+		{Type: RunStarted, Payload: RunStartedPayload{}},
+		{Type: NodeReady, NodeID: "node", NodeRunID: "node-run", Payload: NodeReadyPayload{}},
+		{Type: NodeStarted, NodeID: "node", NodeRunID: "node-run", Payload: NodeStartedPayload{}},
+	} {
+		if _, err := collector.Append(event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := collector.Page(0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Events) != 2 || first.Events[0].Sequence != 1 || first.Events[1].Sequence != 2 || first.NextAfter != 2 || !first.HasMore || first.Watermark != 3 {
+		t.Fatalf("first page = %+v", first)
+	}
+	second, err := collector.Page(first.NextAfter, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Events) != 1 || second.Events[0].Sequence != 3 || second.NextAfter != 3 || second.HasMore || second.Watermark != 3 {
+		t.Fatalf("second page = %+v", second)
+	}
+}
+
+func TestCollectorPageAdvancesAcrossOmittedProgressAndDetachesPayload(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	for i := 0; i < MaxRetainedProgressItems+1; i++ {
+		if _, err := collector.Append(Event{Type: LogChunk, Payload: LogChunkPayload{Stream: Stdout, Data: []byte("safe")}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := collector.Page(MaxRetainedProgressItems-1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 || page.Events[0].Sequence != MaxRetainedProgressItems || page.NextAfter != MaxRetainedProgressItems+1 || page.Watermark != MaxRetainedProgressItems+1 || page.HasMore || page.Stats.RetainedOmittedEvents != 1 {
+		t.Fatalf("omission page = %+v", page)
+	}
+	page.Events[0].Payload.(LogChunkPayload).Data[0] = 'X'
+	again, err := collector.Page(MaxRetainedProgressItems-1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(again.Events[0].Payload.(LogChunkPayload).Data); got != "safe" {
+		t.Fatalf("stored payload = %q", got)
+	}
+	if _, err := collector.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}}); err != nil {
+		t.Fatal(err)
+	}
+	final, err := collector.Page(page.NextAfter, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !final.Finished || len(final.Events) != 2 || final.Events[0].Type != ProgressOmitted || final.Events[1].Type != RunFinished || final.HasMore {
+		t.Fatalf("final page = %+v", final)
+	}
+}
+
+func TestCollectorPageRejectsInvalidCursorAndLimit(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	for _, tc := range []struct {
+		after uint64
+		limit int
+	}{{0, 0}, {0, MaxTracePageItems + 1}, {1, 1}} {
+		if _, err := collector.Page(tc.after, tc.limit); err == nil {
+			t.Fatalf("Page(%d, %d) accepted", tc.after, tc.limit)
+		}
+	}
+}
+
+func TestCollectorPageResumesAfterAppendBetweenSnapshots(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := collector.Page(0, 1)
+	if err != nil || first.HasMore || first.NextAfter != 1 || first.Watermark != 1 || first.Finished {
+		t.Fatalf("initial page = %+v, %v", first, err)
+	}
+	resume := make(chan struct{})
+	appended := make(chan struct{})
+	go func() {
+		<-resume
+		collector.Append(Event{Type: NodeReady, NodeID: "node", NodeRunID: "node-run", Payload: NodeReadyPayload{}})
+		collector.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}})
+		close(appended)
+	}()
+	close(resume)
+	<-appended
+	second, err := collector.Page(first.NextAfter, 2)
+	if err != nil || len(second.Events) != 2 || second.Events[0].Sequence != 2 || second.Events[1].Sequence != 3 || second.Events[1].Type != RunFinished || second.NextAfter != 3 || second.HasMore || second.Watermark != 3 || !second.Finished {
+		t.Fatalf("resumed page = %+v, %v", second, err)
+	}
+}
