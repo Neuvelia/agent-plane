@@ -40,6 +40,16 @@ clean up descendants on all release platforms, including Windows; no fallback
 that silently removes Codex safety flags. Exact dependency pins and OS minima
 are implementation-plan decisions reviewed before installation.
 
+The Go source-build minimum rises from 1.23 to 1.25. Traversal-resistant
+`os.Root` access confines local project files, and pinned
+`golang.org/x/sys v0.46.0` supplies named Darwin/Linux exchange calls that the
+standard library lacks. It is compiled into the bundled sidecar, so installed
+users do not need Go. Offline CI/build hosts must preinstall Go 1.25 or newer
+and use `GOTOOLCHAIN=local` to avoid hidden toolchain downloads. The platform
+exchange only preserves a displaced file; it does not provide an atomic
+digest compare-and-swap. Saves need durable intent and recovery before they
+can claim conflict safety.
+
 ## Alternatives considered
 
 A browser UI plus localhost server is possible but conflicts with the requested
@@ -51,7 +61,9 @@ but Electron is the user's stated preference.
 
 Go and CLI retain ownership of semantics. Desktop adds packaging and bridge
 maintenance, and Windows execution portability is required work. SQLite driver
-selection remains separate. No cloud architecture is introduced.
+selection remains separate. Developers building from source need Go 1.25 or
+newer; existing graph and CLI data formats remain unchanged. No cloud
+architecture is introduced.
 
 ## Compatibility and migration
 
