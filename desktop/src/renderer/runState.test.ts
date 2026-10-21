@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { applyPage, applySnapshot, emptyRunView, type EventPage, type RunFact } from './runState'
+import { applyPage, applySnapshot, currentRunView, emptyRunView, type EventPage, type RunFact } from './runState'
 
 const runID = '00000000-0000-4000-8000-000000000099'
 const hashA = `sha256:${'a'.repeat(64)}`
@@ -54,4 +54,10 @@ describe('retained run reducer', () => {
     expect(() => applyPage(emptyRunView(runID), page([fact(1)], []))).toThrow()
     expect(() => applyPage(emptyRunView(runID), { ...page([fact(1)], [hashA]), run_id: 'other' })).toThrow()
   })
+})
+
+it('does not display a prior run replay while a new run loads', () => {
+  const old = emptyRunView('old-run')
+  expect(currentRunView(old, 'new-run')).toBeNull()
+  expect(currentRunView(old, 'old-run')).toBe(old)
 })

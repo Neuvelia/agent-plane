@@ -4,6 +4,7 @@ export type RunFact = {
   run_id: string
   sequence: number
   type: string
+  graph_id?: string
   timestamp: string
   event_schema_version: number
   payload: unknown
@@ -119,4 +120,9 @@ export function applySnapshot(current: RunView, snapshot: RunSnapshot): RunView 
   }
   return { ...current, state: snapshot.state, finished: snapshot.finished,
     watermark: Math.max(current.watermark, snapshot.trace_watermark) }
+}
+
+// A replay from the previous run must never label a newly selected run.
+export function currentRunView(view: RunView | null, runID?: string): RunView | null {
+  return runID && view?.runID === runID ? view : null
 }
