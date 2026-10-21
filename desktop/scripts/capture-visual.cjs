@@ -27,6 +27,34 @@ app.whenReady().then(async () => {
     }
     await fs.writeFile(path.join(output, `${page}.png`), await window.webContents.capturePage().then((image) => image.toPNG()))
   }
+  const graphPrompt = await window.webContents.executeJavaScript(`(async () => {
+    document.querySelector('button[aria-label=Projects]').click()
+    await new Promise(r => requestAnimationFrame(r))
+    const prompt = document.querySelector('button.graph-open-prompt')
+    const before = { focusable: prompt?.tabIndex >= 0, expanded: prompt?.getAttribute('aria-expanded'), input: !!document.querySelector('input[aria-label="Graph path relative to project"]') }
+    prompt?.click()
+    await new Promise(r => requestAnimationFrame(r))
+    const afterClick = { expanded: prompt?.getAttribute('aria-expanded'), input: !!document.querySelector('input[aria-label="Graph path relative to project"]'), open: !![...document.querySelectorAll('button')].find(b => b.textContent === 'Open') }
+    prompt?.click()
+    await new Promise(r => requestAnimationFrame(r))
+    prompt?.focus()
+    return { before, afterClick, focused: document.activeElement === prompt }
+  })()`)
+  if (!graphPrompt.before.focusable || graphPrompt.before.expanded !== 'false' || graphPrompt.before.input || graphPrompt.afterClick.expanded !== 'true' || !graphPrompt.afterClick.input || !graphPrompt.afterClick.open || !graphPrompt.focused) throw new Error(`Project graph disclosure failed: ${JSON.stringify(graphPrompt)}`)
+  window.show()
+  window.focus()
+  window.webContents.focus()
+  const graphRefocused = await window.webContents.executeJavaScript(`(() => { const prompt = document.querySelector('button.graph-open-prompt'); prompt?.focus(); return document.activeElement === prompt })()`)
+  if (!graphRefocused) throw new Error('Project graph disclosure lost focus before keyboard activation')
+  window.webContents.debugger.attach('1.3')
+  try {
+    await window.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', text: '\r', unmodifiedText: '\r', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+    await window.webContents.debugger.sendCommand('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13 })
+  } finally {
+    window.webContents.debugger.detach()
+  }
+  const graphKeyboard = await window.webContents.executeJavaScript(`(async () => { await new Promise(r => requestAnimationFrame(r)); return { expanded: document.querySelector('button.graph-open-prompt')?.getAttribute('aria-expanded'), input: !!document.querySelector('input[aria-label="Graph path relative to project"]'), open: !![...document.querySelectorAll('button')].find(b => b.textContent === 'Open'), focus: document.activeElement?.className } })()`)
+  if (graphKeyboard.expanded !== 'true' || !graphKeyboard.input || !graphKeyboard.open) throw new Error(`Project graph keyboard disclosure failed: ${JSON.stringify(graphKeyboard)}`)
   const keyboard = await window.webContents.executeJavaScript(`(async () => { const b = document.querySelector('button[aria-label=Dashboard]'); b.focus(); b.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true })); await new Promise(r => requestAnimationFrame(r)); return { focused: document.activeElement?.getAttribute('aria-label'), selected: document.querySelector('button[aria-current=page]')?.getAttribute('aria-label') } })()`)
   if (keyboard.focused !== 'Projects' || keyboard.selected !== 'Projects') throw new Error(`Keyboard navigation failed: ${JSON.stringify(keyboard)}`)
   const projectSwitch = await window.webContents.executeJavaScript(`(async () => { window.visualFixture.holdWorkspaces(); [...document.querySelectorAll('.sidebar-link')].find(e => e.textContent.includes('Thesis experiments')).click(); await new Promise(r => requestAnimationFrame(r)); return { text: document.querySelector('main.content')?.innerText, title: document.querySelector('.sidebar-title')?.innerText } })()`)
@@ -43,7 +71,7 @@ app.whenReady().then(async () => {
   if (!conflict.error?.includes('revision conflict') || !conflict.reload) throw new Error(`Settings conflict recovery is not visible: ${JSON.stringify(conflict)}`)
   const disconnect = await window.webContents.executeJavaScript(`(async () => { window.visualFixture.holdProjects(); [...document.querySelectorAll('button')].find(b => b.textContent === 'Reload local data').click(); window.visualFixture.disconnect(); window.visualFixture.releaseProjects(); await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return { text: document.body.innerText, disabled: [...document.querySelectorAll('.preferences input')].every(e => e.disabled) } })()`)
   if (!disconnect.text.includes('Local service unavailable') || !disconnect.text.includes('Stale') || !disconnect.disabled) throw new Error('Disconnect did not keep stale read-only state')
-  console.log(JSON.stringify({ ...metrics, keyboard, projectSwitch: 'pass', missingAvailability: 'pass', failedRefresh: 'pass', deletedWorkspace: 'pass', conflict: 'pass', disconnect: 'pass' }))
+  console.log(JSON.stringify({ ...metrics, graphPrompt: 'pass', graphKeyboard: 'pass', keyboard, projectSwitch: 'pass', missingAvailability: 'pass', failedRefresh: 'pass', deletedWorkspace: 'pass', conflict: 'pass', disconnect: 'pass' }))
   const compact = new BrowserWindow({ width: 900, height: 620, useContentSize: true, show: false, backgroundColor: '#0a0b0b', webPreferences: { preload: path.join(__dirname, 'visual-preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } })
   await compact.loadFile(path.join(__dirname, '..', 'out', 'renderer', 'index.html'))
   const responsive = await compact.webContents.executeJavaScript(`(async () => { await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); return { width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth, rail: !!document.querySelector('.rail'), sidebar: !!document.querySelector('.sidebar') } })()`)
