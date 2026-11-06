@@ -87,6 +87,121 @@ func TestCollectorPageBoundedSelectsLargeFactsBeforeCopying(t *testing.T) {
 	}
 }
 
+func TestCollectorReservesOriginalSequenceForSensitiveOmission(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	sequence, err := collector.OmitSensitive()
+	if err != nil || sequence != 2 {
+		t.Fatalf("omitted sequence = %d, %v", sequence, err)
+	}
+	if _, err := collector.Append(Event{Type: NodeReady, NodeID: "node", NodeRunID: "node-run", Payload: NodeReadyPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := collector.Page(0, 1)
+	if err != nil || len(first.Events) != 1 || first.Events[0].Sequence != 1 || first.NextAfter != 1 || len(first.Omissions) != 0 {
+		t.Fatalf("first page = %+v, %v", first, err)
+	}
+	second, err := collector.Page(first.NextAfter, 1)
+	if err != nil || len(second.Events) != 1 || second.Events[0].Sequence != 3 || second.NextAfter != 3 || second.HasMore ||
+		len(second.Omissions) != 1 || second.Omissions[0] != (OmissionRange{From: 2, To: 2, Reason: OmissionSensitiveIdentity}) {
+		t.Fatalf("second page = %+v, %v", second, err)
+	}
+}
+
+func TestCollectorPagesOnlySensitiveOmissionsAndCoalescesRanges(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := collector.OmitSensitive(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	page, err := collector.Page(1, 1)
+	if err != nil || len(page.Events) != 0 || page.NextAfter != 4 || page.HasMore || page.Watermark != 4 ||
+		len(page.Omissions) != 1 || page.Omissions[0] != (OmissionRange{From: 2, To: 4, Reason: OmissionSensitiveIdentity}) {
+		t.Fatalf("all-omission page = %+v, %v", page, err)
+	}
+	if _, err := collector.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.OmitSensitive(); !errors.Is(err, ErrCollectorFinished) {
+		t.Fatalf("late omission = %v", err)
+	}
+}
+
+func TestCollectorPageBoundedAccountsForOmissionsBeforeLargeFact(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.OmitSensitive(); err != nil {
+		t.Fatal(err)
+	}
+	large, err := collector.Append(Event{Type: NodeEvidence,
+		Payload: NodeEvidencePayload{ChangedFiles: []ChangedFile{{Path: strings.Repeat("x", 4<<20)}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(large)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := len(encoded) + 4 // event array and empty omission array fit exactly
+	first, err := collector.PageBounded(1, 1, budget)
+	if err != nil || len(first.Events) != 0 || first.NextAfter != 2 || !first.HasMore ||
+		len(first.Omissions) != 1 || first.Omissions[0] != (OmissionRange{From: 2, To: 2, Reason: OmissionSensitiveIdentity}) {
+		t.Fatalf("bounded omission page = %d events, cursor %d, more %t, omissions %+v, %v",
+			len(first.Events), first.NextAfter, first.HasMore, first.Omissions, err)
+	}
+	second, err := collector.PageBounded(first.NextAfter, 1, budget)
+	if err != nil || len(second.Events) != 1 || second.Events[0].Sequence != 3 || len(second.Omissions) != 0 || second.HasMore {
+		t.Fatalf("bounded fact page = %d events, %+v omissions, %v", len(second.Events), second.Omissions, err)
+	}
+	pageEvents, err := json.Marshal(second.Events)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pageOmissions, err := json.Marshal(second.Omissions)
+	if err != nil || len(pageEvents)+len(pageOmissions) > budget {
+		t.Fatalf("bounded encoded page = %d bytes, %v", len(pageEvents)+len(pageOmissions), err)
+	}
+}
+
+func TestCollectorPageBoundedSeparatesTrailingOmissions(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	fact, err := collector.Append(Event{Type: NodeReady, NodeID: "node", NodeRunID: "node-run", Payload: NodeReadyPayload{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.OmitSensitive(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(fact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	budget := len(encoded) + 4
+	first, err := collector.PageBounded(1, 1, budget)
+	if err != nil || len(first.Events) != 1 || first.Events[0].Sequence != 2 ||
+		first.NextAfter != 2 || !first.HasMore || len(first.Omissions) != 0 {
+		t.Fatalf("trailing split = %d events, cursor %d, more %t, omissions %+v, %v",
+			len(first.Events), first.NextAfter, first.HasMore, first.Omissions, err)
+	}
+	second, err := collector.PageBounded(first.NextAfter, 1, budget)
+	if err != nil || len(second.Events) != 0 || second.NextAfter != 3 || second.HasMore ||
+		len(second.Omissions) != 1 || second.Omissions[0].From != 3 || second.Omissions[0].To != 3 {
+		t.Fatalf("trailing omission = %d events, cursor %d, more %t, omissions %+v, %v",
+			len(second.Events), second.NextAfter, second.HasMore, second.Omissions, err)
+	}
+}
+
 func TestCollectorSequencesConcurrentEventsAndCopiesLogs(t *testing.T) {
 	collector := NewCollector("run", "graph", "sha256-v0:hash")
 	const workers, perWorker = 8, 20

@@ -62,10 +62,20 @@ function validatedEventPage(result: unknown): EventPage {
   const value = object(result)
   for (const key of ['after_sequence', 'next_after', 'watermark']) safeUnsigned(value[key])
   if (!Array.isArray(value.events) || !Array.isArray(value.event_hashes) ||
+    !Array.isArray(value.omissions) || value.omissions.length > 16384 ||
     value.events.length !== value.event_hashes.length) {
     throw new SidecarError('unavailable', 'Invalid retained event page')
   }
   for (const event of value.events) safeUnsigned(object(event).sequence)
+  for (const raw of value.omissions) {
+    const omission = object(raw)
+    const from = safeUnsigned(omission.from)
+    const to = safeUnsigned(omission.to)
+    if (from < 1 || to < from || to > (value.next_after as number) ||
+      !['sensitive_identity', 'not_retained'].includes(omission.reason as string)) {
+      throw new SidecarError('unavailable', 'Invalid retained event omission')
+    }
+  }
   const stats = object(value.stats)
   for (const key of ['retained_omitted_events', 'retained_omitted_bytes',
     'live_omitted_events', 'live_omitted_bytes']) safeUnsigned(stats[key])

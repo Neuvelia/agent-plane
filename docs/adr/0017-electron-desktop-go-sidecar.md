@@ -31,11 +31,21 @@ limit 1–256. It echoes the cursor and returns one atomic retained page with
 `next_after`, `has_more`, watermark, `finished` and the five omission counters
 also exposed by `runs.snapshot`. Clients follow `next_after` while `has_more`
 and may then advance to the watermark across omitted progress. A page shrinks
-to fit a 7 MiB result budget within the 8 MiB frame; a single fact that cannot
+to fit a 7 MiB result budget within the 8 MiB frame, counting both event and
+omission arrays; a single fact that cannot
 fit returns `response_too_large` without skipping it. A `finished` trace page
 can precede the run owner's terminal snapshot by a brief scheduling interval;
 the client reconciles until the snapshot reports its final state or explicit
 `unknown`. Full output values require a separate bounded F2.9 contract.
+The page also carries `omissions[]` with inclusive original-sequence `from`
+and `to` and a fixed reason (`not_retained` or `sensitive_identity`). Events
+and omission ranges cover every sequence from `after_sequence + 1` through
+`next_after` without fabricating facts. A page may contain only omissions and
+still have `has_more=true`; the client advances its cursor by `next_after`.
+An omission can be emitted before the next large retained fact to keep both
+pages within the frame budget. F2.9's shared safe projection must supply the
+privacy decision and safe hashes; the collector range API alone does not
+establish that contract.
 Each event page also carries aligned `event_hashes[]` containing SHA-256 of
 the exact retained event JSON object bytes. The collector computes hashes at
 append, so replay does not hash a large page under the execution lock. The

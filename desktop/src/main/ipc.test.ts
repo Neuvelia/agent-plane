@@ -66,6 +66,21 @@ describe('fixed Electron IPC bridge', () => {
     expect(app.opened).toEqual(['https://example.com/help'])
   })
 
+  it('preserves bounded omission ranges and rejects malformed sidecar ranges', async () => {
+    const base = { run_id: 'id', after_sequence: 0, events: [], event_hashes: [],
+      next_after: 2, has_more: false, watermark: 2, finished: false,
+      stats: { retained_omitted_events: 0, retained_omitted_bytes: 0,
+        live_omitted_events: 0, live_omitted_bytes: 0, live_stopped: false } }
+    const good = fixture((method) => method === 'runs.events'
+      ? { ...base, omissions: [{ from: 1, to: 2, reason: 'sensitive_identity' }] } : undefined)
+    await expect(good.invoke('eventsRun', { run_id: 'id', after_sequence: 0, limit: 1 }))
+      .resolves.toMatchObject({ omissions: [{ from: 1, to: 2, reason: 'sensitive_identity' }] })
+    const unsafe = fixture((method) => method === 'runs.events'
+      ? { ...base, omissions: [{ from: 1, to: 2 ** 53, reason: 'sensitive_identity' }] } : undefined)
+    await expect(unsafe.invoke('eventsRun', { run_id: 'id', after_sequence: 0, limit: 1 }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+  })
+
   it('releases the main-owned slot after a terminal snapshot and rejects unsafe document revisions', async () => {
     const app = fixture((method) => method === 'runs.snapshot'
       ? { run_id: 'run', state: 'succeeded', finished: true, trace_watermark: 2 }

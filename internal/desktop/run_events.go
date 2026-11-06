@@ -15,15 +15,16 @@ const maxRunEventsEventBytes = maxRunEventsResultBytes - 32768
 // RunEventsPage is a transport view of one atomic retained trace page. The
 // event objects retain their runtime schema and sequence identities.
 type RunEventsPage struct {
-	RunID         events.RunID     `json:"run_id"`
-	AfterSequence uint64           `json:"after_sequence"`
-	Events        []events.Event   `json:"events"`
-	EventHashes   []string         `json:"event_hashes"`
-	NextAfter     uint64           `json:"next_after"`
-	HasMore       bool             `json:"has_more"`
-	Watermark     uint64           `json:"watermark"`
-	Stats         RunDeliveryStats `json:"stats"`
-	Finished      bool             `json:"finished"`
+	RunID         events.RunID           `json:"run_id"`
+	AfterSequence uint64                 `json:"after_sequence"`
+	Events        []events.Event         `json:"events"`
+	EventHashes   []string               `json:"event_hashes"`
+	Omissions     []events.OmissionRange `json:"omissions"`
+	NextAfter     uint64                 `json:"next_after"`
+	HasMore       bool                   `json:"has_more"`
+	Watermark     uint64                 `json:"watermark"`
+	Stats         RunDeliveryStats       `json:"stats"`
+	Finished      bool                   `json:"finished"`
 }
 
 // Events reads the current retained trace without consuming its lossy live
@@ -58,8 +59,8 @@ func (s *RunService) Events(runID events.RunID, after uint64, limit int) (RunEve
 	}
 	result := RunEventsPage{
 		RunID: runID, AfterSequence: after, Events: page.Events,
-		EventHashes: page.EventHashes,
-		NextAfter:   page.NextAfter, HasMore: page.HasMore,
+		EventHashes: page.EventHashes, Omissions: page.Omissions,
+		NextAfter: page.NextAfter, HasMore: page.HasMore,
 		Watermark: page.Watermark, Finished: page.Finished,
 		Stats: runDeliveryStats(page.Stats),
 	}
@@ -68,6 +69,9 @@ func (s *RunService) Events(runID events.RunID, after uint64, limit int) (RunEve
 	}
 	if result.EventHashes == nil {
 		result.EventHashes = []string{}
+	}
+	if result.Omissions == nil {
+		result.Omissions = []events.OmissionRange{}
 	}
 	encoded, err := json.Marshal(result)
 	if err != nil {

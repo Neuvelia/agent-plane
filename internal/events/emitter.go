@@ -18,12 +18,26 @@ var ErrCollectorFinished = errors.New("event collector is finished")
 var ErrTraceEventTooLarge = errors.New("retained event exceeds page byte limit")
 
 const (
-	MaxRetainedProgressBytes = 4 << 20
-	MaxRetainedProgressItems = 4096
-	MaxLiveBytes             = 1 << 20
-	MaxLiveItems             = 1024
-	MaxTracePageItems        = 256
+	MaxRetainedProgressBytes  = 4 << 20
+	MaxRetainedProgressItems  = 4096
+	MaxLiveBytes              = 1 << 20
+	MaxLiveItems              = 1024
+	MaxTracePageItems         = 256
+	maxExplicitOmissionRanges = 4096
 )
+
+const (
+	OmissionSensitiveIdentity = "sensitive_identity"
+	OmissionNotRetained       = "not_retained"
+)
+
+// OmissionRange accounts for original sequence numbers with no retained fact.
+// From and To are inclusive; no event is fabricated at those positions.
+type OmissionRange struct {
+	From   uint64 `json:"from"`
+	To     uint64 `json:"to"`
+	Reason string `json:"reason"`
+}
 
 // TracePage is one atomic view of retained facts and their sequence watermark.
 // NextAfter is safe to use as the next cursor. When HasMore is false, it skips
@@ -32,6 +46,7 @@ const (
 type TracePage struct {
 	Events      []Event
 	EventHashes []string
+	Omissions   []OmissionRange
 	NextAfter   uint64
 	HasMore     bool
 	Watermark   uint64
@@ -67,6 +82,7 @@ type Collector struct {
 	events                       []Event
 	eventSizes                   []int
 	eventHashes                  []string
+	omissions                    []OmissionRange
 	sequence                     uint64
 	finished, finalizing         bool
 	retainedBytes, retainedItems int
@@ -75,6 +91,25 @@ type Collector struct {
 	queue                        []queuedEvent
 	queueBytes                   int
 	wake, stop, done             chan struct{}
+}
+
+// OmitSensitive reserves a sequence for a fact whose identity could not be
+// safely represented. The reason index is bounded; after it fills, pages still
+// account for every missing sequence with the generic not-retained reason.
+func (c *Collector) OmitSensitive() (uint64, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.finished || c.finalizing {
+		return 0, ErrCollectorFinished
+	}
+	c.sequence++
+	sequence := c.sequence
+	if count := len(c.omissions); count > 0 && c.omissions[count-1].To+1 == sequence {
+		c.omissions[count-1].To = sequence
+	} else if len(c.omissions) < maxExplicitOmissionRanges {
+		c.omissions = append(c.omissions, OmissionRange{From: sequence, To: sequence, Reason: OmissionSensitiveIdentity})
+	}
+	return sequence, nil
 }
 
 func NewCollector(runID RunID, graphID, graphVersion string) *Collector {
@@ -255,8 +290,8 @@ func (c *Collector) Page(after uint64, limit int) (TracePage, error) {
 	return c.page(after, limit, 0)
 }
 
-// PageBounded selects the largest retained prefix whose encoded event objects
-// and array commas fit maxEventBytes. It never copies excluded payloads.
+// PageBounded selects the largest retained prefix whose encoded event and
+// omission arrays fit maxEventBytes. It never copies excluded payloads.
 func (c *Collector) PageBounded(after uint64, limit, maxEventBytes int) (TracePage, error) {
 	if maxEventBytes < 1 {
 		return TracePage{}, errors.New("trace page byte limit must be positive")
@@ -279,22 +314,56 @@ func (c *Collector) page(after uint64, limit, maxEventBytes int) (TracePage, err
 	if end > len(c.events) {
 		end = len(c.events)
 	}
-	if maxEventBytes > 0 {
-		used := 0
-		for i := start; i < end; i++ {
-			next := c.eventSizes[i]
-			if i > start {
-				next++ // JSON array comma
+	includeTrailing := true
+	pageEnd := func(end int) (uint64, []OmissionRange, int, error) {
+		through := c.sequence
+		if end < len(c.events) || !includeTrailing && end > start {
+			if end > start {
+				through = c.events[end-1].Sequence
+			} else {
+				through = c.events[start].Sequence - 1
 			}
-			if next > maxEventBytes-used {
-				if i == start {
-					return TracePage{}, ErrTraceEventTooLarge
-				}
-				end = i
-				break
-			}
-			used += next
 		}
+		omissions := c.pageOmissions(after, through, c.events[start:end])
+		used := 2 // event array brackets
+		for i := start; i < end; i++ {
+			used += c.eventSizes[i]
+			if i > start {
+				used++ // JSON array comma
+			}
+		}
+		if len(omissions) == 0 {
+			return through, omissions, used + 2, nil // empty omission array
+		}
+		encoded, err := json.Marshal(omissions)
+		return through, omissions, used + len(encoded), err
+	}
+	if maxEventBytes > 0 && start < len(c.events) && c.eventSizes[start]+4 > maxEventBytes {
+		return TracePage{}, ErrTraceEventTooLarge
+	}
+	var through uint64
+	var omissions []OmissionRange
+	for {
+		var used int
+		var err error
+		through, omissions, used, err = pageEnd(end)
+		if err != nil {
+			return TracePage{}, err
+		}
+		if maxEventBytes == 0 || used <= maxEventBytes {
+			break
+		}
+		if includeTrailing && end == len(c.events) && end > start && c.sequence > c.events[end-1].Sequence {
+			includeTrailing = false
+			continue
+		}
+		if end == start {
+			return TracePage{}, ErrTraceEventTooLarge
+		}
+		end--
+	}
+	if end == start && end < len(c.events) && through == after {
+		return TracePage{}, ErrTraceEventTooLarge
 	}
 	page.Events = make([]Event, 0, end-start)
 	page.EventHashes = append([]string{}, c.eventHashes[start:end]...)
@@ -302,13 +371,64 @@ func (c *Collector) page(after uint64, limit, maxEventBytes int) (TracePage, err
 		event.Payload = copyPayload(event.Payload)
 		page.Events = append(page.Events, event)
 	}
-	page.HasMore = end < len(c.events)
-	if page.HasMore {
-		page.NextAfter = page.Events[len(page.Events)-1].Sequence
-	} else {
-		page.NextAfter = page.Watermark
-	}
+	page.HasMore = end < len(c.events) || through < c.sequence
+	page.NextAfter = through
+	page.Omissions = append([]OmissionRange{}, omissions...)
 	return page, nil
+}
+
+func (c *Collector) pageOmissions(after, through uint64, selected []Event) []OmissionRange {
+	if after >= through {
+		return nil
+	}
+	var result []OmissionRange
+	appendRange := func(from, to uint64, reason string) {
+		if from > to {
+			return
+		}
+		if len(result) > 0 && result[len(result)-1].To+1 == from && result[len(result)-1].Reason == reason {
+			result[len(result)-1].To = to
+			return
+		}
+		result = append(result, OmissionRange{From: from, To: to, Reason: reason})
+	}
+	appendGap := func(from, to uint64) {
+		if from > to {
+			return
+		}
+		start := sort.Search(len(c.omissions), func(i int) bool { return c.omissions[i].To >= from })
+		for _, explicit := range c.omissions[start:] {
+			if explicit.From > to {
+				break
+			}
+			if from < explicit.From {
+				appendRange(from, explicit.From-1, OmissionNotRetained)
+			}
+			start := from
+			if explicit.From > start {
+				start = explicit.From
+			}
+			end := to
+			if explicit.To < end {
+				end = explicit.To
+			}
+			appendRange(start, end, explicit.Reason)
+			from = end + 1
+			if from > to {
+				return
+			}
+		}
+		appendRange(from, to, OmissionNotRetained)
+	}
+	cursor := after + 1
+	for _, event := range selected {
+		if cursor < event.Sequence {
+			appendGap(cursor, event.Sequence-1)
+		}
+		cursor = event.Sequence + 1
+	}
+	appendGap(cursor, through)
+	return result
 }
 
 func copyPayload(payload Payload) Payload {

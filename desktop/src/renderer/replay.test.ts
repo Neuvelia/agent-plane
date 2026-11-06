@@ -22,6 +22,7 @@ describe('renderer replay', () => {
           events: after === 0 ? [{ run_id: runID, sequence: 1, type: 'run_started',
             timestamp: '2026-10-20T12:00:00Z', event_schema_version: 8, payload: {} }] : [],
           event_hashes: after === 0 ? [`sha256:${'a'.repeat(64)}`] : [],
+          omissions: after === 0 ? [] : [{ from: 2, to: 3, reason: 'not_retained' }],
           next_after: after === 0 ? 1 : 3, has_more: after === 0,
           watermark: 3, stats: omissions, finished: true }
       }

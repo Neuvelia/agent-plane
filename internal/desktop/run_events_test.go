@@ -70,6 +70,30 @@ func TestRunEventsPagesAndResumesAfterAppend(t *testing.T) {
 	}
 }
 
+func TestRunEventsPropagatesSensitiveOmissions(t *testing.T) {
+	collector := events.NewCollector(replayRunID, "graph", "version")
+	appendReplayEvent(t, collector, events.Event{Type: events.RunStarted, Payload: events.RunStartedPayload{}})
+	if _, err := collector.OmitSensitive(); err != nil {
+		t.Fatal(err)
+	}
+	appendReplayEvent(t, collector, events.Event{Type: events.NodeReady, Payload: events.NodeReadyPayload{}})
+	service := replayFixture(t, collector)
+	first, err := service.Events(replayRunID, 0, 1)
+	if err != nil || len(first.Events) != 1 || first.NextAfter != 1 || len(first.Omissions) != 0 {
+		t.Fatalf("first page = %+v, %v", first, err)
+	}
+	second, err := service.Events(replayRunID, first.NextAfter, 1)
+	want := events.OmissionRange{From: 2, To: 2, Reason: events.OmissionSensitiveIdentity}
+	if err != nil || len(second.Events) != 1 || second.Events[0].Sequence != 3 ||
+		len(second.Omissions) != 1 || second.Omissions[0] != want || second.NextAfter != 3 {
+		t.Fatalf("second page = %+v, %v", second, err)
+	}
+	encoded, marshalErr := json.Marshal(second)
+	if marshalErr != nil || !strings.Contains(string(encoded), `"omissions":[{"from":2,"to":2,"reason":"sensitive_identity"}]`) {
+		t.Fatalf("wire page = %s, %v", encoded, marshalErr)
+	}
+}
+
 func TestRunEventsOmissionAndTerminalSnapshot(t *testing.T) {
 	collector := events.NewCollector(replayRunID, "graph", "version")
 	for i := 0; i <= events.MaxRetainedProgressItems; i++ {

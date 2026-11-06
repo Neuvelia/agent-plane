@@ -19,11 +19,18 @@ export type DeliveryOmissions = {
   live_stopped: boolean
 }
 
+export type OmissionRange = {
+  from: number
+  to: number
+  reason: 'sensitive_identity' | 'not_retained'
+}
+
 export type EventPage = {
   run_id: string
   after_sequence: number
   events: RunFact[]
   event_hashes: string[]
+  omissions: OmissionRange[]
   next_after: number
   has_more: boolean
   watermark: number
@@ -46,6 +53,7 @@ export type RunView = {
   conflicts: number[]
   watermark: number
   omitted: DeliveryOmissions
+  omissionRanges: OmissionRange[]
   traceFinished: boolean
   state: string
   finished: boolean
@@ -63,12 +71,13 @@ function safeInteger(value: number): boolean {
 export function emptyRunView(runID: string): RunView {
   if (!runID) throw new Error('missing run identity')
   return { runID, cursor: 0, events: [], hashes: new Map(), conflicts: [], watermark: 0,
-    omitted: { ...zeroOmissions }, traceFinished: false, state: 'running', finished: false }
+    omitted: { ...zeroOmissions }, omissionRanges: [], traceFinished: false, state: 'running', finished: false }
 }
 
 export function applyPage(current: RunView, page: EventPage): RunView {
   if (page.run_id !== current.runID || !Array.isArray(page.events) ||
-      !Array.isArray(page.event_hashes) || page.events.length !== page.event_hashes.length ||
+      !Array.isArray(page.event_hashes) || !Array.isArray(page.omissions) ||
+      page.events.length !== page.event_hashes.length ||
       !safeInteger(page.after_sequence) || !safeInteger(page.next_after) ||
       !safeInteger(page.watermark) || page.after_sequence > page.watermark ||
       page.next_after < page.after_sequence || page.next_after > page.watermark) {
@@ -77,16 +86,22 @@ export function applyPage(current: RunView, page: EventPage): RunView {
   const hashes = new Map(current.hashes)
   const bySequence = new Map(current.events.map((event) => [event.sequence, event]))
   const conflicts = new Set(current.conflicts)
+  const coverage: Array<{ from: number; to: number }> = []
   let previous = page.after_sequence
   for (let index = 0; index < page.events.length; index++) {
     const event = page.events[index]
     const hash = page.event_hashes[index]
     if (event.run_id !== current.runID || !safeInteger(event.sequence) ||
-        event.sequence <= previous || event.sequence > page.watermark ||
+        event.sequence <= previous || event.sequence > page.next_after ||
         !/^sha256:[0-9a-f]{64}$/.test(hash)) {
       throw new Error('invalid retained event identity')
     }
     previous = event.sequence
+    coverage.push({ from: event.sequence, to: event.sequence })
+    if (current.omissionRanges.some((range) => range.from <= event.sequence && event.sequence <= range.to)) {
+      conflicts.add(event.sequence)
+      continue
+    }
     const acceptedHash = hashes.get(event.sequence)
     if (acceptedHash && acceptedHash !== hash) {
       conflicts.add(event.sequence)
@@ -95,7 +110,32 @@ export function applyPage(current: RunView, page: EventPage): RunView {
       bySequence.set(event.sequence, event)
     }
   }
-  if (page.has_more && (page.events.length === 0 || page.next_after !== previous)) {
+  for (const omission of page.omissions) {
+    if (!safeInteger(omission.from) || !safeInteger(omission.to) ||
+        omission.from <= page.after_sequence || omission.from > omission.to ||
+        omission.to > page.next_after ||
+        !['sensitive_identity', 'not_retained'].includes(omission.reason)) {
+      throw new Error('invalid retained event omission')
+    }
+    coverage.push({ from: omission.from, to: omission.to })
+    for (const accepted of current.events) {
+      if (omission.from <= accepted.sequence && accepted.sequence <= omission.to) {
+        conflicts.add(accepted.sequence)
+        if (omission.reason === 'sensitive_identity') {
+          bySequence.delete(accepted.sequence)
+          hashes.delete(accepted.sequence)
+        }
+      }
+    }
+  }
+  coverage.sort((a, b) => a.from - b.from)
+  let covered = page.after_sequence
+  for (const item of coverage) {
+    if (item.from !== covered + 1) throw new Error('unexplained retained event sequence')
+    covered = item.to
+  }
+  if (covered !== page.next_after) throw new Error('unexplained retained event sequence')
+  if (page.has_more && page.next_after === page.after_sequence) {
     throw new Error('invalid retained event continuation')
   }
   if (!page.has_more && page.next_after !== page.watermark) {
@@ -110,7 +150,11 @@ export function applyPage(current: RunView, page: EventPage): RunView {
     events: [...bySequence.values()].sort((a, b) => a.sequence - b.sequence),
     conflicts: [...conflicts].sort((a, b) => a - b),
     watermark: Math.max(current.watermark, page.watermark),
-    omitted: { ...page.stats }, traceFinished: current.traceFinished || page.finished }
+    omitted: { ...page.stats },
+    omissionRanges: [...new Map([...current.omissionRanges, ...page.omissions].map(
+      (range) => [range.from + ':' + range.to + ':' + range.reason, range])).values()]
+      .sort((a, b) => a.from - b.from),
+    traceFinished: current.traceFinished || page.finished }
 }
 
 export function applySnapshot(current: RunView, snapshot: RunSnapshot): RunView {

@@ -10,9 +10,17 @@ function fact(sequence: number, type = 'run_started', timestamp = '2026-10-20T12
 }
 
 function page(events: RunFact[], hashes: string[], after = 0, watermark = events.at(-1)?.sequence ?? 0): EventPage {
+  const omissions: Array<{ from: number; to: number; reason: 'not_retained' }> = []
+  let prior = after
+  for (const event of events) {
+    if (event.sequence > prior + 1) omissions.push({ from: prior + 1, to: event.sequence - 1, reason: 'not_retained' })
+    prior = event.sequence
+  }
+  const nextAfter = events.at(-1)?.sequence ?? watermark
+  if (nextAfter > prior) omissions.push({ from: prior + 1, to: nextAfter, reason: 'not_retained' })
   return {
-    run_id: runID, after_sequence: after, events, event_hashes: hashes,
-    next_after: events.at(-1)?.sequence ?? watermark, has_more: false, watermark,
+    run_id: runID, after_sequence: after, events, event_hashes: hashes, omissions,
+    next_after: nextAfter, has_more: false, watermark,
     stats: { retained_omitted_events: 0, retained_omitted_bytes: 0,
       live_omitted_events: 0, live_omitted_bytes: 0, live_stopped: false }, finished: false
   }
@@ -21,7 +29,7 @@ function page(events: RunFact[], hashes: string[], after = 0, watermark = events
 describe('retained run reducer', () => {
   it('orders by sequence, not timestamps, and ignores exact duplicate bytes', () => {
     let view = emptyRunView(runID)
-    view = applyPage(view, page([fact(2, 'node_ready', '2026-10-20T10:00:00Z')], [hashB], 0, 2))
+    view = applyPage(view, page([fact(2, 'node_ready', '2026-10-20T10:00:00Z')], [hashB], 1, 2))
     view = applyPage(view, page([fact(1, 'run_started', '2026-10-20T15:00:00Z'), fact(2, 'node_ready', '2026-10-20T10:00:00Z')], [hashA, hashB], 0, 2))
     expect(view.events.map((event) => event.sequence)).toEqual([1, 2])
     expect(view.conflicts).toEqual([])
@@ -53,6 +61,38 @@ describe('retained run reducer', () => {
     expect(() => applyPage(emptyRunView(runID), page([fact(2 ** 53)], [hashA], 0, 2 ** 53))).toThrow()
     expect(() => applyPage(emptyRunView(runID), page([fact(1)], []))).toThrow()
     expect(() => applyPage(emptyRunView(runID), { ...page([fact(1)], [hashA]), run_id: 'other' })).toThrow()
+  })
+
+  it('advances through an all-omission page without fabricating an event', () => {
+    let view = applyPage(emptyRunView(runID), { ...page([fact(1)], [hashA], 0, 3), has_more: true })
+    view = applyPage(view, { ...page([], [], 1, 3), omissions: [
+      { from: 2, to: 3, reason: 'sensitive_identity' }
+    ] })
+    expect(view.cursor).toBe(3)
+    expect(view.events.map((event) => event.sequence)).toEqual([1])
+    expect(view.omissionRanges).toEqual([{ from: 2, to: 3, reason: 'sensitive_identity' }])
+  })
+
+  it('rejects an unexplained or overlapping sequence gap', () => {
+    expect(() => applyPage(emptyRunView(runID), { ...page([], [], 0, 2), omissions: [] })).toThrow()
+    expect(() => applyPage(emptyRunView(runID), { ...page([fact(2)], [hashA], 0, 2),
+      omissions: [{ from: 1, to: 2, reason: 'not_retained' }] })).toThrow()
+  })
+
+  it('does not reveal a fact after its sequence was marked sensitive', () => {
+    let view = applyPage(emptyRunView(runID), { ...page([], [], 0, 1),
+      omissions: [{ from: 1, to: 1, reason: 'sensitive_identity' }] })
+    view = applyPage(view, { ...page([fact(1)], [hashA], 0, 1), omissions: [] })
+    expect(view.events).toEqual([])
+    expect(view.conflicts).toEqual([1])
+  })
+
+  it('marks a later omission overlapping an accepted fact as a conflict', () => {
+    let view = applyPage(emptyRunView(runID), page([fact(1)], [hashA]))
+    view = applyPage(view, { ...page([], [], 0, 1),
+      omissions: [{ from: 1, to: 1, reason: 'not_retained' }] })
+    expect(view.events.map((event) => event.sequence)).toEqual([1])
+    expect(view.conflicts).toEqual([1])
   })
 })
 
