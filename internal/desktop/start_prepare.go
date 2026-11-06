@@ -95,6 +95,9 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if err != nil {
 		return PreparedRun{}, protocolError("conflict", "Launch redaction values changed since preflight")
 	}
+	if runtime.ValidateProjectionIdentities(definition.ID, snapshot.SemanticVersion, projectionNodeIDs(definition), redactions) != nil {
+		return PreparedRun{}, protocolError("conflict", "Required graph identity is unsafe for this launch")
+	}
 	if err := ctx.Err(); err != nil {
 		return PreparedRun{}, protocolError("unavailable", "Start request was interrupted")
 	}

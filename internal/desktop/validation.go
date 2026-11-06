@@ -108,6 +108,8 @@ func safeDiagnosticText(code string, severity graph.Severity) (string, string) {
 		return "Graph or launch inputs contain a credential-shaped key", "Remove or rename the key; keep credentials outside graph files and launch inputs"
 	case "E_EMBEDDED_VALUE":
 		return "Saved graph contains a launch input or environment value", "Remove the value from the graph source or supply an input absent from the saved graph"
+	case "E_UNSAFE_IDENTITY":
+		return "Required graph identity intersects a private launch value", "Change the graph identity or the private value before starting"
 	case "E_NODE_TYPE_UNSUPPORTED":
 		return "Node type is unsupported by the desktop service", "Use a supported node type"
 	case "E_INPUT_VALUE_INVALID":

@@ -197,15 +197,21 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		graphInputs[name] = value
 	}
 
+	machine, err := newRunMachine(definition)
+	if err != nil {
+		return RunResult{}, err
+	}
+	if err := validateProjectionIdentities(redactionTemplate, definition.ID, machine.result.GraphVersion, machine.ids); err != nil {
+		return RunResult{}, err
+	}
+	if err := machine.validateGeneratedProjectionIdentities(redactionTemplate); err != nil {
+		return RunResult{}, err
+	}
 	scopes, scopeRedacted, err := unitScopes(definition, redactionTemplate)
 	if err != nil {
 		return RunResult{}, err
 	}
 	if err := preflightLoops(ctx, definition, executor); err != nil {
-		return RunResult{}, err
-	}
-	machine, err := newRunMachine(definition)
-	if err != nil {
 		return RunResult{}, err
 	}
 	machine.definition = definition
@@ -296,6 +302,11 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					aid, e := events.NewAttemptID()
 					if e != nil {
 						machine.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
+						machine.transitionNode(id, NodeFailed)
+						continue
+					}
+					if identityRedactedBy(redactionTemplate, string(aid)) {
+						machine.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: ErrUnsafeProjectionIdentity}
 						machine.transitionNode(id, NodeFailed)
 						continue
 					}

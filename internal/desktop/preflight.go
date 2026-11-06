@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -135,7 +136,7 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 	}
 	findings := append([]graph.Diagnostic(nil), doc.Diagnostics...)
 	if doc.Validity != DocumentValid {
-		return PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}, nil
+		return earlyPreflightDiagnostics(findings, nil, request.Inputs), nil
 	}
 	snapshot, err := s.documents.SavedSnapshot(request.DocumentID, request.Revision)
 	if err != nil {
@@ -157,7 +158,7 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 	plan, validation := graph.CompileBindings(definition)
 	findings = append([]graph.Diagnostic(nil), validation.Diagnostics...)
 	if plan == nil {
-		return PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}, nil
+		return earlyPreflightDiagnostics(findings, definition, request.Inputs), nil
 	}
 	findings = append(findings, plan.ValidateGraphInputs(request.Inputs).Diagnostics...)
 	path, inputLeaves, credentialErr := validateCredentialKeys(definition, request.Inputs)
@@ -182,18 +183,23 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 		findings = append(findings, preflightDiagnostic(definition.ID, "", "max_concurrency", "E_CONCURRENCY_LIMIT", "Concurrency exceeds local setting or is below one"))
 	}
 	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() {
-		return PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}, nil
+		return earlyPreflightDiagnostics(findings, definition, request.Inputs), nil
 	}
 	capabilityHash, environment, checks := s.checkNodesWithEnvironment(ctx, definition, workspace, settings)
 	findings = append(findings, checks...)
-	if !(graph.ValidationResult{Diagnostics: findings}).HasErrors() {
-		if graphContainsExternalValue(snapshot.Text, environment, inputLeaves) {
-			findings = append(findings, preflightDiagnostic(definition.ID, "", "document_id", "E_EMBEDDED_VALUE", "Saved graph contains a launch input or environment value"))
-		}
-		if _, err := launchRedactionsWithLeaves(environment, inputLeaves); err != nil {
-			findings = append(findings, preflightDiagnostic(definition.ID, "", "inputs", "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
-		}
+	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() {
+		return earlyPreflightDiagnostics(findings, definition, request.Inputs), nil
 	}
+	redactions, redactionErr := launchRedactionsWithLeaves(environment, inputLeaves)
+	if graphContainsExternalValue(snapshot.Text, environment, inputLeaves) {
+		findings = append(findings, preflightDiagnostic(definition.ID, "", "document_id", "E_EMBEDDED_VALUE", "Saved graph contains a launch input or environment value"))
+	}
+	if redactionErr != nil {
+		findings = append(findings, preflightDiagnostic(definition.ID, "", "inputs", "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
+	} else if runtime.ValidateProjectionIdentities(definition.ID, snapshot.SemanticVersion, projectionNodeIDs(definition), redactions) != nil {
+		findings = append(findings, preflightDiagnostic("", "", "document_id", "E_UNSAFE_IDENTITY", "Required graph identity intersects a private launch value"))
+	}
+	sanitizePreflightDiagnosticLocations(findings, redactions, redactionErr != nil)
 	result := PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}
 	if result.HasErrors {
 		return result, nil
@@ -223,6 +229,63 @@ func preflightFailure(code, message, path string) PreflightResult {
 func preflightDiagnostic(graphID, nodeID, path, code, message string) graph.Diagnostic {
 	return graph.Diagnostic{Severity: graph.SeverityError, Code: code, Message: message,
 		GraphID: graphID, Location: graph.DiagnosticLocation{NodeID: nodeID, Path: path}}
+}
+
+func projectionNodeIDs(definition *graph.Definition) []string {
+	ids := make([]string, 0, len(definition.Nodes))
+	for id := range definition.Nodes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+func earlyPreflightDiagnostics(findings []graph.Diagnostic, definition *graph.Definition, inputs map[string]graph.Value) PreflightResult {
+	unknownValues := definition == nil
+	var redactions []string
+	if !unknownValues {
+		leaves, err := inputStringLeaves(inputs)
+		if err == nil {
+			var environment LaunchEnvironment
+			environment, err = CaptureLaunchEnvironment(definition)
+			if err == nil {
+				redactions, err = launchRedactionsWithLeaves(environment, leaves)
+			}
+		}
+		unknownValues = err != nil
+	}
+	sanitizePreflightDiagnosticLocations(findings, redactions, unknownValues)
+	return PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}
+}
+
+func sanitizePreflightDiagnosticLocations(findings []graph.Diagnostic, redactions []string, unknownValues bool) {
+	for i := range findings {
+		location := &findings[i]
+		if unknownValues {
+			inputPath := (location.Code == "E_EMBEDDED_SECRET" || location.Code == "E_REDACTION_LIMIT") && (location.Location.Path == "inputs" || strings.HasPrefix(location.Location.Path, "inputs."))
+			location.GraphID = ""
+			location.Location.NodeID = ""
+			location.Location.Path = ""
+			if inputPath {
+				location.Location.Path = "inputs"
+			}
+			continue
+		}
+		for _, value := range redactions {
+			if value == "" {
+				continue
+			}
+			if strings.Contains(location.GraphID, value) {
+				location.GraphID = ""
+			}
+			if strings.Contains(location.Location.NodeID, value) {
+				location.Location.NodeID = ""
+			}
+			if strings.Contains(location.Location.Path, value) {
+				location.Location.Path = ""
+			}
+		}
+	}
 }
 
 func (s *PreflightService) checkNodes(ctx context.Context, definition *graph.Definition, workspace ResolvedWorkspace, settings LocalSettings) (string, []graph.Diagnostic) {

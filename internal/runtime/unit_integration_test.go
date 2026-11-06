@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -300,6 +301,19 @@ func TestUnitsScopeValidationBeforeAdapterDetectionAndLegacyAbsence(t *testing.T
 		}
 	}
 }
+
+func TestUnsafeGraphIdentityRejectsBeforeUnitScopeDiagnostic(t *testing.T) {
+	d := loopDefinition(1)
+	d.ID = "privatevalue"
+	d.Units = []string{"work"}
+	d.Nodes["work"].Config["allowed_paths"] = []string{"../outside"}
+	a := newLoopAdapter()
+	_, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{LogRedactions: []string{"privatevalue"}})
+	if !errors.Is(err, runtime.ErrUnsafeProjectionIdentity) || strings.Contains(fmt.Sprint(err), "privatevalue") || a.detect != 0 {
+		t.Fatalf("unsafe identity leaked before scope rejection: %v", err)
+	}
+}
+
 func TestUnitEnvelopeUsesCompleteNormalizedRedactedAuthoredScope(t *testing.T) {
 	d := loopDefinition(1)
 	d.Units = []string{"work"}

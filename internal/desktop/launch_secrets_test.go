@@ -83,6 +83,26 @@ outputs: {}
 	expectSecretPreflightRejected(t, result, "nodes.step.config.env")
 }
 
+func TestPreflightRejectsOwnShellLiteralMatchingRequiredIdentity(t *testing.T) {
+	text := `schema_version: 0
+id: ownliteral
+inputs: {}
+nodes:
+  step:
+    type: shell
+    config:
+      command: /bin/echo
+      env: {MESSAGE: ownliteral}
+    outputs: {}
+edges: []
+outputs: {}
+`
+	result, _, _, _ := preflightSecretGraph(t, text, nil)
+	if !result.HasErrors || result.PreflightToken != "" || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "E_UNSAFE_IDENTITY" || result.Diagnostics[0].GraphID != "" || result.Diagnostics[0].Message != "Required graph identity intersects a private launch value" {
+		t.Fatalf("unsafe identity received token or leaked its value: %+v", result)
+	}
+}
+
 func TestMalformedShellEnvReportsNodeConfigInsteadOfCredentialKey(t *testing.T) {
 	text := `schema_version: 0
 id: malformed-env
@@ -257,6 +277,70 @@ outputs: {}
 	result, _, _, _ := preflightSecretGraph(t, text, nil)
 	if !result.HasErrors || result.PreflightToken != "" || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "E_EMBEDDED_VALUE" {
 		t.Fatalf("embedded frozen environment preflight = %+v", result)
+	}
+}
+
+func TestPreflightEmbeddedValueDiagnosticDoesNotEchoPrivateGraphID(t *testing.T) {
+	t.Setenv("AP_F2_PRIVATE_GRAPH_ID", "privatevalue")
+	text := `schema_version: 0
+id: privatevalue
+inputs: {}
+nodes:
+  step:
+    type: shell
+    config:
+      command: /bin/echo
+      env_allowlist: [AP_F2_PRIVATE_GRAPH_ID]
+    outputs: {}
+edges: []
+outputs: {}
+`
+	result, _, _, _ := preflightSecretGraph(t, text, nil)
+	if !result.HasErrors || result.PreflightToken != "" || len(result.Diagnostics) == 0 || result.Diagnostics[0].Code != "E_EMBEDDED_VALUE" || result.Diagnostics[0].GraphID != "" || strings.Contains(fmt.Sprint(result.Diagnostics), "privatevalue") {
+		t.Fatalf("embedded-value diagnostic leaked private graph identity: %+v", result)
+	}
+}
+
+func TestEarlyPreflightErrorDoesNotEchoPrivateIdentity(t *testing.T) {
+	t.Setenv("AP_F2_EARLY_PRIVATE_ID", "privatevalue")
+	text := `schema_version: 0
+id: privatevalue
+inputs: {}
+nodes:
+  step:
+    type: shell
+    config:
+      command: /bin/echo
+      env_allowlist: [AP_F2_EARLY_PRIVATE_ID]
+    outputs: {}
+edges: []
+outputs: {}
+`
+	service, doc, workspace, _ := preflightFixture(t, text)
+	result, err := service.Preflight(context.Background(), PreflightRequest{DocumentID: doc.DocumentID, Revision: doc.Revision, WorkspaceID: workspace.WorkspaceID, MaxConcurrency: 0})
+	if err != nil || !result.HasErrors || result.PreflightToken != "" || strings.Contains(fmt.Sprint(result.Diagnostics), "privatevalue") {
+		t.Fatalf("early preflight diagnostic leaked required identity: result=%+v err=%v", result, err)
+	}
+}
+
+func TestCapabilityPreflightErrorDoesNotEchoLiteralIdentity(t *testing.T) {
+	text := `schema_version: 0
+id: privatevalue
+inputs: {}
+nodes:
+  step:
+    type: shell
+    config:
+      command: ""
+      env: {MESSAGE: privatevalue}
+    outputs: {}
+edges: []
+outputs: {}
+`
+	service, doc, workspace, _ := preflightFixture(t, text)
+	result, err := service.Preflight(context.Background(), PreflightRequest{DocumentID: doc.DocumentID, Revision: doc.Revision, WorkspaceID: workspace.WorkspaceID, MaxConcurrency: 1})
+	if err != nil || !result.HasErrors || result.PreflightToken != "" || strings.Contains(fmt.Sprint(result.Diagnostics), "privatevalue") {
+		t.Fatalf("capability diagnostic leaked required identity: result=%+v err=%v", result, err)
 	}
 }
 

@@ -29,6 +29,29 @@ func ValidateLogRedactions(values []string, observed bool) error {
 	return nil
 }
 
+// CaptureRedactor applies the run's exact redaction policy to one whole field.
+// The immutable template can be shared by concurrent projection readers.
+type CaptureRedactor struct{ template *logRedactor }
+
+func NewCaptureRedactor(values []string) (*CaptureRedactor, error) {
+	if err := ValidateLogRedactions(values, true); err != nil {
+		return nil, err
+	}
+	template, err := newLogRedactor(values)
+	if err != nil {
+		return nil, err
+	}
+	return &CaptureRedactor{template: template}, nil
+}
+
+// Redact returns detached bytes. It flushes the undecidable stream tail before
+// returning, so a private value at the end of the field is never exposed.
+func (r *CaptureRedactor) Redact(input []byte) []byte {
+	field := r.template.clone()
+	output := append([]byte(nil), field.Write(events.Stdout, input)...)
+	return append(output, field.Flush(events.Stdout)...)
+}
+
 // logRedactor keeps the undecidable tail of each byte stream until a later
 // write or final flush can rule out a secret spanning the boundary.
 type logRedactor struct {

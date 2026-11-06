@@ -315,6 +315,24 @@ func TestBeforeDispatchFailureLeavesNoExecutionFactsOrNodeWork(t *testing.T) {
 	}
 }
 
+func TestUnsafeRequiredIdentityRejectsBeforeMarkerAndDispatch(t *testing.T) {
+	called, marked, ready := false, false, false
+	live := make(chan events.Event, 8)
+	executor := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		called = true
+		return nil, nil
+	})
+	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, executor, Options{
+		LogRedactions:  []string{"scheduler-test"},
+		LiveEvents:     live,
+		BeforeDispatch: func(events.RunID) error { marked = true; return nil },
+		OnRunReady:     func(events.RunID, events.TraceReader) { ready = true },
+	})
+	if err == nil || r.RunID != "" || len(r.Events) != 0 || called || marked || ready || len(live) != 0 || strings.Contains(err.Error(), "scheduler-test") {
+		t.Fatalf("unsafe identity crossed start boundary: run=%+v err=%v called=%v marked=%v ready=%v live=%d", r, err, called, marked, ready, len(live))
+	}
+}
+
 func TestBeforeDispatchPrecedesRunStartedAndReadyCallback(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
 	live := make(chan events.Event, 8)
