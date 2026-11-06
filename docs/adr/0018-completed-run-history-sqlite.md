@@ -157,6 +157,15 @@ normal append position. The projector must honor that hint; it cannot infer
 provenance from the replacement marker text.
 Idempotence hashes the canonical safe projection, so distinct raw events that
 redact to identical bytes are identical for storage.
+The event projector accepts only typed event payloads. It checks each identity
+for byte-preserving UTF-8 and private-value collisions before serialization,
+redacts content and Gate evidence bytes before their base64 encoding, and omits
+an unrepresentable fact at its original sequence. The dedicated safe-event
+constructor scans typed fields before encoding and decoded JSON **values**
+after encoding; fixed event-schema key spellings are not user data. General
+graph, launch and output projections retain the existing key-and-value scan.
+Canonical safe event bytes and their SHA-256 are the sole live/history hash
+authority; an event above the indexed 3 MiB bound is a `not_retained` omission.
 
 The redaction set contains nonempty frozen environment values, authored Shell
 `config.env` values and typed launch input strings, recursively including JSON
