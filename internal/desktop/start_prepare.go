@@ -3,6 +3,7 @@ package desktop
 import (
 	"bytes"
 	"context"
+	"errors"
 	"reflect"
 
 	"agentplane/internal/gate"
@@ -58,6 +59,13 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if plan == nil || validation.HasErrors() || plan.ValidateGraphInputs(request.Inputs).HasErrors() {
 		return PreparedRun{}, protocolError("conflict", "Graph contract changed since preflight")
 	}
+	_, inputLeaves, credentialErr := validateCredentialKeys(definition, request.Inputs)
+	if credentialErr != nil {
+		if errors.Is(credentialErr, errLaunchRedactions) {
+			return PreparedRun{}, protocolError("conflict", "Launch redaction values changed since preflight")
+		}
+		return PreparedRun{}, protocolError("conflict", "Graph or inputs contain a credential-shaped key")
+	}
 	capabilityHash, environment, findings := s.checkNodesWithEnvironment(ctx, definition, workspace, settings)
 	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() || capabilityHash != ticket.CapabilityHash {
 		return PreparedRun{}, protocolError("conflict", "Local capability changed since preflight")
@@ -80,7 +88,7 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if err != nil || !reflect.DeepEqual(latestSettings, settings) {
 		return PreparedRun{}, protocolError("conflict", "Local settings changed during capability checks")
 	}
-	redactions, err := launchRedactions(environment, request.Inputs)
+	redactions, err := launchRedactionsWithLeaves(environment, inputLeaves)
 	if err != nil {
 		return PreparedRun{}, protocolError("conflict", "Launch redaction values changed since preflight")
 	}

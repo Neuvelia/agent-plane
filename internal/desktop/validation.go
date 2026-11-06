@@ -104,6 +104,8 @@ func safeDiagnosticText(code string, severity graph.Severity) (string, string) {
 		return "A referenced environment value is unavailable or invalid", "Configure the named local value before preflight"
 	case "E_REDACTION_LIMIT":
 		return "Launch redaction values exceed local limits", "Reduce environment or graph input values"
+	case "E_EMBEDDED_SECRET":
+		return "Graph or launch inputs contain a credential-shaped key", "Remove or rename the key; keep credentials outside graph files and launch inputs"
 	case "E_NODE_TYPE_UNSUPPORTED":
 		return "Node type is unsupported by the desktop service", "Use a supported node type"
 	case "E_INPUT_VALUE_INVALID":

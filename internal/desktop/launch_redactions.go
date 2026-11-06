@@ -14,12 +14,20 @@ const maxLaunchRedactionBytes = 1 << 20
 var errLaunchRedactions = errors.New("launch redaction limit exceeded")
 
 // launchRedactions covers explicit environment values and supplied string
-// graph inputs, including values that a Shell input_env binding may forward.
+// graph inputs, including JSON string leaves and Shell input_env bindings.
 // Derived node outputs cannot be known until execution; they are not added.
 func launchRedactions(environment LaunchEnvironment, inputs map[string]graph.Value) ([]string, error) {
+	leaves, err := inputStringLeaves(inputs)
+	if err != nil {
+		return nil, err
+	}
+	return launchRedactionsWithLeaves(environment, leaves)
+}
+
+func launchRedactionsWithLeaves(environment LaunchEnvironment, leaves []string) ([]string, error) {
 	values := environment.Redactions()
-	seen := make(map[string]bool, len(values)+len(inputs))
-	redactions := make([]string, 0, len(values)+len(inputs))
+	seen := make(map[string]bool, len(values)+len(leaves))
+	redactions := make([]string, 0, len(values)+len(leaves))
 	bytes := 0
 	add := func(value string) error {
 		if value == "" || seen[value] {
@@ -38,11 +46,9 @@ func launchRedactions(environment LaunchEnvironment, inputs map[string]graph.Val
 			return nil, err
 		}
 	}
-	for _, value := range inputs {
-		if text, ok := value.AsString(); ok {
-			if err := add(text); err != nil {
-				return nil, err
-			}
+	for _, value := range leaves {
+		if err := add(value); err != nil {
+			return nil, err
 		}
 	}
 	if err := runtime.ValidateLogRedactions(redactions, true); err != nil {

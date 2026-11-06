@@ -160,6 +160,14 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 		return PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}, nil
 	}
 	findings = append(findings, plan.ValidateGraphInputs(request.Inputs).Diagnostics...)
+	path, inputLeaves, credentialErr := validateCredentialKeys(definition, request.Inputs)
+	if credentialErr != nil {
+		if errors.Is(credentialErr, errLaunchRedactions) {
+			findings = append(findings, preflightDiagnostic(definition.ID, "", path, "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
+		} else {
+			findings = append(findings, preflightDiagnostic(definition.ID, "", path, "E_EMBEDDED_SECRET", "Graph or inputs contain a credential-shaped key"))
+		}
+	}
 	workspace, err := s.registry.ResolveWorkspace(request.WorkspaceID)
 	if err != nil {
 		findings = append(findings, preflightDiagnostic(definition.ID, "", "workspace_id", "E_WORKSPACE_UNAVAILABLE", "Selected workspace is unavailable"))
@@ -179,7 +187,7 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 	capabilityHash, environment, checks := s.checkNodesWithEnvironment(ctx, definition, workspace, settings)
 	findings = append(findings, checks...)
 	if !(graph.ValidationResult{Diagnostics: findings}).HasErrors() {
-		if _, err := launchRedactions(environment, request.Inputs); err != nil {
+		if _, err := launchRedactionsWithLeaves(environment, inputLeaves); err != nil {
 			findings = append(findings, preflightDiagnostic(definition.ID, "", "inputs", "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
 		}
 	}
