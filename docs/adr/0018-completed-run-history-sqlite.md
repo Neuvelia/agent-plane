@@ -169,6 +169,21 @@ authority; an event above the indexed 3 MiB bound is a `not_retained` omission.
 For graph, launch and result projections, use versioned typed positional
 arrays for allowlisted fixed structure before invoking the general safe JSON
 parser. A redacted value or omitted member marks its projection incomplete.
+Safe graph projection v1 is positional
+`[1, graph_hash, schema_version, graph_id, name, metadata, units, inputs,
+nodes, edges, graph_input_bindings, outputs]`. A node is
+`[id, type, inputs, config, outputs, loop]`; loop is
+`[max_attempts, gate_inputs, gate_config, bindings]`. A port/input declaration
+is `[id, type_code, required]`, and a launch input is `[name,
+[type_code, value]]` inside `[1, entries]`. Type codes 1–5 mean string,
+number, boolean, JSON and artifact reference. Known node type codes 1–4 mean
+Shell, Agent, Gate and Human. Other node types remain redacted strings in a
+partial inspection view. Dynamic config/metadata maps are decoded and walked
+under depth/item/byte bounds; nonstring-key or otherwise unsupported YAML
+subtrees are omitted and reported as incomplete. A YAML timestamp is rendered
+as a tagged, sanitized text value and marked incomplete because the view is
+not executable YAML. Numeric config and loop values are checked against known
+private strings using their exact JSON encoding before retention.
 This avoids a configured private value colliding with an otherwise harmless
 fixed DTO key such as `status`. Dynamic object keys and all decoded string
 values remain subject to the full key-and-value scan; credential-shaped
