@@ -10,29 +10,13 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"agentplane/internal/graph"
+	"agentplane/internal/safeview"
 )
 
 var errEmbeddedSecret = errors.New("launch contains a credential-shaped key")
 
 func credentialShapedKey(key string) bool {
-	normalized := make([]byte, 0, len(key))
-	for i := 0; i < len(key); i++ {
-		letter := key[i]
-		if letter == '_' || letter == '-' {
-			continue
-		}
-		if letter >= 'A' && letter <= 'Z' {
-			letter += 'a' - 'A'
-		}
-		normalized = append(normalized, letter)
-	}
-	value := string(normalized)
-	for _, word := range []string{"password", "secret", "token", "credential", "apikey", "privatekey"} {
-		if strings.Contains(value, word) {
-			return true
-		}
-	}
-	return false
+	return safeview.CredentialShapedKey(key)
 }
 
 // inputStringLeaves visits the original JSON token stream so duplicate object

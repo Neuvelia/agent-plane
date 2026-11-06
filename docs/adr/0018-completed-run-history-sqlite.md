@@ -162,10 +162,21 @@ for byte-preserving UTF-8 and private-value collisions before serialization,
 redacts content and Gate evidence bytes before their base64 encoding, and omits
 an unrepresentable fact at its original sequence. The dedicated safe-event
 constructor scans typed fields before encoding and decoded JSON **values**
-after encoding; fixed event-schema key spellings are not user data. General
-graph, launch and output projections retain the existing key-and-value scan.
+after encoding; fixed event-schema key spellings are not user data. Graph,
+launch and output projections scan all remaining dynamic keys and values.
 Canonical safe event bytes and their SHA-256 are the sole live/history hash
 authority; an event above the indexed 3 MiB bound is a `not_retained` omission.
+For graph, launch and result projections, use versioned typed positional
+arrays for allowlisted fixed structure before invoking the general safe JSON
+parser. A redacted value or omitted member marks its projection incomplete.
+This avoids a configured private value colliding with an otherwise harmless
+fixed DTO key such as `status`. Dynamic object keys and all decoded string
+values remain subject to the full key-and-value scan; credential-shaped
+dynamic members are omitted with explicit incompleteness. Fixed status and
+identity already held in typed run/index columns are not repeated as string
+values in the projection, avoiding fixed enum collisions. Do not broadly
+exempt string values after serialization. The stored semantic graph hash is
+the frozen launch version, separate from the safe projection digest.
 Active replay selects one retained candidate at a time under the collector
 lock, copying its payload only below a 4 MiB raw bound. Larger raw facts are
 reported by original sequence without copying them. The first candidate fixes
