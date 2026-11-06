@@ -72,6 +72,10 @@ type Options struct {
 	// GitSupervisorBinary is the trusted bundled helper used by desktop Git
 	// inspection. Empty preserves direct CLI inspection.
 	GitSupervisorBinary string
+	// BeforeDispatch commits a launch marker after preflight and run identity
+	// allocation, before any execution fact or node work. A returned error
+	// rejects the run without publishing an identity or trace.
+	BeforeDispatch func(events.RunID) error
 	// OnRunReady publishes a read-only retained trace after preflight and
 	// run initialization, before any node is dispatched. It must return
 	// promptly; a blocking callback delays execution.
@@ -196,7 +200,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err := preflightLoops(ctx, definition, executor); err != nil {
 		return RunResult{}, err
 	}
-	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
+	machine, err := newRunMachine(definition)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -208,6 +212,15 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 	if definition.Units != nil {
 		machine.workspaces = inspectWorkspaces(ctx, definition)
+	}
+	if options.BeforeDispatch != nil {
+		if err := options.BeforeDispatch(machine.result.RunID); err != nil {
+			return RunResult{}, fmt.Errorf("before dispatch: %w", err)
+		}
+	}
+	machine.emitter = events.NewCollectorWithLiveEvents(ctx, machine.result.RunID, definition.ID, machine.result.GraphVersion, options.LiveEvents)
+	machine.record("", "", string(RunRunning))
+	if definition.Units != nil {
 		machine.reportScopeConflicts(definition)
 	}
 	if options.OnRunReady != nil {
@@ -471,7 +484,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 }
 
-func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event) (*runMachine, error) {
+func newRunMachine(definition *graph.Definition) (*runMachine, error) {
 	version, err := graph.SemanticVersion(definition)
 	if err != nil {
 		return nil, err
@@ -501,8 +514,6 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<
 		}
 		m.nodes[id] = &NodeResult{NodeID: id, NodeRunID: nodeRunID, State: NodePending}
 	}
-	m.emitter = events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live)
-	m.record("", "", string(RunRunning))
 	return m, nil
 }
 

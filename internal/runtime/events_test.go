@@ -288,6 +288,65 @@ func TestRunDoesNotPublishReadyTraceWhenPreflightFails(t *testing.T) {
 	}
 }
 
+func TestBeforeDispatchFailureLeavesNoExecutionFactsOrNodeWork(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	live := make(chan events.Event, 8)
+	markerFailure := errors.New("marker write failed")
+	ready := false
+	called := false
+	result, err := Run(context.Background(), def, nil, executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		called = true
+		return nil, nil
+	}), Options{
+		LiveEvents: live,
+		BeforeDispatch: func(id events.RunID) error {
+			if id == "" {
+				t.Fatal("marker hook received empty run ID")
+			}
+			if len(live) != 0 {
+				t.Fatal("run fact delivered before marker commit")
+			}
+			return markerFailure
+		},
+		OnRunReady: func(events.RunID, events.TraceReader) { ready = true },
+	})
+	if !errors.Is(err, markerFailure) || result.RunID != "" || len(result.Events) != 0 || called || ready || len(live) != 0 {
+		t.Fatalf("rejected marker produced run: result=%+v err=%v called=%t ready=%t live=%d", result, err, called, ready, len(live))
+	}
+}
+
+func TestBeforeDispatchPrecedesRunStartedAndReadyCallback(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	live := make(chan events.Event, 8)
+	markerID := events.RunID("")
+	ready := false
+	result, err := Run(context.Background(), def, nil, executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		if !ready {
+			t.Fatal("node dispatched before ready callback")
+		}
+		return nil, nil
+	}), Options{
+		LiveEvents: live,
+		BeforeDispatch: func(id events.RunID) error {
+			markerID = id
+			if len(live) != 0 {
+				t.Fatal("run fact delivered before marker commit")
+			}
+			return nil
+		},
+		OnRunReady: func(id events.RunID, reader events.TraceReader) {
+			ready = true
+			page, pageErr := reader.Page(0, 1)
+			if id != markerID || pageErr != nil || len(page.Events) != 1 || page.Events[0].Type != events.RunStarted {
+				t.Fatalf("ready callback saw wrong trace: marker=%q id=%q page=%+v err=%v", markerID, id, page, pageErr)
+			}
+		},
+	})
+	if err != nil || result.State != RunSucceeded || result.RunID != markerID || !ready {
+		t.Fatalf("run after marker: result=%+v err=%v marker=%q ready=%t", result, err, markerID, ready)
+	}
+}
+
 func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
