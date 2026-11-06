@@ -116,67 +116,75 @@ outputs: {}
 	}
 }
 func TestCLILocalGateWorksWithoutAdapter(t *testing.T) {
-	for _, green := range []bool{true, false} {
-		t.Run(fmt.Sprint(green), func(t *testing.T) {
-			cwd, e := filepath.EvalSymlinks(t.TempDir())
-			if e != nil {
-				t.Fatal(e)
-			}
-			left := strings.Repeat("SECRET left\n", 3000)
-			right := left
-			if !green {
-				right = strings.Repeat("SECRET right\n", 3000)
-			}
-			os.WriteFile(filepath.Join(cwd, "left"), []byte(left), 0400)
-			os.WriteFile(filepath.Join(cwd, "right"), []byte(right), 0400)
-			n := graph.NodeDefinition{Type: "gate", Config: graph.NodeConfig{"check_id": "diff-check", "kind": "command", "cwd": cwd, "command": "/usr/bin/diff", "left_input": "left", "right_input": "right"}, Inputs: map[string]graph.PortDefinition{"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}
-			d := &graph.Definition{ID: "local-diff", Nodes: map[string]graph.NodeDefinition{"gate": n, "shell": {Type: "shell", Config: graph.NodeConfig{"command": "/usr/bin/printf", "args": []string{"downstream"}}, Inputs: map[string]graph.PortDefinition{"accepted": {Type: graph.ValueTypeString, Required: true}}}}, Inputs: map[string]graph.InputDefinition{"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true}}, GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.left", To: "gate.inputs.left"}, {From: "inputs.right", To: "gate.inputs.right"}}, Edges: []graph.EdgeDefinition{{From: "gate.outputs.verdict", To: "shell.inputs.accepted"}}}
-			b, e := graph.Marshal(d)
-			if e != nil {
-				t.Fatal(e)
-			}
-			path := filepath.Join(t.TempDir(), "graph.yaml")
-			os.WriteFile(path, b, 0600)
-			t.Setenv("GATE_TEST_SECRET", "SECRET")
-			var out, errout bytes.Buffer
-			code := runCommand(context.Background(), []string{"run", path, "--input", "left=left", "--input", "right=right", "--redact-env", "GATE_TEST_SECRET", "--json"}, &out, &errout)
-			if (code == 0) != green {
-				t.Fatalf("%d %s %s", code, &out, &errout)
-			}
-			var doc struct {
-				Events []events.Event `json:"events"`
-			}
-			json.Unmarshal(out.Bytes(), &doc)
-			found := false
-			starts := 0
-			for _, e := range doc.Events {
-				if e.Type == events.GateCheck {
-					found = true
-					p := e.Payload.(events.GateCheckPayload)
-					if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != events.SchemaVersion || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
-						t.Fatal("full result contract/correlation")
+	for _, command := range []string{"/usr/bin/diff", "agentplane.diff"} {
+		for _, green := range []bool{true, false} {
+			t.Run(command+"/"+fmt.Sprint(green), func(t *testing.T) {
+				cwd, e := filepath.EvalSymlinks(t.TempDir())
+				if e != nil {
+					t.Fatal(e)
+				}
+				left := strings.Repeat("SECRET left\n", 3000)
+				right := left
+				if !green {
+					right = strings.Repeat("SECRET right\n", 3000)
+				}
+				os.WriteFile(filepath.Join(cwd, "left"), []byte(left), 0400)
+				os.WriteFile(filepath.Join(cwd, "right"), []byte(right), 0400)
+				n := graph.NodeDefinition{Type: "gate", Config: graph.NodeConfig{"check_id": "diff-check", "kind": "command", "cwd": cwd, "command": command, "left_input": "left", "right_input": "right"}, Inputs: map[string]graph.PortDefinition{"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}
+				d := &graph.Definition{ID: "local-diff", Nodes: map[string]graph.NodeDefinition{"gate": n, "shell": {Type: "shell", Config: graph.NodeConfig{"command": "/usr/bin/printf", "args": []string{"downstream"}}, Inputs: map[string]graph.PortDefinition{"accepted": {Type: graph.ValueTypeString, Required: true}}}}, Inputs: map[string]graph.InputDefinition{"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true}}, GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.left", To: "gate.inputs.left"}, {From: "inputs.right", To: "gate.inputs.right"}}, Edges: []graph.EdgeDefinition{{From: "gate.outputs.verdict", To: "shell.inputs.accepted"}}}
+				b, e := graph.Marshal(d)
+				if e != nil {
+					t.Fatal(e)
+				}
+				path := filepath.Join(t.TempDir(), "graph.yaml")
+				os.WriteFile(path, b, 0600)
+				t.Setenv("GATE_TEST_SECRET", "SECRET")
+				var out, errout bytes.Buffer
+				code := runCommand(context.Background(), []string{"run", path, "--input", "left=left", "--input", "right=right", "--redact-env", "GATE_TEST_SECRET", "--json"}, &out, &errout)
+				if (code == 0) != green {
+					t.Fatalf("%d %s %s", code, &out, &errout)
+				}
+				var doc struct {
+					Events []events.Event `json:"events"`
+				}
+				json.Unmarshal(out.Bytes(), &doc)
+				found := false
+				starts := 0
+				for _, e := range doc.Events {
+					if e.Type == events.GateCheck {
+						found = true
+						p := e.Payload.(events.GateCheckPayload)
+						if p.Version != 1 || p.DurationNS < 0 || len(p.Scope.CheckedInputs) == 0 || e.SchemaVersion != events.SchemaVersion || e.RunID == "" || e.NodeRunID == "" || e.AttemptID != "" || p.Validate() != nil {
+							t.Fatal("full result contract/correlation")
+						}
+						if len(events.CheckResults(doc.Events, e.RunID, e.NodeRunID)) != 1 {
+							t.Fatal("typed retrieval")
+						}
+						ev := p.Evidence[0]
+						if strings.Contains(string(ev.Stdout), "SECRET") || (*ev.ExitCode == 0) != green {
+							t.Fatal("unsafe/incorrect bounded diff evidence")
+						}
+						if command == "/usr/bin/diff" && !green && ev.StdoutOmitted == 0 {
+							t.Fatal("legacy diff evidence was not bounded")
+						}
+						if command == "agentplane.diff" && (len(ev.Stdout) != 0 || len(ev.Stderr) != 0 || ev.StdoutOmitted != 0 || ev.StderrOmitted != 0) {
+							t.Fatal("portable Gate emitted file content")
+						}
 					}
-					if len(events.CheckResults(doc.Events, e.RunID, e.NodeRunID)) != 1 {
-						t.Fatal("typed retrieval")
-					}
-					ev := p.Evidence[0]
-					if strings.Contains(string(ev.Stdout), "SECRET") || (!green && ev.StdoutOmitted == 0) || (*ev.ExitCode == 0) != green {
-						t.Fatal("unsafe/incorrect bounded diff evidence")
+					if e.Type == events.NodeStarted && e.NodeID == "shell" {
+						starts++
 					}
 				}
-				if e.Type == events.NodeStarted && e.NodeID == "shell" {
-					starts++
+				if !found || starts != map[bool]int{true: 1, false: 0}[green] {
+					t.Fatal("local gate scheduling")
 				}
-			}
-			if !found || starts != map[bool]int{true: 1, false: 0}[green] {
-				t.Fatal("local gate scheduling")
-			}
-			for k, v := range map[string]string{"left": left, "right": right} {
-				b, _ := os.ReadFile(filepath.Join(cwd, k))
-				if string(b) != v {
-					t.Fatal("changed comparison input")
+				for k, v := range map[string]string{"left": left, "right": right} {
+					b, _ := os.ReadFile(filepath.Join(cwd, k))
+					if string(b) != v {
+						t.Fatal("changed comparison input")
+					}
 				}
-			}
-		})
+			})
+		}
 	}
 }

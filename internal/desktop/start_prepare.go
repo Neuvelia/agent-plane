@@ -5,6 +5,7 @@ import (
 	"context"
 	"reflect"
 
+	"agentplane/internal/gate"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 )
@@ -86,8 +87,8 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if err := ctx.Err(); err != nil {
 		return PreparedRun{}, protocolError("unavailable", "Start request was interrupted")
 	}
-	executor := desktopNodeExecutor{shell: shellExecutorFor(environment), agents: agentExecutorFor(settings, environment)}
+	executor := desktopNodeExecutor{shell: shellExecutorFor(environment, s.supervisorBinary), agents: agentExecutorFor(settings, environment, s.supervisorBinary), gate: gate.Executor{SupervisorBinary: s.supervisorBinary}}
 	return PreparedRun{Definition: definition, Inputs: cloneInputValues(request.Inputs), Executor: executor,
-		Options:      runtime.Options{MaxConcurrency: request.MaxConcurrency, LogRedactions: redactions},
+		Options:      runtime.Options{MaxConcurrency: request.MaxConcurrency, LogRedactions: redactions, GitExecutable: derefPath(settings.GitBinaryPath), GitSupervisorBinary: s.supervisorBinary},
 		GraphVersion: snapshot.SemanticVersion}, nil
 }

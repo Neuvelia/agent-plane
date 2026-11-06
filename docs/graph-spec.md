@@ -505,7 +505,7 @@ below. Only `verdict: {type: string}` may be declared as an output.
 
 | Kind | Config and bound inputs |
 | --- | --- |
-| `command` | `command: /usr/bin/diff`, canonical absolute `cwd`, `left_input` and `right_input` name required string ports containing relative file paths |
+| `command` | `command: /usr/bin/diff` or `command: agentplane.diff`, canonical absolute `cwd`, `left_input` and `right_input` name required string ports containing relative file paths |
 | `json_predicate` | `input` names a required JSON object port; `field` is a nonempty list of literal object keys, `operator: eq` or `ne`, exactly one of `expected` scalar/null or `expected_json` containing a JSON scalar/null literal string |
 | `reported_file_scope` | `input` names a required JSON array port of `{path, provenance?}` records, `allowed_paths` is an explicit list of exact file paths or directory prefixes ending in `/` |
 
@@ -522,14 +522,24 @@ segment. Dot/repeated separators normalize; directory prefixes match segment
 boundaries. Scope evidence is always `source: reported`, sorted/deduplicated,
 and bounded with an omitted count; it does not assert Git verification.
 
-Command checks support Darwin/Linux trusted `/usr/bin/diff` only. No args,
-options, alternate binary, scripts, shell or caller environment may be supplied.
-Both files must be regular and confined under a symlink-free explicit cwd.
-The implementation preopens them read-only and supplies only `/dev/fd/3` and
-`/dev/fd/4` operands, `LC_ALL=C`, context termination and a one-second pipe-drain
-limit. Exit 0 is green, 1 red; other exits/start/cancellation are errors.
-This is a restricted read-only operation trusting OS binary integrity, not a
-sandbox against hostile concurrent filesystem changes.
+Command checks accept only two fixed values; no args, options, alternate binary,
+scripts, shell or caller environment may be supplied. The existing trusted
+Darwin/Linux `/usr/bin/diff` value preopens regular files read-only under a
+symlink-free explicit cwd and supplies only `/dev/fd/3` and `/dev/fd/4`
+operands, `LC_ALL=C`, context termination and a one-second pipe-drain limit.
+It is valid to parse on Windows but execution reports unsupported. The new
+`agentplane.diff` value compares observed opened-handle bytes in-process,
+using no-follow traversal of cwd and relative inputs where native support is
+available. It emits empty stdout/stderr; its `exit_code` is a fixed comparison
+status. Status 0 is green, 1 red; open/read/cancellation errors have no verdict.
+No file contents enter its evidence. Same-size concurrent in-place mutation can
+escape detection, so it does not provide an atomic file snapshot or a strong
+integrity gate for a concurrently adversarial workspace (ADR-0020). The
+comparator checks cancellation between reads; a stalled filesystem read can
+delay cancellation and is not supported as a prompt-cancellation guarantee. The
+portable value must fail closed on platforms without the native safe open.
+On Windows its initial native safe-open scope is local drive-absolute cwd
+only; UNC/device paths and alternate data streams are unsupported explicitly.
 
 Green publishes only the declared `verdict: green` and runs dependents once;
 red fails and blocks dependents with no accepted outputs. Both emit schema-5

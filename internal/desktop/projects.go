@@ -179,7 +179,7 @@ func (r *Registry) verifyStatePath() error {
 	current, err := os.Lstat(r.stateDir)
 	opened, statErr := dir.Stat()
 	if err != nil || statErr != nil || !current.IsDir() || current.Mode()&os.ModeSymlink != 0 ||
-		current.Mode().Perm()&0077 != 0 || !os.SameFile(opened, current) {
+		!os.SameFile(opened, current) || privateStateDirectory(dir) != nil {
 		return ErrRegistryUnavailable
 	}
 	return nil
@@ -586,7 +586,7 @@ func readRegistryState(root *os.Root) (registryState, error) {
 	if errors.Is(err, os.ErrNotExist) {
 		return defaultState, nil
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > maxRegistryBytes {
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxRegistryBytes {
 		return registryState{}, ErrRegistryUnavailable
 	}
 	file, err := openRegularDocument(root, "registry.json")
@@ -599,12 +599,11 @@ func readRegistryState(root *os.Root) (registryState, error) {
 		return registryState{}, ErrRegistryUnavailable
 	}
 	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || opened.Mode().Perm()&0077 != 0 ||
+	if err != nil || !opened.Mode().IsRegular() || privateStateRegular(file) != nil ||
 		opened.Size() > maxRegistryBytes || !os.SameFile(info, opened) {
 		return registryState{}, ErrRegistryUnavailable
 	}
-	if current, err := root.Lstat("registry.json"); err != nil || !current.Mode().IsRegular() ||
-		current.Mode().Perm()&0077 != 0 || !os.SameFile(info, current) {
+	if current, err := root.Lstat("registry.json"); err != nil || !current.Mode().IsRegular() || !os.SameFile(info, current) {
 		return registryState{}, ErrRegistryUnavailable
 	}
 	return decodeRegistryState(data)
@@ -669,7 +668,17 @@ func writeRegistryState(root *os.Root, state registryState, beforeSync func() er
 		return ErrRegistryUnavailable
 	}
 	if old, err := root.Lstat("registry.json"); err == nil {
-		if !old.Mode().IsRegular() || old.Mode().Perm()&0077 != 0 {
+		if !old.Mode().IsRegular() {
+			return ErrRegistryUnavailable
+		}
+		existing, err := openRegularDocument(root, "registry.json")
+		if err != nil {
+			return ErrRegistryUnavailable
+		}
+		opened, statErr := existing.Stat()
+		privateErr := privateStateRegular(existing)
+		existing.Close()
+		if statErr != nil || privateErr != nil || !os.SameFile(old, opened) {
 			return ErrRegistryUnavailable
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
@@ -685,6 +694,10 @@ func writeRegistryState(root *os.Root, state registryState, beforeSync func() er
 		return err
 	}
 	defer root.Remove(tempName)
+	if err := privateStateRegular(file); err != nil {
+		file.Close()
+		return ErrRegistryUnavailable
+	}
 	if _, err := file.Write(data); err != nil {
 		file.Close()
 		return err

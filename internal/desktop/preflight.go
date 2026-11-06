@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -35,22 +34,28 @@ type CapabilityDetector interface {
 	CheckGit(context.Context, string, string) error
 }
 
-type installedCapabilities struct{}
+type installedCapabilities struct{ supervisorBinary string }
 
-func (installedCapabilities) DetectCodex(ctx context.Context, path string) (agent.CapabilityReport, error) {
-	return (codex.Adapter{Binary: path}).Detect(ctx)
+func (c installedCapabilities) DetectCodex(ctx context.Context, path string) (agent.CapabilityReport, error) {
+	return (codex.Adapter{Binary: path, SupervisorBinary: c.supervisorBinary}).Detect(ctx)
 }
 
-func (installedCapabilities) CheckGit(ctx context.Context, workspace, configured string) error {
+func (c installedCapabilities) CheckGit(ctx context.Context, workspace, configured string) error {
 	canonical, err := validateToolPath(configured)
 	if err != nil {
 		return err
 	}
-	runtimeGit, err := filepath.EvalSymlinks("/usr/bin/git")
-	if err != nil || canonical != runtimeGit {
+	selected, err := gitstate.WithExecutable(ctx, canonical)
+	if err != nil {
 		return ErrToolUnavailable
 	}
-	root, err := gitstate.CanonicalWorkspace(ctx, workspace)
+	if c.supervisorBinary != "" {
+		selected, err = gitstate.WithSupervisor(selected, c.supervisorBinary)
+		if err != nil {
+			return ErrToolUnavailable
+		}
+	}
+	root, err := gitstate.CanonicalWorkspace(selected, workspace)
 	if err != nil || root != workspace {
 		return ErrToolUnavailable
 	}
@@ -85,23 +90,30 @@ type PreflightTicket struct {
 }
 
 type PreflightService struct {
-	registry  *Registry
-	documents *DocumentStore
-	detector  CapabilityDetector
-	mu        sync.Mutex
-	tokens    map[string]PreflightTicket
-	ordinal   uint64
-	bytes     int
-	now       func() time.Time
-	sealKey   [32]byte
-	sealErr   error
+	registry         *Registry
+	documents        *DocumentStore
+	detector         CapabilityDetector
+	supervisorBinary string
+	mu               sync.Mutex
+	tokens           map[string]PreflightTicket
+	ordinal          uint64
+	bytes            int
+	now              func() time.Time
+	sealKey          [32]byte
+	sealErr          error
 }
 
 func NewPreflightService(registry *Registry, documents *DocumentStore, detector CapabilityDetector) *PreflightService {
+	return NewPreflightServiceWithSupervisor(registry, documents, detector, "")
+}
+
+// NewPreflightServiceWithSupervisor routes desktop probes and execution through
+// the trusted sidecar helper. The empty value retains CLI/test direct execution.
+func NewPreflightServiceWithSupervisor(registry *Registry, documents *DocumentStore, detector CapabilityDetector, supervisorBinary string) *PreflightService {
 	if detector == nil {
-		detector = installedCapabilities{}
+		detector = installedCapabilities{supervisorBinary: supervisorBinary}
 	}
-	s := &PreflightService{registry: registry, documents: documents, detector: detector,
+	s := &PreflightService{registry: registry, documents: documents, detector: detector, supervisorBinary: supervisorBinary,
 		tokens: make(map[string]PreflightTicket), now: time.Now}
 	_, s.sealErr = rand.Read(s.sealKey[:])
 	return s

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"syscall"
@@ -19,6 +20,7 @@ import (
 
 	"agentplane/internal/desktop"
 	"agentplane/internal/events"
+	"agentplane/internal/gate"
 	"agentplane/internal/graph"
 	apruntime "agentplane/internal/runtime"
 	"agentplane/internal/shell"
@@ -84,6 +86,78 @@ func TestSidecarStdioHandshake(t *testing.T) {
 	}
 	if _, err := desktop.ReadFrame(&stdout); err != io.EOF {
 		t.Fatalf("stdout contains non-protocol data: %v", err)
+	}
+}
+
+func TestFixedSupervisorModeRejectsMalformedRequestWithoutServiceOutput(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "agentplane-desktop")
+	if output, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build sidecar: %v: %s", err, output)
+	}
+	cmd := exec.Command(binary, "--internal-process-supervisor")
+	cmd.Stdin = strings.NewReader("{}\n")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	var exit *exec.ExitError
+	if !errors.As(err, &exit) || exit.ExitCode() != 125 || stdout.Len() != 0 || stderr.Len() != 0 {
+		t.Fatalf("malformed fixed mode: err=%v stdout=%q stderr=%q", err, stdout.String(), stderr.String())
+	}
+}
+
+func TestBuiltSidecarSupervisesLegacyDiffWithCLIEvidence(t *testing.T) {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+		t.Skip("fixed /usr/bin/diff is a Unix Gate")
+	}
+	binary := filepath.Join(t.TempDir(), "agentplane-desktop")
+	if output, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
+		t.Fatalf("build sidecar: %v: %s", err, output)
+	}
+	cwd, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	node := graph.NodeDefinition{
+		Type: "gate", Config: graph.NodeConfig{
+			"kind": "command", "check_id": "legacy-diff", "cwd": cwd,
+			"command": "/usr/bin/diff", "left_input": "left", "right_input": "right",
+		},
+		Inputs: map[string]graph.PortDefinition{
+			"left":  {Type: graph.ValueTypeString, Required: true},
+			"right": {Type: graph.ValueTypeString, Required: true},
+		},
+		Outputs: map[string]graph.PortDefinition{
+			"verdict": {Type: graph.ValueTypeString, Required: true},
+		},
+	}
+	inputs := map[string]graph.Value{"left": graph.NewStringValue("left"), "right": graph.NewStringValue("right")}
+	for _, tc := range []struct{ name, right, verdict string }{
+		{"green", "same\n", "green"}, {"red", "different\n", "red"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(filepath.Join(cwd, "left"), []byte("same\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(cwd, "right"), []byte(tc.right), 0600); err != nil {
+				t.Fatal(err)
+			}
+			var desktopFact, cliFact events.GateCheckPayload
+			_, _, desktopErr := (gate.Executor{SupervisorBinary: binary}).ExecuteNodeObserved(context.Background(), "diff", node, inputs,
+				apruntime.ExecutionObservation{Check: func(v events.GateCheckPayload) { desktopFact = v }})
+			_, _, cliErr := (gate.Executor{}).ExecuteNodeObserved(context.Background(), "diff", node, inputs,
+				apruntime.ExecutionObservation{Check: func(v events.GateCheckPayload) { cliFact = v }})
+			if string(desktopFact.Verdict) != tc.verdict || string(cliFact.Verdict) != tc.verdict ||
+				!reflect.DeepEqual(desktopFact.Evidence, cliFact.Evidence) || desktopFact.Reason != cliFact.Reason ||
+				(desktopErr == nil) != (cliErr == nil) {
+				t.Fatalf("desktop=%+v %v; cli=%+v %v", desktopFact, desktopErr, cliFact, cliErr)
+			}
+			if tc.verdict == "red" {
+				var red gate.RedError
+				if !errors.As(desktopErr, &red) || !errors.As(cliErr, &red) {
+					t.Fatalf("red verdict errors: desktop=%v cli=%v", desktopErr, cliErr)
+				}
+			}
+		})
 	}
 }
 

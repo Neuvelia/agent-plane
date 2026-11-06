@@ -8,6 +8,7 @@
     "dev": "npm run build:sidecar && electron-vite dev",
     "build:sidecar": "node scripts/build-sidecar.mjs",
     "build": "electron-vite build",
+    "package:dir": "npm run build:sidecar && npm run build && electron-builder --config electron-builder.config.cjs --dir --publish never && node scripts/verify-package.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run typecheck && npm test && npm run build"
@@ -19,6 +20,7 @@
     "react-dom": "19.3.0"
   },
   "devDependencies": {
+    "@electron/asar": "3.4.1",
     "@types/node": "26.0.0",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",

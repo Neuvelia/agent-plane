@@ -13,6 +13,7 @@ import (
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
+	"agentplane/internal/process"
 	run "agentplane/internal/runtime"
 )
 
@@ -58,8 +59,11 @@ func openCompared(cwd, relative string) (*os.File, error) {
 	}
 	return f, nil
 }
-func command(ctx context.Context, c config, in map[string]graph.Value, o run.ExecutionObservation) (events.GateCheckPayload, error) {
+func command(ctx context.Context, c config, in map[string]graph.Value, o run.ExecutionObservation, supervisorBinary string) (events.GateCheckPayload, error) {
 	var p events.GateCheckPayload
+	if c.Command == "agentplane.diff" {
+		return portableCommand(ctx, c, in)
+	}
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return p, errors.New("read-only diff unsupported on this platform")
 	}
@@ -94,7 +98,12 @@ func command(ctx context.Context, c config, in map[string]graph.Value, o run.Exe
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	cmd.WaitDelay = time.Second
-	exit, err := runDiff(ctx, cmd)
+	var exit int
+	if supervisorBinary == "" {
+		exit, err = runDiff(ctx, cmd)
+	} else {
+		exit, err = runDiffSupervised(ctx, supervisorBinary, c.Cwd, left, right, stdout, stderr)
+	}
 	out, no := stdout.Finish()
 	errs, ne := stderr.Finish()
 	if err != nil {
@@ -106,6 +115,30 @@ func command(ctx context.Context, c config, in map[string]graph.Value, o run.Exe
 		p.Reason = "files differ"
 	}
 	return p, nil
+}
+
+// runDiffSupervised preserves the legacy fixed argv/descriptor and evidence
+// semantics while making the desktop sidecar own the child lifecycle.
+func runDiffSupervised(ctx context.Context, supervisorBinary, cwd string, left, right *os.File, stdout, stderr io.Writer) (int, error) {
+	outcome, err := process.Run(ctx, supervisorBinary, process.Spec{
+		Path: "/usr/bin/diff", Args: []string{"/dev/fd/3", "/dev/fd/4"},
+		Dir: cwd, Env: []string{"LC_ALL=C"}, ExtraFiles: []*os.File{left, right},
+	}, stdout, stderr)
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	if err == nil {
+		switch outcome.ExitCode {
+		case 0, 1:
+			return outcome.ExitCode, nil
+		}
+		err = fmt.Errorf("unexpected diff status %d", outcome.ExitCode)
+	}
+	var exit *exec.ExitError
+	if outcome.ExitCode == 1 && errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return 1, nil
+	}
+	return 0, fmt.Errorf("diff execution failed: %w", err)
 }
 
 // runDiff separates lifecycle failures from the two valid comparison exits.

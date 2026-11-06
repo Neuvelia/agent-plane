@@ -3,13 +3,17 @@ package runtime
 import (
 	"context"
 	"errors"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"agentplane/internal/events"
+	"agentplane/internal/gitstate"
 	"agentplane/internal/graph"
+	"agentplane/internal/process"
 )
 
 type workspaceIdentity struct {
@@ -42,13 +46,29 @@ func inspectWorkspace(ctx context.Context, workspace string) workspaceIdentity {
 	result := workspaceIdentity{root: root}
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(bounded, "/usr/bin/git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "rev-parse", "--show-toplevel", "--absolute-git-dir")
-	cmd.Dir = root
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0"}
-	cmd.WaitDelay = time.Second
+	path := gitstate.Executable(bounded)
+	if path == "" {
+		return result
+	}
 	output := &identityOutput{}
-	cmd.Stdout = output
-	if cmd.Run() != nil {
+	args := []string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.DevNull, "rev-parse", "--show-toplevel", "--absolute-git-dir"}
+	var runErr error
+	if supervisor := gitstate.Supervisor(bounded); supervisor != "" {
+		outcome, err := process.Run(bounded, supervisor, process.Spec{Path: path, Args: args,
+			Dir: root, Env: gitstate.InspectionEnvironment()}, output, io.Discard)
+		runErr = err
+		if runErr == nil && outcome.ExitCode != 0 {
+			runErr = errors.New("Git workspace identity command exited unsuccessfully")
+		}
+	} else {
+		cmd := exec.CommandContext(bounded, path, args...)
+		cmd.Dir = root
+		cmd.Env = gitstate.InspectionEnvironment()
+		cmd.WaitDelay = time.Second
+		cmd.Stdout = output
+		runErr = cmd.Run()
+	}
+	if runErr != nil {
 		return result
 	}
 	lines := strings.Split(strings.TrimSuffix(string(output.data), "\n"), "\n")

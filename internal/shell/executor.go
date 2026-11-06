@@ -18,12 +18,18 @@ import (
 	"time"
 
 	"agentplane/internal/graph"
+	"agentplane/internal/process"
 )
 
 // Executor satisfies runtime.Executor without adding process details to the
 // scheduler. A non-nil FrozenEnvironment forbids ambient fallback for named
 // env_allowlist entries; callers must not mutate that map during a run.
-type Executor struct{ FrozenEnvironment map[string]string }
+type Executor struct {
+	FrozenEnvironment map[string]string
+	// SupervisorBinary is the trusted local sidecar executable for desktop runs.
+	// Empty retains the existing CLI process path.
+	SupervisorBinary string
+}
 
 // Result is the process evidence retained by Execute and ExecutionError.
 // ExitCode is -1 if no OS exit code is available. A canceled process may
@@ -45,6 +51,7 @@ const (
 	FailureStart    FailureKind = "start"
 	FailureExit     FailureKind = "exit"
 	FailureCanceled FailureKind = "canceled"
+	FailureCleanup  FailureKind = "cleanup"
 	FailureOutput   FailureKind = "output"
 )
 
@@ -80,10 +87,10 @@ type config struct {
 // argument text as shell syntax. Only inputs listed in input_env enter the
 // child process environment.
 func (e Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
-	return execute(ctx, nodeID, node, inputs, nil, e.FrozenEnvironment)
+	return execute(ctx, nodeID, node, inputs, nil, e.FrozenEnvironment, e.SupervisorBinary)
 }
 
-func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), frozen map[string]string) (Result, error) {
+func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), frozen map[string]string, supervisorBinary string) (Result, error) {
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -103,6 +110,9 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	environment, err := buildEnvironmentWithSnapshot(cfg, frozen)
 	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
+	}
+	if supervisorBinary != "" {
+		return executeSupervised(ctx, nodeID, cfg, append(environment, inputEnvironment...), observe, supervisorBinary)
 	}
 	cmd := exec.CommandContext(ctx, cfg.command, cfg.args...)
 	cmd.Dir = cfg.cwd
@@ -178,7 +188,7 @@ func (e Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node g
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	result, err := execute(ctx, nodeID, node, inputs, observe, e.FrozenEnvironment)
+	result, err := execute(ctx, nodeID, node, inputs, observe, e.FrozenEnvironment, e.SupervisorBinary)
 	if err != nil {
 		return nil, err
 	}
@@ -201,6 +211,35 @@ func (e Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node g
 		}
 	}
 	return outputs, nil
+}
+
+func executeSupervised(ctx context.Context, nodeID string, cfg config, environment []string, observe func(string, []byte), supervisorBinary string) (Result, error) {
+	result := Result{ExitCode: -1}
+	var stdout, stderr bytes.Buffer
+	outcome, err := process.Run(ctx, supervisorBinary, process.Spec{
+		Path: cfg.command, Args: cfg.args, Env: environment, Dir: cfg.cwd,
+	}, &logWriter{capture: &stdout, stream: "stdout", observe: observe}, &logWriter{capture: &stderr, stream: "stderr", observe: observe})
+	result.StartedAt, result.EndedAt, result.ExitCode = outcome.StartedAt, outcome.EndedAt, outcome.ExitCode
+	result.Stdout, result.Stderr = stdout.String(), stderr.String()
+	if err == nil {
+		return result, nil
+	}
+	kind := FailureExit
+	var join *process.JoinFailure
+	var supervisor *process.SupervisorFailure
+	var start *process.TargetStartError
+	if errors.As(err, &join) || errors.As(err, &supervisor) {
+		kind = FailureCleanup
+	} else if errors.As(err, &start) || outcome.StartedAt.IsZero() {
+		kind = FailureStart
+	}
+	if errors.Is(err, exec.ErrWaitDelay) {
+		kind = FailureOutput
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		kind = FailureCanceled
+	}
+	return result, &ExecutionError{NodeID: nodeID, Kind: kind, Result: result, Cause: err}
 }
 
 // ValidateNodeConfig performs the same configuration/output validation as

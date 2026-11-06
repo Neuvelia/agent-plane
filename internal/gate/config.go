@@ -59,8 +59,8 @@ func parse(n graph.NodeDefinition) (config, error) {
 		for _, k := range []string{"cwd", "command", "left_input", "right_input"} {
 			allowed[k] = true
 		}
-		if c.Command != "/usr/bin/diff" || !filepath.IsAbs(c.Cwd) || filepath.Clean(c.Cwd) != c.Cwd {
-			return c, fmt.Errorf("command requires /usr/bin/diff and canonical absolute cwd")
+		if (c.Command != "/usr/bin/diff" && c.Command != "agentplane.diff") || !filepath.IsAbs(c.Cwd) || filepath.Clean(c.Cwd) != c.Cwd {
+			return c, fmt.Errorf("command requires /usr/bin/diff or agentplane.diff and canonical absolute cwd")
 		}
 		if err = port(c.Left, graph.ValueTypeString); err == nil {
 			err = port(c.Right, graph.ValueTypeString)

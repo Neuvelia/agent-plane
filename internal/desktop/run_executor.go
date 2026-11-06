@@ -17,17 +17,18 @@ import (
 type desktopNodeExecutor struct {
 	shell  shell.Executor
 	agents agent.Executor
+	gate   gate.Executor
 }
 
-func shellExecutorFor(environment LaunchEnvironment) shell.Executor {
-	return shell.Executor{FrozenEnvironment: environment.ShellValues()}
+func shellExecutorFor(environment LaunchEnvironment, supervisorBinary string) shell.Executor {
+	return shell.Executor{FrozenEnvironment: environment.ShellValues(), SupervisorBinary: supervisorBinary}
 }
 
-func agentExecutorFor(settings LocalSettings, environment LaunchEnvironment) agent.Executor {
+func agentExecutorFor(settings LocalSettings, environment LaunchEnvironment, supervisorBinary string) agent.Executor {
 	executor := agent.Executor{Adapters: make(map[agent.AdapterID]agent.AgentAdapter)}
 	if settings.CodexBinaryPath != nil {
 		executor.Adapters["codex"] = codex.Adapter{Binary: *settings.CodexBinaryPath,
-			FrozenEnvironment: environment.CodexValues()}
+			FrozenEnvironment: environment.CodexValues(), SupervisorBinary: supervisorBinary}
 	}
 	return executor
 }
@@ -40,7 +41,7 @@ func (e desktopNodeExecutor) ExecuteNode(ctx context.Context, id string, node gr
 func (e desktopNodeExecutor) ExecuteNodeObserved(ctx context.Context, id string, node graph.NodeDefinition, inputs map[string]graph.Value, observation runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
 	switch node.Type {
 	case "gate":
-		return (gate.Executor{}).ExecuteNodeObserved(ctx, id, node, inputs, observation)
+		return e.gate.ExecuteNodeObserved(ctx, id, node, inputs, observation)
 	case "agent":
 		return e.agents.ExecuteNodeObserved(ctx, id, node, inputs, observation)
 	default:
@@ -51,7 +52,7 @@ func (e desktopNodeExecutor) ExecuteNodeObserved(ctx context.Context, id string,
 
 func (e desktopNodeExecutor) ValidateNodeConfig(id string, node graph.NodeDefinition) error {
 	if node.Type == "gate" {
-		return (gate.Executor{}).ValidateNodeConfig(id, node)
+		return e.gate.ValidateNodeConfig(id, node)
 	}
 	return e.agents.ValidateNodeConfig(id, node)
 }

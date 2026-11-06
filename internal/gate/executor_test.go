@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -196,9 +195,7 @@ func TestUnsafeCommandsConfigAndFilesRejected(t *testing.T) {
 				os.Symlink(".", filepath.Join(cwd, "alias"))
 				in["left"] = graph.NewStringValue("alias/right")
 			case "fifo":
-				if e := syscall.Mkfifo(filepath.Join(cwd, "left"), 0600); e != nil {
-					t.Fatal(e)
-				}
+				makeFIFO(t, filepath.Join(cwd, "left"))
 			case "directory":
 				os.Mkdir(filepath.Join(cwd, "left"), 0700)
 			case "traversal":

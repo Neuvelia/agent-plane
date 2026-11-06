@@ -5,9 +5,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	goRuntime "runtime"
 	"testing"
 
 	"agentplane/internal/events"
+	"agentplane/internal/gitstate"
 	"agentplane/internal/graph"
 )
 
@@ -71,6 +73,27 @@ func TestPhysicalWorkspaceIdentityConflicts(t *testing.T) {
 	t.Setenv("GIT_DIR", filepath.Join(root, "nonexistent"))
 	if !inspectWorkspace(context.Background(), root).known {
 		t.Fatal("inherited Git environment")
+	}
+}
+
+func TestWorkspaceIdentityUsesRunSelectedGit(t *testing.T) {
+	if goRuntime.GOOS == "windows" {
+		t.Skip("Unix wrapper fixture")
+	}
+	root := workspaceRepo(t)
+	selected := filepath.Join(t.TempDir(), "git-wrapper")
+	if err := os.WriteFile(selected, []byte("#!/bin/sh\nexec /usr/bin/git \"$@\"\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	ctx, err := gitstate.WithExecutable(context.Background(), selected)
+	if err != nil || !inspectWorkspace(ctx, root).known {
+		t.Fatalf("selected Git did not identify workspace: %v", err)
+	}
+	if err := os.Remove(selected); err != nil {
+		t.Fatal(err)
+	}
+	if inspectWorkspace(ctx, root).known {
+		t.Fatal("workspace inspection fell back to default Git")
 	}
 }
 func TestUnitModeSchedulingIncludesUnenrolledAgentsAndKeepsShells(t *testing.T) {

@@ -15,7 +15,15 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/graph"
+	"agentplane/internal/process"
 )
+
+func TestMain(m *testing.M) {
+	if len(os.Args) == 2 && os.Args[1] == "--internal-process-supervisor" {
+		os.Exit(process.Supervise(os.Stdin, os.Stdout, os.Stderr))
+	}
+	os.Exit(m.Run())
+}
 
 func gitTest(t *testing.T, dir string, args ...string) {
 	t.Helper()
@@ -90,6 +98,19 @@ printf '{"summary":"done","artifacts":[{"ref":"artifact:report"}]}' >"$result"
 	}
 	if strings.Contains(logs.String(), "SECRET") || strings.Contains(logs.String(), "PRIVATE") || logs.Len() == 0 {
 		t.Fatalf("logs=%q", logs.String())
+	}
+}
+
+func TestSupervisedProbeAndExecution(t *testing.T) {
+	d := repo(t)
+	a := Adapter{Binary: fake(t, `printf '{"summary":"supervised","artifacts":[]}' >"$result"`), SupervisorBinary: os.Args[0]}
+	report, err := a.Detect(context.Background())
+	if err != nil || !report.Available {
+		t.Fatalf("supervised detect = %+v, %v", report, err)
+	}
+	out, err := a.Execute(context.Background(), agent.AgentExecutionInput{Workspace: d, Task: "work"})
+	if err != nil || out.Summary != "supervised" {
+		t.Fatalf("supervised execute = %+v, %v", out, err)
 	}
 }
 func TestSnapshotInvocationBaseline(t *testing.T) {

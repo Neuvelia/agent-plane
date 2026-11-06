@@ -10,10 +10,17 @@ import (
 	"syscall"
 
 	"agentplane/internal/desktop"
+	"agentplane/internal/process"
 	"agentplane/internal/version"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--internal-process-supervisor" {
+		if len(os.Args) != 2 {
+			os.Exit(125)
+		}
+		os.Exit(process.Supervise(os.Stdin, os.Stdout, os.Stderr))
+	}
 	ctx, stop := serviceContext()
 	defer stop()
 	if err := runDesktopService(ctx, os.Args[1:], os.Stdin, os.Stdout); err != nil {
@@ -44,7 +51,11 @@ func runDesktopService(ctx context.Context, args []string, input io.Reader, outp
 		return err
 	}
 	documents := desktop.NewDocumentStore(registry, stateDir)
-	preflight := desktop.NewPreflightService(registry, documents, nil)
+	supervisorBinary, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	preflight := desktop.NewPreflightServiceWithSupervisor(registry, documents, nil, supervisorBinary)
 	for name, handler := range desktop.NewDocumentHandlers(documents, preflight) {
 		handlers[name] = handler
 	}

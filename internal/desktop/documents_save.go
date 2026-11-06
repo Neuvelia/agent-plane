@@ -470,11 +470,20 @@ func verifyStateDir(dir string) error {
 	if dir == "" || !filepath.IsAbs(dir) {
 		return ErrDocumentSaveUnavailable
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := createStateDirectory(dir); err != nil {
 		return err
 	}
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode().Perm()&0077 != 0 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return ErrDocumentSaveUnavailable
+	}
+	opened, err := os.Open(dir)
+	if err != nil {
+		return ErrDocumentSaveUnavailable
+	}
+	defer opened.Close()
+	current, err := opened.Stat()
+	if err != nil || !os.SameFile(info, current) || privateStateDirectory(opened) != nil {
 		return ErrDocumentSaveUnavailable
 	}
 	return nil
@@ -489,6 +498,10 @@ func writeSaveIntent(dir string, intent saveIntent) error {
 	if err := tmp.Chmod(0600); err != nil {
 		tmp.Close()
 		return err
+	}
+	if err := privateStateRegular(tmp); err != nil {
+		tmp.Close()
+		return ErrDocumentSaveUnavailable
 	}
 	if err := json.NewEncoder(tmp).Encode(intent); err != nil {
 		tmp.Close()
@@ -520,7 +533,7 @@ func readSaveIntent(filename string) (saveIntent, error) {
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || info.Size() > 4096 || info.Mode().Perm()&0077 != 0 {
+	if err != nil || info.Size() > 4096 || privateStateRegular(file) != nil {
 		return intent, ErrDocumentSaveInDoubt
 	}
 	decoder := json.NewDecoder(io.LimitReader(file, 4096))

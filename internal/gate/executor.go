@@ -18,24 +18,28 @@ import (
 	"agentplane/internal/runtime"
 )
 
-type Executor struct{}
+type Executor struct {
+	// SupervisorBinary routes the legacy diff child through the desktop-owned
+	// lifecycle. Empty preserves the existing CLI execution path.
+	SupervisorBinary string
+}
 type RedError struct{}
 
 func (RedError) GateVerdict() string    { return "red" }
 func (RedError) Error() string          { return "gate check returned red" }
 func (RedError) DiagnosticCode() string { return "E_GATE_RED" }
-func (Executor) ExecuteNode(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value) (map[string]graph.Value, error) {
-	o, _, e := (Executor{}).ExecuteNodeObserved(ctx, id, n, in, runtime.ExecutionObservation{})
+func (executor Executor) ExecuteNode(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value) (map[string]graph.Value, error) {
+	o, _, e := executor.ExecuteNodeObserved(ctx, id, n, in, runtime.ExecutionObservation{})
 	return o, e
 }
-func (Executor) ExecuteNodeObserved(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
-	out, err := execute(ctx, n, in, o)
+func (e Executor) ExecuteNodeObserved(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+	out, err := execute(ctx, n, in, o, e.SupervisorBinary)
 	if err != nil {
 		return nil, nil, fmt.Errorf("gate node %q: %w", id, err)
 	}
 	return out, nil, nil
 }
-func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, error) {
+func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation, supervisorBinary string) (map[string]graph.Value, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -55,7 +59,7 @@ func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Va
 	p := events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: scopeInputs}, CheckID: c.CheckID, Kind: events.CheckKind(c.Kind), Verdict: "green", Reason: "check matched", Evidence: []events.GateEvidence{{Kind: events.EvidenceKind(c.Kind), Source: events.EvidenceSource(c.Kind)}}}
 	switch c.Kind {
 	case "command":
-		p, err = command(ctx, c, in, o)
+		p, err = command(ctx, c, in, o, supervisorBinary)
 	case "json_predicate":
 		err = predicate(c, in, &p)
 	case "reported_file_scope":

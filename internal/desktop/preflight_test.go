@@ -82,6 +82,44 @@ outputs: {}
 	}
 }
 
+func TestPreflightSavedGraphAcceptsBothFixedCommandGateValues(t *testing.T) {
+	for _, command := range []string{"/usr/bin/diff", "agentplane.diff"} {
+		t.Run(command, func(t *testing.T) {
+			cwd, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			text := fmt.Sprintf(`schema_version: 0
+id: saved-gate
+inputs:
+  left: {type: string, required: true}
+  right: {type: string, required: true}
+nodes:
+  check:
+    type: gate
+    config: {check_id: compare, kind: command, command: %q, cwd: %q, left_input: left, right_input: right}
+    inputs:
+      left: {type: string, required: true}
+      right: {type: string, required: true}
+    outputs:
+      verdict: {type: string}
+graph_input_bindings:
+  - {from: inputs.left, to: check.inputs.left}
+  - {from: inputs.right, to: check.inputs.right}
+edges: []
+outputs: {}
+`, command, cwd)
+			service, doc, workspace, _ := preflightFixture(t, text)
+			result, err := service.Preflight(context.Background(), PreflightRequest{DocumentID: doc.DocumentID,
+				Revision: doc.Revision, WorkspaceID: workspace.WorkspaceID,
+				Inputs: map[string]graph.Value{"left": graph.NewStringValue("left"), "right": graph.NewStringValue("right")}, MaxConcurrency: 1})
+			if err != nil || result.HasErrors || result.PreflightToken == "" {
+				t.Fatalf("saved fixed Gate %q preflight = %#v, %v", command, result, err)
+			}
+		})
+	}
+}
+
 func TestPreflightRejectsGraphInputContractViolations(t *testing.T) {
 	text := `schema_version: 0
 id: inputs
@@ -392,6 +430,23 @@ func TestPreflightStaticGateAndLoopCapability(t *testing.T) {
 	_, findings := service.checkNodes(context.Background(), badGate, workspace, defaultSettings())
 	if !hasGraphDiagnosticCode(findings, "E_NODE_CONFIG") {
 		t.Fatalf("invalid Gate config passed: %#v", findings)
+	}
+	for _, command := range []string{"/usr/bin/diff", "agentplane.diff"} {
+		cwd, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		check := graph.NodeDefinition{Type: "gate", Config: graph.NodeConfig{
+			"check_id": "compare", "kind": "command", "command": command, "cwd": cwd,
+			"left_input": "left", "right_input": "right",
+		}, Inputs: map[string]graph.PortDefinition{
+			"left":  {Type: graph.ValueTypeString, Required: true},
+			"right": {Type: graph.ValueTypeString, Required: true},
+		}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString}}}
+		_, findings := service.checkNodes(context.Background(), &graph.Definition{Nodes: map[string]graph.NodeDefinition{"check": check}}, workspace, defaultSettings())
+		if hasGraphDiagnosticCode(findings, "E_NODE_CONFIG") {
+			t.Fatalf("desktop rejected fixed Gate %q: %#v", command, findings)
+		}
 	}
 	trueValue, falseValue := true, false
 	fake := &fakeCapabilities{report: agent.CapabilityReport{Available: true, Workspace: &trueValue,

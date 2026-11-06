@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"agentplane/internal/process"
 )
 
 type fileState struct{ Index, Working string }
@@ -60,15 +62,32 @@ func fail(_ string, message string, cause error) error {
 func git(ctx context.Context, dir string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	argv := append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"}, args...)
-	cmd := exec.CommandContext(ctx, "/usr/bin/git", argv...)
-	cmd.Dir = dir
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C"}
+	path := Executable(ctx)
+	if path == "" {
+		return nil, fail("git", "a trusted Git executable must be selected", nil)
+	}
+	argv := append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=" + os.DevNull}, args...)
 	var b limitedBuffer
 	b.limit = 16 << 20
-	cmd.Stdout = &b
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
+	var runErr error
+	if supervisor := Supervisor(ctx); supervisor != "" {
+		outcome, err := process.Run(ctx, supervisor, process.Spec{Path: path, Args: argv,
+			Dir: dir, Env: InspectionEnvironment()}, &b, io.Discard)
+		runErr = err
+		if runErr == nil && outcome.ExitCode != 0 {
+			runErr = fmt.Errorf("Git exited with status %d", outcome.ExitCode)
+		}
+	} else {
+		cmd := exec.CommandContext(ctx, path, argv...)
+		cmd.Dir = dir
+		cmd.Env = InspectionEnvironment()
+		// A direct CLI Git wrapper may exit while a descendant retains stdout.
+		cmd.WaitDelay = time.Second
+		cmd.Stdout = &b
+		cmd.Stderr = io.Discard
+		runErr = cmd.Run()
+	}
+	if err := runErr; err != nil {
 		if ctx.Err() != nil {
 			err = errors.Join(err, ctx.Err(), context.Cause(ctx))
 		}

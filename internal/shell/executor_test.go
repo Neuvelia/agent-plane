@@ -16,8 +16,86 @@ import (
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
+	"agentplane/internal/process"
 	"agentplane/internal/runtime"
 )
+
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "--internal-process-supervisor" {
+		os.Exit(process.Supervise(os.Stdin, os.Stdout, os.Stderr))
+	}
+	os.Exit(m.Run())
+}
+
+func TestSupervisedShellPreservesOutputAndExitStatus(t *testing.T) {
+	executor := Executor{SupervisorBinary: os.Args[0]}
+	result, err := executor.Execute(context.Background(), "worker", helperNode("echo", "two words"), nil)
+	if err != nil || result.ExitCode != 0 || result.Stdout != `["two words"]` || result.Stderr != "stderr only" {
+		t.Fatalf("supervised shell output: result=%+v err=%v", result, err)
+	}
+	result, err = executor.Execute(context.Background(), "worker", helperNode("fail"), nil)
+	var executionErr *ExecutionError
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureExit || result.ExitCode != 7 || result.Stdout != "partial" {
+		t.Fatalf("supervised shell exit: result=%+v err=%v", result, err)
+	}
+}
+
+func TestSupervisedShellDistinguishesTargetStartFromExit125(t *testing.T) {
+	executor := Executor{SupervisorBinary: os.Args[0]}
+	missing := graph.NodeDefinition{Type: "shell", Config: graph.NodeConfig{"command": filepath.Join(t.TempDir(), "missing")}}
+	badCwd := helperNode("echo")
+	badCwd.Config["cwd"] = filepath.Join(t.TempDir(), "missing")
+	for _, node := range []graph.NodeDefinition{missing, badCwd} {
+		result, err := executor.Execute(context.Background(), "worker", node, nil)
+		var typed *ExecutionError
+		if !errors.As(err, &typed) || typed.Kind != FailureStart || result.ExitCode != -1 || !result.StartedAt.IsZero() {
+			t.Fatalf("supervised start = %+v, %v", result, err)
+		}
+	}
+	result, err := executor.Execute(context.Background(), "worker", helperNode("exit-125"), nil)
+	var typed *ExecutionError
+	if !errors.As(err, &typed) || typed.Kind != FailureExit || result.ExitCode != 125 || result.StartedAt.IsZero() {
+		t.Fatalf("supervised exit 125 = %+v, %v", result, err)
+	}
+}
+
+func TestSupervisedShellCancellationIsTyped(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready := filepath.Join(t.TempDir(), "ready")
+	type answer struct {
+		result Result
+		err    error
+	}
+	done := make(chan answer, 1)
+	go func() {
+		result, err := (Executor{SupervisorBinary: os.Args[0]}).Execute(ctx, "worker", helperNode("wait", ready), nil)
+		done <- answer{result, err}
+	}()
+	deadline := time.After(3 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		select {
+		case got := <-done:
+			t.Fatalf("worker exited before cancel: %+v", got)
+		case <-deadline:
+			t.Fatal("worker readiness timeout")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case got := <-done:
+		var typed *ExecutionError
+		if !errors.As(got.err, &typed) || typed.Kind != FailureCanceled || !errors.Is(got.err, context.Canceled) || got.result.EndedAt.IsZero() {
+			t.Fatalf("supervised cancel: result=%+v err=%v", got.result, got.err)
+		}
+	case <-time.After(4 * time.Second):
+		t.Fatal("supervised shell did not join")
+	}
+}
 
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv("AGENTPLANE_HELPER") != "1" {
@@ -42,6 +120,8 @@ func TestHelperProcess(t *testing.T) {
 		fmt.Print("partial")
 		fmt.Fprint(os.Stderr, "failure detail")
 		os.Exit(7)
+	case "exit-125":
+		os.Exit(125)
 	case "cwd":
 		cwd, _ := os.Getwd()
 		fmt.Print(cwd)

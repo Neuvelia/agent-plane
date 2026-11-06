@@ -66,6 +66,12 @@ type ObservedExecutor interface {
 // Zero selects the conservative default of one. Negative values are invalid.
 type Options struct {
 	MaxConcurrency int
+	// GitExecutable is the validated absolute Git program selected for this
+	// run. Empty retains the Unix CLI default and fails closed on Windows.
+	GitExecutable string
+	// GitSupervisorBinary is the trusted bundled helper used by desktop Git
+	// inspection. Empty preserves direct CLI inspection.
+	GitSupervisorBinary string
 	// OnRunReady publishes a read-only retained trace after preflight and
 	// run initialization, before any node is dispatched. It must return
 	// promptly; a blocking callback delays execution.
@@ -131,6 +137,20 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 	if options.MaxConcurrency < 0 {
 		return RunResult{}, fmt.Errorf("max concurrency must not be negative: %d", options.MaxConcurrency)
+	}
+	if options.GitExecutable != "" {
+		var err error
+		ctx, err = gitstate.WithExecutable(ctx, options.GitExecutable)
+		if err != nil {
+			return RunResult{}, err
+		}
+	}
+	if options.GitSupervisorBinary != "" {
+		var err error
+		ctx, err = gitstate.WithSupervisor(ctx, options.GitSupervisorBinary)
+		if err != nil {
+			return RunResult{}, err
+		}
 	}
 	limit := options.MaxConcurrency
 	if limit == 0 {

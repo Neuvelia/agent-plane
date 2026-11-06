@@ -16,6 +16,7 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/events"
+	"agentplane/internal/process"
 )
 
 const maxRecord = 1 << 20
@@ -27,6 +28,9 @@ const resultSchema = `{"type":"object","additionalProperties":false,"required":[
 type Adapter struct {
 	Binary            string
 	FrozenEnvironment map[string]string
+	// SupervisorBinary selects the fixed sidecar helper for owned desktop runs.
+	// Empty preserves the existing CLI process path.
+	SupervisorBinary string
 }
 
 func (Adapter) ID() agent.AdapterID { return "codex" }
@@ -41,7 +45,7 @@ func (e *Error) Error() string { return "codex " + e.Code + ": " + e.Message }
 func (e *Error) Unwrap() error { return e.cause }
 func (e *Error) DiagnosticCode() string {
 	switch e.Code {
-	case "detection", "unsupported_platform", "unsupported_capability", "environment", "workspace", "git", "start", "shutdown", "cancelled", "process_exit", "result", "progress":
+	case "detection", "unsupported_platform", "unsupported_capability", "environment", "workspace", "git", "start", "shutdown", "cancelled", "cleanup", "process_exit", "result", "progress":
 		return "codex_" + e.Code
 	default:
 		return "codex_process_exit"
@@ -77,7 +81,7 @@ var versionPattern = regexp.MustCompile(`^codex-cli ([0-9]+\.[0-9]+\.[0-9]+(?:[-
 func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 	supported := true
 	r := agent.CapabilityReport{DisplayName: "Codex CLI", CorrectionFeedback: &supported}
-	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
+	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" && !(runtime.GOOS == "windows" && a.SupervisorBinary != "") {
 		return r, fail("unsupported_platform", "process ownership requires Darwin or Linux", nil)
 	}
 	if !filepath.IsAbs(a.Binary) {
@@ -94,7 +98,7 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 		pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		b := limitedBuffer{limit: maxRecord}
-		err := runProcess(pctx, a.Binary, args, []string{}, "", nil, &b)
+		err := a.runProcess(pctx, a.Binary, args, []string{}, "", nil, &b)
 		if err != nil || b.overflow {
 			return "", fail("detection", "Codex capability probe failed or exceeded bounds", err)
 		}
@@ -220,11 +224,20 @@ func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, log 
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream := progress{log: log, normalized: normalized, cancel: cancel}
-	err = runProcess(pctx, a.Binary, args, env, workspace, strings.NewReader(task), &stream)
+	err = a.runProcess(pctx, a.Binary, args, env, workspace, strings.NewReader(task), &stream)
+	var join *process.JoinFailure
+	var supervisor *process.SupervisorFailure
+	if errors.As(err, &join) || errors.As(err, &supervisor) {
+		return out, fail("cleanup", "process cleanup is unverified", err)
+	}
 	if stream.err != nil {
 		return out, stream.err
 	}
 	if err != nil {
+		var start *process.TargetStartError
+		if errors.As(err, &start) {
+			return out, fail("start", "Codex executable or working directory is unavailable", err)
+		}
 		if ctx.Err() != nil {
 			return out, fail("cancelled", "execution cancelled", err)
 		}
@@ -247,6 +260,22 @@ func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, log 
 	}
 	parsed.ChangedFiles = changed(before, after)
 	return parsed, nil
+}
+
+func (a Adapter) runProcess(ctx context.Context, binary string, args, env []string, dir string, stdin io.Reader, stdout io.Writer) error {
+	if a.SupervisorBinary == "" {
+		return runProcess(ctx, binary, args, env, dir, stdin, stdout)
+	}
+	var input []byte
+	if stdin != nil {
+		var err error
+		input, err = io.ReadAll(io.LimitReader(stdin, (4<<20)+1))
+		if err != nil || len(input) > 4<<20 {
+			return fail("start", "Codex task exceeds owned process input limit", err)
+		}
+	}
+	_, err := process.Run(ctx, a.SupervisorBinary, process.Spec{Path: binary, Args: args, Env: env, Dir: dir, Stdin: input}, stdout, io.Discard)
+	return err
 }
 func readResult(path string) (agent.AgentExecutionOutput, error) {
 	var out agent.AgentExecutionOutput
