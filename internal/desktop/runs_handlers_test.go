@@ -80,7 +80,7 @@ func TestRunHandlerStartsSavedPreflightAndReattachesWithFreshToken(t *testing.T)
 		t.Fatalf("reattach = %#v, %v", reattached, serviceErr)
 	}
 	page, serviceErr := handlers["runs.events"](context.Background(), json.RawMessage(`{"run_id":"00000000-0000-4000-8000-000000000099","after_sequence":0,"limit":8}`))
-	if serviceErr != nil || len(page.(RunEventsPage).Events) != 1 || page.(RunEventsPage).Events[0].Type != events.RunStarted {
+	if serviceErr != nil || len(page.(RunEventsPage).Events) != 1 || replayEvent(t, page.(RunEventsPage).Events[0]).Type != events.RunStarted {
 		t.Fatalf("replay after reattach = %#v, %v", page, serviceErr)
 	}
 	cancelled, serviceErr := handlers["runs.cancel"](context.Background(), json.RawMessage(`{"run_id":"00000000-0000-4000-8000-000000000099"}`))

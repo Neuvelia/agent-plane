@@ -237,6 +237,54 @@ func TestCollectorPageBoundedSeparatesTrailingOmissions(t *testing.T) {
 	}
 }
 
+func TestCollectorNextBoundedReportsOversizeWithoutCopyingFact(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.OmitSensitive(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := collector.Append(Event{Type: NodeEvidence, Payload: NodeEvidencePayload{AdapterVersion: strings.Repeat("x", 4<<20)}}); err != nil {
+		t.Fatal(err)
+	}
+	first, err := collector.NextBounded(0, 3<<20)
+	if err != nil || first.Event == nil || first.Event.Sequence != 1 || first.OversizeSequence != 0 || first.NextAfter != 1 || first.Watermark != 3 {
+		t.Fatalf("first bounded candidate = %+v, %v", first, err)
+	}
+	second, err := collector.NextBounded(1, 3<<20)
+	if err != nil || second.Event != nil || second.OversizeSequence != 3 || second.NextAfter != 3 || len(second.Omissions) != 1 || second.Omissions[0] != (OmissionRange{From: 2, To: 2, Reason: OmissionSensitiveIdentity}) {
+		t.Fatalf("oversize bounded candidate = %+v, %v", second, err)
+	}
+	if _, err := collector.OmitSensitive(); err != nil {
+		t.Fatal(err)
+	}
+	third, err := collector.NextBounded(second.NextAfter, 3<<20)
+	if err != nil || third.Event != nil || third.OversizeSequence != 0 || third.NextAfter != 4 || len(third.Omissions) != 1 || third.Omissions[0].From != 4 || third.Omissions[0].To != 4 {
+		t.Fatalf("all-omission bounded candidate = %+v, %v", third, err)
+	}
+	if _, err := collector.NextBounded(5, 3<<20); err == nil {
+		t.Fatal("cursor past watermark accepted")
+	}
+}
+
+func TestCollectorNextBoundedDetachesReturnedPayload(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	if _, err := collector.Append(Event{Type: LogChunk, Payload: LogChunkPayload{Stream: Stdout, Data: []byte("original")}}); err != nil {
+		t.Fatal(err)
+	}
+	candidate, err := collector.NextBounded(0, 1024)
+	if err != nil || candidate.Event == nil {
+		t.Fatalf("candidate = %+v, %v", candidate, err)
+	}
+	data := candidate.Event.Payload.(LogChunkPayload).Data
+	data[0] = 'X'
+	again, err := collector.NextBounded(0, 1024)
+	if err != nil || string(again.Event.Payload.(LogChunkPayload).Data) != "original" {
+		t.Fatalf("retained payload mutated through candidate: %+v, %v", again, err)
+	}
+}
+
 func TestCollectorSequencesConcurrentEventsAndCopiesLogs(t *testing.T) {
 	collector := NewCollector("run", "graph", "sha256-v0:hash")
 	const workers, perWorker = 8, 20

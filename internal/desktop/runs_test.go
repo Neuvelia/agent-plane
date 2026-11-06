@@ -92,6 +92,35 @@ func TestRunOwnerIdempotencyBusyAndTokenIndependentRetry(t *testing.T) {
 	}
 }
 
+func TestRunOwnerFreezesReplayRedactionsBeforePublishingTrace(t *testing.T) {
+	preparedValues := []string{"private"}
+	service := NewRunService(context.Background(), func(context.Context, RunStartRequest) (PreparedRun, *ServiceError) {
+		prepared := testPrepared()
+		prepared.Options.LogRedactions = preparedValues
+		return prepared, nil
+	}, func(_ context.Context, _ *graph.Definition, _ map[string]graph.Value, _ runtime.Executor, options runtime.Options) (runtime.RunResult, error) {
+		collector := events.NewCollector("run-safe", "graph", "graph-version")
+		if _, err := collector.Append(events.Event{Type: events.LogChunk, Payload: events.LogChunkPayload{Stream: events.Stdout, Data: []byte("before private after")}}); err != nil {
+			return runtime.RunResult{}, err
+		}
+		options.OnRunReady("run-safe", collector)
+		return runtime.RunResult{RunID: "run-safe", GraphID: "graph", GraphVersion: "graph-version", State: runtime.RunSucceeded}, nil
+	})
+	defer service.Close()
+	result, serviceErr := service.Start(context.Background(), runRequest())
+	if serviceErr != nil || result.RunID != "run-safe" {
+		t.Fatalf("start = %+v, %v", result, serviceErr)
+	}
+	preparedValues[0] = "changed"
+	page, serviceErr := service.Events("run-safe", 0, 1)
+	if serviceErr != nil || len(page.Events) != 1 || strings.Contains(string(page.Events[0]), "private") {
+		t.Fatalf("replay did not retain frozen redactions: %+v, %v", page, serviceErr)
+	}
+	if got := replayEvent(t, page.Events[0]).Payload.(events.LogChunkPayload); string(got.Data) != "before *** after" {
+		t.Fatalf("replay redaction = %q", got.Data)
+	}
+}
+
 func TestRunOwnerPreReadyFailureHasNoPhantomIdentity(t *testing.T) {
 	var calls atomic.Int32
 	service := NewRunService(context.Background(), func(context.Context, RunStartRequest) (PreparedRun, *ServiceError) {

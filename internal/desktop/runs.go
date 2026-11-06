@@ -90,6 +90,7 @@ type ownedRun struct {
 	cancel           context.CancelFunc
 	runID            events.RunID
 	reader           events.TraceReader
+	redactions       []string
 	graphID          string
 	graphVersion     string
 	state            runtime.RunState
@@ -231,6 +232,10 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 	record.cancel = cancel
 	s.mu.Unlock()
 	options := prepared.Options
+	options.LogRedactions = append([]string(nil), prepared.Options.LogRedactions...)
+	s.mu.Lock()
+	record.redactions = append([]string(nil), options.LogRedactions...)
+	s.mu.Unlock()
 	options.OnRunReady = func(id events.RunID, reader events.TraceReader) {
 		s.mu.Lock()
 		defer s.mu.Unlock()

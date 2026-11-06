@@ -133,6 +133,10 @@ func (r retainedTraceReader) PageBounded(after uint64, limit, maxEventBytes int)
 	return r.collector.PageBounded(after, limit, maxEventBytes)
 }
 
+func (r retainedTraceReader) NextBounded(after uint64, maxRawBytes int) (events.BoundedCandidate, error) {
+	return r.collector.NextBounded(after, maxRawBytes)
+}
+
 // Run executes one validated graph in memory. A non-nil error means preflight
 // failed and no run started. Runtime failures are represented in RunResult.
 // Callers must not mutate definition or inputs while Run is active.

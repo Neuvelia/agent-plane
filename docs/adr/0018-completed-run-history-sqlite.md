@@ -166,6 +166,14 @@ after encoding; fixed event-schema key spellings are not user data. General
 graph, launch and output projections retain the existing key-and-value scan.
 Canonical safe event bytes and their SHA-256 are the sole live/history hash
 authority; an event above the indexed 3 MiB bound is a `not_retained` omission.
+Active replay selects one retained candidate at a time under the collector
+lock, copying its payload only below a 4 MiB raw bound. Larger raw facts are
+reported by original sequence without copying them. The first candidate fixes
+the page watermark, delivery stats and finished flag; later immutable facts
+are clipped to that watermark. The encoded safe event and omission arrays must
+fit the 7 MiB result bound, with cursor progress preserved when a fact is
+omitted. Readers lacking bounded selection make replay unavailable rather than
+falling back to an unbounded raw copy.
 
 The redaction set contains nonempty frozen environment values, authored Shell
 `config.env` values and typed launch input strings, recursively including JSON

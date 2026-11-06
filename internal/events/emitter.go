@@ -60,6 +60,22 @@ type TraceReader interface {
 	PageBounded(after uint64, limit, maxEventBytes int) (TracePage, error)
 }
 
+// BoundedTraceReader is optional for readers that can select one candidate
+// without copying an oversized raw payload into the caller's memory.
+type BoundedTraceReader interface {
+	NextBounded(after uint64, maxRawBytes int) (BoundedCandidate, error)
+}
+
+type BoundedCandidate struct {
+	Event            *Event
+	OversizeSequence uint64
+	Omissions        []OmissionRange
+	NextAfter        uint64
+	Watermark        uint64
+	Stats            DeliveryStats
+	Finished         bool
+}
+
 // DeliveryStats counts encoded whole-event JSON bytes, not Go heap usage.
 type DeliveryStats struct {
 	RetainedPeakBytes, RetainedPeakItems        int
@@ -297,6 +313,37 @@ func (c *Collector) PageBounded(after uint64, limit, maxEventBytes int) (TracePa
 		return TracePage{}, errors.New("trace page byte limit must be positive")
 	}
 	return c.page(after, limit, maxEventBytes)
+}
+
+// NextBounded accounts for one retained fact and the omissions before it. An
+// oversized fact is represented only by sequence; its payload is never copied.
+func (c *Collector) NextBounded(after uint64, maxRawBytes int) (BoundedCandidate, error) {
+	if maxRawBytes < 1 {
+		return BoundedCandidate{}, errors.New("trace candidate byte limit must be positive")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if after > c.sequence {
+		return BoundedCandidate{}, fmt.Errorf("trace cursor %d exceeds watermark %d", after, c.sequence)
+	}
+	candidate := BoundedCandidate{Watermark: c.sequence, Stats: c.stats, Finished: c.finished}
+	index := sort.Search(len(c.events), func(i int) bool { return c.events[i].Sequence > after })
+	if index == len(c.events) {
+		candidate.NextAfter = c.sequence
+		candidate.Omissions = c.pageOmissions(after, c.sequence, nil)
+		return candidate, nil
+	}
+	sequence := c.events[index].Sequence
+	candidate.NextAfter = sequence
+	candidate.Omissions = c.pageOmissions(after, sequence, c.events[index:index+1])
+	if c.eventSizes[index] > maxRawBytes {
+		candidate.OversizeSequence = sequence
+		return candidate, nil
+	}
+	fact := c.events[index]
+	fact.Payload = copyPayload(fact.Payload)
+	candidate.Event = &fact
+	return candidate, nil
 }
 
 func (c *Collector) page(after uint64, limit, maxEventBytes int) (TracePage, error) {
