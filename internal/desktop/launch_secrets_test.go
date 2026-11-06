@@ -128,6 +128,154 @@ outputs: {}
 	expectSecretPreflightRejected(t, result, "inputs")
 }
 
+func TestPreflightRejectsInputStringPresentInSavedGraph(t *testing.T) {
+	text := `schema_version: 0
+id: embedded-input
+name: ordinary-title
+inputs:
+  query: {type: string, required: true}
+nodes: {}
+edges: []
+outputs: {}
+# HIDDEN_INPUT_VALUE
+`
+	result, _, _, _ := preflightSecretGraph(t, text, map[string]graph.Value{"query": graph.NewStringValue("HIDDEN_INPUT_VALUE")})
+	if !result.HasErrors || result.PreflightToken != "" {
+		t.Fatalf("embedded input received token: %+v", result)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "E_EMBEDDED_VALUE" || result.Diagnostics[0].Path != "document_id" {
+		t.Fatalf("embedded input diagnostic = %+v", result.Diagnostics)
+	}
+	if result.Diagnostics[0].Message != "Saved graph contains a launch input or environment value" || result.Diagnostics[0].Suggestion == "" {
+		t.Fatalf("embedded input lacks actionable safe text: %+v", result.Diagnostics[0])
+	}
+}
+
+func TestPreflightRejectsYAMLEscapedInputString(t *testing.T) {
+	text := `schema_version: 0
+id: escaped-input
+name: "PRIVATE\u005fINPUT_VALUE"
+inputs:
+  query: {type: string, required: true}
+nodes: {}
+edges: []
+outputs: {}
+`
+	result, _, _, _ := preflightSecretGraph(t, text, map[string]graph.Value{"query": graph.NewStringValue("PRIVATE_INPUT_VALUE")})
+	if !result.HasErrors || result.PreflightToken != "" || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "E_EMBEDDED_VALUE" {
+		t.Fatalf("escaped embedded input preflight = %+v", result)
+	}
+}
+
+func TestPrepareStartRechecksEmbeddedInputWithLegacyTicket(t *testing.T) {
+	text := `schema_version: 0
+id: legacy-ticket
+inputs:
+  query: {type: string, required: true}
+nodes: {}
+edges: []
+outputs: {}
+# LEGACY_PRIVATE_VALUE
+`
+	service, doc, workspace, _ := preflightFixture(t, text)
+	ctx := context.Background()
+	inputs := map[string]graph.Value{"query": graph.NewStringValue("LEGACY_PRIVATE_VALUE")}
+	snapshot, err := service.documents.SavedSnapshot(doc.DocumentID, doc.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := service.registry.ResolveWorkspace(workspace.WorkspaceID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := service.registry.Settings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := graph.Parse([]byte(snapshot.Text))
+	if err != nil {
+		t.Fatal(err)
+	}
+	capabilityHash, _, findings := service.checkNodesWithEnvironment(ctx, definition, resolved, settings)
+	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() {
+		t.Fatalf("unexpected capability findings: %+v", findings)
+	}
+	encodedInputs, err := encodeTypedInputsExact(inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := payloadDigest(snapshot, resolved, settings, 1, encodedInputs, capabilityHash)
+	token, err := service.storeToken(PreflightTicket{Document: snapshot, Workspace: resolved, Inputs: inputs,
+		MaxConcurrency: 1, Settings: settings, CapabilityHash: capabilityHash, PayloadDigest: digest})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, serviceErr := service.PrepareStart(ctx, RunStartRequest{PreflightToken: token, PayloadDigest: digest,
+		DocumentID: doc.DocumentID, Revision: doc.Revision, WorkspaceID: workspace.WorkspaceID,
+		Inputs: inputs, MaxConcurrency: 1})
+	if serviceErr == nil || serviceErr.Code != "conflict" {
+		t.Fatalf("legacy ticket with embedded input Start error = %+v", serviceErr)
+	}
+}
+
+func TestPreflightRejectsNestedJSONStringPresentInSavedGraph(t *testing.T) {
+	text := `schema_version: 0
+id: embedded-json-input
+inputs:
+  payload: {type: json, required: true}
+nodes: {}
+edges: []
+outputs: {}
+# PRIVATE_JSON_LEAF
+`
+	value, err := graph.NewJSONValue([]byte(`{"items":["PRIVATE_JSON_LEAF"]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, _, _, _ := preflightSecretGraph(t, text, map[string]graph.Value{"payload": value})
+	if !result.HasErrors || result.PreflightToken != "" || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "E_EMBEDDED_VALUE" {
+		t.Fatalf("embedded JSON leaf preflight = %+v", result)
+	}
+}
+
+func TestPreflightRejectsFrozenEnvironmentValuePresentInSavedGraph(t *testing.T) {
+	t.Setenv("AP_F2_FROZEN_VALUE", "PRIVATE_ENV_VALUE")
+	text := `schema_version: 0
+id: embedded-environment
+name: PRIVATE_ENV_VALUE
+inputs: {}
+nodes:
+  step:
+    type: shell
+    config:
+      command: /bin/echo
+      env_allowlist: [AP_F2_FROZEN_VALUE]
+    outputs: {}
+edges: []
+outputs: {}
+`
+	result, _, _, _ := preflightSecretGraph(t, text, nil)
+	if !result.HasErrors || result.PreflightToken != "" || len(result.Diagnostics) != 1 || result.Diagnostics[0].Code != "E_EMBEDDED_VALUE" {
+		t.Fatalf("embedded frozen environment preflight = %+v", result)
+	}
+}
+
+func TestGraphContainsExternalValueExemptsOnlyOwnShellLiteral(t *testing.T) {
+	text := `config: {env: {MESSAGE: OWN_LITERAL_VALUE}}`
+	if graphContainsExternalValue(text, LaunchEnvironment{literals: []string{"OWN_LITERAL_VALUE"}}, nil) {
+		t.Fatal("own ordinary Shell literal was rejected")
+	}
+	if !graphContainsExternalValue(text, LaunchEnvironment{shell: map[string]string{"NAMED": "OWN_LITERAL_VALUE"}}, nil) {
+		t.Fatal("frozen external value was accepted")
+	}
+	if !graphContainsExternalValue(text, LaunchEnvironment{literals: []string{"OWN_LITERAL_VALUE"}}, []string{"OWN_LITERAL_VALUE"}) {
+		t.Fatal("input value matching an own literal was accepted")
+	}
+	if graphContainsExternalValue("name: ordinary", LaunchEnvironment{}, []string{""}) {
+		t.Fatal("empty input value matched the graph")
+	}
+}
+
 func TestPreflightAllowsOwnOrdinaryShellEnv(t *testing.T) {
 	base := `schema_version: 0
 id: own-literal

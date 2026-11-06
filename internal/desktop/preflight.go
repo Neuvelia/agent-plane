@@ -187,6 +187,9 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 	capabilityHash, environment, checks := s.checkNodesWithEnvironment(ctx, definition, workspace, settings)
 	findings = append(findings, checks...)
 	if !(graph.ValidationResult{Diagnostics: findings}).HasErrors() {
+		if graphContainsExternalValue(snapshot.Text, environment, inputLeaves) {
+			findings = append(findings, preflightDiagnostic(definition.ID, "", "document_id", "E_EMBEDDED_VALUE", "Saved graph contains a launch input or environment value"))
+		}
 		if _, err := launchRedactionsWithLeaves(environment, inputLeaves); err != nil {
 			findings = append(findings, preflightDiagnostic(definition.ID, "", "inputs", "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
 		}

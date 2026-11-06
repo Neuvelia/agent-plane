@@ -112,7 +112,7 @@ outputs: {}
 			service, doc, workspace, _ := preflightFixture(t, text)
 			result, err := service.Preflight(context.Background(), PreflightRequest{DocumentID: doc.DocumentID,
 				Revision: doc.Revision, WorkspaceID: workspace.WorkspaceID,
-				Inputs: map[string]graph.Value{"left": graph.NewStringValue("left"), "right": graph.NewStringValue("right")}, MaxConcurrency: 1})
+				Inputs: map[string]graph.Value{"left": graph.NewStringValue("LEFT_CONTENT_VALUE"), "right": graph.NewStringValue("RIGHT_CONTENT_VALUE")}, MaxConcurrency: 1})
 			if err != nil || result.HasErrors || result.PreflightToken == "" {
 				t.Fatalf("saved fixed Gate %q preflight = %#v, %v", command, result, err)
 			}

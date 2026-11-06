@@ -70,6 +70,9 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if (graph.ValidationResult{Diagnostics: findings}).HasErrors() || capabilityHash != ticket.CapabilityHash {
 		return PreparedRun{}, protocolError("conflict", "Local capability changed since preflight")
 	}
+	if graphContainsExternalValue(snapshot.Text, environment, inputLeaves) {
+		return PreparedRun{}, protocolError("conflict", "Saved graph contains a launch input or environment value")
+	}
 	if payloadDigest(snapshot, workspace, settings, request.MaxConcurrency, requestedInputs, capabilityHash) != ticket.PayloadDigest {
 		return PreparedRun{}, protocolError("conflict", "Start payload changed since preflight")
 	}

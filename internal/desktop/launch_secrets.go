@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"agentplane/internal/graph"
 )
 
@@ -144,6 +146,59 @@ func validateCredentialKeys(definition *graph.Definition, inputs map[string]grap
 		return "inputs", nil, err
 	}
 	return "", leaves, nil
+}
+
+// graphContainsExternalValue checks the exact saved source. Authored Shell env
+// literals alone are exempt; a value also supplied as an input or captured
+// from the process environment is external and blocks the launch.
+func graphContainsExternalValue(text string, environment LaunchEnvironment, inputLeaves []string) bool {
+	values := make(map[string]bool)
+	for _, source := range []map[string]string{environment.codex, environment.shell} {
+		for _, value := range source {
+			if value != "" {
+				values[value] = true
+			}
+		}
+	}
+	for _, value := range inputLeaves {
+		if value != "" {
+			values[value] = true
+		}
+	}
+	for value := range values {
+		if strings.Contains(text, value) {
+			return true
+		}
+	}
+	// YAML escapes can conceal a value in the source bytes while producing the
+	// same graph string after decoding. Graph.Parse has already validated this
+	// saved text; fail closed if the second parse unexpectedly fails.
+	var root yaml.Node
+	if err := yaml.Unmarshal([]byte(text), &root); err != nil {
+		return true
+	}
+	stack := []*yaml.Node{&root}
+	seen := make(map[*yaml.Node]bool)
+	for len(stack) > 0 {
+		node := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+		if node == nil || seen[node] {
+			continue
+		}
+		seen[node] = true
+		if node.Kind == yaml.ScalarNode && node.Tag == "!!str" {
+			for value := range values {
+				if strings.Contains(node.Value, value) {
+					return true
+				}
+			}
+		}
+		stack = append(stack, node.Content...)
+		if node.Alias != nil {
+			stack = append(stack, node.Alias)
+		}
+	}
+	return false
 }
 
 func credentialShellEnvKey(raw any) bool {
