@@ -128,6 +128,9 @@ type Event struct {
 	NodeRunID     NodeRunID `json:"node_run_id,omitempty"`
 	AttemptID     AttemptID `json:"attempt_id,omitempty"`
 	Payload       Payload   `json:"payload"`
+	// IdentityRedacted marks a pre-retention change to an identity-bearing field.
+	// It is a memory-only hint for safe live/history projection, not a wire fact.
+	IdentityRedacted bool `json:"-"`
 }
 
 // Validate checks the event envelope before it becomes a serialized fact.

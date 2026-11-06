@@ -149,6 +149,12 @@ that event from the inspector projection and report the omission through
 out-of-band page/run completeness metadata; do not fabricate an event at its
 sequence. Cursors advance past omitted sequences. If `run_finished` is omitted,
 the safe run snapshot still reports terminal status and incompleteness.
+Runtime marks facts whose identity/path/reference fields changed during its
+own redaction with a memory-only `Event.IdentityRedacted` hint excluded from
+event JSON. A valid observed fact made unrepresentable by redaction reserves
+its original sequence as a `sensitive_identity` omission at the scheduler's
+normal append position. The projector must honor that hint; it cannot infer
+provenance from the replacement marker text.
 Idempotence hashes the canonical safe projection, so distinct raw events that
 redact to identical bytes are identical for storage.
 

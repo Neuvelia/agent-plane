@@ -92,15 +92,19 @@ type Options struct {
 }
 
 type completedNode struct {
-	baseline     *gitstate.Baseline
-	id           string
-	attemptID    events.AttemptID
-	outputs      map[string]graph.Value
-	evidence     *events.NodeEvidencePayload
-	check        *events.GateCheckPayload
-	checkInvalid bool
-	diagnostics  []graph.Diagnostic
-	err          error
+	baseline                 *gitstate.Baseline
+	id                       string
+	attemptID                events.AttemptID
+	outputs                  map[string]graph.Value
+	evidence                 *events.NodeEvidencePayload
+	evidenceIdentityRedacted bool
+	check                    *events.GateCheckPayload
+	checkIdentityRedacted    bool
+	checkIDRedacted          bool
+	checkOmitted             bool
+	checkInvalid             bool
+	diagnostics              []graph.Diagnostic
+	err                      error
 }
 
 const maxEventLogChunk = 16 * 1024
@@ -305,7 +309,8 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					attempts[id] = aid
 					numbers[id]++
 					machine.appendEvent(events.Event{Type: events.AttemptStarted, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: events.AttemptStartedPayload{Number: numbers[id], MaxAttempts: l.Attempts()}})
-					machine.appendEvent(events.Event{Type: events.AttemptInput, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: attemptInput(definition.Nodes[id], machine.resolved[id], feedbacks[id], redactionTemplate)})
+					input, identityRedacted := attemptInput(definition.Nodes[id], machine.resolved[id], feedbacks[id], redactionTemplate)
+					machine.appendEvent(events.Event{Type: events.AttemptInput, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: input, IdentityRedacted: identityRedacted})
 				}
 				node := definition.Nodes[id]
 				resolved := machine.resolved[id]
@@ -331,8 +336,11 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					if work.err != nil && ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
 						outcome = "cancelled"
 					}
+					if work.checkOmitted {
+						machine.omitSensitive()
+					}
 					if work.check != nil && !work.checkInvalid {
-						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check)})
+						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check), IdentityRedacted: work.checkIdentityRedacted})
 						if machine.units[work.id] != nil {
 							envelope, err := machine.units.envelope(work.id, work.attemptID, *work.check)
 							if err == nil {
@@ -344,7 +352,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 								work.check = nil
 								work.checkInvalid = true
 							} else {
-								machine.appendEvent(events.Event{Type: events.ReturnEnvelope, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: envelope})
+								machine.appendEvent(events.Event{Type: events.ReturnEnvelope, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: envelope, IdentityRedacted: work.checkIdentityRedacted || envelope.ScopeRedacted})
 							}
 						}
 						if work.check != nil && work.check.Verdict == "red" {
@@ -362,16 +370,16 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						}
 					}
 					if work.evidence != nil {
-						machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: *work.evidence})
+						machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: *work.evidence, IdentityRedacted: work.evidenceIdentityRedacted})
 						work.evidence = nil
 					}
 					checkID := ""
 					if work.check != nil {
 						checkID = work.check.CheckID
 					}
-					machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}})
+					machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}, IdentityRedacted: checkID != "" && work.checkIDRedacted})
 					if outcome == "rejected" && ctx.Err() == nil {
-						feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
+						feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id]), checkIDRedacted: work.checkIDRedacted}
 						retry = append(retry, work.id)
 						continue
 					}
@@ -387,6 +395,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					work.checkInvalid = false
 				}
 				if work.check != nil || work.checkInvalid {
+					if work.checkOmitted {
+						machine.omitSensitive()
+					}
 					valid := !work.checkInvalid && work.check != nil && definition.Nodes[work.id].Type == "gate" && work.evidence == nil
 					if valid && work.check.Verdict == "red" {
 						var verdict interface{ GateVerdict() string }
@@ -403,7 +414,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						work.err = errors.New("invalid or inconsistent gate observation")
 						work.outputs = nil
 					} else {
-						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.check})
+						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.check, IdentityRedacted: work.checkIdentityRedacted})
 					}
 				} else if definition.Nodes[work.id].Type == "gate" && work.err == nil {
 					work.err = errors.New("gate execution missing check observation")
@@ -442,7 +453,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					nodeResult.AcceptedAttemptID = u.accepted
 				}
 				if work.evidence != nil {
-					machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
+					machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence, IdentityRedacted: work.evidenceIdentityRedacted})
 				}
 				machine.transitionNode(work.id, NodeSucceeded)
 			}
@@ -523,6 +534,12 @@ func (m *runMachine) appendEvent(event events.Event) events.Event {
 		panic(fmt.Errorf("scheduler event invariant: %w", err))
 	}
 	return recorded
+}
+
+func (m *runMachine) omitSensitive() {
+	if _, err := m.emitter.OmitSensitive(); err != nil {
+		panic(fmt.Errorf("scheduler event omission invariant: %w", err))
+	}
 }
 
 func (m *runMachine) record(id, from, to string) {
@@ -772,6 +789,10 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 	var evidence *events.NodeEvidencePayload
 	var check *events.GateCheckPayload
 	checkInvalid := false
+	checkOmitted := false
+	checkIdentityRedacted := false
+	checkIDRedacted := false
+	evidenceIdentityRedacted := false
 	streaming, hasLogs := executor.(LogStreamingExecutor)
 	observed, hasObserved := executor.(ObservedExecutor)
 	if hasLogs || hasObserved {
@@ -788,8 +809,10 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 				data = data[len(chunk):]
 			}
 		}
-		progress := newProgressRedactor(redactionTemplate, func(kind events.Type, payload events.Payload) {
-			m.appendEvent(events.Event{Type: kind, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: payload})
+		progress := newProgressRedactor(redactionTemplate, func(kind events.Type, payload events.Payload, identityRedacted bool) {
+			m.appendEvent(events.Event{Type: kind, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: payload, IdentityRedacted: identityRedacted})
+		}, func() {
+			m.omitSensitive()
 		})
 		observerProgress := func(kind events.Type, payload events.Payload) {
 			logMu.Lock()
@@ -822,11 +845,17 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			}
 			snapshot := events.CloneGate(p)
 			redact := func(s string) string { return progress.redact(s) }
-			snapshot.CheckID = redact(snapshot.CheckID)
+			redactIdentity := func(s string) string {
+				safe := redact(s)
+				checkIdentityRedacted = checkIdentityRedacted || safe != s
+				return safe
+			}
+			snapshot.CheckID = redactIdentity(snapshot.CheckID)
+			checkIDRedacted = snapshot.CheckID != p.CheckID
 			snapshot.Reason = redact(snapshot.Reason)
 			if snapshot.ChangedFiles != nil {
 				for i, path := range snapshot.ChangedFiles.AllowedPaths {
-					snapshot.ChangedFiles.AllowedPaths[i] = redact(path)
+					snapshot.ChangedFiles.AllowedPaths[i] = redactIdentity(path)
 					snapshot.ChangedFiles.ScopeRedacted = snapshot.ChangedFiles.ScopeRedacted || snapshot.ChangedFiles.AllowedPaths[i] != path
 				}
 				sort.Strings(snapshot.ChangedFiles.AllowedPaths)
@@ -841,14 +870,14 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 				}
 			}
 			for i := range snapshot.Scope.CheckedInputs {
-				snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
+				snapshot.Scope.CheckedInputs[i] = redactIdentity(snapshot.Scope.CheckedInputs[i])
 			}
 			sort.Strings(snapshot.Scope.CheckedInputs)
 			for i := range snapshot.Evidence {
 				e := &snapshot.Evidence[i]
-				e.Path = redact(e.Path)
+				e.Path = redactIdentity(e.Path)
 				if e.Reference != nil {
-					e.Reference.Identifier = redact(e.Reference.Identifier)
+					e.Reference.Identifier = redactIdentity(e.Reference.Identifier)
 					e.Reference.Reason = redact(e.Reference.Reason)
 				}
 				// Byte evidence is redacted again at the trust boundary for custom executors.
@@ -898,6 +927,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			}
 			if snapshot.Validate() != nil {
 				checkInvalid = true
+				checkOmitted = true
 				return
 			}
 			check = &snapshot
@@ -925,6 +955,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			r := redactionTemplate.clone()
 			data := append([]byte{}, r.Write(events.Stdout, []byte(s))...)
 			data = append(data, r.Flush(events.Stdout)...)
+			evidenceIdentityRedacted = evidenceIdentityRedacted || string(data) != s
 			return string(data)
 		}
 		snapshot.AdapterID = redact(snapshot.AdapterID)
@@ -934,5 +965,5 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 		}
 		evidence = &snapshot
 	}
-	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err}
+	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, evidenceIdentityRedacted: evidenceIdentityRedacted, check: check, checkIdentityRedacted: checkIdentityRedacted, checkIDRedacted: checkIDRedacted, checkOmitted: checkOmitted, checkInvalid: checkInvalid, err: err}
 }

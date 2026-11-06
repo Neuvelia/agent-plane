@@ -20,6 +20,7 @@ type CorrectionFeedback struct {
 	PreviousAttemptID events.AttemptID   `json:"previous_attempt_id"`
 	CheckResult       events.CheckResult `json:"check_result"`
 	IntendedScope     []string           `json:"intended_scope"`
+	checkIDRedacted   bool
 }
 
 func CloneFeedback(f *CorrectionFeedback) *CorrectionFeedback {
@@ -151,7 +152,7 @@ func originalScope(n graph.NodeDefinition) []string {
 	}
 	return result
 }
-func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *CorrectionFeedback, r *logRedactor) events.AttemptInputPayload {
+func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *CorrectionFeedback, r *logRedactor) (events.AttemptInputPayload, bool) {
 	task, _ := n.Config["task"].(string)
 	if task == "" {
 		task, _ = in["task"].AsString()
@@ -161,11 +162,14 @@ func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *Correcti
 	_, p.EnvironmentRefsPresent = n.Config["environment_refs"]
 	p.ReferencesOmitted = p.ContextRefsPresent || p.EnvironmentRefsPresent
 	size := 0
+	identityRedacted := false
 	for _, s := range originalScope(n) {
+		original := s
 		c := r.clone()
 		b := append([]byte{}, c.Write(events.Stdout, []byte(strings.ToValidUTF8(s, "")))...)
 		b = append(b, c.Flush(events.Stdout)...)
 		s = string(b)
+		identityRedacted = identityRedacted || s != original
 		if len(s) > 512 || size+len(s) > 1024 || len(p.IntendedScope) >= 32 {
 			p.ScopeOmitted = true
 			continue
@@ -176,8 +180,9 @@ func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *Correcti
 	if f != nil {
 		p.PreviousAttemptID = f.PreviousAttemptID
 		p.PreviousCheckID = f.CheckResult.CheckID
+		identityRedacted = identityRedacted || f.checkIDRedacted
 	}
-	return p
+	return p, identityRedacted
 }
 func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, f *CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
 	if err := ctx.Err(); err != nil {
@@ -205,6 +210,7 @@ func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.N
 	if work.check != nil || work.checkInvalid {
 		work.err = errors.New("producer emitted Gate observation")
 		work.check = nil
+		work.checkOmitted = false
 		work.checkInvalid = true
 		return work
 	}
@@ -237,6 +243,9 @@ func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.N
 		}
 	}
 	gate := m.invoke(ctx, e, id, n.Loop.GateNode(), bound, aid, nil, baseline, baselineError, r)
+	work.checkOmitted = gate.checkOmitted
+	work.checkIdentityRedacted = gate.checkIdentityRedacted
+	work.checkIDRedacted = gate.checkIDRedacted
 	valid := !gate.checkInvalid && gate.check != nil && gate.evidence == nil
 	if valid && gate.check.Verdict == "red" {
 		var v interface{ GateVerdict() string }

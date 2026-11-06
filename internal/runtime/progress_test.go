@@ -42,6 +42,9 @@ func TestTypedProgressRedactionEveryBoundary(t *testing.T) {
 			var text string
 			for _, e := range r.Events {
 				if p, ok := e.Payload.(events.TextDeltaPayload); ok {
+					if !e.IdentityRedacted {
+						t.Fatal("redacted source ID lost provenance")
+					}
 					text += p.Text
 				}
 			}
@@ -49,6 +52,77 @@ func TestTypedProgressRedactionEveryBoundary(t *testing.T) {
 				t.Fatalf("redaction lost text: %q", text)
 			}
 		})
+	}
+}
+
+func TestRedactionExpandedSourceIDReservesOneSequence(t *testing.T) {
+	var reader events.TraceReader
+	source := strings.Repeat("A", events.MaxProgressContent-len("SECRET")) + "SECRET"
+	ex := typedExecutor{func(o ExecutionObservation) {
+		o.Progress(events.TextDelta, events.TextDeltaPayload{SourceID: source, Text: "x"})
+	}}
+	_, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{
+		LogRedactions: []string{"SECRET"},
+		OnRunReady:    func(_ events.RunID, trace events.TraceReader) { reader = trace },
+	})
+	if err != nil || reader == nil {
+		t.Fatalf("run err=%v reader=%v", err, reader)
+	}
+	page, err := reader.Page(0, events.MaxTracePageItems)
+	if err != nil || len(page.Omissions) != 1 || page.Omissions[0].Reason != events.OmissionSensitiveIdentity {
+		t.Fatalf("oversized safe source lost omission: page=%+v err=%v", page, err)
+	}
+	for _, event := range page.Events {
+		if event.Type == events.TextDelta {
+			t.Fatal("oversized safe identity became a text fact")
+		}
+	}
+}
+
+func TestInvalidOriginalStructuredProgressDoesNotBecomeValidAfterRedaction(t *testing.T) {
+	ex := typedExecutor{func(o ExecutionObservation) {
+		o.Progress(events.ToolCallStarted, events.ToolCallPayload{CallID: "c", Name: strings.Repeat("SECRET", 3000), Status: "in_progress"})
+	}}
+	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{LogRedactions: []string{"SECRET"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range r.Events {
+		if event.Type == events.ToolCallStarted {
+			t.Fatal("originally invalid provider fact was admitted after redaction")
+		}
+	}
+}
+
+func TestRedactionInvalidatedStatusReservesOriginalSequence(t *testing.T) {
+	var reader events.TraceReader
+	ex := typedExecutor{func(o ExecutionObservation) {
+		o.Progress(events.Status, events.StatusPayload{Code: "working"})
+		o.Progress(events.Status, events.StatusPayload{Code: "turn_completed"})
+	}}
+	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{
+		LogRedactions: []string{"work"},
+		OnRunReady:    func(_ events.RunID, trace events.TraceReader) { reader = trace },
+	})
+	if err != nil || r.State != RunSucceeded || reader == nil {
+		t.Fatalf("run=%+v err=%v reader=%v", r, err, reader)
+	}
+	page, err := reader.Page(0, events.MaxTracePageItems)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Omissions) != 1 || page.Omissions[0].Reason != events.OmissionSensitiveIdentity || page.Omissions[0].From != page.Omissions[0].To {
+		t.Fatalf("redacted fact did not reserve one sensitive sequence: %+v", page.Omissions)
+	}
+	omitted := page.Omissions[0].From
+	var next *events.Event
+	for i := range page.Events {
+		if page.Events[i].Sequence == omitted+1 {
+			next = &page.Events[i]
+		}
+	}
+	if next == nil || next.Type != events.Status || next.Payload.(events.StatusPayload).Code != "turn_completed" || page.NextAfter != page.Watermark || page.HasMore {
+		t.Fatalf("omission did not preserve ordering: omitted=%d page=%+v", omitted, page)
 	}
 }
 
@@ -168,9 +242,9 @@ func TestProgressUnicodeSplittingPreservesPublicText(t *testing.T) {
 func TestProgressSourceStateBoundAndRecovery(t *testing.T) {
 	template := mustLogRedactor(t, []string{"secret"})
 	var eventsSeen []events.Event
-	p := newProgressRedactor(template, func(k events.Type, v events.Payload) {
+	p := newProgressRedactor(template, func(k events.Type, v events.Payload, _ bool) {
 		eventsSeen = append(eventsSeen, events.Event{Type: k, Payload: v})
-	})
+	}, func() {})
 	for i := 0; i < maxTextSources; i++ {
 		p.write(events.TextDelta, events.TextDeltaPayload{SourceID: string(rune('A' + i)), Text: "s"})
 	}

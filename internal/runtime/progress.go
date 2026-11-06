@@ -12,7 +12,8 @@ import (
 type progressRedactor struct {
 	template *logRedactor
 	streams  map[string]*textStream
-	emit     func(events.Type, events.Payload)
+	emit     func(events.Type, events.Payload, bool)
+	omit     func()
 	limited  bool
 }
 
@@ -23,8 +24,8 @@ type textStream struct {
 
 const maxTextSources = 16
 
-func newProgressRedactor(template *logRedactor, emit func(events.Type, events.Payload)) *progressRedactor {
-	return &progressRedactor{template: template, streams: make(map[string]*textStream), emit: emit}
+func newProgressRedactor(template *logRedactor, emit func(events.Type, events.Payload, bool), omit func()) *progressRedactor {
+	return &progressRedactor{template: template, streams: make(map[string]*textStream), emit: emit, omit: omit}
 }
 func (p *progressRedactor) redact(s string) string {
 	r := p.template.clone()
@@ -55,7 +56,7 @@ func (p *progressRedactor) text(id string, b []byte, final bool) {
 		if n == 0 {
 			break
 		}
-		p.emit(events.TextDelta, events.TextDeltaPayload{SourceID: safeID, Text: string(stream.pending[:n])})
+		p.emit(events.TextDelta, events.TextDeltaPayload{SourceID: safeID, Text: string(stream.pending[:n])}, safeID != id)
 		stream.pending = append([]byte(nil), stream.pending[n:]...)
 	}
 }
@@ -67,12 +68,17 @@ func (p *progressRedactor) write(kind events.Type, payload events.Payload) {
 		if len(v.SourceID) > events.MaxProgressContent || !utf8.ValidString(v.SourceID) || !utf8.ValidString(v.Text) {
 			return
 		}
+		if events.MaxProgressContent-len(p.redact(v.SourceID)) < utf8.UTFMax {
+			p.omit()
+			delete(p.streams, v.SourceID)
+			return
+		}
 		r := p.streams[v.SourceID]
 		if r == nil {
 			if len(p.streams) >= maxTextSources {
 				if !p.limited {
 					p.limited = true
-					p.emit(events.Status, events.StatusPayload{Code: "progress_limited"})
+					p.emit(events.Status, events.StatusPayload{Code: "progress_limited"}, false)
 				}
 				return
 			}
@@ -95,35 +101,50 @@ func (p *progressRedactor) write(kind events.Type, payload events.Payload) {
 		}
 		return
 	}
+	originalValid := (events.Event{Type: kind, Payload: payload}).Validate() == nil
+	if !originalValid {
+		return
+	}
+	identityRedacted := false
 	switch v := payload.(type) {
 	case events.ToolCallPayload:
+		original := v
 		v.CallID = p.redact(v.CallID)
 		v.Name = p.redact(v.Name)
 		v.Status = p.redact(v.Status)
+		identityRedacted = v != original
 		payload = v
 	case events.CommandPayload:
+		original := v
 		v.CommandID = p.redact(v.CommandID)
 		v.Status = p.redact(v.Status)
+		identityRedacted = v.CommandID != original.CommandID || v.Status != original.Status
 		payload = v
 	case events.FileChangedPayload:
+		original := v
 		v.Path = p.redact(v.Path)
 		v.Action = p.redact(v.Action)
 		v.Provenance = p.redact(v.Provenance)
+		identityRedacted = v != original
 		payload = v
 	case events.StatusPayload:
+		original := v
 		v.Code = p.redact(v.Code)
+		identityRedacted = v != original
 		payload = v
 	default:
 		return
 	}
 	b, _ := json.Marshal(payload)
 	if len(b) > events.MaxProgressContent {
+		p.omit()
 		return
 	}
 	if (events.Event{Type: kind, Payload: payload}).Validate() != nil {
+		p.omit()
 		return
 	}
-	p.emit(kind, payload)
+	p.emit(kind, payload, identityRedacted)
 }
 func (p *progressRedactor) flush() {
 	ids := make([]string, 0, len(p.streams))

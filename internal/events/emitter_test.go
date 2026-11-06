@@ -46,6 +46,41 @@ func TestLiveEventsRemainPrefixAfterCancellationDropsAnEvent(t *testing.T) {
 
 }
 
+func TestIdentityRedactionProvenanceStaysInMemory(t *testing.T) {
+	collector := NewCollector("run", "graph", "version")
+	recorded, err := collector.Append(Event{Type: NodeReady, NodeID: "node", NodeRunID: "node-run", Payload: NodeReadyPayload{}, IdentityRedacted: true})
+	if err != nil || !recorded.IdentityRedacted {
+		t.Fatalf("append provenance = %+v, %v", recorded, err)
+	}
+	for name, events := range map[string][]Event{
+		"snapshot": collector.Snapshot(),
+	} {
+		if len(events) != 1 || !events[0].IdentityRedacted {
+			t.Fatalf("%s provenance = %+v", name, events)
+		}
+	}
+	page, err := collector.Page(0, 1)
+	if err != nil || len(page.Events) != 1 || !page.Events[0].IdentityRedacted {
+		t.Fatalf("page provenance = %+v, %v", page, err)
+	}
+	bounded, err := collector.PageBounded(0, 1, 1024)
+	if err != nil || len(bounded.Events) != 1 || !bounded.Events[0].IdentityRedacted {
+		t.Fatalf("bounded provenance = %+v, %v", bounded, err)
+	}
+	encoded, err := json.Marshal(recorded)
+	if err != nil || strings.Contains(string(encoded), "identity_redacted") || strings.Contains(string(encoded), "IdentityRedacted") {
+		t.Fatalf("wire leaked provenance: %s, %v", encoded, err)
+	}
+	var decoded Event
+	if err := json.Unmarshal(encoded, &decoded); err != nil || decoded.IdentityRedacted {
+		t.Fatalf("wire unexpectedly carries provenance: %+v, %v", decoded, err)
+	}
+	digest := sha256.Sum256(encoded)
+	if len(page.EventHashes) != 1 || page.EventHashes[0] != "sha256:"+hex.EncodeToString(digest[:]) {
+		t.Fatalf("wire hash changed by memory-only provenance: %+v", page.EventHashes)
+	}
+}
+
 func TestCollectorPageBoundedSelectsLargeFactsBeforeCopying(t *testing.T) {
 	collector := NewCollector("run", "graph", "version")
 	largePath := strings.Repeat("x", 4<<20)

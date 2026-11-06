@@ -182,6 +182,106 @@ func TestLoopRedGreenPublicationAndFeedback(t *testing.T) {
 		t.Fatal("feedback aliases trace")
 	}
 }
+
+func TestRedactedCheckIDProvenanceSurvivesCorrectionFeedback(t *testing.T) {
+	d := loopDefinition(2)
+	d.Units = []string{"work"}
+	n := d.Nodes["work"]
+	n.Loop.Gate.Config["check_id"] = "SECRET-quality"
+	d.Nodes["work"] = n
+	a := newLoopAdapter()
+	a.produce = func(_ context.Context, _ agent.AgentExecutionInput, attempt int) (agent.AgentExecutionOutput, error) {
+		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(map[bool]string{true: `{"ok":true}`, false: `{"ok":false}`}[attempt == 2])}, nil
+	}
+	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{LogRedactions: []string{"SECRET"}})
+	if err != nil || r.State != runtime.RunSucceeded || len(a.calls) != 2 {
+		t.Fatalf("run=%+v err=%v calls=%d", r, err, len(a.calls))
+	}
+	var attempts, checks, envelopes, finishes int
+	for _, event := range r.Events {
+		switch event.Type {
+		case events.AttemptInput:
+			attempts++
+			previous := event.Payload.(events.AttemptInputPayload).PreviousCheckID
+			if attempts == 2 && (!event.IdentityRedacted || previous == "" || strings.Contains(previous, "SECRET")) {
+				t.Fatalf("second attempt lost previous CheckID provenance: %+v", event)
+			}
+		case events.GateCheck:
+			checks++
+			if !event.IdentityRedacted {
+				t.Fatal("redacted CheckID lost Gate provenance")
+			}
+		case events.ReturnEnvelope:
+			envelopes++
+			if !event.IdentityRedacted {
+				t.Fatal("redacted CheckID lost envelope provenance")
+			}
+		case events.AttemptFinished:
+			finishes++
+			if !event.IdentityRedacted {
+				t.Fatal("redacted CheckID lost attempt outcome provenance")
+			}
+		}
+	}
+	if attempts != 2 || checks != 2 || envelopes != 2 || finishes != 2 {
+		t.Fatalf("missing correction facts: attempts=%d checks=%d envelopes=%d finishes=%d", attempts, checks, envelopes, finishes)
+	}
+}
+
+func TestEmbeddedGateRedactionOmissionKeepsAttemptOrder(t *testing.T) {
+	d := loopDefinition(2)
+	checkID := strings.Repeat("S", 256)
+	n := d.Nodes["work"]
+	n.Loop.Gate.Config["check_id"] = checkID
+	d.Nodes["work"] = n
+	a := newLoopAdapter()
+	a.produce = func(context.Context, agent.AgentExecutionInput, int) (agent.AgentExecutionOutput, error) {
+		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{"ok":true}`)}, nil
+	}
+	executor := compose(a)
+	base := executor
+	executor.hook = func(ctx context.Context, id string, node graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+		if node.Type == "gate" {
+			o.Check(events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: []string{"candidate"}}, CheckID: checkID, Kind: "json_predicate", Verdict: "green", Reason: "matched", Evidence: []events.GateEvidence{{Kind: "json_predicate", Source: "json_predicate"}}})
+			return nil, nil, nil
+		}
+		return base.ExecuteNodeObserved(ctx, id, node, in, o)
+	}
+	var reader events.TraceReader
+	r, err := runtime.Run(context.Background(), d, nil, executor, runtime.Options{
+		LogRedactions: []string{"S"},
+		OnRunReady:    func(_ events.RunID, trace events.TraceReader) { reader = trace },
+	})
+	if err != nil || r.State != runtime.RunFailed || len(a.calls) != 1 || reader == nil {
+		t.Fatalf("run=%+v err=%v calls=%d reader=%v", r, err, len(a.calls), reader)
+	}
+	page, err := reader.Page(0, events.MaxTracePageItems)
+	if err != nil || len(page.Omissions) != 1 || page.Omissions[0].Reason != events.OmissionSensitiveIdentity || page.Omissions[0].From != page.Omissions[0].To {
+		t.Fatalf("embedded Gate omission missing: page=%+v err=%v", page, err)
+	}
+	var started, finished, terminal uint64
+	for _, event := range page.Events {
+		switch event.Type {
+		case events.GateCheck:
+			t.Fatal("invalid embedded Gate fact was retained")
+		case events.AttemptStarted:
+			started = event.Sequence
+		case events.AttemptFinished:
+			finished = event.Sequence
+			if event.Payload.(events.AttemptFinishedPayload).Outcome != "execution_error" {
+				t.Fatalf("invalid Gate attempt looked accepted: %+v", event)
+			}
+		case events.NodeFinished:
+			if event.NodeID == "work" {
+				terminal = event.Sequence
+			}
+		}
+	}
+	omitted := page.Omissions[0].From
+	if !(started < omitted && omitted < finished && finished < terminal) {
+		t.Fatalf("embedded Gate omission moved out of attempt order: started=%d omitted=%d finished=%d terminal=%d", started, omitted, finished, terminal)
+	}
+}
 func TestLoopPreflightBeforeDetection(t *testing.T) {
 	for _, mutate := range []func(*graph.Definition){
 		func(d *graph.Definition) { n := d.Nodes["work"]; n.Loop.MaxAttempts = 11 },

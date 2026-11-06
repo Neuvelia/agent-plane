@@ -314,7 +314,7 @@ func TestUnitEnvelopeUsesCompleteNormalizedRedactedAuthoredScope(t *testing.T) {
 		if ev.Type == events.ReturnEnvelope {
 			found = true
 			p := ev.Payload.(events.ReturnEnvelopePayload)
-			if len(p.IntendedScope) != 2 || !p.ScopeRedacted || strings.Contains(p.IntendedScope[0], "SECRET") || !strings.HasSuffix(p.IntendedScope[0], "/a/") || p.IntendedScope[1] != "./" {
+			if len(p.IntendedScope) != 2 || !p.ScopeRedacted || !ev.IdentityRedacted || strings.Contains(p.IntendedScope[0], "SECRET") || !strings.HasSuffix(p.IntendedScope[0], "/a/") || p.IntendedScope[1] != "./" {
 				t.Fatal(p)
 			}
 			if p.IntendedScope[0] == "candidate" {

@@ -41,7 +41,7 @@ func TestObservedPrecedenceCorrelationEvidenceAndRedaction(t *testing.T) {
 		for i, event := range r.Events {
 			if event.Type == events.NodeEvidence {
 				found = true
-				if r.Events[i+1].Type != events.NodeFinished || event.NodeRunID != p.ids.NodeRunID {
+				if r.Events[i+1].Type != events.NodeFinished || event.NodeRunID != p.ids.NodeRunID || !event.IdentityRedacted {
 					t.Fatal("evidence ordering/correlation")
 				}
 			}

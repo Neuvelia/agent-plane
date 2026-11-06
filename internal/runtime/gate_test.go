@@ -76,7 +76,7 @@ func TestGateObservationFailsClosedAndOrdersFact(t *testing.T) {
 				if ev.Type == events.GateCheck {
 					facts++
 					p := ev.Payload.(events.GateCheckPayload)
-					if strings.Contains(p.CheckID+p.Reason, "SECRET") || p.Evidence[0].Path != "" || ev.RunID != r.RunID || ev.NodeRunID != r.Nodes[0].NodeRunID || r.Events[i+1].Type != events.NodeFinished {
+					if strings.Contains(p.CheckID+p.Reason, "SECRET") || p.Evidence[0].Path != "" || !ev.IdentityRedacted || ev.RunID != r.RunID || ev.NodeRunID != r.Nodes[0].NodeRunID || r.Events[i+1].Type != events.NodeFinished {
 						t.Fatal("fact redaction/copy/correlation/order")
 					}
 				}
@@ -128,6 +128,11 @@ func TestGateResultRedactsAndDetachesScopeAndReferences(t *testing.T) {
 			if len(got) != 1 || strings.Contains(got[0].Scope.CheckedInputs[0]+got[0].Evidence[0].Reference.Identifier+got[0].Evidence[0].Reference.Reason, "SECRET") {
 				t.Fatal("new fields leaked secret")
 			}
+			for _, event := range r.Events {
+				if event.Type == events.GateCheck && !event.IdentityRedacted {
+					t.Fatal("redacted checked input/reference identity lost provenance")
+				}
+			}
 			p.Scope.CheckedInputs[0] = "mutated"
 			ref.Identifier = "mutated"
 			line = 1
@@ -136,5 +141,82 @@ func TestGateResultRedactsAndDetachesScopeAndReferences(t *testing.T) {
 				t.Fatal("new fields aliased")
 			}
 		})
+	}
+}
+
+func TestGateReasonOnlyRedactionKeepsIdentity(t *testing.T) {
+	p := events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: []string{"data"}}, CheckID: "check", Kind: "json_predicate", Verdict: "green", Reason: "SECRET reason", Evidence: []events.GateEvidence{{Kind: "json_predicate", Source: "json_predicate"}}}
+	d := definition(map[string]graph.NodeDefinition{"gate": {Type: "gate", Config: graph.NodeConfig{"check_id": "check", "kind": "json_predicate"}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}})
+	r, err := Run(context.Background(), d, nil, checkProbe{fact: p}, Options{LogRedactions: []string{"SECRET"}})
+	if err != nil || r.State != RunSucceeded {
+		t.Fatalf("run=%+v err=%v", r, err)
+	}
+	found := false
+	for _, event := range r.Events {
+		if event.Type == events.GateCheck {
+			found = true
+			if event.IdentityRedacted || strings.Contains(event.Payload.(events.GateCheckPayload).Reason, "SECRET") {
+				t.Fatalf("description redaction should preserve Gate identity: %+v", event)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("missing Gate fact")
+	}
+}
+
+type orderedGateOmissionProbe struct {
+	checkID  string
+	observed chan struct{}
+}
+
+func (p orderedGateOmissionProbe) ExecuteNode(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+	panic("observed dispatch required")
+}
+
+func (p orderedGateOmissionProbe) ExecuteNodeObserved(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value, o ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+	if id == "peer" {
+		<-p.observed
+		o.Progress(events.Status, events.StatusPayload{Code: "turn_completed"})
+		return nil, nil, nil
+	}
+	o.Check(events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: []string{"data"}}, CheckID: p.checkID, Kind: "json_predicate", Verdict: "green", Reason: "matched", Evidence: []events.GateEvidence{{Kind: "json_predicate", Source: "json_predicate"}}})
+	close(p.observed)
+	return map[string]graph.Value{"verdict": graph.NewStringValue("green")}, nil, nil
+}
+
+func TestGateRedactionOmissionUsesSchedulerPosition(t *testing.T) {
+	checkID := strings.Repeat("S", 256)
+	d := definition(map[string]graph.NodeDefinition{
+		"gate": {Type: "gate", Config: graph.NodeConfig{"check_id": checkID, "kind": "json_predicate"}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}},
+		"peer": {Type: "test"},
+	})
+	var reader events.TraceReader
+	r, err := Run(context.Background(), d, nil, orderedGateOmissionProbe{checkID: checkID, observed: make(chan struct{})}, Options{
+		MaxConcurrency: 2, LogRedactions: []string{"S"},
+		OnRunReady: func(_ events.RunID, trace events.TraceReader) { reader = trace },
+	})
+	if err != nil || r.State != RunFailed || reader == nil {
+		t.Fatalf("run=%+v err=%v reader=%v", r, err, reader)
+	}
+	page, err := reader.Page(0, events.MaxTracePageItems)
+	if err != nil || len(page.Omissions) != 1 || page.Omissions[0].Reason != events.OmissionSensitiveIdentity {
+		t.Fatalf("missing Gate omission: page=%+v err=%v", page, err)
+	}
+	var peerProgress, gateTerminal uint64
+	for _, event := range page.Events {
+		if event.Type == events.GateCheck {
+			t.Fatal("invalid redacted Gate fact was retained")
+		}
+		if event.Type == events.Status && event.NodeID == "peer" {
+			peerProgress = event.Sequence
+		}
+		if event.Type == events.NodeFinished && event.NodeID == "gate" {
+			gateTerminal = event.Sequence
+		}
+	}
+	omitted := page.Omissions[0]
+	if peerProgress == 0 || gateTerminal == 0 || !(peerProgress < omitted.From && omitted.To < gateTerminal) || omitted.From != omitted.To {
+		t.Fatalf("Gate omission moved out of scheduler order: progress=%d omitted=%+v terminal=%d", peerProgress, omitted, gateTerminal)
 	}
 }
