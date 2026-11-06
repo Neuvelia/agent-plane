@@ -1,6 +1,7 @@
 package desktop
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"unicode/utf8"
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
@@ -338,6 +340,9 @@ func (s *RunService) Snapshot(runID events.RunID) (RunSnapshot, *ServiceError) {
 }
 
 func runSnapshotLocked(record *ownedRun) (RunSnapshot, *ServiceError) {
+	if !snapshotIdentitiesSafe(record) {
+		return RunSnapshot{}, protocolError("unavailable", "Run snapshot identity is unavailable")
+	}
 	snapshot := RunSnapshot{RunID: record.runID, GraphID: record.graphID,
 		GraphVersion: record.graphVersion, State: record.state, Finished: record.finished,
 		FailureKind: record.failureKind, TraceWatermark: record.watermark}
@@ -354,6 +359,25 @@ func runSnapshotLocked(record *ownedRun) (RunSnapshot, *ServiceError) {
 		snapshot.Nodes = append([]RunNodeSummary(nil), record.nodes...)
 	}
 	return snapshot, nil
+}
+
+func snapshotIdentitiesSafe(record *ownedRun) bool {
+	redactor, err := runtime.NewCaptureRedactor(record.redactions)
+	if err != nil {
+		return false
+	}
+	unchanged := func(value string) bool {
+		return utf8.ValidString(value) && bytes.Equal(redactor.Redact([]byte(value)), []byte(value))
+	}
+	if !unchanged(string(record.runID)) || !unchanged(record.graphID) || !unchanged(record.graphVersion) || !unchanged(string(record.state)) || !unchanged(string(record.failureKind)) {
+		return false
+	}
+	for _, node := range record.nodes {
+		if !unchanged(node.NodeID) || !unchanged(string(node.NodeRunID)) || !unchanged(string(node.State)) || !unchanged(string(node.AcceptedAttemptID)) || !unchanged(string(node.FailureKind)) {
+			return false
+		}
+	}
+	return true
 }
 
 // Cancel targets one exact RunID. It joins runtime.Run before reporting its

@@ -121,6 +121,31 @@ func TestRunOwnerFreezesReplayRedactionsBeforePublishingTrace(t *testing.T) {
 	}
 }
 
+func TestRunSnapshotRejectsPrivateAcceptedAttemptIdentity(t *testing.T) {
+	service := NewRunService(context.Background(), func(context.Context, RunStartRequest) (PreparedRun, *ServiceError) {
+		prepared := testPrepared()
+		prepared.Options.LogRedactions = []string{"private"}
+		return prepared, nil
+	}, func(_ context.Context, _ *graph.Definition, _ map[string]graph.Value, _ runtime.Executor, options runtime.Options) (runtime.RunResult, error) {
+		collector := events.NewCollector("run-safe", "graph", "graph-version")
+		if _, err := collector.Append(events.Event{Type: events.RunStarted, Payload: events.RunStartedPayload{}}); err != nil {
+			return runtime.RunResult{}, err
+		}
+		options.OnRunReady("run-safe", collector)
+		return runtime.RunResult{RunID: "run-safe", GraphID: "graph", GraphVersion: "graph-version", State: runtime.RunSucceeded, Nodes: []runtime.NodeResult{{NodeID: "node", NodeRunID: "nrid", State: runtime.NodeSucceeded, AcceptedAttemptID: "private"}}}, nil
+	})
+	defer service.Close()
+	if _, err := service.Start(context.Background(), runRequest()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Cancel(context.Background(), "run-safe"); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot, err := service.Snapshot("run-safe"); err == nil || err.Code != "unavailable" || snapshot.RunID != "" {
+		t.Fatalf("unsafe accepted attempt entered snapshot: %+v, %v", snapshot, err)
+	}
+}
+
 func TestRunOwnerPreReadyFailureHasNoPhantomIdentity(t *testing.T) {
 	var calls atomic.Int32
 	service := NewRunService(context.Background(), func(context.Context, RunStartRequest) (PreparedRun, *ServiceError) {
