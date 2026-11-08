@@ -141,4 +141,91 @@ describe('fixed Electron IPC bridge', () => {
     await expect(unbound.invoke('listEvidence', { run_id: 'r', limit: 1 }))
       .rejects.toMatchObject({ code: 'unavailable' })
   })
+
+  it('routes only the four named graph authoring methods and validates their result shapes', async () => {
+    const summary = { diagnostics: [], diagnostics_total: 0, diagnostics_omitted: 0, has_errors: false }
+    const document = { document_id: 'doc', project_id: 'project', relative_path: 'graph.yaml',
+      text_base64: 'eA==', revision: 1, disk_digest: 'digest', validity: 'valid', ...summary }
+    const graph = { schema_version: 0, id: 'graph', units: [], inputs: [], nodes: [], edges: [], graph_input_bindings: [], outputs: [] }
+    const app = fixture((method) => method === 'documents.create' || method === 'documents.reload' ? document
+      : method === 'documents.inspect' ? { revision: 1, validity: 'valid', graph,
+        layout: { version: 1, source: 'fallback', nodes: {} }, diagnostics: summary }
+        : method === 'documents.preview_edit' ? { base_revision: 1, text_base64: 'eA==', validity: 'valid',
+          diagnostics: summary, reformat_required: false, changed_paths: ['nodes.plan'] } : undefined)
+    expect(app.handlers.has('agentplane:invoke')).toBe(false)
+    await expect(app.invoke('createDocument', { project_id: 'project', relative_path: 'graph.yaml', graph_id: 'graph' }))
+      .resolves.toMatchObject({ document_id: 'doc' })
+    await expect(app.invoke('reloadDocument', { document_id: 'doc', expected_revision: 1, discard_draft: true }))
+      .resolves.toMatchObject({ document_id: 'doc' })
+    await expect(app.invoke('inspectDocument', { document_id: 'doc', revision: 1 }))
+      .resolves.toMatchObject({ graph: { id: 'graph' } })
+    await expect(app.invoke('previewDocumentEdit', { document_id: 'doc', revision: 1,
+      operation: { kind: 'add_node', node_id: 'plan', node_type: 'agent' } }))
+      .resolves.toMatchObject({ base_revision: 1, changed_paths: ['nodes.plan'] })
+    expect(app.calls.map(({ method }) => method)).toEqual([
+      'documents.create', 'documents.reload', 'documents.inspect', 'documents.preview_edit'
+    ])
+  })
+
+  it('rejects malformed visual operations before contacting the sidecar', async () => {
+    const app = fixture()
+    for (const operation of [
+      { kind: 'add_node', node_id: 'plan', node_type: 'human' },
+      { kind: 'set_layout', node_id: 'plan', x: 100001, y: 0 },
+      { kind: 'set_layout', node_id: 'plan', x: 1.25, y: 0 },
+      { kind: 'delete_node', node_id: 'plan' },
+      { kind: 'remove_layout', node_id: 'plan', extra: true }
+    ]) {
+      await expect(app.invoke('previewDocumentEdit', { document_id: 'doc', revision: 1, operation }))
+        .rejects.toMatchObject({ code: 'invalid_request' })
+    }
+    await expect(app.invoke('createDocument', { project_id: 'project', relative_path: 'graph.yaml', graph_id: 'graph', extra: true }))
+      .rejects.toMatchObject({ code: 'invalid_request' })
+    await expect(app.invoke('reloadDocument', { document_id: 'doc', expected_revision: 1, discard_draft: 'yes' }))
+      .rejects.toMatchObject({ code: 'invalid_request' })
+    expect(app.calls).toEqual([])
+  })
+
+  it('rejects malformed authoring projections and unsafe preview text from the sidecar', async () => {
+    const summary = { diagnostics: [], diagnostics_total: 0, diagnostics_omitted: 0, has_errors: false }
+    const badInspection = fixture((method) => method === 'documents.inspect'
+      ? { revision: 1, validity: 'valid', graph: { schema_version: 0, id: 'graph', nodes: 'not-array' },
+        layout: { version: 1, source: 'fallback', nodes: {} }, diagnostics: summary } : undefined)
+    await expect(badInspection.invoke('inspectDocument', { document_id: 'doc', revision: 1 }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+    const badPreview = fixture((method) => method === 'documents.preview_edit'
+      ? { base_revision: 2 ** 53, text_base64: 'eA==', validity: 'valid', diagnostics: summary,
+        reformat_required: false, changed_paths: [] } : undefined)
+    await expect(badPreview.invoke('previewDocumentEdit', { document_id: 'doc', revision: 1,
+      operation: { kind: 'remove_layout', node_id: 'plan' } }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+  })
+
+  it('refuses undeclared nested graph config and extra document or preview fields', async () => {
+    const summary = { diagnostics: [], diagnostics_total: 0, diagnostics_omitted: 0, has_errors: false }
+    const node = { id: 'plan', type: 'agent', inputs: [], outputs: [], needs_configuration: false }
+    const graph = { schema_version: 0, id: 'graph', units: [], inputs: [], nodes: [node], edges: [], graph_input_bindings: [], outputs: [] }
+    const inspect = (graphValue: unknown) => ({ revision: 1, validity: 'valid', graph: graphValue,
+      layout: { version: 1, source: 'fallback', nodes: { plan: { x: 0, y: 0 } } }, diagnostics: summary })
+    const secret = 'private-token'
+    const unsafeGraph = fixture((method) => method === 'documents.inspect'
+      ? inspect({ ...graph, nodes: [{ ...node, config: { credential: secret } }] }) : undefined)
+    await expect(unsafeGraph.invoke('inspectDocument', { document_id: 'doc', revision: 1 }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+    const unsafeLayout = fixture((method) => method === 'documents.inspect'
+      ? inspect({ ...graph, inputs: [{ name: 'task', type: 'string', required: true, secret }] }) : undefined)
+    await expect(unsafeLayout.invoke('inspectDocument', { document_id: 'doc', revision: 1 }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+    const unsafePreview = fixture((method) => method === 'documents.preview_edit'
+      ? { base_revision: 1, text_base64: 'eA==', validity: 'valid', diagnostics: summary,
+        reformat_required: false, changed_paths: [], secret } : undefined)
+    await expect(unsafePreview.invoke('previewDocumentEdit', { document_id: 'doc', revision: 1,
+      operation: { kind: 'remove_layout', node_id: 'plan' } }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+    const unsafeDocument = fixture((method) => method === 'documents.create'
+      ? { document_id: 'doc', project_id: 'project', relative_path: 'graph.yaml',
+        text_base64: 'eA==', revision: 1, disk_digest: 'digest', validity: 'valid', ...summary, secret } : undefined)
+    await expect(unsafeDocument.invoke('createDocument', { project_id: 'project', relative_path: 'graph.yaml', graph_id: 'graph' }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+  })
 })

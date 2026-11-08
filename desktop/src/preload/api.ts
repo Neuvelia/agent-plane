@@ -1,4 +1,5 @@
 import type { EventPage, RunSnapshot } from '../renderer/runState'
+import type { GraphEditOperation, GraphInspection, GraphPreview } from '../renderer/graphDocument'
 
 export type TypedInput =
   | { type: 'string'; value: string }
@@ -120,6 +121,10 @@ export type AgentPlaneAPI = {
   updateSettings(expectedRevision: number, changes: Record<string, unknown>): Promise<LocalSettings>
   detectTool(toolID: 'git' | 'codex'): Promise<ToolStatus>
   openDocument(projectID: string, relativePath: string): Promise<DocumentView>
+  createDocument(projectID: string, relativePath: string, graphID: string): Promise<DocumentView>
+  reloadDocument(documentID: string, expectedRevision: number, discardDraft: boolean): Promise<DocumentView>
+  inspectDocument(documentID: string, revision: number): Promise<GraphInspection>
+  previewDocumentEdit(documentID: string, revision: number, operation: GraphEditOperation): Promise<GraphPreview>
   updateDocument(documentID: string, expectedRevision: number, text: string): Promise<DocumentView>
   saveDocument(documentID: string, expectedRevision: number, expectedDiskDigest: string, acceptReformat: boolean): Promise<DocumentView>
   validateGraph(documentID: string, revision: number): Promise<DiagnosticSummary>

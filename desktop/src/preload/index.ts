@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { AgentPlaneAPI } from './api'
-import { documentView, encodeText } from './document'
+import { documentView, encodeText, previewView } from './document'
 
 async function call<T>(name: string, params?: unknown): Promise<T> {
   const reply: unknown = await ipcRenderer.invoke(`agentplane:${name}`, params)
@@ -27,6 +27,10 @@ const api: AgentPlaneAPI = {
   updateSettings: (expectedRevision, changes) => call('updateSettings', { expected_revision: expectedRevision, changes }),
   detectTool: (toolID) => call('detectTool', { tool_id: toolID }),
   openDocument: async (projectID, relativePath) => documentView(await call('openDocument', { project_id: projectID, relative_path: relativePath })),
+  createDocument: async (projectID, relativePath, graphID) => documentView(await call('createDocument', { project_id: projectID, relative_path: relativePath, graph_id: graphID })),
+  reloadDocument: async (documentID, expectedRevision, discardDraft) => documentView(await call('reloadDocument', { document_id: documentID, expected_revision: expectedRevision, discard_draft: discardDraft })),
+  inspectDocument: (documentID, revision) => call('inspectDocument', { document_id: documentID, revision }),
+  previewDocumentEdit: async (documentID, revision, operation) => previewView(await call('previewDocumentEdit', { document_id: documentID, revision, operation })),
   updateDocument: async (documentID, expectedRevision, text) => documentView(await call('updateDocument', { document_id: documentID, expected_revision: expectedRevision, text_base64: encodeText(text) })),
   saveDocument: async (documentID, expectedRevision, expectedDiskDigest, acceptReformat) => documentView(await call('saveDocument', { document_id: documentID, expected_revision: expectedRevision, expected_disk_digest: expectedDiskDigest, accept_reformat: acceptReformat })),
   validateGraph: (documentID, revision) => call('validateGraph', { document_id: documentID, revision }),
