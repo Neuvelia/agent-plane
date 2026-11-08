@@ -133,6 +133,21 @@ func TestSafeJSONPreservesLargeNumberLexemes(t *testing.T) {
 	}
 }
 
+func TestEventPageCompletenessIsTraceSpecific(t *testing.T) {
+	ctx := context.Background()
+	store := testStore(t)
+	started := time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC)
+	launchEvidenceRun(t, store, "partial-evidence", started)
+	if err := store.Finalize(ctx, Finalization{RunID: "partial-evidence", EndedAt: started.Add(time.Second), RuntimeState: "succeeded", Watermark: 1,
+		Result: safeJSON(t, `{}`), Completeness: safeJSON(t, `[1,true,true,true,true,true,false]`), Events: []Event{{Sequence: 1, Projection: safeJSON(t, `{}`)}}}); err != nil {
+		t.Fatal(err)
+	}
+	page, err := store.Events(ctx, "partial-evidence", 0, 1)
+	if err != nil || !page.Complete || len(page.Omissions) != 0 || page.CompletenessDigest == "" {
+		t.Fatalf("partial evidence hid complete trace: %+v %v", page, err)
+	}
+}
+
 func TestLaunchMarkerBecomesInterruptedWithoutInventedEvents(t *testing.T) {
 	ctx := context.Background()
 	dir := filepath.Join(t.TempDir(), "private")
@@ -274,7 +289,7 @@ func TestNewerSchemaIsRejectedWithoutChangingVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.ExecContext(ctx, "PRAGMA user_version=2"); err != nil {
+	if _, err := raw.ExecContext(ctx, "PRAGMA user_version=4"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := raw.ExecContext(ctx, "PRAGMA journal_mode=DELETE"); err != nil {
@@ -292,7 +307,7 @@ func TestNewerSchemaIsRejectedWithoutChangingVersion(t *testing.T) {
 	}
 	defer raw.Close()
 	var version int
-	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil || version != 2 {
+	if err := raw.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil || version != 4 {
 		t.Fatalf("schema version after rejected open=%d, %v", version, err)
 	}
 	var mode string

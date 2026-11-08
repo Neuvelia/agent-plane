@@ -5,6 +5,7 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/agent/codex"
+	"agentplane/internal/capture"
 	"agentplane/internal/events"
 	"agentplane/internal/gate"
 	"agentplane/internal/graph"
@@ -15,9 +16,11 @@ import (
 // desktopNodeExecutor composes existing execution types at the sidecar caller
 // boundary. The runtime scheduler remains independent of provider choices.
 type desktopNodeExecutor struct {
-	shell  shell.Executor
-	agents agent.Executor
-	gate   gate.Executor
+	shell             shell.Executor
+	agents            agent.Executor
+	gate              gate.Executor
+	capture           *captureController
+	workspaceResolver capture.Resolver
 }
 
 func shellExecutorFor(environment LaunchEnvironment, supervisorBinary string) shell.Executor {
@@ -43,6 +46,11 @@ func (e desktopNodeExecutor) ExecuteNodeObserved(ctx context.Context, id string,
 	case "gate":
 		return e.gate.ExecuteNodeObserved(ctx, id, node, inputs, observation)
 	case "agent":
+		if e.capture != nil && observation.Correlation.NodeRunID != "" {
+			return e.capture.observe(node, observation, func(observed runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+				return e.agents.ExecuteNodeObserved(ctx, id, node, inputs, observed)
+			})
+		}
 		return e.agents.ExecuteNodeObserved(ctx, id, node, inputs, observation)
 	default:
 		values, err := e.shell.ExecuteNodeWithLogs(ctx, id, node, inputs, observation.Log)

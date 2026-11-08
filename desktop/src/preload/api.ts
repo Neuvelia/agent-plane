@@ -69,6 +69,48 @@ export type PreflightResult = DiagnosticSummary & {
 }
 export type RunCancelResult = { run_id: string; state: string }
 
+export type HistoryRunSummary = {
+  run_id: string; project_id: string; graph_id: string; started_at: string
+  ended_at?: string; storage_state: 'active' | 'complete' | 'interrupted'
+  runtime_state?: string; pinned: boolean; revision: number
+  completeness: unknown; completeness_digest: string
+}
+export type HistoryListPage = { runs: HistoryRunSummary[]; next_cursor?: string; generation: number }
+export type HistoryRun = Omit<HistoryRunSummary, 'completeness' | 'completeness_digest'> & {
+  workspace_id: string; document_id: string; graph_hash: string
+}
+export type HistoryDetail = {
+  run: HistoryRun; graph: unknown; graph_digest: string; launch: unknown; launch_digest: string
+  result?: unknown; result_digest?: string; completeness: unknown; completeness_digest: string
+}
+export type HistoryNodeOutcome = { node_run_id: string; node_id: string; status: string; projection: unknown; digest: string }
+export type HistoryAttemptOutcome = { attempt_id: string; node_run_id: string; status: string; projection: unknown; digest: string }
+export type HistoryOutcomePage = {
+  nodes: HistoryNodeOutcome[]; attempts: HistoryAttemptOutcome[]
+  next_node_cursor?: string; next_attempt_cursor?: string
+}
+export type HistoryEventPage = {
+  events: { sequence: number; projection: unknown; digest: string }[]
+  omissions: { from: number; to: number; reason: 'sensitive_identity' | 'not_retained' }[]
+  next_sequence: number; watermark: number; finished: boolean; complete: boolean
+  completeness_digest: string
+}
+export type EvidenceDescriptor = {
+  evidence_id: string; run_id: string; attempt_id?: string; node_run_id?: string
+  source_path?: string; capture_group?: string; kind: string
+  availability: 'available' | 'unavailable'; omission_reason?: string
+  byte_length?: number; digest?: string; created_at: string; redacted: boolean
+}
+export type EvidenceDescriptorPage = { descriptors: EvidenceDescriptor[]; next_cursor?: string; generation: number; complete: boolean }
+export type EvidenceChunk = {
+  availability: 'available' | 'unavailable'; omission_reason?: string
+  total_length: number; digest?: string; bytes_base64?: string; next_offset: number; end: boolean
+}
+export type HistoryPruneResult = {
+  removed_runs: number; removed_files: number; skipped_active: number
+  skipped_interrupted: number; skipped_pinned: number; skipped_pending: number
+}
+
 export type AgentPlaneAPI = {
   chooseProjectFolder(): Promise<ProjectView | null>
   listProjects(limit: number, cursor?: string): Promise<ProjectPage>
@@ -87,6 +129,14 @@ export type AgentPlaneAPI = {
   cancelRun(runID: string): Promise<RunCancelResult>
   snapshotRun(runID: string): Promise<RunSnapshot>
   eventsRun(runID: string, afterSequence: number, limit: number): Promise<EventPage>
+  listHistory(selection: { project_id?: string; graph_id?: string; storage_state?: string; started_from?: string; started_before?: string; cursor?: string; limit: number }): Promise<HistoryListPage>
+  getHistory(runID: string): Promise<HistoryDetail>
+  outcomesHistory(runID: string, limit: number, nodeCursor?: string, attemptCursor?: string): Promise<HistoryOutcomePage>
+  eventsHistory(runID: string, afterSequence: number, limit: number): Promise<HistoryEventPage>
+  listEvidence(runID: string, limit: number, attemptID?: string, cursor?: string): Promise<EvidenceDescriptorPage>
+  evidenceChunk(evidenceID: string, offset: number, limit: number): Promise<EvidenceChunk>
+  pinHistory(runID: string, expectedRevision: number, pinned: boolean): Promise<{ revision: number; pinned: boolean }>
+  pruneHistory(retentionDays?: number, keepAll?: boolean): Promise<HistoryPruneResult>
   currentRun(): Promise<CurrentRun>
   onServiceDisconnected(listener: () => void): () => void
   openExternal(url: string): Promise<void>

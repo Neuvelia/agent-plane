@@ -18,9 +18,17 @@ app.whenReady().then(async () => {
   for (const [page, label] of [['dashboard', 'Dashboard'], ['project', 'Projects'], ['runner', 'This device'], ['settings', 'Settings']]) {
     if (page !== 'dashboard') await window.webContents.executeJavaScript(`document.querySelector('button[aria-label=${JSON.stringify(label)}]').click()`)
     await window.webContents.executeJavaScript(`(async () => { await document.fonts.ready; await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); })()`)
+    if (page === 'dashboard' || page === 'project') await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+      if (document.body.innerText.includes('No local run history')) return resolve(true)
+      const observer = new MutationObserver(() => { if (document.body.innerText.includes('No local run history')) { observer.disconnect(); clearTimeout(timer); resolve(true) } })
+      observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+      const timer = setTimeout(() => { observer.disconnect(); reject(new Error('Empty history state did not render')) }, 3000)
+    })`)
     const body = await window.webContents.executeJavaScript('document.body.innerText')
-    const expected = { dashboard: 'Local attention', project: 'Workspaces & targets', runner: 'CAPABILITIES', settings: 'Effective configuration' }[page]
+    const expected = { dashboard: 'Recent history', project: 'Workspaces & targets', runner: 'CAPABILITIES', settings: 'Effective configuration' }[page]
     if (!body.includes(expected)) throw new Error(`Missing ${page} fixture content`)
+    if ((page === 'dashboard' || page === 'project') && !body.includes('No local run history')) throw new Error(`Missing ${page} empty history state`)
+    if (page === 'settings' && !body.includes('Applied when pruning')) throw new Error('Settings retention does not describe current behavior')
     if (page === 'dashboard') {
       const disabled = await window.webContents.executeJavaScript(`[...document.querySelectorAll('button')].filter(b => b.textContent.includes('Run graph')).every(b => b.disabled)`)
       if (!disabled) throw new Error('Unsupported Run graph action is enabled')

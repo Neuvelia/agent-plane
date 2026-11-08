@@ -32,6 +32,7 @@ type RunSummary struct {
 	RuntimeState              string
 	Pinned                    bool
 	Revision                  uint64
+	Completeness              SafeJSON
 }
 
 type ListPage struct {
@@ -106,7 +107,7 @@ func (s *Store) List(ctx context.Context, query ListQuery) (ListPage, error) {
 		}
 	}
 	var sqlText strings.Builder
-	sqlText.WriteString("SELECT run_id,project_id,graph_id,started_at,ended_at,storage_state,runtime_state,pinned,revision,safe_result_json IS NOT NULL,result_digest IS NOT NULL FROM runs WHERE 1=1")
+	sqlText.WriteString("SELECT run_id,project_id,graph_id,started_at,ended_at,storage_state,runtime_state,pinned,revision,safe_result_json IS NOT NULL,result_digest IS NOT NULL,completeness_json,completeness_digest FROM runs WHERE 1=1")
 	args := make([]any, 0, 12)
 	if query.ProjectID != "" {
 		sqlText.WriteString(" AND project_id=?")
@@ -145,9 +146,16 @@ func (s *Store) List(ctx context.Context, query ListQuery) (ListPage, error) {
 		var pinned int
 		var revision int64
 		var hasResult, hasResultDigest int
-		if err := rows.Scan(&item.RunID, &item.ProjectID, &item.GraphID, &started, &ended, &item.StorageState, &runtimeState, &pinned, &revision, &hasResult, &hasResultDigest); err != nil {
+		var completenessData []byte
+		var completenessDigest string
+		if err := rows.Scan(&item.RunID, &item.ProjectID, &item.GraphID, &started, &ended, &item.StorageState, &runtimeState, &pinned, &revision, &hasResult, &hasResultDigest, &completenessData, &completenessDigest); err != nil {
 			rows.Close()
 			return ListPage{}, fmt.Errorf("%w: scan history list: %v", ErrUnavailable, err)
+		}
+		item.Completeness, err = storedProjection(completenessData, completenessDigest)
+		if err != nil {
+			rows.Close()
+			return ListPage{}, err
 		}
 		if item.StorageState == Complete && (!ended.Valid || !runtimeState.Valid || runtimeState.String == "" || hasResult == 0 || hasResultDigest == 0) {
 			rows.Close()
@@ -177,11 +185,11 @@ func (s *Store) List(ctx context.Context, query ListQuery) (ListPage, error) {
 		item.Revision = uint64(revision)
 		if len(page.Runs) < query.Limit {
 			encoded, err := json.Marshal(item)
-			if err != nil || pageBytes+len(encoded)+1 > maxRunResponseBytes {
+			if err != nil || pageBytes+len(encoded)+len(completenessData)+len(completenessDigest)+1 > maxRunResponseBytes {
 				rows.Close()
 				return ListPage{}, ErrPageTooLarge
 			}
-			pageBytes += len(encoded) + 1
+			pageBytes += len(encoded) + len(completenessData) + len(completenessDigest) + 1
 		}
 		page.Runs = append(page.Runs, item)
 	}

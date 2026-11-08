@@ -57,6 +57,10 @@ type ExecutionObservation struct {
 	Progress           func(events.Type, events.Payload)
 	Check              func(events.GateCheckPayload)
 	NewCheckCapture    func() *CheckCapture
+	// Producer hooks surround the provider call itself. The desktop history
+	// owner uses them for attempt-start and after-produce observations.
+	BeforeProduce func(context.Context)
+	AfterProduce  func(context.Context)
 }
 type ObservedExecutor interface {
 	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)

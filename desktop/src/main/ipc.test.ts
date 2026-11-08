@@ -101,4 +101,44 @@ describe('fixed Electron IPC bridge', () => {
     expect(reply).toEqual({ ok: false, error: { code: 'conflict', message: 'Saved file changed',
       request_id: 'request-1', retryable: true } })
   })
+
+  it('routes named history methods and rejects an evidence path in a sidecar descriptor', async () => {
+    const history = fixture((method) => method === 'history.list'
+      ? { runs: [{ run_id: 'run', project_id: 'project', graph_id: 'graph', started_at: '2026-11-08T00:00:00Z', storage_state: 'complete', runtime_state: 'succeeded', pinned: false, revision: 1, completeness: [1, true, true, true, true, true], completeness_digest: 'digest' }], generation: 2 }
+      : undefined)
+    await expect(history.invoke('listHistory', { project_id: 'project', limit: 10 }))
+      .resolves.toMatchObject({ runs: [{ run_id: 'run' }] })
+    expect(history.calls).toEqual([{ method: 'history.list', params: { project_id: 'project', limit: 10 } }])
+    const unsafe = fixture((method) => method === 'history.evidence.list'
+      ? { descriptors: [{ evidence_id: 'e', run_id: 'r', attempt_id: 'a', kind: 'diff', availability: 'available', created_at: '2026-11-08T00:00:00Z', redacted: false, relative_path: 'evidence/private' }], generation: 1, complete: true }
+      : undefined)
+    await expect(unsafe.invoke('listEvidence', { run_id: 'r', limit: 1 })).rejects.toMatchObject({ code: 'unavailable' })
+  })
+
+  it('omits absent optional retention fields before validating and sending prune', async () => {
+    const app = fixture((method) => method === 'history.prune'
+      ? { removed_runs: 0, removed_files: 0, skipped_active: 0,
+        skipped_interrupted: 0, skipped_pinned: 0, skipped_pending: 0 }
+      : undefined)
+    await expect(app.invoke('pruneHistory', { retention_days: undefined, keep_all: undefined }))
+      .resolves.toMatchObject({ removed_runs: 0 })
+    expect(app.calls).toEqual([{ method: 'history.prune', params: {} }])
+  })
+
+  it('accepts node-scoped evidence without inventing an attempt identity', async () => {
+    const node = fixture((method) => method === 'history.evidence.list'
+      ? { descriptors: [{ evidence_id: 'e', run_id: 'r', node_run_id: 'n',
+        kind: 'diff', availability: 'available', created_at: '2026-11-08T00:00:00Z',
+        redacted: false, byte_length: 0, digest: 'digest' }], generation: 1, complete: true }
+      : undefined)
+    await expect(node.invoke('listEvidence', { run_id: 'r', limit: 1 }))
+      .resolves.toMatchObject({ descriptors: [{ node_run_id: 'n' }] })
+    const unbound = fixture((method) => method === 'history.evidence.list'
+      ? { descriptors: [{ evidence_id: 'e', run_id: 'r', kind: 'diff',
+        availability: 'unavailable', omission_reason: 'capture_failed',
+        created_at: '2026-11-08T00:00:00Z', redacted: false }], generation: 1, complete: false }
+      : undefined)
+    await expect(unbound.invoke('listEvidence', { run_id: 'r', limit: 1 }))
+      .rejects.toMatchObject({ code: 'unavailable' })
+  })
 })

@@ -79,6 +79,9 @@ func runDesktopService(ctx context.Context, args []string, input io.Reader, outp
 	for name, handler := range desktop.NewRunHandlers(runs) {
 		handlers[name] = handler
 	}
+	for name, handler := range desktop.NewHistoryHandlers(historyStore, runs, registry) {
+		handlers[name] = handler
+	}
 	server := desktop.NewServer(version.String(), handlers)
 	return serveOwned(ctx, server, runs, input, output)
 }

@@ -22,6 +22,7 @@ import (
 	"agentplane/internal/events"
 	"agentplane/internal/gate"
 	"agentplane/internal/graph"
+	"agentplane/internal/history"
 	apruntime "agentplane/internal/runtime"
 	"agentplane/internal/shell"
 )
@@ -82,7 +83,15 @@ func TestSidecarStdioHandshake(t *testing.T) {
 		!bytes.Contains(responses[1].Result, []byte(`"runs.start"`)) ||
 		!bytes.Contains(responses[1].Result, []byte(`"runs.cancel"`)) ||
 		!bytes.Contains(responses[1].Result, []byte(`"runs.snapshot"`)) ||
-		!bytes.Contains(responses[1].Result, []byte(`"runs.events"`)) {
+		!bytes.Contains(responses[1].Result, []byte(`"runs.events"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.list"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.get"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.outcomes"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.events"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.evidence.list"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.evidence"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.pin"`)) ||
+		!bytes.Contains(responses[1].Result, []byte(`"history.prune"`)) {
 		t.Fatalf("hello response = %#v", responses[1])
 	}
 	if responses[2].RequestID != "validation" || responses[2].Error == nil || responses[2].Error.Code != "not_found" {
@@ -90,6 +99,128 @@ func TestSidecarStdioHandshake(t *testing.T) {
 	}
 	if _, err := desktop.ReadFrame(&stdout); err != io.EOF {
 		t.Fatalf("stdout contains non-protocol data: %v", err)
+	}
+}
+
+func TestHistoryOpensUnderRegistryLock(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "state")
+	registry, err := desktop.NewRegistry(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer registry.Close()
+	directory, err := registry.HistoryDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := history.Open(context.Background(), directory)
+	if err != nil {
+		t.Fatalf("history.Open: %v", err)
+	}
+	defer store.Close()
+	if page, err := store.List(context.Background(), history.ListQuery{Limit: 1}); err != nil || len(page.Runs) != 0 {
+		t.Fatalf("empty list=%+v err=%v", page, err)
+	}
+}
+
+func TestHistoryDetailSurvivesServiceRestartWithoutProjectDirectory(t *testing.T) {
+	base := t.TempDir()
+	stateDir := filepath.Join(base, "state")
+	projectDir := filepath.Join(base, "project")
+	if err := os.Mkdir(projectDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := desktop.NewRegistry(stateDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant, err := registry.GrantProjectFolder(projectDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	project, err := registry.AddProject(grant.Token, grant.PathDigest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(projectDir, "workspace"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := registry.AddWorkspace(project.ProjectID, "workspace")
+	if err != nil {
+		t.Fatal(err)
+	}
+	directory, err := registry.HistoryDirectory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := history.Open(context.Background(), directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	safe := func(source string) history.SafeJSON {
+		value, err := history.ParseSafeJSON([]byte(source), nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+	runID := "11111111-1111-4111-8111-111111111111"
+	started := time.Now().UTC().Add(-time.Minute)
+	if err := store.Launch(context.Background(), history.LaunchRecord{RunID: runID, ProjectID: project.ProjectID, WorkspaceID: workspace.WorkspaceID, DocumentID: "22222222-2222-4222-8222-222222222222", GraphID: "graph", GraphHash: "sha256:graph", StartedAt: started, Graph: safe(`[1,"graph"]`), Launch: safe(`[1,[]]`), Completeness: safe(`[1,true,true]`)}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Finalize(context.Background(), history.Finalization{RunID: runID, EndedAt: started.Add(time.Second), RuntimeState: "succeeded", Watermark: 1, Result: safe(`[1,"done"]`), Completeness: safe(`[1,true,true,true,true,true]`), Events: []history.Event{{Sequence: 1, Projection: safe(`{"type":"run_finished"}`)}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := registry.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(projectDir); err != nil {
+		t.Fatal(err)
+	}
+	inputReader, inputWriter := io.Pipe()
+	outputReader, outputWriter := io.Pipe()
+	defer inputWriter.Close()
+	defer outputReader.Close()
+	done := make(chan error, 1)
+	go func() {
+		err := runDesktopService(context.Background(), []string{"--state-dir", stateDir}, inputReader, outputWriter)
+		_ = outputWriter.Close()
+		done <- err
+	}()
+	request := func(id, method, params string) {
+		t.Helper()
+		if err := desktop.WriteFrame(inputWriter, json.RawMessage(`{"protocol_version":1,"request_id":"`+id+`","method":"`+method+`","params":`+params+`}`)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	response := func() desktop.Response {
+		t.Helper()
+		frame, err := desktop.ReadFrame(outputReader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var result desktop.Response
+		if err := json.Unmarshal(frame, &result); err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	request("hello", "hello", `{"client_protocol_version":1}`)
+	if got := response(); got.Error != nil {
+		t.Fatalf("hello: %+v", got.Error)
+	}
+	request("history", "history.get", `{"run_id":"`+runID+`"}`)
+	got := response()
+	if got.Error != nil || !bytes.Contains(got.Result, []byte(`"storage_state":"complete"`)) || !bytes.Contains(got.Result, []byte(`"graph":[1,"graph"]`)) || !bytes.Contains(got.Result, []byte(`"result":[1,"done"]`)) {
+		t.Fatalf("historical detail after repo removal=%s error=%+v", got.Result, got.Error)
+	}
+	_ = inputWriter.Close()
+	if err := <-done; err != nil {
+		t.Fatalf("service shutdown: %v", err)
 	}
 }
 

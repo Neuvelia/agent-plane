@@ -6,6 +6,7 @@ import (
 	"errors"
 	"reflect"
 
+	"agentplane/internal/capture"
 	"agentplane/internal/gate"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
@@ -107,7 +108,14 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if err := ctx.Err(); err != nil {
 		return PreparedRun{}, protocolError("unavailable", "Start request was interrupted")
 	}
-	executor := desktopNodeExecutor{shell: shellExecutorFor(environment, s.supervisorBinary), agents: agentExecutorFor(settings, environment, s.supervisorBinary), gate: gate.Executor{SupervisorBinary: s.supervisorBinary}}
+	executor := desktopNodeExecutor{shell: shellExecutorFor(environment, s.supervisorBinary), agents: agentExecutorFor(settings, environment, s.supervisorBinary), gate: gate.Executor{SupervisorBinary: s.supervisorBinary},
+		workspaceResolver: func() (capture.Workspace, error) {
+			current, err := s.registry.ResolveWorkspace(request.WorkspaceID)
+			if err != nil || current != latestWorkspace {
+				return capture.Workspace{}, ErrRegistryUnavailable
+			}
+			return capture.Workspace{Path: current.CanonicalPath, Identity: string(current.Identity)}, nil
+		}}
 	return PreparedRun{Definition: definition, Inputs: cloneInputValues(request.Inputs), Executor: executor,
 		Options:      runtime.Options{MaxConcurrency: request.MaxConcurrency, LogRedactions: redactions, GitExecutable: derefPath(settings.GitBinaryPath), GitSupervisorBinary: s.supervisorBinary},
 		GraphVersion: snapshot.SemanticVersion, ProjectID: latestWorkspace.ProjectID,

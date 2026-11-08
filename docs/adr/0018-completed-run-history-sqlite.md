@@ -1,6 +1,6 @@
 # ADR-0018 — local completed-run history in SQLite
 
-**Status:** proposed
+**Status:** accepted; implementation in progress
 **Date:** 2026-10-21
 
 ## Context
@@ -87,6 +87,28 @@ private store:
   nonnegative `list_generation`. A list-visible mutation increments it in the
   same transaction as the changed run rows.
 
+Version 2 migrates version 1 transactionally: add
+`managed_evidence.redacted INTEGER NOT NULL DEFAULT 0 CHECK(redacted IN (0,1))`,
+nullable `source_path` (sanitized workspace-relative path) and nullable
+`capture_group` (generated pre/post/diff pairing identity), plus an index on
+`(run_id, attempt_id, created_at, evidence_id)` for bounded
+descriptor listing. Existing rows default to false; stored content/digests
+are unchanged. Any failed v1-to-v2 migration preserves the readable v1 store.
+An available evidence file whose bytes were changed by configured redaction
+has `redacted=true`; the inspector labels it sanitized/partial, never an exact
+file diff. A redaction error records `redaction_failed` without a file.
+An unsafe source path is omitted with `unsafe_path`; the private managed-file
+relative path is never part of the descriptor DTO. Bounded textual diffs are
+captured before retry; binary or oversized content has an explicit
+`diff_unavailable` descriptor. Pre/postimages remain paired by `capture_group`
+for independent inspection.
+Version 3 rebuilds `managed_evidence` transactionally with nullable
+`attempt_id`: a row has either a nonempty attempt ID for a Loop Agent, or a
+null attempt ID and nonempty `node_run_id` for a one-shot Agent. Existing
+v1/v2 loop rows keep their optional `node_run_id`; all existing bytes and
+digests remain unchanged. The SQLite CHECK uses explicit NULL tests and
+nonempty identity tests. A failed migration leaves the prior schema readable.
+
 Indexes support `(project_id, started_at DESC, run_id DESC)`,
 `(graph_id, started_at DESC, run_id DESC)`,
 `(storage_state, started_at DESC, run_id DESC)` and the unfiltered
@@ -137,6 +159,16 @@ private string colliding with a fixed status label. A newer SQLite schema
 produces an actionable `history_version_unsupported` Start error; a missing
 or unwritable store produces `history_unavailable` without exposing paths or
 raw database diagnostics.
+Final completeness is the positional tuple `[1, graph, launch, result,
+event_trace, attempt_references, managed_evidence]`. The last bit is false
+when any capture is partial/unavailable or redacted; a failed descriptor write
+prevents finalization entirely. A launch marker initially carries only the
+graph and launch bits; absent final bits are unknown/incomplete.
+The managed-evidence bit covers every Agent produce, including a one-shot
+Agent without a Loop. One-shot evidence is node-scoped and carries no
+AttemptID, preserving ADR-0014 and the existing event schema. Finalization
+binds that evidence to its node outcome; Loop evidence binds to its attempt
+outcome. A missing or mismatched identity rejects the final transaction.
 
 Final ingestion rejects any individual safe event, node outcome or attempt
 outcome projection above 3 MiB with a typed page-size error before committing
@@ -263,7 +295,22 @@ They never turn a missing artifact into a successful empty diff or rerun an
 accepted unit. External concurrent writes can contribute to observed diffs;
 these are observations, not exclusive Agent authorship.
 
+Each attempt also records a separate managed `git_observation` descriptor.
+When available, its safe JSON payload is `{"schema":1,"changed_paths":N}`:
+only the count of paths changed since that attempt's Git baseline is stored.
+The observed names remain in the no-follow content descriptors when safe;
+Git errors produce an unavailable `git_observation` with `diff_unavailable`.
+The payload bytes count toward the 100 MiB/run capture budget. A one-shot
+Agent produce receives the same Git and no-follow observations, indexed by
+`node_run_id` rather than an invented attempt.
+
 Evidence files are completed and fsynced before database references commit.
+The active run retains at most 4,096 evidence descriptors plus one overflow
+sentinel in memory. It exposes committed and failed captures to a pending
+Human request even if a later SQLite write fails. A failed descriptor write
+or index overflow makes final archival unavailable; successful fixed-code
+unavailable descriptors may archive with completeness false. Postimage
+observation runs after provider failure/cancellation as well as success.
 Every read pins the private directory, refuses symlink traversal and verifies
 length and SHA-256 before delivering bounded chunks below the 8 MiB sidecar
 frame. A later safe sweep removes files orphaned by a crash between file fsync
@@ -271,7 +318,8 @@ and reference commit. Retention defaults to 30 days, accepts a positive day
 count or explicit keep-all, and prunes only finalized unpinned runs with no
 pending approval. It deletes owned managed files only, never repository files.
 
-The sidecar exposes typed paged `history.list`, `history.get`, `history.events`,
+The sidecar exposes typed paged `history.list`, `history.get`,
+`history.outcomes`, `history.events`, `history.evidence.list`,
 `history.evidence`, `history.pin` and `history.prune` methods. Renderer code
 never opens SQLite or arbitrary evidence paths. A minimal read-only historical
 detail view shows run facts, node/attempt outcomes, Check Results, Return
@@ -286,32 +334,51 @@ unknown fields and keep each response below 8 MiB:
   `started_from`, `started_before`, opaque `cursor`; required `limit` in 1–256.
   Response: `runs[]` of run ID, project/graph IDs, start/end, storage/runtime
   state, pinned, revision and completeness summary; `next_cursor` and
-  `list_generation`. A cursor binds the exact filters, generation and
+  `generation`. A cursor binds the exact filters, generation and
   `(started_at, run_id)` key; mutation returns `stale_cursor`.
-- `history.get` request: `run_id`, required `outcome_limit` in 1–256 and
-  optional opaque `node_cursor` and `attempt_cursor`. Response: the safe run
-  graph/launch/result projections, digest/completeness metadata, separate
-  `nodes[]` and `attempts[]` pages with `next_node_cursor` and
-  `next_attempt_cursor`, typed Check Result/Return Envelope references and
-  evidence descriptors from each attempt projection, and storage/runtime
-  state. Cursors bind the run ID and stable outcome ID order; oversized
-  detail returns a typed size error instead of silent truncation.
+- `history.get` request: `run_id`. Response: the safe run graph/launch/result
+  projections, digest/completeness metadata and storage/runtime state, bounded
+  to 6 MiB. This response excludes outcome pages so a maximal run snapshot
+  cannot make a valid outcome permanently unreadable.
+- `history.outcomes` request: `run_id`, required `limit` in 1–256 and optional
+  opaque `node_cursor` and `attempt_cursor`. Response: separate `nodes[]` and
+  `attempts[]` pages with `next_node_cursor` and `next_attempt_cursor`, typed
+  Check Result/Return Envelope references in safe attempt projections, and
+  digest metadata. Cursors bind the run ID and outcome kind. The 7 MiB page
+  limit admits one bounded 3 MiB node and one bounded 3 MiB attempt; a larger
+  selection returns a typed size error without truncating an item.
 - `history.events` request: `run_id`, nonnegative `after_sequence`, `limit`
   in 1–256. Response: original-sequence ordered safe `events[]`, omission
   ranges with reason, `next_sequence`, `watermark`, `finished` and
-  completeness. The cursor advances across omitted original sequences and a
+  `complete` for the event-trace bit only, plus the verified full
+  `completeness_digest`. The cursor advances across omitted original sequences and a
   cursor above the watermark is rejected.
 - `history.evidence` request: `evidence_id`, nonnegative `offset`, `limit`
   in 1–1,048,576 bytes. Response: availability/omission reason, total length,
   full-content SHA-256, `bytes_base64`, next offset and end flag. The server
-  validates the full stored file before returning any chunk. This method also
-  reads the active run's committed/in-memory capture index.
+  validates the full stored file before returning any chunk. For a failed
+  active descriptor write present only in the in-memory index, it returns a
+  fixed unavailable `capture_failed` chunk with no content; after restart
+  only committed descriptors remain.
+- `history.evidence.list` request: required `run_id`, optional `attempt_id`
+  and opaque cursor, required `limit` in 1–256. Response: bounded
+  `descriptors[]`, `next_cursor`, `generation` and `complete`. Each descriptor
+  includes evidence/run IDs, optional attempt ID, node-run ID when node-scoped,
+  safe source path and
+  generated capture group, kind, availability,
+  optional omission reason/byte length/digest, creation time and `redacted`;
+  it excludes the managed relative path. Rows order by
+  `(created_at,evidence_id)`; a cursor binds filter, generation and last key.
+  New capture invalidates older cursors. Active runs read a bounded in-memory
+  descriptor copy so a SQLite write failure remains an explicit unavailable
+  descriptor with `complete=false`; completed/interrupted runs read SQLite.
 - `history.pin` request: `run_id`, `expected_revision`, `pinned` boolean.
   Response: new revision and pinned state; conflicts are typed and do not
   overwrite a concurrent change.
 - `history.prune` request: optional positive `retention_days` override or
   explicit `keep_all`, never both; response: bounded removed-run and owned-file
-  counts plus skipped-active/pinned/pending counts. The configured setting is
+  counts plus skipped-active/pinned/pending counts. Only `complete` unpinned
+  runs are eligible; `interrupted` is not finalized and remains stored. The configured setting is
   the default; a caller cannot supply an arbitrary filesystem path.
 
 Wire IDs and enum values are validated at the Go service boundary. A page or

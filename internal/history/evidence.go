@@ -11,15 +11,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const maxEvidenceFileBytes = 10 << 20
 const maxEvidenceRunBytes = 100 << 20
 const maxEvidenceChunkBytes = 1 << 20
 const evidenceSweepBatchSize = 128
+
+var ErrInvalidEvidenceOffset = errors.New("evidence offset exceeds content length")
 
 func validEvidenceOmissionReason(reason string) bool {
 	switch reason {
@@ -56,14 +60,32 @@ func (value SafeEvidence) Bytes() []byte { return append([]byte(nil), value.data
 
 type EvidenceCapture struct {
 	EvidenceID, RunID, AttemptID, NodeRunID, Kind string
+	SourcePath, CaptureGroup                      string
 	CreatedAt                                     time.Time
 	Content                                       *SafeEvidence
 	OmissionReason                                string
+	Redacted                                      bool
+}
+
+func validEvidenceSourcePath(value string) bool {
+	if value == "" {
+		return true
+	}
+	if len(value) > 512 || !utf8.ValidString(value) || strings.ContainsAny(value, "\\\x00") || strings.HasPrefix(value, "/") || path.Clean(value) != value || value == "." {
+		return false
+	}
+	for _, part := range strings.Split(value, "/") {
+		if part == ".." || part == "." || part == "" {
+			return false
+		}
+	}
+	return true
 }
 
 type EvidenceChunk struct {
 	Availability   string
 	OmissionReason string
+	Redacted       bool
 	TotalLength    int64
 	Digest         string
 	Data           []byte
@@ -217,8 +239,11 @@ func (s *Store) sweepEvidenceCount(ctx context.Context) (int, error) {
 }
 
 func (s *Store) CaptureEvidence(ctx context.Context, record EvidenceCapture) error {
-	if record.EvidenceID == "" || record.RunID == "" || record.AttemptID == "" || record.Kind == "" || record.CreatedAt.IsZero() ||
-		len(record.EvidenceID) > 256 || len(record.RunID) > 256 || len(record.AttemptID) > 256 || len(record.NodeRunID) > 256 || len(record.Kind) > 64 {
+	if !validHistoryID(record.EvidenceID) || !validHistoryID(record.RunID) || record.Kind == "" || record.CreatedAt.IsZero() ||
+		(record.AttemptID == "" && !validHistoryID(record.NodeRunID)) ||
+		(record.AttemptID != "" && !validHistoryID(record.AttemptID)) ||
+		(record.NodeRunID != "" && !validHistoryID(record.NodeRunID)) ||
+		len(record.Kind) > 64 || len(record.CaptureGroup) > 256 || !validEvidenceSourcePath(record.SourcePath) {
 		return errors.New("invalid managed evidence identity")
 	}
 	available := record.Content != nil
@@ -226,7 +251,7 @@ func (s *Store) CaptureEvidence(ctx context.Context, record EvidenceCapture) err
 		if len(record.Content.data) > maxEvidenceFileBytes || record.Content.digest == "" || record.OmissionReason != "" {
 			return errors.New("invalid available managed evidence")
 		}
-	} else if !validEvidenceOmissionReason(record.OmissionReason) {
+	} else if record.Redacted || !validEvidenceOmissionReason(record.OmissionReason) {
 		return errors.New("unavailable evidence requires an approved reason code")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -304,9 +329,27 @@ func (s *Store) CaptureEvidence(ctx context.Context, record EvidenceCapture) err
 	if record.NodeRunID != "" {
 		nodeID = record.NodeRunID
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO managed_evidence(evidence_id,run_id,attempt_id,node_run_id,kind,availability,created_at,relative_path,byte_length,digest,omission_reason)
-	VALUES(?,?,?,?,?,?,?,?,?,?,?)`, record.EvidenceID, record.RunID, record.AttemptID, nodeID, record.Kind, availability, formatHistoryTime(record.CreatedAt), relativePath, length, digest, reason); err != nil {
+	var attemptID any
+	if record.AttemptID != "" {
+		attemptID = record.AttemptID
+	}
+	redacted := 0
+	if record.Redacted {
+		redacted = 1
+	}
+	var sourcePath, captureGroup any
+	if record.SourcePath != "" {
+		sourcePath = record.SourcePath
+	}
+	if record.CaptureGroup != "" {
+		captureGroup = record.CaptureGroup
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO managed_evidence(evidence_id,run_id,attempt_id,node_run_id,kind,availability,created_at,relative_path,byte_length,digest,omission_reason,redacted,source_path,capture_group)
+	VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, record.EvidenceID, record.RunID, attemptID, nodeID, record.Kind, availability, formatHistoryTime(record.CreatedAt), relativePath, length, digest, reason, redacted, sourcePath, captureGroup); err != nil {
 		return fmt.Errorf("%w: insert evidence reference: %v", ErrUnavailable, err)
+	}
+	if _, err := tx.ExecContext(ctx, "UPDATE store_meta SET list_generation=list_generation+1 WHERE id=1"); err != nil {
+		return fmt.Errorf("%w: advance evidence generation: %v", ErrUnavailable, err)
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("%w: commit evidence reference: %v", ErrUnavailable, err)
@@ -320,17 +363,21 @@ func (s *Store) Evidence(ctx context.Context, evidenceID string, offset int64, l
 		return EvidenceChunk{}, errors.New("invalid evidence chunk request")
 	}
 	var availability string
+	var redacted int
 	var path, digest, reason sql.NullString
 	var length sql.NullInt64
-	err := s.db.QueryRowContext(ctx, "SELECT availability,relative_path,byte_length,digest,omission_reason FROM managed_evidence WHERE evidence_id=?", evidenceID).Scan(&availability, &path, &length, &digest, &reason)
+	err := s.db.QueryRowContext(ctx, "SELECT availability,relative_path,byte_length,digest,omission_reason,redacted FROM managed_evidence WHERE evidence_id=?", evidenceID).Scan(&availability, &path, &length, &digest, &reason, &redacted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return EvidenceChunk{}, ErrNotFound
 	}
 	if err != nil {
 		return EvidenceChunk{}, fmt.Errorf("%w: read evidence reference: %v", ErrUnavailable, err)
 	}
+	if redacted != 0 && redacted != 1 {
+		return EvidenceChunk{}, fmt.Errorf("%w: invalid evidence redaction flag", ErrUnavailable)
+	}
 	if availability == "unavailable" {
-		if !reason.Valid || !validEvidenceOmissionReason(reason.String) || path.Valid || length.Valid || digest.Valid {
+		if redacted != 0 || !reason.Valid || !validEvidenceOmissionReason(reason.String) || path.Valid || length.Valid || digest.Valid {
 			return EvidenceChunk{}, fmt.Errorf("%w: invalid unavailable evidence reference", ErrUnavailable)
 		}
 		return EvidenceChunk{Availability: availability, OmissionReason: reason.String, End: true}, nil
@@ -369,12 +416,12 @@ func (s *Store) Evidence(ctx context.Context, evidenceID string, offset int64, l
 		return EvidenceChunk{}, fmt.Errorf("%w: evidence digest mismatch", ErrUnavailable)
 	}
 	if offset > int64(len(data)) {
-		return EvidenceChunk{}, errors.New("evidence offset exceeds content length")
+		return EvidenceChunk{}, ErrInvalidEvidenceOffset
 	}
 	end := offset + int64(limit)
 	if end > int64(len(data)) {
 		end = int64(len(data))
 	}
-	return EvidenceChunk{Availability: availability, TotalLength: int64(len(data)), Digest: digest.String,
+	return EvidenceChunk{Availability: availability, Redacted: redacted != 0, TotalLength: int64(len(data)), Digest: digest.String,
 		Data: append([]byte(nil), data[offset:end]...), NextOffset: end, End: end == int64(len(data))}, nil
 }

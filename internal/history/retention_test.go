@@ -61,8 +61,17 @@ func TestPruneCommitsBoundedBatchesBeforeLaterFailure(t *testing.T) {
 	if err := store.db.QueryRowContext(ctx, "SELECT relative_path FROM managed_evidence WHERE evidence_id='first-evidence'").Scan(&evidencePath); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.db.ExecContext(ctx, "UPDATE runs SET storage_state='interrupted'"); err != nil {
-		t.Fatal(err)
+	for i := 0; i < 129; i++ {
+		id := fmt.Sprintf("run-%03d", i)
+		final := Finalization{RunID: id, EndedAt: old.Add(time.Hour), RuntimeState: "succeeded", Watermark: 1,
+			Result: safeJSON(t, `{}`), Completeness: safeJSON(t, `{}`), Events: []Event{{Sequence: 1, Projection: safeJSON(t, `{}`)}}}
+		if i == 0 {
+			final.Nodes = []NodeOutcome{{NodeRunID: "node-run", NodeID: "node", Status: "succeeded", Projection: safeJSON(t, `{}`)}}
+			final.Attempts = []AttemptOutcome{{AttemptID: "attempt", NodeRunID: "node-run", Status: "accepted", Projection: safeJSON(t, `{}`)}}
+		}
+		if err := store.Finalize(ctx, final); err != nil {
+			t.Fatalf("finalize %s: %v", id, err)
+		}
 	}
 	if _, err := store.db.ExecContext(ctx, `CREATE TRIGGER fail_later_prune BEFORE DELETE ON runs WHEN OLD.run_id='run-128' BEGIN SELECT RAISE(ABORT,'injected failure'); END`); err != nil {
 		t.Fatal(err)
@@ -151,15 +160,15 @@ func TestPruneKeepsActivePinnedPendingAndRecentRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := store.Prune(ctx, PruneOptions{Now: now, RetentionDays: 30})
-	if err != nil || result.RemovedRuns != 2 || result.SkippedActive != 1 || result.SkippedPinned != 1 || result.SkippedPending != 1 {
+	if err != nil || result.RemovedRuns != 1 || result.SkippedActive != 1 || result.SkippedInterrupted != 1 || result.SkippedPinned != 1 || result.SkippedPending != 1 {
 		t.Fatalf("prune result=%+v, %v", result, err)
 	}
-	for _, id := range []string{"old-complete", "old-interrupted"} {
+	for _, id := range []string{"old-complete"} {
 		if _, err := store.Get(ctx, id); !errors.Is(err, ErrNotFound) {
 			t.Fatalf("eligible run %s retained: %v", id, err)
 		}
 	}
-	for _, id := range []string{"old-active", "old-pinned", "old-pending", "recent"} {
+	for _, id := range []string{"old-interrupted", "old-active", "old-pinned", "old-pending", "recent"} {
 		if _, err := store.Get(ctx, id); err != nil {
 			t.Fatalf("protected run %s removed: %v", id, err)
 		}

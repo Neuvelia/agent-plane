@@ -380,3 +380,35 @@ func TestFinalizationRejectsUnboundManagedEvidenceAtomically(t *testing.T) {
 		t.Fatalf("valid evidence binding rejected: %v", err)
 	}
 }
+
+func TestFinalizationBindsNodeScopedEvidenceWithoutAttempt(t *testing.T) {
+	ctx := context.Background()
+	store := testStore(t)
+	started := time.Now().UTC()
+	launchEvidenceRun(t, store, "run", started)
+	content, err := ParseSafeEvidence([]byte("node image"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CaptureEvidence(ctx, EvidenceCapture{EvidenceID: "node-e", RunID: "run", NodeRunID: "node-1", Kind: "postimage", CreatedAt: started, Content: &content}); err != nil {
+		t.Fatal(err)
+	}
+	base := Finalization{RunID: "run", EndedAt: started.Add(time.Second), RuntimeState: "succeeded", Watermark: 1, Result: safeJSON(t, `{}`), Completeness: safeJSON(t, `{}`), Events: []Event{{Sequence: 1, Projection: safeJSON(t, `{}`)}}}
+	if err := store.Finalize(ctx, base); !errors.Is(err, ErrConflict) {
+		t.Fatalf("missing node outcome accepted: %v", err)
+	}
+	wrong := base
+	wrong.Nodes = []NodeOutcome{{NodeRunID: "other-node", NodeID: "work", Status: "succeeded", Projection: safeJSON(t, `{}`)}}
+	if err := store.Finalize(ctx, wrong); !errors.Is(err, ErrConflict) {
+		t.Fatalf("mismatched node outcome accepted: %v", err)
+	}
+	run, err := store.Get(ctx, "run")
+	if err != nil || run.StorageState != Active {
+		t.Fatalf("failed finalization changed run: %+v %v", run, err)
+	}
+	valid := base
+	valid.Nodes = []NodeOutcome{{NodeRunID: "node-1", NodeID: "work", Status: "succeeded", Projection: safeJSON(t, `{}`)}}
+	if err := store.Finalize(ctx, valid); err != nil {
+		t.Fatalf("node evidence binding rejected: %v", err)
+	}
+}

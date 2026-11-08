@@ -37,7 +37,17 @@ const api = {
   currentRun: async () => ({ state: 'known', run_id: runID }),
   reattachRun: async () => null,
   snapshotRun: async () => ({ run_id: runID, state: 'running', finished: false, trace_watermark: 1 }),
-  eventsRun: async (_id, after) => ({ run_id: runID, after_sequence: after, events: after === 0 ? [event] : [], event_hashes: after === 0 ? [`sha256:${'a'.repeat(64)}`] : [], next_after: 1, has_more: false, watermark: 1, stats: omission, finished: false }),
+  eventsRun: async (_id, after) => ({ run_id: runID, after_sequence: after, events: after === 0 ? [event] : [], event_hashes: after === 0 ? [`sha256:${'a'.repeat(64)}`] : [], omissions: [], next_after: 1, has_more: false, watermark: 1, stats: omission, finished: false }),
+  // The frozen visual fixture has no archived runs. Empty history is a real
+  // local state, not a fabricated completed record.
+  listHistory: async () => ({ runs: [], generation: 1 }),
+  getHistory: async () => { throw new Error('No historical run in visual fixture') },
+  outcomesHistory: async () => { throw new Error('No historical run in visual fixture') },
+  eventsHistory: async () => { throw new Error('No historical run in visual fixture') },
+  listEvidence: async () => { throw new Error('No managed evidence in visual fixture') },
+  evidenceChunk: async () => { throw new Error('No managed evidence in visual fixture') },
+  pinHistory: async () => { throw new Error('No historical run in visual fixture') },
+  pruneHistory: async () => ({ removed_runs: 0, removed_files: 0, skipped_active: 0, skipped_interrupted: 0, skipped_pinned: 0, skipped_pending: 0 }),
   openDocument: async () => { throw new Error('Visual fixture is read-only') },
   onServiceDisconnected: (listener) => { listeners.add(listener); return () => listeners.delete(listener) }
 }

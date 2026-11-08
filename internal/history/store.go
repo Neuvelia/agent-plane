@@ -21,7 +21,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-const schemaVersion = 1
+const schemaVersion = 3
 const maxProjectionBytes = 8 << 20
 const maxIndexedProjectionBytes = 3 << 20
 const maxEventPageBytes = 7 << 20
@@ -208,11 +208,13 @@ type OmissionRange struct {
 }
 
 type EventPage struct {
-	Events       []Event
-	Omissions    []OmissionRange
-	Watermark    uint64
-	NextSequence uint64
-	Finished     bool
+	Events             []Event
+	Omissions          []OmissionRange
+	Watermark          uint64
+	NextSequence       uint64
+	Finished           bool
+	Complete           bool
+	CompletenessDigest string
 }
 
 func encodedEventBytes(sequence uint64, projection SafeJSON) (int, error) {
@@ -358,6 +360,28 @@ func (s *Store) initialize(ctx context.Context) error {
 			}
 		}
 		if _, err := tx.ExecContext(ctx, "PRAGMA user_version=1"); err != nil {
+			return fmt.Errorf("%w: set schema version: %v", ErrUnavailable, err)
+		}
+		version = 1
+	}
+	if version == 1 {
+		for _, statement := range migrationV2 {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("%w: migrate evidence descriptors: %v", ErrUnavailable, err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "PRAGMA user_version=2"); err != nil {
+			return fmt.Errorf("%w: set schema version: %v", ErrUnavailable, err)
+		}
+		version = 2
+	}
+	if version == 2 {
+		for _, statement := range migrationV3 {
+			if _, err := tx.ExecContext(ctx, statement); err != nil {
+				return fmt.Errorf("%w: migrate node evidence: %v", ErrUnavailable, err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "PRAGMA user_version=3"); err != nil {
 			return fmt.Errorf("%w: set schema version: %v", ErrUnavailable, err)
 		}
 	}
@@ -587,14 +611,18 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 		return fmt.Errorf("%w: read final evidence references: %v", ErrUnavailable, err)
 	}
 	for references.Next() {
-		var attemptID string
-		var nodeID sql.NullString
+		var attemptID, nodeID sql.NullString
 		if err := references.Scan(&attemptID, &nodeID); err != nil {
 			references.Close()
 			return fmt.Errorf("%w: scan final evidence reference: %v", ErrUnavailable, err)
 		}
-		boundNode, exists := attemptNodes[attemptID]
-		if !exists || (nodeID.Valid && nodeID.String != boundNode) {
+		if attemptID.Valid {
+			boundNode, exists := attemptNodes[attemptID.String]
+			if !exists || (nodeID.Valid && nodeID.String != boundNode) {
+				references.Close()
+				return ErrConflict
+			}
+		} else if !nodeID.Valid || !nodeIDs[nodeID.String] {
 			references.Close()
 			return ErrConflict
 		}
@@ -748,7 +776,9 @@ func (s *Store) eventsWithin(ctx context.Context, tx *sql.Tx, runID string, afte
 	var state StorageState
 	var ended, runtimeState sql.NullString
 	var hasResult, hasResultDigest int
-	if err := tx.QueryRowContext(ctx, "SELECT storage_state,ended_at,runtime_state,safe_result_json IS NOT NULL,result_digest IS NOT NULL FROM runs WHERE run_id=?", runID).Scan(&state, &ended, &runtimeState, &hasResult, &hasResultDigest); errors.Is(err, sql.ErrNoRows) {
+	var completenessData []byte
+	var completenessDigest string
+	if err := tx.QueryRowContext(ctx, "SELECT storage_state,ended_at,runtime_state,safe_result_json IS NOT NULL,result_digest IS NOT NULL,completeness_json,completeness_digest FROM runs WHERE run_id=?", runID).Scan(&state, &ended, &runtimeState, &hasResult, &hasResultDigest, &completenessData, &completenessDigest); errors.Is(err, sql.ErrNoRows) {
 		return EventPage{}, ErrNotFound
 	} else if err != nil {
 		return EventPage{}, fmt.Errorf("%w: read event page run: %v", ErrUnavailable, err)
@@ -756,7 +786,26 @@ func (s *Store) eventsWithin(ctx context.Context, tx *sql.Tx, runID string, afte
 	if state == Complete && (!ended.Valid || !runtimeState.Valid || runtimeState.String == "" || hasResult == 0 || hasResultDigest == 0) {
 		return EventPage{}, fmt.Errorf("%w: incomplete terminal run record", ErrUnavailable)
 	}
-	page := EventPage{NextSequence: after, Finished: state == Complete}
+	completeness, err := storedProjection(completenessData, completenessDigest)
+	if err != nil {
+		return EventPage{}, err
+	}
+	page := EventPage{NextSequence: after, Finished: state == Complete, CompletenessDigest: completenessDigest}
+	if state == Complete {
+		var bits []any
+		if json.Unmarshal(completeness.Bytes(), &bits) == nil && (len(bits) == 6 || len(bits) == 7) && bits[0] == float64(1) {
+			validShape := true
+			for _, bit := range bits[1:] {
+				if _, ok := bit.(bool); !ok {
+					validShape = false
+					break
+				}
+			}
+			if validShape {
+				page.Complete = bits[4].(bool)
+			}
+		}
+	}
 	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(sequence),0) FROM (
 	SELECT sequence FROM events WHERE run_id=? UNION ALL SELECT sequence FROM event_omissions WHERE run_id=?)`, runID, runID).Scan(&page.Watermark); err != nil {
 		return EventPage{}, fmt.Errorf("%w: read event watermark: %v", ErrUnavailable, err)

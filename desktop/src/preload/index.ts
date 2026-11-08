@@ -36,6 +36,14 @@ const api: AgentPlaneAPI = {
   cancelRun: (runID) => call('cancelRun', { run_id: runID }),
   snapshotRun: (runID) => call('snapshotRun', { run_id: runID }),
   eventsRun: (runID, afterSequence, limit) => call('eventsRun', { run_id: runID, after_sequence: afterSequence, limit }),
+  listHistory: (selection) => call('listHistory', selection),
+  getHistory: (runID) => call('getHistory', { run_id: runID }),
+  outcomesHistory: (runID, limit, nodeCursor, attemptCursor) => call('outcomesHistory', { run_id: runID, limit, node_cursor: nodeCursor, attempt_cursor: attemptCursor }),
+  eventsHistory: (runID, afterSequence, limit) => call('eventsHistory', { run_id: runID, after_sequence: afterSequence, limit }),
+  listEvidence: (runID, limit, attemptID, cursor) => call('listEvidence', { run_id: runID, limit, attempt_id: attemptID, cursor }),
+  evidenceChunk: (evidenceID, offset, limit) => call('evidenceChunk', { evidence_id: evidenceID, offset, limit }),
+  pinHistory: (runID, expectedRevision, pinned) => call('pinHistory', { run_id: runID, expected_revision: expectedRevision, pinned }),
+  pruneHistory: (retentionDays, keepAll) => call('pruneHistory', { retention_days: retentionDays, keep_all: keepAll }),
   currentRun: () => call('currentRun'),
   onServiceDisconnected: (listener) => {
     const handler = (): void => listener()

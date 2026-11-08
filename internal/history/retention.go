@@ -57,11 +57,12 @@ type PruneOptions struct {
 }
 
 type PruneResult struct {
-	RemovedRuns    int
-	RemovedFiles   int
-	SkippedActive  int
-	SkippedPinned  int
-	SkippedPending int
+	RemovedRuns        int
+	RemovedFiles       int
+	SkippedActive      int
+	SkippedInterrupted int
+	SkippedPinned      int
+	SkippedPending     int
 }
 
 func (s *Store) Prune(ctx context.Context, options PruneOptions) (PruneResult, error) {
@@ -89,6 +90,7 @@ func (s *Store) Prune(ctx context.Context, options PruneOptions) (PruneResult, e
 		}
 		result.RemovedRuns += batch.RemovedRuns
 		result.SkippedActive += batch.SkippedActive
+		result.SkippedInterrupted += batch.SkippedInterrupted
 		result.SkippedPinned += batch.SkippedPinned
 		result.SkippedPending += batch.SkippedPending
 		if done {
@@ -131,11 +133,13 @@ func (s *Store) pruneBatch(ctx context.Context, cutoff, after string, evidenceRo
 		switch {
 		case state == Active:
 			result.SkippedActive++
+		case state == Interrupted:
+			result.SkippedInterrupted++
 		case pinned != 0:
 			result.SkippedPinned++
 		case pending != 0:
 			result.SkippedPending++
-		case state == Complete || state == Interrupted:
+		case state == Complete:
 			eligible = append(eligible, id)
 		}
 	}

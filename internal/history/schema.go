@@ -43,3 +43,31 @@ var migrationV1 = []string{
 	`CREATE INDEX runs_state_page ON runs(storage_state,started_at DESC,run_id DESC)`,
 	`CREATE INDEX runs_page ON runs(started_at DESC,run_id DESC)`,
 }
+
+// A separate version preserves existing v1 stores. New descriptors retain
+// whether their managed bytes were sanitized, and the ordered lookup avoids a
+// full-table scan when a historical attempt has many captures.
+var migrationV2 = []string{
+	`ALTER TABLE managed_evidence ADD COLUMN redacted INTEGER NOT NULL DEFAULT 0 CHECK(redacted IN (0,1))`,
+	`ALTER TABLE managed_evidence ADD COLUMN source_path TEXT`,
+	`ALTER TABLE managed_evidence ADD COLUMN capture_group TEXT`,
+	`CREATE INDEX managed_evidence_attempt_page ON managed_evidence(run_id,attempt_id,created_at,evidence_id)`,
+}
+
+// V3 permits node-scoped evidence for Agent nodes without a Loop. Rebuilding
+// the table preserves v1/v2 loop rows, including their nullable node_run_id.
+var migrationV3 = []string{
+	`CREATE TABLE managed_evidence_v3 (evidence_id TEXT PRIMARY KEY, run_id TEXT NOT NULL REFERENCES runs(run_id) ON DELETE CASCADE,
+ attempt_id TEXT, node_run_id TEXT, kind TEXT NOT NULL, availability TEXT NOT NULL CHECK(availability IN ('available','unavailable')),
+ created_at TEXT NOT NULL, relative_path TEXT, byte_length INTEGER, digest TEXT, omission_reason TEXT,
+ redacted INTEGER NOT NULL DEFAULT 0 CHECK(redacted IN (0,1)), source_path TEXT, capture_group TEXT,
+ CHECK((attempt_id IS NOT NULL AND length(attempt_id)>0) OR (attempt_id IS NULL AND node_run_id IS NOT NULL AND length(node_run_id)>0)),
+ CHECK((availability='available' AND relative_path IS NOT NULL AND byte_length>=0 AND digest IS NOT NULL AND omission_reason IS NULL)
+ OR (availability='unavailable' AND relative_path IS NULL AND byte_length IS NULL AND digest IS NULL
+  AND omission_reason IN ('preimage_missing','diff_unavailable','redaction_failed','size_limit','capture_failed','unsafe_path'))))`,
+	`INSERT INTO managed_evidence_v3(evidence_id,run_id,attempt_id,node_run_id,kind,availability,created_at,relative_path,byte_length,digest,omission_reason,redacted,source_path,capture_group)
+ SELECT evidence_id,run_id,attempt_id,node_run_id,kind,availability,created_at,relative_path,byte_length,digest,omission_reason,redacted,source_path,capture_group FROM managed_evidence`,
+	`DROP TABLE managed_evidence`,
+	`ALTER TABLE managed_evidence_v3 RENAME TO managed_evidence`,
+	`CREATE INDEX managed_evidence_attempt_page ON managed_evidence(run_id,attempt_id,created_at,evidence_id)`,
+}

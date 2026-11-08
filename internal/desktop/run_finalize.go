@@ -128,7 +128,7 @@ type historyFinalizer interface {
 
 // finalizeRun retains only typed, bounded projections. A failed write leaves
 // the Launch marker active for crash recovery and keeps later Starts closed.
-func (s *RunService) finalizeRun(result runtime.RunResult, redactions []string, graphComplete, launchComplete bool) error {
+func (s *RunService) finalizeRun(result runtime.RunResult, redactions []string, graphComplete, launchComplete, evidenceComplete bool) error {
 	writer, ok := s.history.(historyFinalizer)
 	if !ok {
 		return errors.New("history finalizer is unavailable")
@@ -155,7 +155,7 @@ func (s *RunService) finalizeRun(result runtime.RunResult, redactions []string, 
 	if err != nil {
 		return err
 	}
-	bits, err := json.Marshal([]any{1, graphComplete, launchComplete, projected.Complete, trace.Complete, attemptComplete})
+	bits, err := json.Marshal([]any{1, graphComplete, launchComplete, projected.Complete, trace.Complete, attemptComplete, evidenceComplete})
 	if err != nil {
 		return err
 	}

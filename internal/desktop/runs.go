@@ -126,6 +126,7 @@ type ownedRun struct {
 	failureKind         runtime.FailureKind
 	watermark           uint64
 	historyAvailability HistoryAvailability
+	capture             *captureController
 }
 
 // RunService owns one local run at a time. Accepted identities remain for the
@@ -324,6 +325,38 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 			DocumentID: prepared.DocumentID, GraphID: prepared.Definition.ID, GraphHash: prepared.GraphVersion,
 			Graph: graphView, Launch: launchView, Completeness: completeness}
 	}
+	if s.historyRequired {
+		hasAgent := false
+		for _, node := range prepared.Definition.Nodes {
+			if node.Type == "agent" {
+				hasAgent = true
+				break
+			}
+		}
+		if hasAgent {
+			executor, ok := prepared.Executor.(desktopNodeExecutor)
+			writer, writerOK := s.history.(evidenceWriter)
+			if !ok || !writerOK || executor.workspaceResolver == nil {
+				s.finishBeforeReady(record, protocolError("unavailable", "Managed attempt capture is unavailable"))
+				return
+			}
+			controller, err := newCaptureController(writer, executor.workspaceResolver, prepared.Options.LogRedactions, func() {
+				s.mu.Lock()
+				s.historyUnavailable = true
+				record.historyAvailability = HistoryUnavailable
+				s.mu.Unlock()
+			})
+			if err != nil {
+				s.finishBeforeReady(record, protocolError("unavailable", "Managed attempt capture is unavailable"))
+				return
+			}
+			executor.capture = controller
+			prepared.Executor = executor
+			s.mu.Lock()
+			record.capture = controller
+			s.mu.Unlock()
+		}
+	}
 	runCtx, cancel := context.WithCancel(s.ctx)
 	s.mu.Lock()
 	record.cancel = cancel
@@ -379,8 +412,9 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 	cancel()
 	validResult := err == nil && result.RunID == record.runID && result.GraphID == prepared.Definition.ID && result.GraphVersion == prepared.GraphVersion && terminalRunState(result.State)
 	finalized := false
-	if s.historyRequired && record.runID != "" && validResult {
-		finalized = s.finalizeRun(result, options.LogRedactions, graphComplete, launchComplete) == nil
+	if s.historyRequired && record.runID != "" && validResult && (record.capture == nil || !record.capture.failedWrite()) {
+		evidenceComplete := record.capture == nil || record.capture.completeState()
+		finalized = s.finalizeRun(result, options.LogRedactions, graphComplete, launchComplete, evidenceComplete) == nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
