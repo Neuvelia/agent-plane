@@ -46,6 +46,48 @@ type NodeResult struct {
 	SkipReason        string
 }
 
+// AttemptOutcome is the terminal outcome of a bounded Agent loop attempt.
+type AttemptOutcome string
+
+const (
+	AttemptAccepted          AttemptOutcome = "accepted"
+	AttemptRejected          AttemptOutcome = "rejected"
+	AttemptNeedsIntervention AttemptOutcome = "needs_intervention"
+	AttemptCancelled         AttemptOutcome = "cancelled"
+	AttemptExecutionError    AttemptOutcome = "execution_error"
+)
+
+// AttemptCheckReference points to a typed Check Result fact without retaining
+// its reason, evidence, or other potentially sensitive content.
+type AttemptCheckReference struct {
+	CheckID          string
+	Kind             events.CheckKind
+	Verdict          events.CheckVerdict
+	Sequence         uint64
+	IdentityRedacted bool
+}
+
+// AttemptEnvelopeReference points to a typed Return Envelope fact without
+// duplicating its content.
+type AttemptEnvelopeReference struct {
+	UnitID           string
+	CheckID          string
+	Verdict          events.CheckVerdict
+	Sequence         uint64
+	IdentityRedacted bool
+}
+
+// AttemptSummary survives retained-trace progress eviction. The scheduler
+// owns this bounded index; it contains no raw executor output or error text.
+type AttemptSummary struct {
+	AttemptID events.AttemptID
+	NodeID    string
+	NodeRunID events.NodeRunID
+	Outcome   AttemptOutcome
+	Check     *AttemptCheckReference
+	Envelope  *AttemptEnvelopeReference
+}
+
 // StateTransition records an observable in-memory state change. An empty
 // NodeID identifies a run transition. No values or error text are recorded.
 type StateTransition struct {
@@ -63,6 +105,7 @@ type RunResult struct {
 	RunID         events.RunID
 	State         RunState
 	Nodes         []NodeResult
+	Attempts      []AttemptSummary
 	Outputs       []PortValue
 	Failure       *Failure
 	Transitions   []StateTransition

@@ -59,6 +59,9 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	if plan == nil || validation.HasErrors() || plan.ValidateGraphInputs(request.Inputs).HasErrors() {
 		return PreparedRun{}, protocolError("conflict", "Graph contract changed since preflight")
 	}
+	if runtime.ValidateAttemptSummaryBudget(definition) != nil {
+		return PreparedRun{}, protocolError("conflict", "Graph exceeds the bounded attempt history budget")
+	}
 	_, inputLeaves, credentialErr := validateCredentialKeys(definition, request.Inputs)
 	if credentialErr != nil {
 		if errors.Is(credentialErr, errLaunchRedactions) {
@@ -97,6 +100,9 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	}
 	if runtime.ValidateProjectionIdentities(definition.ID, snapshot.SemanticVersion, projectionNodeIDs(definition), redactions) != nil {
 		return PreparedRun{}, protocolError("conflict", "Required graph identity is unsafe for this launch")
+	}
+	if !historyOutcomeStatusesSafe(redactions) {
+		return PreparedRun{}, protocolError("conflict", "Required history outcome status is unsafe for this launch")
 	}
 	if err := ctx.Err(); err != nil {
 		return PreparedRun{}, protocolError("unavailable", "Start request was interrupted")

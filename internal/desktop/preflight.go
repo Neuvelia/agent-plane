@@ -160,6 +160,12 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 	if plan == nil {
 		return earlyPreflightDiagnostics(findings, definition, request.Inputs), nil
 	}
+	if budgetErr := runtime.ValidateAttemptSummaryBudget(definition); budgetErr != nil {
+		var preflightErr *runtime.PreflightError
+		if errors.As(budgetErr, &preflightErr) {
+			findings = append(findings, preflightErr.Diagnostics.Diagnostics...)
+		}
+	}
 	findings = append(findings, plan.ValidateGraphInputs(request.Inputs).Diagnostics...)
 	path, inputLeaves, credentialErr := validateCredentialKeys(definition, request.Inputs)
 	if credentialErr != nil {
@@ -198,6 +204,8 @@ func (s *PreflightService) Preflight(ctx context.Context, request PreflightReque
 		findings = append(findings, preflightDiagnostic(definition.ID, "", "inputs", "E_REDACTION_LIMIT", "Launch redaction values exceed local limits"))
 	} else if runtime.ValidateProjectionIdentities(definition.ID, snapshot.SemanticVersion, projectionNodeIDs(definition), redactions) != nil {
 		findings = append(findings, preflightDiagnostic("", "", "document_id", "E_UNSAFE_IDENTITY", "Required graph identity intersects a private launch value"))
+	} else if !historyOutcomeStatusesSafe(redactions) {
+		findings = append(findings, preflightDiagnostic("", "", "inputs", "E_UNSAFE_STATUS", "A launch value intersects a required history outcome status"))
 	}
 	sanitizePreflightDiagnosticLocations(findings, redactions, redactionErr != nil)
 	result := PreflightResult{DiagnosticSummary: summarizeDiagnostics(findings)}

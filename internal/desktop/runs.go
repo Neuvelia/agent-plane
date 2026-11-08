@@ -292,22 +292,24 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 		return
 	}
 	var launch history.LaunchRecord
+	var graphComplete, launchComplete bool
 	if s.historyRequired {
 		projector, err := safeview.NewProjector(prepared.Options.LogRedactions)
 		if err != nil {
 			s.finishBeforeReady(record, protocolError("conflict", "Launch redactions cannot be projected safely"))
 			return
 		}
-		graphView, graphComplete, err := projector.ProjectGraph(prepared.Definition, prepared.GraphVersion)
+		graphView, graphIsComplete, err := projector.ProjectGraph(prepared.Definition, prepared.GraphVersion)
 		if err != nil {
 			s.finishBeforeReady(record, protocolError("conflict", "Saved graph cannot be projected safely"))
 			return
 		}
-		launchView, launchComplete, err := projector.ProjectLaunchValues(prepared.Inputs)
+		launchView, launchIsComplete, err := projector.ProjectLaunchValues(prepared.Inputs)
 		if err != nil {
 			s.finishBeforeReady(record, protocolError("conflict", "Launch inputs cannot be projected safely"))
 			return
 		}
+		graphComplete, launchComplete = graphIsComplete, launchIsComplete
 		completenessBytes, err := json.Marshal([]any{1, graphComplete, launchComplete})
 		if err != nil {
 			s.finishBeforeReady(record, protocolError("unavailable", "History completeness cannot be encoded"))
@@ -375,6 +377,11 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 	}
 	result, err := s.runner(runCtx, prepared.Definition, prepared.Inputs, prepared.Executor, options)
 	cancel()
+	validResult := err == nil && result.RunID == record.runID && result.GraphID == prepared.Definition.ID && result.GraphVersion == prepared.GraphVersion && terminalRunState(result.State)
+	finalized := false
+	if s.historyRequired && record.runID != "" && validResult {
+		finalized = s.finalizeRun(result, options.LogRedactions, graphComplete, launchComplete) == nil
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !record.readyClosed {
@@ -386,13 +393,15 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 		close(record.ready)
 		record.readyClosed = true
 	} else if record.runID != "" {
-		// Until safe Finalize is wired, an accepted marker cannot be archived.
-		// Keep its live runtime outcome visible and block another local Start.
 		if s.historyRequired {
-			s.historyUnavailable = true
-			record.historyAvailability = HistoryUnavailable
+			if finalized {
+				record.historyAvailability = HistoryArchived
+			} else {
+				s.historyUnavailable = true
+				record.historyAvailability = HistoryUnavailable
+			}
 		}
-		if err == nil && result.RunID == record.runID && result.GraphVersion == record.graphVersion && terminalRunState(result.State) {
+		if validResult {
 			record.state = result.State
 			record.finished = true
 			record.nodes = safeNodeSummaries(result.Nodes)

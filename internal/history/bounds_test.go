@@ -58,8 +58,8 @@ func TestFinalizeRejectsAggregateSnapshotOverflowAtomically(t *testing.T) {
 	ctx := context.Background()
 	store := testStore(t)
 	started := time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC)
-	initial := safeJSON(t, `{"text":"`+strings.Repeat("x", 2<<20)+`"}`)
-	result := safeJSON(t, `{"text":"`+strings.Repeat("x", 3<<20)+`"}`)
+	initial := safeJSON(t, `{"text":"`+strings.Repeat("x", 1<<20)+`"}`)
+	result := safeJSON(t, `{"text":"`+strings.Repeat("x", 5<<20)+`"}`)
 	if err := store.Launch(ctx, LaunchRecord{RunID: "run", ProjectID: "p", WorkspaceID: "w", DocumentID: "d", GraphID: "g", GraphHash: "hash", StartedAt: started, Graph: initial, Launch: initial, Completeness: safeJSON(t, `{}`)}); err != nil {
 		t.Fatal(err)
 	}
@@ -70,6 +70,31 @@ func TestFinalizeRejectsAggregateSnapshotOverflowAtomically(t *testing.T) {
 	run, err := store.Get(ctx, "run")
 	if err != nil || run.StorageState != Active {
 		t.Fatalf("failed finalization changed marker: %+v, %v", run, err)
+	}
+}
+
+func TestLaunchReservesRoomForMaximumFinalResult(t *testing.T) {
+	ctx := context.Background()
+	store := testStore(t)
+	started := time.Date(2026, 10, 21, 10, 0, 0, 0, time.UTC)
+	nearLimit := safeJSON(t, `{"text":"`+strings.Repeat("x", 3<<20)+`"}`)
+	marker := LaunchRecord{RunID: "run", ProjectID: "p", WorkspaceID: "w", DocumentID: "d", GraphID: "g", GraphHash: "hash", StartedAt: started,
+		Graph: nearLimit, Launch: safeJSON(t, `{}`), Completeness: safeJSON(t, `{}`)}
+	if err := store.Launch(ctx, marker); !errors.Is(err, ErrPageTooLarge) {
+		t.Fatalf("launch without final result room accepted: %v", err)
+	}
+	if _, err := store.Get(ctx, marker.RunID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("rejected marker persisted: %v", err)
+	}
+	marker.Graph = safeJSON(t, `{"text":"`+strings.Repeat("x", 2<<20)+`"}`)
+	if err := store.Launch(ctx, marker); err != nil {
+		t.Fatal(err)
+	}
+	result := safeJSON(t, `{"text":"`+strings.Repeat("x", (3<<20)-32)+`"}`)
+	final := Finalization{RunID: marker.RunID, EndedAt: started.Add(time.Second), RuntimeState: "succeeded", Watermark: 1,
+		Result: result, Completeness: safeJSON(t, `[1,true,true,true,true,true]`), Events: []Event{{Sequence: 1, Projection: safeJSON(t, `{}`)}}}
+	if err := store.Finalize(ctx, final); err != nil {
+		t.Fatal(err)
 	}
 }
 

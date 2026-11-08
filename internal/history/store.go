@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"time"
 
@@ -27,6 +28,11 @@ const maxEventPageBytes = 7 << 20
 const maxRunResponseBytes = 6 << 20
 const maxHistoryIDBytes = 256
 const maxHistoryStatusBytes = 64
+
+// A final result may reach the indexed 3 MiB limit. Reserve its full size
+// when admitting a launch marker so successful execution cannot later fail
+// the combined history.get response budget solely because it produced data.
+const finalResultReservationBytes = maxIndexedProjectionBytes + 512
 const historyTimeLayout = "2006-01-02T15:04:05.000000000Z"
 
 func formatHistoryTime(value time.Time) string {
@@ -231,8 +237,11 @@ type Finalization struct {
 	Result, Completeness SafeJSON
 	Events               []Event
 	Omissions            []EventOmission
-	Nodes                []NodeOutcome
-	Attempts             []AttemptOutcome
+	// OmissionRanges are inclusive, disjoint source-sequence spans. They are
+	// persisted as individual omission rows without expanding them in memory.
+	OmissionRanges []OmissionRange
+	Nodes          []NodeOutcome
+	Attempts       []AttemptOutcome
 }
 
 type NodeOutcome struct {
@@ -386,8 +395,9 @@ func (s *Store) Launch(ctx context.Context, record LaunchRecord) error {
 	if !validHistoryID(record.RunID) || !validHistoryID(record.ProjectID) || !validHistoryID(record.WorkspaceID) || !validHistoryID(record.DocumentID) || !validHistoryID(record.GraphID) || !validHistoryID(record.GraphHash) || record.StartedAt.IsZero() || !record.Graph.valid() || !record.Launch.valid() || !record.Completeness.valid() {
 		return errors.New("invalid history launch marker")
 	}
-	if !runProjectionFits(record.Graph, record.Launch, SafeJSON{}, record.Completeness,
-		len(record.RunID)+len(record.ProjectID)+len(record.WorkspaceID)+len(record.DocumentID)+len(record.GraphID)+len(record.GraphHash)) {
+	if len(record.Graph.data)+len(record.Launch.data)+len(record.Completeness.data)+
+		len(record.RunID)+len(record.ProjectID)+len(record.WorkspaceID)+len(record.DocumentID)+len(record.GraphID)+len(record.GraphHash)+
+		finalResultReservationBytes+2048+4096 > maxRunResponseBytes {
 		return ErrPageTooLarge
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -413,29 +423,45 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 	if !validHistoryID(final.RunID) || final.EndedAt.IsZero() || final.RuntimeState == "" || len(final.RuntimeState) > maxHistoryStatusBytes || final.Watermark == 0 || final.Watermark > uint64(math.MaxInt64) || !final.Result.valid() || !final.Completeness.valid() {
 		return errors.New("invalid history finalization")
 	}
-	seen := make(map[uint64]bool, len(final.Events))
+	// Validate coverage as intervals. A range contributes one interval here,
+	// regardless of the number of per-sequence rows it will persist.
+	intervals := make([]OmissionRange, 0, len(final.Events)+len(final.Omissions)+len(final.OmissionRanges))
 	for _, event := range final.Events {
-		if event.Sequence == 0 || !event.Projection.valid() || seen[event.Sequence] {
+		if event.Sequence == 0 || event.Sequence > final.Watermark || !event.Projection.valid() {
 			return errors.New("invalid or repeated final event")
 		}
 		if len(event.Projection.data) > maxIndexedProjectionBytes {
 			return ErrPageTooLarge
 		}
-		seen[event.Sequence] = true
+		intervals = append(intervals, OmissionRange{From: event.Sequence, To: event.Sequence})
 	}
 	for _, omission := range final.Omissions {
-		if omission.Sequence == 0 || !validEventOmissionReason(omission.Reason) || seen[omission.Sequence] {
+		if omission.Sequence == 0 || omission.Sequence > final.Watermark || !validEventOmissionReason(omission.Reason) {
 			return errors.New("invalid or repeated final event omission")
 		}
-		seen[omission.Sequence] = true
+		intervals = append(intervals, OmissionRange{From: omission.Sequence, To: omission.Sequence})
 	}
-	if uint64(len(seen)) != final.Watermark {
-		return errors.New("final trace does not cover source watermark")
-	}
-	for sequence := range seen {
-		if sequence > final.Watermark {
-			return errors.New("final trace sequence exceeds source watermark")
+	for _, omission := range final.OmissionRanges {
+		if omission.From == 0 || omission.To < omission.From || omission.To > final.Watermark || !validEventOmissionReason(omission.Reason) {
+			return errors.New("invalid final event omission range")
 		}
+		intervals = append(intervals, omission)
+	}
+	sort.Slice(intervals, func(i, j int) bool {
+		if intervals[i].From == intervals[j].From {
+			return intervals[i].To < intervals[j].To
+		}
+		return intervals[i].From < intervals[j].From
+	})
+	next := uint64(1)
+	for _, interval := range intervals {
+		if interval.From != next {
+			return errors.New("final trace has overlapping or unexplained source sequences")
+		}
+		next = interval.To + 1
+	}
+	if next != final.Watermark+1 {
+		return errors.New("final trace does not cover source watermark")
 	}
 	nodeIDs := make(map[string]bool, len(final.Nodes))
 	for _, node := range final.Nodes {
@@ -476,11 +502,11 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 		if !ended.Valid || ended.String != endedText || !runtimeState.Valid || runtimeState.String != final.RuntimeState || !resultDigest.Valid || resultDigest.String != final.Result.digest || !completenessDigest.Valid || completenessDigest.String != final.Completeness.digest {
 			return ErrConflict
 		}
-		var count int
+		var count int64
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM events WHERE run_id=?", final.RunID).Scan(&count); err != nil {
 			return err
 		}
-		if count != len(final.Events) {
+		if count != int64(len(final.Events)) {
 			return ErrConflict
 		}
 		for _, event := range final.Events {
@@ -492,7 +518,11 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM event_omissions WHERE run_id=?", final.RunID).Scan(&count); err != nil {
 			return err
 		}
-		if count != len(final.Omissions) {
+		omissionCount := uint64(len(final.Omissions))
+		for _, omission := range final.OmissionRanges {
+			omissionCount += omission.To - omission.From + 1
+		}
+		if count != int64(omissionCount) {
 			return ErrConflict
 		}
 		for _, omission := range final.Omissions {
@@ -501,10 +531,16 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 				return ErrConflict
 			}
 		}
+		for _, omission := range final.OmissionRanges {
+			var matching int64
+			if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM event_omissions WHERE run_id=? AND sequence BETWEEN ? AND ? AND reason=?", final.RunID, omission.From, omission.To, omission.Reason).Scan(&matching); err != nil || matching != int64(omission.To-omission.From+1) {
+				return ErrConflict
+			}
+		}
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM node_outcomes WHERE run_id=?", final.RunID).Scan(&count); err != nil {
 			return err
 		}
-		if count != len(final.Nodes) {
+		if count != int64(len(final.Nodes)) {
 			return ErrConflict
 		}
 		for _, node := range final.Nodes {
@@ -516,7 +552,7 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM attempt_outcomes WHERE run_id=?", final.RunID).Scan(&count); err != nil {
 			return err
 		}
-		if count != len(final.Attempts) {
+		if count != int64(len(final.Attempts)) {
 			return ErrConflict
 		}
 		for _, attempt := range final.Attempts {
@@ -578,6 +614,23 @@ func (s *Store) Finalize(ctx context.Context, final Finalization) error {
 	for _, omission := range final.Omissions {
 		if _, err := tx.ExecContext(ctx, "INSERT INTO event_omissions(run_id,sequence,reason) VALUES(?,?,?)", final.RunID, omission.Sequence, omission.Reason); err != nil {
 			return fmt.Errorf("%w: insert final event omission: %v", ErrUnavailable, err)
+		}
+	}
+	if len(final.OmissionRanges) > 0 {
+		insert, err := tx.PrepareContext(ctx, "INSERT INTO event_omissions(run_id,sequence,reason) VALUES(?,?,?)")
+		if err != nil {
+			return fmt.Errorf("%w: prepare final event omission range: %v", ErrUnavailable, err)
+		}
+		defer insert.Close()
+		for _, omission := range final.OmissionRanges {
+			for sequence := omission.From; sequence <= omission.To; sequence++ {
+				if _, err := insert.ExecContext(ctx, final.RunID, sequence, omission.Reason); err != nil {
+					return fmt.Errorf("%w: insert final event omission range at sequence %d: %v", ErrUnavailable, sequence, err)
+				}
+			}
+		}
+		if err := insert.Close(); err != nil {
+			return fmt.Errorf("%w: close final event omission range statement: %v", ErrUnavailable, err)
 		}
 	}
 	for _, node := range final.Nodes {

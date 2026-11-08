@@ -148,6 +148,22 @@ explicit original-sequence omission; node and attempt outcomes require a
 smaller safe projection because they have no omission slot. The general safe
 JSON parser retains its 8 MiB cap for run-level projections, whose combined
 Launch/Get fit is checked separately.
+Launch admission reserves the full 3 MiB safe result limit, plus final
+completeness and metadata headroom, within the 6 MiB run-detail budget.
+Thus a graph/launch snapshot that would make a maximally bounded result
+unreadable is rejected before node dispatch. Original-sequence omission
+ranges have no independent count cap: the collector's bounded explicit
+identity index can coexist with additional `not_retained` gaps. Finalization
+validates their exact disjoint coverage and writes per-sequence rows in one
+transaction.
+
+The runtime also retains a bounded typed summary of each started Agent loop
+attempt before progress eviction. Its maximum is 4,096 configured attempts
+per run, checked in preflight and again before dispatch. The summary stores
+attempt/node identities, terminal outcome and safe Check Result/Return Envelope
+references, without error prose or evidence bytes. Final node/attempt indexes
+are projected from the terminal result and these summaries; a missing required
+identity fails finalization rather than advertising archived history.
 
 The live inspector, `runs.events` and history APIs share one bounded safe
 projection. Redact full nested payload values before serialization and full

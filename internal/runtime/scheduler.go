@@ -110,17 +110,18 @@ type completedNode struct {
 const maxEventLogChunk = 16 * 1024
 
 type runMachine struct {
-	units       unitRegistry
-	workspaces  map[string]workspaceIdentity
-	definition  *graph.Definition
-	ids         []string
-	nodes       map[string]*NodeResult
-	resolved    map[string]map[string]graph.Value
-	outputs     map[string]map[string]graph.Value
-	result      RunResult
-	emitter     *events.Collector
-	startedAt   time.Time
-	nodeStarted map[string]time.Time
+	units          unitRegistry
+	workspaces     map[string]workspaceIdentity
+	definition     *graph.Definition
+	ids            []string
+	nodes          map[string]*NodeResult
+	resolved       map[string]map[string]graph.Value
+	outputs        map[string]map[string]graph.Value
+	result         RunResult
+	attemptIndexes map[events.AttemptID]int
+	emitter        *events.Collector
+	startedAt      time.Time
+	nodeStarted    map[string]time.Time
 }
 
 type retainedTraceReader struct{ collector *events.Collector }
@@ -194,6 +195,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	inputValidation := plan.ValidateGraphInputs(inputs)
 	if !inputValidation.Valid() {
 		return RunResult{}, &PreflightError{Diagnostics: inputValidation}
+	}
+	if err := ValidateAttemptSummaryBudget(definition); err != nil {
+		return RunResult{}, err
 	}
 	// Run inputs are a stable snapshot even if the caller reuses its map.
 	graphInputs := make(map[string]graph.Value, len(inputs))
@@ -323,6 +327,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					}
 					attempts[id] = aid
 					numbers[id]++
+					machine.beginAttempt(id, aid)
 					machine.appendEvent(events.Event{Type: events.AttemptStarted, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: events.AttemptStartedPayload{Number: numbers[id], MaxAttempts: l.Attempts()}})
 					input, identityRedacted := attemptInput(definition.Nodes[id], machine.resolved[id], feedbacks[id], redactionTemplate)
 					machine.appendEvent(events.Event{Type: events.AttemptInput, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: input, IdentityRedacted: identityRedacted})
@@ -355,7 +360,8 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						machine.omitSensitive()
 					}
 					if work.check != nil && !work.checkInvalid {
-						machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check), IdentityRedacted: work.checkIdentityRedacted})
+						fact := machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check), IdentityRedacted: work.checkIdentityRedacted})
+						machine.recordAttemptCheck(work.attemptID, fact, *work.check)
 						if machine.units[work.id] != nil {
 							envelope, err := machine.units.envelope(work.id, work.attemptID, *work.check)
 							if err == nil {
@@ -367,7 +373,8 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 								work.check = nil
 								work.checkInvalid = true
 							} else {
-								machine.appendEvent(events.Event{Type: events.ReturnEnvelope, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: envelope, IdentityRedacted: work.checkIdentityRedacted || envelope.ScopeRedacted})
+								fact := machine.appendEvent(events.Event{Type: events.ReturnEnvelope, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: envelope, IdentityRedacted: work.checkIdentityRedacted || envelope.ScopeRedacted})
+								machine.recordAttemptEnvelope(work.attemptID, fact, envelope)
 							}
 						}
 						if work.check != nil && work.check.Verdict == "red" {
@@ -393,6 +400,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						checkID = work.check.CheckID
 					}
 					machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}, IdentityRedacted: checkID != "" && work.checkIDRedacted})
+					machine.finishAttempt(work.attemptID, AttemptOutcome(outcome))
 					if outcome == "rejected" && ctx.Err() == nil {
 						feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id]), checkIDRedacted: work.checkIDRedacted}
 						retry = append(retry, work.id)
@@ -525,13 +533,14 @@ func newRunMachine(definition *graph.Definition) (*runMachine, error) {
 	}
 	sort.Strings(ids)
 	m := &runMachine{
-		ids:         ids,
-		units:       unitRegistry{},
-		nodes:       make(map[string]*NodeResult, len(ids)),
-		resolved:    make(map[string]map[string]graph.Value, len(ids)),
-		outputs:     make(map[string]map[string]graph.Value, len(ids)),
-		result:      RunResult{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: RunRunning},
-		nodeStarted: make(map[string]time.Time, len(ids)),
+		ids:            ids,
+		units:          unitRegistry{},
+		nodes:          make(map[string]*NodeResult, len(ids)),
+		resolved:       make(map[string]map[string]graph.Value, len(ids)),
+		outputs:        make(map[string]map[string]graph.Value, len(ids)),
+		result:         RunResult{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: RunRunning},
+		attemptIndexes: make(map[events.AttemptID]int),
+		nodeStarted:    make(map[string]time.Time, len(ids)),
 	}
 	for _, id := range ids {
 		nodeRunID, err := events.NewNodeRunID()
@@ -737,6 +746,7 @@ func (m *runMachine) cancelUnstarted() {
 
 func (m *runMachine) snapshot() RunResult {
 	result := m.result
+	result.Attempts = append([]AttemptSummary(nil), m.result.Attempts...)
 	result.Events = m.emitter.Snapshot()
 	result.ProgressStats = m.emitter.Stats()
 	result.Nodes = make([]NodeResult, 0, len(m.ids))
