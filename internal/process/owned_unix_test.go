@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -358,6 +359,17 @@ func terminated(pid int) error {
 	for {
 		if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
 			return nil
+		}
+		if runtime.GOOS == "linux" {
+			// Minimal container images may ship BusyBox ps without -p. Linux
+			// procfs reports a reparented zombie even when kill(pid, 0) succeeds.
+			stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+			if err == nil {
+				close := strings.LastIndexByte(string(stat), ')')
+				if close >= 0 && len(stat) > close+2 && stat[close+2] == 'Z' {
+					return nil
+				}
+			}
 		}
 		b, err := exec.Command("/bin/ps", "-o", "stat=", "-p", strconv.Itoa(pid)).Output()
 		if err == nil && strings.HasPrefix(strings.TrimSpace(string(b)), "Z") {
