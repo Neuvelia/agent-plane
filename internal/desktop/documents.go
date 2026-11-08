@@ -73,6 +73,7 @@ type DocumentStore struct {
 	beforeRestore        func() error                                      // deterministic restore race seam for package tests
 	afterExchange        func() error                                      // deterministic crash seam for package tests
 	beforeRecoveryCommit func() error                                      // deterministic recovery race seam for package tests
+	afterCreatePublish   func() error                                      // deterministic create crash seam for package tests
 	candidateWriter      func(*os.Root, string, []byte, os.FileMode) error // write failure seam for package tests
 }
 

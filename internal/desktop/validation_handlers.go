@@ -43,11 +43,15 @@ func NewDocumentHandlers(store *DocumentStore, preflight *PreflightService) map[
 		set.recovery = protocolError("unavailable", "Graph save recovery requires local resolution and service restart")
 	}
 	return map[string]Handler{
-		"documents.open":   set.documentsOpen,
-		"documents.update": set.documentsUpdate,
-		"documents.save":   set.documentsSave,
-		"graphs.validate":  set.graphsValidate,
-		"runs.preflight":   set.runsPreflight,
+		"documents.open":         set.documentsOpen,
+		"documents.create":       set.documentsCreate,
+		"documents.reload":       set.documentsReload,
+		"documents.inspect":      set.documentsInspect,
+		"documents.preview_edit": set.documentsPreviewEdit,
+		"documents.update":       set.documentsUpdate,
+		"documents.save":         set.documentsSave,
+		"graphs.validate":        set.graphsValidate,
+		"runs.preflight":         set.runsPreflight,
 	}
 }
 
@@ -57,15 +61,164 @@ func documentError(err error) *ServiceError {
 	switch {
 	case errors.Is(err, ErrDocumentNotFound), errors.Is(err, ErrRegistryNotFound):
 		return protocolError("not_found", "Graph document or registered item not found")
+	case errors.Is(err, ErrAuthoringReferences):
+		return protocolError("conflict", "Node has dependent graph references; confirm their removal")
+	case errors.Is(err, ErrAuthoringUnknownLayout):
+		return protocolError("conflict", "Layout metadata has an unknown version; confirm replacement")
 	case errors.Is(err, ErrDocumentConflict), errors.Is(err, ErrDocumentUnsaved):
 		return protocolError("conflict", "Graph document revision or saved file changed")
-	case errors.Is(err, ErrInvalidDocumentPath), errors.Is(err, ErrDocumentTooLarge), errors.Is(err, ErrDocumentInvalidEncoding):
+	case errors.Is(err, ErrAuthoringAlias):
+		return protocolError("invalid_request", "This YAML alias cannot be edited visually; edit the source directly")
+	case errors.Is(err, ErrAuthoringInvalid):
+		return protocolError("invalid_request", "Correct invalid graph YAML before visual editing")
+	case errors.Is(err, ErrInvalidDocumentPath), errors.Is(err, ErrDocumentTooLarge), errors.Is(err, ErrDocumentInvalidEncoding), errors.Is(err, ErrInvalidGraphID), errors.Is(err, ErrAuthoringOperation):
 		return protocolError("invalid_request", "Invalid graph document path or text")
+	case errors.Is(err, ErrDocumentCreateUnavailable):
+		return protocolError("unavailable", "Safe graph creation is unavailable on this platform")
 	case errors.Is(err, ErrDocumentSaveInDoubt):
 		return protocolError("unavailable", "Graph save requires recovery before further work")
+	case errors.Is(err, ErrAuthoringResultTooLarge):
+		return protocolError("response_too_large", "Graph authoring result exceeds response limit")
 	default:
 		return protocolError("unavailable", "Graph document or local service is unavailable")
 	}
+}
+
+func (h *documentHandlerSet) documentsCreate(_ context.Context, raw json.RawMessage) (any, *ServiceError) {
+	if e := h.ready(); e != nil {
+		return nil, e
+	}
+	fields, e := strictParams(raw, "project_id", "relative_path", "graph_id")
+	if e != nil {
+		return nil, e
+	}
+	var projectID, relative, graphID string
+	if requiredField(fields, "project_id", &projectID) != nil || !validSaveID(projectID) ||
+		requiredField(fields, "relative_path", &relative) != nil || !validRelativeDocumentPath(relative) ||
+		requiredField(fields, "graph_id", &graphID) != nil || !validGraphIdentifier(graphID) {
+		return nil, protocolError("invalid_request", "Invalid graph creation request")
+	}
+	doc, err := h.documents.Create(projectID, relative, graphID)
+	if err != nil {
+		return nil, documentError(err)
+	}
+	return toDocumentDTO(doc), nil
+}
+
+func (h *documentHandlerSet) documentsReload(_ context.Context, raw json.RawMessage) (any, *ServiceError) {
+	if e := h.ready(); e != nil {
+		return nil, e
+	}
+	fields, e := strictParams(raw, "document_id", "expected_revision", "discard_draft")
+	if e != nil {
+		return nil, e
+	}
+	var id string
+	var revision uint64
+	var discard bool
+	if requiredField(fields, "document_id", &id) != nil || !validSaveID(id) ||
+		requiredField(fields, "expected_revision", &revision) != nil || revision == 0 ||
+		requiredField(fields, "discard_draft", &discard) != nil {
+		return nil, protocolError("invalid_request", "Invalid graph reload request")
+	}
+	doc, err := h.documents.Reload(id, revision, discard)
+	if err != nil {
+		return nil, documentError(err)
+	}
+	return toDocumentDTO(doc), nil
+}
+
+func (h *documentHandlerSet) documentsInspect(_ context.Context, raw json.RawMessage) (any, *ServiceError) {
+	if e := h.ready(); e != nil {
+		return nil, e
+	}
+	fields, e := strictParams(raw, "document_id", "revision")
+	if e != nil {
+		return nil, e
+	}
+	var id string
+	var revision uint64
+	if requiredField(fields, "document_id", &id) != nil || !validSaveID(id) ||
+		requiredField(fields, "revision", &revision) != nil || revision == 0 {
+		return nil, protocolError("invalid_request", "Invalid graph inspection request")
+	}
+	result, err := h.documents.Inspect(id, revision)
+	if err != nil {
+		return nil, documentError(err)
+	}
+	return result, nil
+}
+
+func (h *documentHandlerSet) documentsPreviewEdit(_ context.Context, raw json.RawMessage) (any, *ServiceError) {
+	if e := h.ready(); e != nil {
+		return nil, e
+	}
+	fields, e := strictParams(raw, "document_id", "revision", "operation")
+	if e != nil {
+		return nil, e
+	}
+	var id string
+	var revision uint64
+	if requiredField(fields, "document_id", &id) != nil || !validSaveID(id) ||
+		requiredField(fields, "revision", &revision) != nil || revision == 0 {
+		return nil, protocolError("invalid_request", "Invalid graph preview request")
+	}
+	op, e := decodeAuthoringOperation(fields["operation"])
+	if e != nil {
+		return nil, e
+	}
+	result, err := h.documents.PreviewEdit(id, revision, op)
+	if err != nil {
+		return nil, documentError(err)
+	}
+	return result, nil
+}
+
+func decodeAuthoringOperation(raw json.RawMessage) (AuthoringOperation, *ServiceError) {
+	fields, e := strictParams(raw, "kind", "node_id", "node_type", "remove_references", "replace_unknown_layout", "x", "y")
+	if e != nil {
+		return AuthoringOperation{}, e
+	}
+	var op AuthoringOperation
+	if requiredField(fields, "kind", &op.Kind) != nil || requiredField(fields, "node_id", &op.NodeID) != nil || !validGraphIdentifier(op.NodeID) {
+		return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+	}
+	allowed := map[string]bool{"kind": true, "node_id": true}
+	switch op.Kind {
+	case "add_node":
+		allowed["node_type"] = true
+		if requiredField(fields, "node_type", &op.NodeType) != nil ||
+			(op.NodeType != "shell" && op.NodeType != "agent" && op.NodeType != "gate") {
+			return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+		}
+	case "delete_node":
+		allowed["remove_references"] = true
+		if requiredField(fields, "remove_references", &op.RemoveReferences) != nil {
+			return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+		}
+	case "set_layout":
+		allowed["x"], allowed["y"], allowed["replace_unknown_layout"] = true, true, true
+		if requiredField(fields, "x", &op.X) != nil || requiredField(fields, "y", &op.Y) != nil ||
+			op.X < -maxLayoutCoordinate || op.X > maxLayoutCoordinate || op.Y < -maxLayoutCoordinate || op.Y > maxLayoutCoordinate {
+			return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+		}
+		if _, ok := fields["replace_unknown_layout"]; ok && requiredField(fields, "replace_unknown_layout", &op.ReplaceUnknownLayout) != nil {
+			return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+		}
+	case "remove_layout":
+		allowed["replace_unknown_layout"] = true
+		if _, ok := fields["replace_unknown_layout"]; ok && requiredField(fields, "replace_unknown_layout", &op.ReplaceUnknownLayout) != nil {
+			return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+		}
+	default:
+		return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+	}
+	for name := range fields {
+		if !allowed[name] {
+			return AuthoringOperation{}, protocolError("invalid_request", "Invalid graph edit operation")
+		}
+	}
+	return op, nil
 }
 
 func (h *documentHandlerSet) documentsOpen(_ context.Context, raw json.RawMessage) (any, *ServiceError) {

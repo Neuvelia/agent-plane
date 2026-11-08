@@ -427,6 +427,26 @@ Visual layout is excluded from the F0.6 semantic graph fingerprint.
 Metadata is therefore an open mapping and is kept separate from execution
 fields in the typed definition.
 
+F2.1 reserves `metadata.agentplane_ui` for the local canvas. Version 1 has
+this shape:
+
+```yaml
+metadata:
+  agentplane_ui:
+    version: 1
+    nodes:
+      build: {x: 260, y: 160}
+```
+
+`nodes` maps stable node IDs to integer canvas coordinates from -100000 through
+100000. Missing positions use a deterministic fallback derived from dependency
+layers and node-ID order. The fallback stays within the same coordinate range.
+Unknown layout versions remain in YAML, display the fallback, and require an
+explicit replacement preview before a visual layout edit. Canvas mode, zoom
+and viewport are local preferences, not graph semantics. Layout edits change
+the document revision and exact bytes but do not change the semantic graph
+fingerprint.
+
 F0.6 hashes a normalized schema-v0 definition with `name` and `metadata`
 removed. Edge and graph-input-binding order is normalized; sequence-valued
 node configuration such as `args` keeps its authored order. The resulting

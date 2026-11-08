@@ -144,6 +144,38 @@ Protocol document DTOs carry exact UTF-8 text as canonical standard base64
 document text beyond the 8 MiB frame; base64 plus the bounded diagnostics fits
 that limit. The preload converts this encoding to renderer-facing text.
 
+F2.1 extends the named document API without giving the renderer filesystem or
+YAML parser authority. `documents.create` takes a registered `project_id`, a
+relative path and a valid `graph_id`; it publishes one complete schema-0 graph
+only when the target is absent, and returns the ordinary revision-1 document
+DTO. Publication uses an exclusive same-directory link on Darwin/Linux and
+handle-based NT FileLinkInformation with replacement disabled on Windows. An
+unsupported filesystem or failed native publication returns an error without
+falling back to a direct target write. If publication is interrupted after the
+link, the complete graph can be opened after restart. The Windows path is
+cross-compiled and has a native test; its release gate still requires that
+test to run on Windows. `documents.reload` takes
+`document_id`, `expected_revision` and `discard_draft`; it rereads the pinned
+no-follow path, accepts an external atomic replacement of a regular file, and
+increments the revision. A dirty buffer requires explicit discard and any
+failure retains the buffer.
+
+`documents.inspect` takes a document ID and revision, returning bounded
+`{revision,validity,graph?,layout?,diagnostics}`. Its graph DTO contains schema
+and graph IDs, static units, sorted nodes with typed ports and loop attempt
+summaries, edges, graph input bindings and graph outputs. Node config never
+enters that DTO. The layout DTO has version 1, source `stored`, `fallback` or
+`unsupported_version`, and integer node positions. `documents.preview_edit`
+takes the same identity plus one typed operation: add a Shell/Agent/Gate node,
+delete a node with explicit reference removal, or set/remove one layout
+position. It returns a base revision, canonical `text_base64`, validity,
+diagnostics, `reformat_required` and changed paths, with a 6 MiB encoded result
+limit. Preview does not mutate state; acceptance uses `documents.update` with
+the preview's base revision. Invalid YAML blocks visual edits while exact draft
+text remains editable. YAML AST edits preserve untouched aliases, comments and
+unknown config; edits that target aliases are refused. Serialization that
+changes untouched source sets `reformat_required` for explicit user acceptance.
+
 ## Alternatives considered
 
 A browser UI plus localhost server is possible but conflicts with the requested
