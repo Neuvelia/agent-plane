@@ -43,6 +43,7 @@ export type RunSnapshot = {
   state: string
   finished: boolean
   trace_watermark: number
+  history_availability?: 1 | 2 | 3
 }
 
 export type RunView = {
@@ -57,6 +58,7 @@ export type RunView = {
   traceFinished: boolean
   state: string
   finished: boolean
+  historyAvailability?: 1 | 2 | 3
 }
 
 const zeroOmissions: DeliveryOmissions = {
@@ -159,10 +161,13 @@ export function applyPage(current: RunView, page: EventPage): RunView {
 
 export function applySnapshot(current: RunView, snapshot: RunSnapshot): RunView {
   if (snapshot.run_id !== current.runID || !safeInteger(snapshot.trace_watermark) ||
-      typeof snapshot.state !== 'string' || !snapshot.state) {
+      typeof snapshot.state !== 'string' || !snapshot.state ||
+      (snapshot.history_availability !== undefined &&
+        ![1, 2, 3].includes(snapshot.history_availability))) {
     throw new Error('invalid run snapshot')
   }
   return { ...current, state: snapshot.state, finished: snapshot.finished,
+    historyAvailability: snapshot.history_availability ?? current.historyAvailability,
     watermark: Math.max(current.watermark, snapshot.trace_watermark) }
 }
 

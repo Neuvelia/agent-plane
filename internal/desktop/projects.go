@@ -152,6 +152,21 @@ func (r *Registry) Close() error {
 	return errors.Join(errs...)
 }
 
+// HistoryDirectory returns the pinned private state directory only while the
+// registry lifetime lock and directory identity still verify. Call it
+// immediately before opening the history store.
+func (r *Registry) HistoryDirectory() (string, error) {
+	if r == nil {
+		return "", ErrRegistryUnavailable
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if err := r.checkReady(); err != nil {
+		return "", err
+	}
+	return r.stateDir, nil
+}
+
 func (r *Registry) checkReady() error {
 	if r.closed {
 		return ErrRegistryUnavailable

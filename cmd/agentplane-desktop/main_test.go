@@ -46,7 +46,8 @@ func TestSidecarStdioHandshake(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	process := exec.Command(binary, "--state-dir", filepath.Join(t.TempDir(), "state"))
+	stateDir := filepath.Join(t.TempDir(), "state")
+	process := exec.Command(binary, "--state-dir", stateDir)
 	process.Stdin = &input
 	var stdout, stderr bytes.Buffer
 	process.Stdout, process.Stderr = &stdout, &stderr
@@ -55,6 +56,9 @@ func TestSidecarStdioHandshake(t *testing.T) {
 	}
 	if stderr.Len() != 0 {
 		t.Fatalf("unexpected diagnostics: %s", stderr.String())
+	}
+	if info, err := os.Stat(filepath.Join(stateDir, "history.db")); err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 {
+		t.Fatalf("sidecar did not open private history store: %v / %v", info, err)
 	}
 	var responses []desktop.Response
 	for i := 0; i < 3; i++ {

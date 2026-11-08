@@ -128,6 +128,15 @@ live memory, blocks new starts until storage is writable and never claims that
 state was committed. The durable marker remains `active`; on restart it becomes
 `interrupted` storage status without synthetic runtime events or automatic
 resume.
+The live `runs.start` and `runs.snapshot` DTOs carry optional numeric
+`history_availability`: 1 means the active marker was committed, 2 means the
+run cannot be advertised as archived, and 3 means finalization committed.
+An accepted idempotency-key retry retains its run identity and the current
+availability, even while new starts are blocked. Numeric codes avoid a frozen
+private string colliding with a fixed status label. A newer SQLite schema
+produces an actionable `history_version_unsupported` Start error; a missing
+or unwritable store produces `history_unavailable` without exposing paths or
+raw database diagnostics.
 
 Final ingestion rejects any individual safe event, node outcome or attempt
 outcome projection above 3 MiB with a typed page-size error before committing

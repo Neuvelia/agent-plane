@@ -57,6 +57,17 @@ describe('retained run reducer', () => {
     expect(view.state).toBe('succeeded')
   })
 
+  it('keeps live history availability separate from runtime success', () => {
+    let view = applySnapshot(emptyRunView(runID), { run_id: runID, state: 'running', finished: false,
+      trace_watermark: 1, history_availability: 1 })
+    view = applySnapshot(view, { run_id: runID, state: 'succeeded', finished: true,
+      trace_watermark: 2, history_availability: 2 })
+    expect(view.state).toBe('succeeded')
+    expect(view.historyAvailability).toBe(2)
+    expect(() => applySnapshot(view, { run_id: runID, state: 'succeeded', finished: true,
+      trace_watermark: 2, history_availability: 4 as 1 })).toThrow()
+  })
+
   it('fails closed on unsafe JS integers and inconsistent page identity', () => {
     expect(() => applyPage(emptyRunView(runID), page([fact(2 ** 53)], [hashA], 0, 2 ** 53))).toThrow()
     expect(() => applyPage(emptyRunView(runID), page([fact(1)], []))).toThrow()

@@ -6,14 +6,19 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
+	"agentplane/internal/history"
 	"agentplane/internal/runtime"
+	"agentplane/internal/safeview"
 )
 
 const maxOwnedRunKeys = 64
@@ -39,17 +44,36 @@ type PreparedRun struct {
 	Executor     runtime.Executor
 	Options      runtime.Options
 	GraphVersion string
+	ProjectID    string
+	WorkspaceID  string
+	DocumentID   string
+	Revision     uint64
+}
+
+type HistoryLaunchWriter interface {
+	Launch(context.Context, history.LaunchRecord) error
 }
 
 type StartPreparer func(context.Context, RunStartRequest) (PreparedRun, *ServiceError)
 type RunRunner func(context.Context, *graph.Definition, map[string]graph.Value, runtime.Executor, runtime.Options) (runtime.RunResult, error)
 
 type RunStartResult struct {
-	RunID          events.RunID     `json:"run_id"`
-	State          runtime.RunState `json:"state"`
-	GraphVersion   string           `json:"graph_version"`
-	TraceWatermark uint64           `json:"trace_watermark"`
+	RunID               events.RunID        `json:"run_id"`
+	State               runtime.RunState    `json:"state"`
+	GraphVersion        string              `json:"graph_version"`
+	TraceWatermark      uint64              `json:"trace_watermark"`
+	HistoryAvailability HistoryAvailability `json:"history_availability,omitempty"`
 }
+
+// HistoryAvailability is a fixed numeric live status, separate from runtime
+// success and from durable storage_state. Zero means history was not requested.
+type HistoryAvailability uint8
+
+const (
+	HistoryActive      HistoryAvailability = 1
+	HistoryUnavailable HistoryAvailability = 2
+	HistoryArchived    HistoryAvailability = 3
+)
 
 type RunCancelResult struct {
 	RunID events.RunID     `json:"run_id"`
@@ -65,15 +89,16 @@ type RunNodeSummary struct {
 }
 
 type RunSnapshot struct {
-	RunID          events.RunID        `json:"run_id"`
-	GraphID        string              `json:"graph_id"`
-	GraphVersion   string              `json:"graph_version"`
-	State          runtime.RunState    `json:"state"`
-	TraceWatermark uint64              `json:"trace_watermark"`
-	DeliveryStats  RunDeliveryStats    `json:"delivery_stats"`
-	Finished       bool                `json:"finished"`
-	Nodes          []RunNodeSummary    `json:"nodes,omitempty"`
-	FailureKind    runtime.FailureKind `json:"failure_kind,omitempty"`
+	RunID               events.RunID        `json:"run_id"`
+	GraphID             string              `json:"graph_id"`
+	GraphVersion        string              `json:"graph_version"`
+	State               runtime.RunState    `json:"state"`
+	TraceWatermark      uint64              `json:"trace_watermark"`
+	DeliveryStats       RunDeliveryStats    `json:"delivery_stats"`
+	Finished            bool                `json:"finished"`
+	Nodes               []RunNodeSummary    `json:"nodes,omitempty"`
+	FailureKind         runtime.FailureKind `json:"failure_kind,omitempty"`
+	HistoryAvailability HistoryAvailability `json:"history_availability,omitempty"`
 }
 
 type RunDeliveryStats struct {
@@ -85,36 +110,41 @@ type RunDeliveryStats struct {
 }
 
 type ownedRun struct {
-	key, fingerprint string
-	ready, done      chan struct{}
-	readyClosed      bool
-	startErr         *ServiceError
-	cancel           context.CancelFunc
-	runID            events.RunID
-	reader           events.TraceReader
-	redactions       []string
-	graphID          string
-	graphVersion     string
-	state            runtime.RunState
-	finished         bool
-	nodes            []RunNodeSummary
-	failureKind      runtime.FailureKind
-	watermark        uint64
+	key, fingerprint    string
+	ready, done         chan struct{}
+	readyClosed         bool
+	startErr            *ServiceError
+	cancel              context.CancelFunc
+	runID               events.RunID
+	reader              events.TraceReader
+	redactions          []string
+	graphID             string
+	graphVersion        string
+	state               runtime.RunState
+	finished            bool
+	nodes               []RunNodeSummary
+	failureKind         runtime.FailureKind
+	watermark           uint64
+	historyAvailability HistoryAvailability
 }
 
 // RunService owns one local run at a time. Accepted identities remain for the
 // service lifetime; only the active and most recent completed trace are held.
 type RunService struct {
-	mu       sync.Mutex
-	ctx      context.Context
-	cancel   context.CancelFunc
-	prepare  StartPreparer
-	runner   RunRunner
-	active   *ownedRun
-	accepted map[string]*ownedRun
-	byID     map[events.RunID]*ownedRun
-	lastDone *ownedRun
-	closed   bool
+	mu                 sync.Mutex
+	ctx                context.Context
+	cancel             context.CancelFunc
+	prepare            StartPreparer
+	runner             RunRunner
+	history            HistoryLaunchWriter
+	historyRequired    bool
+	historyUnavailable bool
+	historyOpenErr     error
+	active             *ownedRun
+	accepted           map[string]*ownedRun
+	byID               map[events.RunID]*ownedRun
+	lastDone           *ownedRun
+	closed             bool
 }
 
 func NewRunService(lifetime context.Context, prepare StartPreparer, runner RunRunner) *RunService {
@@ -127,6 +157,32 @@ func NewRunService(lifetime context.Context, prepare StartPreparer, runner RunRu
 	}
 	return &RunService{ctx: ctx, cancel: cancel, prepare: prepare, runner: runner,
 		accepted: make(map[string]*ownedRun), byID: make(map[events.RunID]*ownedRun)}
+}
+
+// NewRunServiceWithHistory requires a durable launch marker before runtime
+// publishes any run identity or event. A nil writer keeps Start unavailable.
+func NewRunServiceWithHistory(lifetime context.Context, prepare StartPreparer, runner RunRunner, writer HistoryLaunchWriter, openErr error) *RunService {
+	service := NewRunService(lifetime, prepare, runner)
+	if writer != nil {
+		value := reflect.ValueOf(writer)
+		switch value.Kind() {
+		case reflect.Pointer, reflect.Interface, reflect.Func, reflect.Map, reflect.Slice, reflect.Chan:
+			if value.IsNil() {
+				writer = nil
+			}
+		}
+	}
+	service.history = writer
+	service.historyRequired = true
+	service.historyOpenErr = openErr
+	return service
+}
+
+func (s *RunService) historyStartError() *ServiceError {
+	if errors.Is(s.historyOpenErr, history.ErrNewerSchema) {
+		return protocolError("history_version_unsupported", "Local history uses a newer schema; update AgentPlane before starting a run")
+	}
+	return protocolError("history_unavailable", "Local run history is unavailable; check private storage and restart AgentPlane")
 }
 
 // Start joins an in-flight identical key, returns an accepted identity, or
@@ -174,6 +230,10 @@ func (s *RunService) Start(requestCtx context.Context, request RunStartRequest) 
 		s.mu.Unlock()
 		return waitForStart(requestCtx, s, pending)
 	}
+	if s.historyRequired && (s.history == nil || s.historyUnavailable) {
+		s.mu.Unlock()
+		return RunStartResult{}, s.historyStartError()
+	}
 	if len(s.accepted) >= maxOwnedRunKeys {
 		s.mu.Unlock()
 		return RunStartResult{}, protocolError("unavailable", "Local run identity capacity is exhausted")
@@ -214,12 +274,14 @@ func startResultLocked(record *ownedRun) (RunStartResult, *ServiceError) {
 		record.watermark = watermark
 	}
 	return RunStartResult{RunID: record.runID, State: record.state,
-		GraphVersion: record.graphVersion, TraceWatermark: watermark}, nil
+		GraphVersion: record.graphVersion, TraceWatermark: watermark,
+		HistoryAvailability: record.historyAvailability}, nil
 }
 
 func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 	prepared, serviceErr := s.prepare(s.ctx, request)
-	if serviceErr == nil && (prepared.Definition == nil || prepared.Executor == nil || prepared.GraphVersion == "" || prepared.Options.OnRunReady != nil) {
+	if serviceErr == nil && (prepared.Definition == nil || prepared.Executor == nil || prepared.GraphVersion == "" || prepared.Options.OnRunReady != nil ||
+		s.historyRequired && (prepared.Options.BeforeDispatch != nil || !validSaveID(prepared.ProjectID) || prepared.WorkspaceID != request.WorkspaceID || prepared.DocumentID != request.DocumentID || prepared.Revision != request.Revision)) {
 		serviceErr = protocolError("unavailable", "Prepared run is unavailable")
 	}
 	if serviceErr == nil && s.ctx.Err() != nil {
@@ -229,12 +291,63 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 		s.finishBeforeReady(record, serviceErr)
 		return
 	}
+	var launch history.LaunchRecord
+	if s.historyRequired {
+		projector, err := safeview.NewProjector(prepared.Options.LogRedactions)
+		if err != nil {
+			s.finishBeforeReady(record, protocolError("conflict", "Launch redactions cannot be projected safely"))
+			return
+		}
+		graphView, graphComplete, err := projector.ProjectGraph(prepared.Definition, prepared.GraphVersion)
+		if err != nil {
+			s.finishBeforeReady(record, protocolError("conflict", "Saved graph cannot be projected safely"))
+			return
+		}
+		launchView, launchComplete, err := projector.ProjectLaunchValues(prepared.Inputs)
+		if err != nil {
+			s.finishBeforeReady(record, protocolError("conflict", "Launch inputs cannot be projected safely"))
+			return
+		}
+		completenessBytes, err := json.Marshal([]any{1, graphComplete, launchComplete})
+		if err != nil {
+			s.finishBeforeReady(record, protocolError("unavailable", "History completeness cannot be encoded"))
+			return
+		}
+		completeness, err := history.ParseSafeJSON(completenessBytes, prepared.Options.LogRedactions)
+		if err != nil {
+			s.finishBeforeReady(record, protocolError("conflict", "History completeness cannot be projected safely"))
+			return
+		}
+		launch = history.LaunchRecord{ProjectID: prepared.ProjectID, WorkspaceID: prepared.WorkspaceID,
+			DocumentID: prepared.DocumentID, GraphID: prepared.Definition.ID, GraphHash: prepared.GraphVersion,
+			Graph: graphView, Launch: launchView, Completeness: completeness}
+	}
 	runCtx, cancel := context.WithCancel(s.ctx)
 	s.mu.Lock()
 	record.cancel = cancel
 	s.mu.Unlock()
 	options := prepared.Options
 	options.LogRedactions = append([]string(nil), prepared.Options.LogRedactions...)
+	if s.historyRequired {
+		options.BeforeDispatch = func(id events.RunID) error {
+			commitCtx, stop := context.WithTimeout(runCtx, 5*time.Second)
+			defer stop()
+			launch.RunID = string(id)
+			launch.StartedAt = time.Now().UTC()
+			if err := s.history.Launch(commitCtx, launch); err != nil {
+				s.mu.Lock()
+				if errors.Is(err, history.ErrPageTooLarge) {
+					record.startErr = protocolError("conflict", "Safe history snapshot exceeds the page limit")
+				} else {
+					s.historyUnavailable = true
+					record.startErr = protocolError("history_unavailable", "Local run history could not record the launch")
+				}
+				s.mu.Unlock()
+				return err
+			}
+			return nil
+		}
+	}
 	s.mu.Lock()
 	record.redactions = append([]string(nil), options.LogRedactions...)
 	s.mu.Unlock()
@@ -251,6 +364,9 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 			record.runID, record.reader = id, reader
 			record.graphID, record.graphVersion = prepared.Definition.ID, prepared.GraphVersion
 			record.state = runtime.RunRunning
+			if s.historyRequired {
+				record.historyAvailability = HistoryActive
+			}
 			s.accepted[record.key] = record
 			s.byID[id] = record
 		}
@@ -264,10 +380,18 @@ func (s *RunService) prepareAndRun(record *ownedRun, request RunStartRequest) {
 	if !record.readyClosed {
 		// runtime.Run promises an error before OnRunReady means no run started.
 		// No ID or accepted key is invented for this failure.
-		record.startErr = protocolError("unavailable", "Runtime could not start the run")
+		if record.startErr == nil {
+			record.startErr = protocolError("unavailable", "Runtime could not start the run")
+		}
 		close(record.ready)
 		record.readyClosed = true
 	} else if record.runID != "" {
+		// Until safe Finalize is wired, an accepted marker cannot be archived.
+		// Keep its live runtime outcome visible and block another local Start.
+		if s.historyRequired {
+			s.historyUnavailable = true
+			record.historyAvailability = HistoryUnavailable
+		}
 		if err == nil && result.RunID == record.runID && result.GraphVersion == record.graphVersion && terminalRunState(result.State) {
 			record.state = result.State
 			record.finished = true
@@ -345,7 +469,8 @@ func runSnapshotLocked(record *ownedRun) (RunSnapshot, *ServiceError) {
 	}
 	snapshot := RunSnapshot{RunID: record.runID, GraphID: record.graphID,
 		GraphVersion: record.graphVersion, State: record.state, Finished: record.finished,
-		FailureKind: record.failureKind, TraceWatermark: record.watermark}
+		FailureKind: record.failureKind, TraceWatermark: record.watermark,
+		HistoryAvailability: record.historyAvailability}
 	if record.reader != nil {
 		page, err := record.reader.Page(0, 1)
 		if err != nil {

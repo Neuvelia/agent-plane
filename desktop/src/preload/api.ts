@@ -26,6 +26,7 @@ export type StartResult = {
   state: string
   graph_version: string
   trace_watermark: number
+  history_availability?: 1 | 2 | 3
 }
 
 export type CurrentRun = {

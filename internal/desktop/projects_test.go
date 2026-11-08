@@ -24,6 +24,22 @@ func registryFixture(t *testing.T) (*Registry, string, string) {
 	return registry, stateDir, projectDir
 }
 
+func TestHistoryDirectoryRequiresPinnedRegistryLifetime(t *testing.T) {
+	registry, stateDir, _ := registryFixture(t)
+	if got, err := registry.HistoryDirectory(); err != nil || got != stateDir {
+		t.Fatalf("history directory=%q err=%v", got, err)
+	}
+	if err := os.Rename(stateDir, stateDir+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(stateDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := registry.HistoryDirectory(); err == nil || got != "" {
+		t.Fatalf("replaced state directory accepted: %q, %v", got, err)
+	}
+}
+
 func TestProjectGrantOneUseAndRestartIdentity(t *testing.T) {
 	registry, stateDir, projectDir := registryFixture(t)
 	grant, err := registry.GrantProjectFolder(projectDir)

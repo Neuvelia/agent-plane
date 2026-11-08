@@ -24,7 +24,7 @@ func TestPrepareStartRequiresExactSavedFileAndTypedPayload(t *testing.T) {
 		DocumentID: request.DocumentID, Revision: request.Revision, WorkspaceID: request.WorkspaceID,
 		Inputs: request.Inputs, MaxConcurrency: request.MaxConcurrency}
 	prepared, serviceErr := service.PrepareStart(context.Background(), start)
-	if serviceErr != nil || prepared.Definition == nil || prepared.GraphVersion != preflight.GraphVersion {
+	if serviceErr != nil || prepared.Definition == nil || prepared.GraphVersion != preflight.GraphVersion || prepared.ProjectID != workspace.ProjectID || prepared.WorkspaceID != workspace.WorkspaceID || prepared.DocumentID != doc.DocumentID || prepared.Revision != doc.Revision {
 		t.Fatalf("prepared: %#v, %v", prepared, serviceErr)
 	}
 	start.PayloadDigest = strings.Repeat("0", len(preflight.PayloadDigest))

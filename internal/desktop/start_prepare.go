@@ -104,5 +104,7 @@ func (s *PreflightService) PrepareStart(ctx context.Context, request RunStartReq
 	executor := desktopNodeExecutor{shell: shellExecutorFor(environment, s.supervisorBinary), agents: agentExecutorFor(settings, environment, s.supervisorBinary), gate: gate.Executor{SupervisorBinary: s.supervisorBinary}}
 	return PreparedRun{Definition: definition, Inputs: cloneInputValues(request.Inputs), Executor: executor,
 		Options:      runtime.Options{MaxConcurrency: request.MaxConcurrency, LogRedactions: redactions, GitExecutable: derefPath(settings.GitBinaryPath), GitSupervisorBinary: s.supervisorBinary},
-		GraphVersion: snapshot.SemanticVersion}, nil
+		GraphVersion: snapshot.SemanticVersion, ProjectID: latestWorkspace.ProjectID,
+		WorkspaceID: latestWorkspace.WorkspaceID, DocumentID: latestDocument.DocumentID,
+		Revision: latestDocument.Revision}, nil
 }

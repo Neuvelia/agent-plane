@@ -37,8 +37,9 @@ function RunSummary({ current, view, compact = false }: { current: CurrentRun; v
   const id = current.run_id ? `${current.run_id.slice(0, 8)}…${current.run_id.slice(-4)}` : '—'
   const graph = view?.events.find((event) => event.type === 'run_started')?.graph_id ?? 'Current local run'
   const state = view?.state ? view.state[0].toUpperCase() + view.state.slice(1) : 'Checking'
-  if (compact) return <div className="runner-run"><span>{graph} · {id}</span><span className="blue-text">{state}</span></div>
-  return <div className="data-row run-grid"><span className="mono">{id}</span><span>{graph}</span><Badge kind={view?.finished ? 'quiet' : 'blue'}>{state}</Badge><span className="muted">{view ? `${view.events.length} retained ${view.events.length === 1 ? 'fact' : 'facts'}` : 'Loading trace'}</span></div>
+  const history = view?.historyAvailability === 2 ? ' · History unavailable' : ''
+  if (compact) return <div className="runner-run"><span>{graph} · {id}</span><span className="blue-text">{state}{history}</span></div>
+  return <div className="data-row run-grid"><span className="mono">{id}</span><span>{graph}</span><Badge kind={view?.finished ? 'quiet' : 'blue'}>{state}</Badge><span className="muted">{view ? `${view.events.length} retained ${view.events.length === 1 ? 'fact' : 'facts'}${history}` : 'Loading trace'}</span></div>
 }
 
 export function App(): React.JSX.Element {

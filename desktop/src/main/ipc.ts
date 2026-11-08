@@ -58,6 +58,13 @@ function validateNumbers(value: Record<string, unknown>): void {
   }
 }
 
+function validateHistoryAvailability(value: Record<string, unknown>): void {
+  if (value.history_availability !== undefined &&
+      ![1, 2, 3].includes(value.history_availability as number)) {
+    throw new SidecarError('unavailable', 'Invalid run history availability', true)
+  }
+}
+
 function validatedEventPage(result: unknown): EventPage {
   const value = object(result)
   for (const key of ['after_sequence', 'next_after', 'watermark']) safeUnsigned(value[key])
@@ -175,6 +182,7 @@ function validatedRemoteResult(method: string, result: unknown): void {
     stringField(value, 'run_id')
     stringField(value, 'state')
     booleanField(value, 'finished')
+    validateHistoryAvailability(value)
   }
 }
 
@@ -230,12 +238,14 @@ export function registerBridge(options: {
     return options.runs.start(selection, async (payload): Promise<StartResult> => {
       const result = object(await client.request('runs.start', payload, 120_000)) as StartResult
       safeUnsigned(result.trace_watermark)
+      validateHistoryAvailability(result as unknown as Record<string, unknown>)
       return result
     })
   })
   register('reattachRun', async (_raw, client) => options.runs.reattach(async (payload) => {
     const result = object(await client.request('runs.start', payload, 120_000)) as StartResult
     safeUnsigned(result.trace_watermark)
+    validateHistoryAvailability(result as unknown as Record<string, unknown>)
     return result
   }))
   channels.push('agentplane:currentRun')

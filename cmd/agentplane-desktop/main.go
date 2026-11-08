@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"agentplane/internal/desktop"
+	"agentplane/internal/history"
 	"agentplane/internal/process"
 	"agentplane/internal/version"
 )
@@ -59,7 +60,22 @@ func runDesktopService(ctx context.Context, args []string, input io.Reader, outp
 	for name, handler := range desktop.NewDocumentHandlers(documents, preflight) {
 		handlers[name] = handler
 	}
-	runs := desktop.NewRunService(ctx, preflight.PrepareStart, nil)
+	historyDir, err := registry.HistoryDirectory()
+	if err != nil {
+		return err
+	}
+	historyStore, err := history.Open(ctx, historyDir)
+	if err != nil {
+		// Keep editing available, but every new Start must fail closed until a
+		// private writable history store can be opened on a later service run.
+		historyStore = nil
+	}
+	var historyWriter desktop.HistoryLaunchWriter
+	if historyStore != nil {
+		defer historyStore.Close()
+		historyWriter = historyStore
+	}
+	runs := desktop.NewRunServiceWithHistory(ctx, preflight.PrepareStart, nil, historyWriter, err)
 	for name, handler := range desktop.NewRunHandlers(runs) {
 		handlers[name] = handler
 	}
