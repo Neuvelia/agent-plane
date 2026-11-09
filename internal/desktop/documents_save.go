@@ -130,11 +130,11 @@ func (s *DocumentStore) Save(documentID string, expectedRevision uint64, expecte
 		cleanupUnjournaledSave(parent, intent)
 		return Document{}, err
 	}
-	defer candidate.Close()
 	intent.CandidateIdentity, err = identityOfFile(candidate)
-	if err != nil {
+	closeErr := candidate.Close()
+	if err != nil || closeErr != nil {
 		cleanupUnjournaledSave(parent, intent)
-		return Document{}, err
+		return Document{}, errors.Join(err, closeErr)
 	}
 	if err := syncDirectory(parent); err != nil {
 		cleanupUnjournaledSave(parent, intent)
@@ -335,6 +335,9 @@ func (s *DocumentStore) recoverIntent(intent saveIntent) (bool, error) {
 		return false, nil
 	}
 	targetName := path.Base(intent.RelativePath)
+	if err := reconcileSwapArtifacts(parent, targetName, intent); err != nil {
+		return false, nil
+	}
 	resolved, err := inspectSwapped(parent, targetName, intent)
 	if err != nil {
 		_ = restoreOriginalIfDisplaced(parent, targetName, intent)
