@@ -8,6 +8,7 @@ import { currentRunView, emptyRunView, type RunView } from './runState'
 import { HistoryDetailView, HistoryRows } from './historyView'
 import { adaptiveHistoryPage } from './historyData'
 import { GraphDocumentController } from './graphDocument'
+import { canRestoreDraft, discardEditorSession, editorIsStale, hasUnsavedDraft, putEditorSession, type EditorSessions } from './editorSessions'
 import { GraphEditor } from './graphEditor'
 
 type Service = 'checking' | 'ready' | 'unavailable'
@@ -61,7 +62,10 @@ export function App(): React.JSX.Element {
   const [graphSelection, setGraphSelection] = useState<{ projectID: string; path: string; opened: string | null } | null>(null)
   const [graphOpenExpanded, setGraphOpenExpanded] = useState(false)
   const [newGraphID, setNewGraphID] = useState('')
-  const [editor, setEditor] = useState<{ projectID: string; controller: GraphDocumentController } | null>(null)
+  const [sessions, setSessions] = useState<EditorSessions>({})
+  const [serviceGeneration, setServiceGeneration] = useState(1)
+  const generationRef = useRef(1)
+  const [reopenNotice, setReopenNotice] = useState<string | null>(null)
   const [historyPage, setHistoryPage] = useState<HistoryListPage | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -93,6 +97,8 @@ export function App(): React.JSX.Element {
     void reload().catch((cause) => { if (alive) { setService('unavailable'); setError(message(cause)) } })
     const off = window.agentplane.onServiceDisconnected(() => {
       serviceEpoch.current++
+      generationRef.current++
+      setServiceGeneration(generationRef.current)
       setService('unavailable')
       setError('Local service disconnected. Last shown data may be stale.')
       setRunKnown(false)
@@ -176,11 +182,13 @@ export function App(): React.JSX.Element {
   }
   async function openGraph(): Promise<void> {
     if (!selected || !graphPath.trim() || service !== 'ready') return
+    if (hasUnsavedDraft(sessions[selected.project_id])) { setError('This project has an unsaved draft. Save or discard it before opening another graph.'); return }
     setBusy(true)
     try {
       const doc = await window.agentplane.openDocument(selected.project_id, graphPath.trim())
       const controller = await GraphDocumentController.open(window.agentplane, doc)
-      setEditor({ projectID: selected.project_id, controller })
+      setSessions((old) => putEditorSession(old, { projectID: selected.project_id, path: doc.relative_path, serviceGeneration: generationRef.current, controller }))
+      setReopenNotice(null)
       setGraphSelection({ projectID: selected.project_id, path: graphPath, opened: `${doc.relative_path} · ${doc.validity} · revision ${doc.revision}` })
       setError(null)
     }
@@ -189,12 +197,35 @@ export function App(): React.JSX.Element {
   }
   async function createGraph(): Promise<void> {
     if (!selected || !graphPath.trim() || !newGraphID.trim() || service !== 'ready' || busy) return
+    if (hasUnsavedDraft(sessions[selected.project_id])) { setError('This project has an unsaved draft. Save or discard it before creating another graph.'); return }
     setBusy(true)
     try {
       const doc = await window.agentplane.createDocument(selected.project_id, graphPath.trim(), newGraphID.trim())
       const controller = await GraphDocumentController.open(window.agentplane, doc)
-      setEditor({ projectID: selected.project_id, controller })
+      setSessions((old) => putEditorSession(old, { projectID: selected.project_id, path: doc.relative_path, serviceGeneration: generationRef.current, controller }))
+      setReopenNotice(null)
       setGraphSelection({ projectID: selected.project_id, path: graphPath, opened: `${doc.relative_path} · ${doc.validity} · revision ${doc.revision}` })
+      setError(null)
+    } catch (cause) { setError(message(cause)) }
+    finally { setBusy(false) }
+  }
+  function discardEditor(projectID: string): void {
+    setSessions((old) => discardEditorSession(old, projectID))
+    setReopenNotice(null)
+  }
+  async function reopenEditor(restore: boolean): Promise<void> {
+    const old = editor
+    if (!old || service !== 'ready' || busy) return
+    setBusy(true)
+    try {
+      const doc = await window.agentplane.openDocument(old.projectID, old.path)
+      const draft = old.controller.getSnapshot().draftText
+      const mayRestore = restore && canRestoreDraft(old, doc)
+      if (restore && !mayRestore) { setReopenNotice('The file changed on disk since this draft began; it was not restored. Copy the draft before discarding it.'); return }
+      const controller = await GraphDocumentController.open(window.agentplane, doc)
+      if (mayRestore && draft !== doc.text) await controller.updateText(draft)
+      setSessions((current) => ({ ...current, [old.projectID]: { projectID: old.projectID, path: doc.relative_path, serviceGeneration: generationRef.current, controller } }))
+      setReopenNotice(null)
       setError(null)
     } catch (cause) { setError(message(cause)) }
     finally { setBusy(false) }
@@ -239,7 +270,9 @@ export function App(): React.JSX.Element {
     else setRoute({ page })
   }
   const activeView = currentRunView(view, current.run_id)
-  const editorOpen = route.page === 'project' && editor?.projectID === selected?.project_id
+  const editor = selected ? sessions[selected.project_id] : undefined
+  const editorStale = !!editor && editorIsStale(editor, serviceGeneration)
+  const editorOpen = route.page === 'project' && !!editor
   const title = route.page === 'project' ? selected?.display_name ?? 'Projects' : route.page === 'runner' ? 'This device' : route.page === 'settings' ? 'Settings' : 'Dashboard'
   return <div className={`shell shell-${route.page}`}>
     <nav className="rail" aria-label="Primary navigation"><div className="brand-mark" aria-label="AgentPlane"><RailIcon page="brand" /></div>
@@ -252,8 +285,8 @@ export function App(): React.JSX.Element {
       <div className="sidebar-footer"><span>Local service</span><Badge kind={service === 'ready' ? 'good' : 'warn'}>{service === 'ready' ? 'Connected' : service === 'checking' ? 'Checking' : 'Unavailable'}</Badge></div></aside>
     <div className="main-column">{!editorOpen && <header className="topbar"><span className="crumb">{route.page === 'project' ? <>Dashboard / Projects / </> : null}<strong>{title}</strong></span><div className="top-actions"><button type="button" className="small-button" disabled={busy} onClick={() => void reload().catch((cause) => setError(message(cause)))}>Refresh</button><Badge>Desktop</Badge><Badge kind={service === 'ready' ? 'good' : 'warn'}>{service === 'ready' ? 'Local only' : 'Stale'}</Badge>{route.page === 'project' && <Badge kind="good">Local project</Badge>}{route.page === 'dashboard' && <button type="button" className="small-button" disabled={service !== 'ready' || busy} onClick={() => void chooseProject()}>New project</button>}{(route.page === 'dashboard' || route.page === 'project') && <button type="button" className="small-button primary" disabled title="Graph start opens in the editor in a later feature">Run graph</button>}{route.page === 'runner' && <><button type="button" className="small-button" disabled title="Self-check is not available">Run self-check</button><button type="button" className="small-button" disabled title="This device cannot be revoked">Revoke</button></>}</div></header>}
       <main className={`content content-${route.page}${editorOpen ? ' content-editor' : ''}`} aria-live="polite">{service !== 'ready' && <div className="notice" role="status">{service === 'checking' ? 'Connecting to local service…' : 'Local service unavailable. Shown data may be stale.'} <button type="button" onClick={() => void reload().catch((cause) => setError(message(cause)))}>Retry</button></div>}{error && <div className="notice error" role="alert">{error}<button type="button" onClick={() => void reload().catch((cause) => setError(message(cause)))}>Reload local data</button></div>}
-        {editorOpen && editor && <GraphEditor controller={editor.controller} serviceReady={service === 'ready'} onClose={() => setEditor(null)} />}
-        {historyRunID && (route.page === 'dashboard' || route.page === 'project') && <HistoryDetailView runID={historyRunID} onClose={() => setHistoryRunID(null)} />}
+        {editorOpen && editor && <>{editorStale && <div className="notice" role="alert">Local service restarted; this draft's document is no longer valid and editing is paused. {reopenNotice} <button type="button" disabled={service !== 'ready' || busy} onClick={() => void reopenEditor(false)}>Reopen from disk</button> <button type="button" disabled={service !== 'ready' || busy} onClick={() => void reopenEditor(true)}>Reopen and restore draft</button> <button type="button" onClick={() => void navigator.clipboard?.writeText(editor.controller.getSnapshot().draftText)}>Copy draft</button> <button type="button" onClick={() => discardEditor(editor.projectID)}>Discard draft</button></div>}<GraphEditor key={`${editor.projectID}:${editor.serviceGeneration}`} controller={editor.controller} serviceReady={service === 'ready' && !editorStale} onClose={() => discardEditor(editor.projectID)} /></>}
+        {historyRunID && !editorOpen && (route.page === 'dashboard' || route.page === 'project') && <HistoryDetailView runID={historyRunID} onClose={() => setHistoryRunID(null)} />}
         {route.page === 'dashboard' && <><Panel title="Recent history"><HistoryRows page={historyPage} loading={historyLoading} error={historyError} onOpen={setHistoryRunID} onMore={() => void loadMoreHistory()} /></Panel><Panel title="Active runs" action={<Badge kind="blue">{!runKnown || current.state === 'pending' || current.state === 'unknown' ? '—' : current.state === 'known' && !activeView?.finished ? '1' : '0'}</Badge>}><div className="table-head run-grid"><span>RUN</span><span>GRAPH</span><span>STATUS</span><span>LATEST EVENT</span></div><RunSummary current={current} view={activeView} /></Panel><div className="quick-actions"><button type="button" disabled={service !== 'ready' || busy} onClick={() => void chooseProject()}><Plus size={18} /><span><strong>New project</strong><small>Choose a local folder</small></span></button><button type="button" disabled><Play size={18} /><span><strong>Run graph</strong><small>Available from the editor</small></span></button><button type="button" disabled><Folder size={18} /><span><strong>Open graph</strong><small>Select a project first</small></span></button><button type="button" disabled><Monitor size={18} /><span><strong>Connect runner</strong><small>This device only</small></span></button></div></>}
         {route.page === 'project' && !editorOpen && <><div className="metric-row"><div><small>Graphs</small><strong>—</strong></div><div><small>Recent runs shown</small><strong>{historyPage ? `${historyPage.runs.length}${historyPage.next_cursor ? "+" : ""}` : "—"}</strong></div><div><small>Workspaces</small><strong>{workspacesKnown ? workspaces.length : '—'}</strong></div>{selected?.availability === 'ready' ? <div><small>Location</small><Badge kind="good">This device</Badge></div> : <div><small>Project status</small><Badge kind="warn">{selected?.availability ?? 'Unknown'}</Badge></div>}</div><Panel title="Workspaces & targets"><div className="table-head four"><span>RUNNER</span><span>WORKSPACE</span><span>PROJECT</span><span>AVAILABILITY</span></div>{workspacesKnown && workspaces.length ? workspaces.map((workspace) => <div className="data-row four" key={workspace.workspace_id}><span>This device</span><span className="mono">{workspace.relative_path}</span><span>{selected?.display_name}</span><Badge kind={workspace.availability === 'ready' ? 'good' : 'warn'}>{workspace.availability[0].toUpperCase() + workspace.availability.slice(1)}</Badge></div>) : <div className="empty-row">{workspacesKnown ? 'No registered workspaces' : 'Loading workspaces…'}</div>}</Panel><Panel title="Graphs"><div className="graph-open"><button type="button" className="graph-open-prompt" aria-expanded={graphOpenExpanded} onClick={() => setGraphOpenExpanded((value) => !value)}>Choose a saved YAML path to open. Graph listing arrives with the editor.</button>{graphOpenExpanded && <div><input aria-label="Graph path relative to project" placeholder=".agents/graphs/example.yaml" value={graphPath} onChange={(event) => { if (selected) setGraphSelection({ projectID: selected.project_id, path: event.target.value, opened: null }) }} disabled={service !== 'ready'} /><button type="button" className="small-button" disabled={!graphPath.trim() || service !== 'ready' || busy} onClick={() => void openGraph()}>Open</button><input aria-label="New graph ID" placeholder="graph-id" value={newGraphID} onChange={(event) => setNewGraphID(event.target.value)} disabled={service !== 'ready'} /><button type="button" className="small-button" disabled={!graphPath.trim() || !newGraphID.trim() || service !== 'ready' || busy} onClick={() => void createGraph()}>Create</button></div>}{openedGraph && <small>{openedGraph}</small>}</div></Panel><Panel title="Recent runs"><HistoryRows page={historyPage} loading={historyLoading} error={historyError} onOpen={setHistoryRunID} onMore={() => void loadMoreHistory()} /></Panel></>}
         {route.page === 'runner' && <><div className="tabs"><span className="selected">Health</span><span>Capabilities</span><span>Workspaces</span><span>Active runs</span></div><div className="two-col"><Panel title="HEALTH"><div className="kv-row"><span>Service</span><Badge kind={service === 'ready' ? 'good' : 'warn'}>{service === 'ready' ? 'Connected' : 'Unavailable'}</Badge></div>{['Transport', 'Slots', 'Local store', 'Fleet heartbeat'].map((label) => <div className="kv-row" key={label}><span>{label}</span><span className="muted">Unavailable</span></div>)}</Panel><Panel title="CAPABILITIES">{data?.tools.map((tool) => <div className="kv-row" key={tool.tool_id}><span className="mono">{tool.tool_id}</span><Badge kind={tool.status === 'unavailable' ? 'warn' : 'quiet'}>{tool.status === 'unverified' ? 'Configured · unverified' : tool.status}</Badge></div>)}<p className="panel-note">A graph-specific preflight verifies tools before Start.</p></Panel><Panel title="WORKSPACE BINDINGS">{runnerWorkspaces.length ? runnerWorkspaces.map((workspace) => <div className="kv-row" key={workspace.workspace_id}><span><span className="mono">{workspace.relative_path}</span><small>{data?.projects.find((project) => project.project_id === workspace.project_id)?.display_name ?? 'Unknown project'}</small></span><Badge kind={workspace.availability === 'ready' ? 'good' : 'warn'}>{workspace.availability[0].toUpperCase() + workspace.availability.slice(1)}</Badge></div>) : <div className="empty-row">No registered local workspaces</div>}</Panel><Panel title="ACTIVE RUNS"><RunSummary current={current} view={activeView} compact /></Panel></div></>}
