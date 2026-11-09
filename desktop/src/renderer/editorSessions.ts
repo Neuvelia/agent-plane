@@ -13,7 +13,8 @@ export type EditorSession = {
 
 export type EditorSessions = Record<string, EditorSession>
 
-function hasDraft(session: EditorSession): boolean {
+export function hasUnsavedDraft(session: EditorSession | undefined): boolean {
+  if (!session) return false
   return session.controller.getSnapshot().dirty
 }
 
@@ -21,7 +22,7 @@ function hasDraft(session: EditorSession): boolean {
 // the caller must save, restore or explicitly discard first.
 export function putEditorSession(sessions: EditorSessions, next: EditorSession): EditorSessions {
   const current = sessions[next.projectID]
-  if (current && current !== next && hasDraft(current)) {
+  if (current && current !== next && hasUnsavedDraft(current)) {
     throw new Error(`Project ${next.projectID} has an unsaved draft for ${current.path}; save or discard it before opening another graph.`)
   }
   return { ...sessions, [next.projectID]: next }
