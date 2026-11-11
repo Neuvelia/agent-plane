@@ -1,6 +1,6 @@
 # ADR-0019 - Local Human gate contract
 
-**Status:** proposed
+**Status:** proposed (decisions 3, 8 and 10 confirmed by the owner on 2026-11-11)
 **Date:** 2026-11-11
 
 ## Context
