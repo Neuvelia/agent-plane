@@ -26,7 +26,10 @@ jobs:
           - name: windows-x64
             os: windows-latest
             experimental: true
+            # A hung Windows test otherwise runs to the 10 min go test limit.
+            timeout: 20
     continue-on-error: ${{ matrix.experimental == true }}
+    timeout-minutes: ${{ matrix.timeout || 30 }}
     defaults:
       run:
         shell: bash
