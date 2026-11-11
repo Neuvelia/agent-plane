@@ -9,12 +9,45 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: check (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One OS failing must not hide the others: Phase 2 needs per-OS evidence.
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+          - name: macos-arm64
+            os: macos-latest
+          # Windows is not yet a supported target (ReplaceFileW work in
+          # progress). Its result is reported but does not block merges until
+          # native evidence exists; remove continue-on-error then.
+          - name: windows-x64
+            os: windows-latest
+            experimental: true
+    continue-on-error: ${{ matrix.experimental == true }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - run: make check
-      - run: make build
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: desktop
+      # scripts/check.sh is the body of `make check`; invoking it directly
+      # avoids depending on GNU make being present on Windows runners.
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
+        if: matrix.os != 'windows-latest'
+        run: make build
