@@ -24,10 +24,10 @@ dependent Shell node, ordered events, and a deterministic terminal result.
 - [x] F1.5 Check Result Contract
 - [x] F1.6 Correction Loop + maxAttempts
 - [x] F1.7 Return Envelope / scoped retry
-- [ ] F1.8 Changed-files Scope Check (P1)
+- [x] F1.8 Changed-files Scope Check (P1; Git-observed warn/deny; ADR-0016)
 
-Review each feature spec before implementing it. F1.1-F1.7 are implemented;
-F1.8 is the next planning candidate and requires its own reviewed spec.
+Review each feature spec before implementing it. F1.1-F1.8 are implemented;
+Phase 2 features require their own reviewed specs before activation.
 F1.7 has a prepared after-merge real-Codex demo; execution evidence is pending. See
 `docs/roadmap.md` for dependencies and phase exit criteria.
 

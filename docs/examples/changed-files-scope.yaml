@@ -1,0 +1,44 @@
+# F1.8 example: one Agent unit whose actual Git-observed changes must stay in scope.
+# Replace the quoted __WORKSPACE__ placeholders with the absolute root of a
+# disposable committed Git repository, then run with
+#   agentplane run docs/examples/changed-files-scope.yaml --adapter codex --codex-bin ABSOLUTE_PATH
+#
+# `mode: deny` makes an out-of-scope change red and feeds the existing bounded
+# correction loop; `mode: warn` keeps the result green but records the violation.
+# Provider-reported changed files are never used for enforcement. The check
+# detects changes after execution; it does not prevent writes or isolate files.
+schema_version: 0
+id: f18-changed-files-scope
+units: [work]
+inputs: {}
+nodes:
+  work:
+    type: agent
+    config:
+      adapter: codex
+      workspace: "__WORKSPACE__"
+      environment_refs: [HOME, PATH]
+      allowed_paths: ["src/**"]
+      task: >-
+        Create src/hello.txt containing hello followed by one newline. Do not
+        modify any other file. Return the structured final result with summary
+        exactly src/hello.txt and artifacts an empty array.
+    outputs:
+      summary: {type: string, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: string, required: true}
+        config:
+          check_id: scope
+          kind: changed_files_scope
+          input: candidate
+          mode: deny
+          workspace: "__WORKSPACE__"
+          allowed_paths: ["src/**"]
+      bindings:
+        - {from: candidate.outputs.summary, to: gate.inputs.candidate}
+edges: []
+outputs:
+  summary: {from: work.outputs.summary}

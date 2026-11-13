@@ -6,14 +6,15 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 
 ## Status
 
-**Phase 0 - Execution Core is implemented.** The active planning milestone is
-**Phase 1 - Agent Loop**. F1.1 provides the adapter contract and F1.2 adds
+**Phase 0 - Execution Core and Phase 1 - Agent Loop (F1.1-F1.8) are implemented;
+the real-Codex F1.7 demo is prepared but not yet executed.** F1.1 provides the adapter contract and F1.2 adds
 explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
 normalized progress and live delivery. F1.4 adds deterministic read-only Gates;
 F1.5 adds versioned Check Results with checked-input scope, duration and typed
 evidence references. F1.6 adds bounded node-local correction attempts. F1.7 adds
 explicit static units, Return Envelopes and immutable accepted runtime values/
-provenance (ADR-0015). Shared files remain outside the immutability guarantee.
+provenance (ADR-0015). F1.8 adds opt-in Git-observed changed-files scope checking
+(ADR-0016). Shared files remain outside the immutability guarantee.
 
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
@@ -110,7 +111,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 7 (old schema 1–6 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 8 (old schema 1–7 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
@@ -285,9 +286,21 @@ Distinct proven physical Git worktrees can run concurrently; advisory disjoint
 paths do not grant concurrency in a shared checkout. Bounded declared conflict
 facts describe potential overlap/unknown scope or identity. Scope is advisory:
 accepted runtime values remain immutable even if another unit changes their
-files. Enforcement and filesystem isolation remain F1.8/F3.1 work.
+files. Git-observed scope enforcement is F1.8 (below); filesystem isolation remains F3.1 work.
 
 See [the example graph](docs/examples/scoped-retry.yaml),
 [ADR-0015](docs/adr/0015-return-envelope-and-unit-acceptance.md) and the
 [prepared after-merge real-Codex demo](docs/validation/F1.7-real-codex-demo.md).
 The recipe is not a record of a completed real-provider validation.
+
+## Changed-files scope check (F1.8)
+
+An Agent loop may use embedded Gate `kind: changed_files_scope` with
+`mode: warn|deny`. The runtime captures a Git baseline before the first attempt
+and compares actual index/worktree state afterwards, including untracked,
+ignored and deleted files; renames check both paths. Adapter-reported
+`changed_files` are metadata only. Deny violations are red and enter the bounded
+correction loop; warn violations stay green with visible evidence. This detects
+out-of-scope writes after the fact; it does not prevent them or isolate the
+workspace (F3.1). See the [example graph](docs/examples/changed-files-scope.yaml),
+[graph-spec](docs/graph-spec.md) and [ADR-0016](docs/adr/0016-changed-files-scope-check.md).

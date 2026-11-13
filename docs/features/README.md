@@ -22,8 +22,8 @@ Git-derived evidence (ADR-0010), verified by a real disposable-repository smoke.
 F1.3 adds bounded normalized progress (ADR-0011). F1.4 adds deterministic Gate checks (ADR-0012). F1.5 adds versioned Check Results (ADR-0013), F1.6 bounded correction
 attempts (ADR-0014), and F1.7 static-unit envelopes/immutable runtime acceptance
 (ADR-0015). Shared files remain mutable; the after-merge real-Codex demo is
-prepared but has not been executed in this implementation. F1.8 is P1 and
-receives its own spec when activated. See `docs/roadmap.md` for the complete ID catalog,
+prepared but has not been executed in this implementation. F1.8 adds opt-in
+Git-observed changed-files scope checking (ADR-0016). See `docs/roadmap.md` for the complete ID catalog,
 dependencies and phase exit criteria. A roadmap entry is not an executable
 feature contract.
 
@@ -36,6 +36,7 @@ feature contract.
 | `F1.5-check-result-contract.md` | Implemented; ADR-0013 |
 | `F1.6-correction-loop.md` | Implemented; ADR-0014 |
 | `F1.7-return-envelope-scoped-retry.md` | Implemented; ADR-0015 |
+| `F1.8-changed-files-scope-check.md` | Implemented; ADR-0016 |
 
 ## Later phases
 

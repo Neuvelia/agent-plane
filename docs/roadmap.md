@@ -23,7 +23,7 @@ Goal: prove graph/node/edge/run semantics without UI.
 
 Exit: a three-node graph runs independent branches concurrently, joins them, passes explicit data, emits structured events, and exits deterministically.
 
-## Phase 1 - Agent Loop (active)
+## Phase 1 - Agent Loop (implemented; real-agent demo pending)
 
 Goal: execute one real coding agent behind an adapter and add deterministic correction.
 
@@ -36,12 +36,12 @@ Goal: execute one real coding agent behind an adapter and add deterministic corr
 | F1.5 | Check Result Contract | P0 | F1.4 | Implemented; ADR-0013 |
 | F1.6 | Correction Loop + maxAttempts | P0 | F1.1, F1.4, F1.5 | Implemented; ADR-0014 |
 | F1.7 | Return Envelope / scoped retry | P0 | F1.5, F1.6 | Implemented; ADR-0015 |
-| F1.8 | Changed-files Scope Check | P1 | F1.2, F1.4 | Create spec on activation |
+| F1.8 | Changed-files Scope Check | P1 | F1.2, F1.4 | Implemented; ADR-0016 |
 
 Exit: an agent modifies a repository, a deterministic check rejects a bad
 result with reason/evidence/scope, and only the failed unit is corrected in no
-more than three attempts. F1.8 is P1; F1.4's reported-path check is not its
-Git-derived enforcement. F1.7 preserves accepted runtime outputs; F3.1 adds
+more than three attempts. F1.8 (P1) adds the Git-derived enforcement that
+F1.4's reported-path check does not provide. F1.7 preserves accepted runtime outputs; F3.1 adds
 filesystem/workspace isolation.
 
 ## Phase 2 - Local IDE
