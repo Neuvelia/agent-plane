@@ -38,6 +38,15 @@ feature contract.
 | `F1.7-return-envelope-scoped-retry.md` | Implemented; ADR-0015 |
 | `F1.8-changed-files-scope-check.md` | Implemented; ADR-0016 |
 
+## Phase 2 vertical slice - drafts awaiting acceptance
+
+| Feature | Spec status |
+| --- | --- |
+| `F1.6a-shell-loop.md` | Draft; ADR-0018 (proposed) |
+| `F2.10-human-node.md` | Draft; ADR-0017 (proposed) |
+| `F2.9-run-store.md` | Draft; ADR-0019 (proposed) |
+| `F2.5-live-map.md` | Draft; ADR-0019 (proposed) |
+
 ## Later phases
 
 F2-F6 remain roadmap scope. Their IDs and priorities are tracked in
