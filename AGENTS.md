@@ -33,9 +33,11 @@ checked-input scope, duration and typed trace lookup (ADR-0013). F1.6 adds bound
 node-local correction attempts with embedded Gates, typed feedback,
 and schema-6 attempt trace (ADR-0014). F1.7 adds explicit static units,
 Return Envelopes, immutable accepted runtime values/provenance and conservative
-shared-workspace Agent scheduling (ADR-0015; event schema 7). Shared files are
-not isolated. Later Phase 1 features remain unimplemented; F1.8 is the next
-planning candidate. Read the
+shared-workspace Agent scheduling (ADR-0015). F1.8 adds opt-in Git-observed
+changed-files scope checking (ADR-0016; event schema 8). Shared files are not
+isolated; F1.8 detects out-of-scope changes after execution and neither prevents
+writes nor isolates the workspace (F3.1). Phase 1 features F1.1-F1.8 are
+implemented; the real-Codex F1.7 demo is prepared but not yet executed. Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without

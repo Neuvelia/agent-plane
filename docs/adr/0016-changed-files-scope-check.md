@@ -1,6 +1,6 @@
 # ADR-0016 - Git-observed changed-files scope checking
 
-**Status:** accepted for F1.8 implementation
+**Status:** accepted; implemented
 **Date:** 2026-10-20
 
 ## Context

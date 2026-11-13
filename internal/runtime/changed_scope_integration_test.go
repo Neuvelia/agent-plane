@@ -237,3 +237,31 @@ func TestChangedScopeGitFailureWarnAndDeny(t *testing.T) {
 		})
 	}
 }
+
+func TestChangedScopeGateMustMatchAgentDeclaration(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(g graph.NodeConfig, agentCfg graph.NodeConfig, other string)
+	}{
+		{"gate widens allowed_paths", func(g, _ graph.NodeConfig, _ string) { g["allowed_paths"] = []string{"src/**", "outside.go"} }},
+		{"gate narrows allowed_paths", func(g, _ graph.NodeConfig, _ string) { g["allowed_paths"] = []string{"src/a.go"} }},
+		{"gate workspace differs", func(g, _ graph.NodeConfig, other string) { g["workspace"] = other }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := scopeRepo(t)
+			d := scopeDefinition(dir, "deny")
+			n := d.Nodes["work"]
+			tc.mutate(n.Loop.Gate.Config, n.Config, scopeRepo(t))
+			d.Nodes["work"] = n
+			a := newLoopAdapter()
+			a.produce = func(_ context.Context, _ agent.AgentExecutionInput, _ int) (agent.AgentExecutionOutput, error) {
+				t.Fatal("Agent executed despite mismatched Gate declaration")
+				return agent.AgentExecutionOutput{}, nil
+			}
+			r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{})
+			if err == nil && r.State == runtime.RunSucceeded {
+				t.Fatalf("mismatched Gate accepted: %+v", r)
+			}
+		})
+	}
+}
