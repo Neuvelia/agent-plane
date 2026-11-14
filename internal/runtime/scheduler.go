@@ -172,58 +172,18 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			return machine.snapshot(), nil
 		}
 
-		attempts := map[string]events.AttemptID{}
-		numbers := map[string]int{}
-		feedbacks := map[string]*CorrectionFeedback{}
-		baselines := map[string]*gitstate.Baseline{}
+		state := batchState{
+			attempts:  map[string]events.AttemptID{},
+			numbers:   map[string]int{},
+			feedbacks: map[string]*CorrectionFeedback{},
+			baselines: map[string]*gitstate.Baseline{},
+		}
 		for len(batch) > 0 {
-			// Only workers run concurrently; the coordinator owns every state and
-			// output map. Buffering lets all workers return before result collection.
-			completed := make(chan completedNode, len(batch))
-			started := 0
-			for _, id := range batch {
-				if ctx.Err() != nil {
-					break
-				}
-				if machine.nodes[id].State == NodeReady {
-					machine.transitionNode(id, NodeRunning)
-				}
-				if l := definition.Nodes[id].Loop; l != nil {
-					aid, e := events.NewAttemptID()
-					if e != nil {
-						machine.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
-						machine.transitionNode(id, NodeFailed)
-						continue
-					}
-					if machine.units[id] != nil {
-						if e := machine.units.begin(id, aid); e != nil {
-							machine.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
-							machine.transitionNode(id, NodeFailed)
-							continue
-						}
-					}
-					attempts[id] = aid
-					numbers[id]++
-					machine.appendEvent(events.Event{Type: events.AttemptStarted, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: events.AttemptStartedPayload{Number: numbers[id], MaxAttempts: l.Attempts()}})
-					machine.appendEvent(events.Event{Type: events.AttemptInput, NodeID: id, NodeRunID: machine.nodes[id].NodeRunID, AttemptID: aid, Payload: attemptInput(definition.Nodes[id], machine.resolved[id], feedbacks[id], redactionTemplate)})
-				}
-				node := definition.Nodes[id]
-				resolved := machine.resolved[id]
-				aid, feedback, baseline, number := attempts[id], feedbacks[id], baselines[id], numbers[id]
-				go func(id string) {
-					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, redactionTemplate)
-				}(id)
-				started++
-			}
-			results := make([]completedNode, 0, started)
-			for range started {
-				results = append(results, <-completed)
-			}
-			sort.Slice(results, func(i, j int) bool { return results[i].id < results[j].id })
+			results := machine.runBatchWorkers(ctx, executor, batch, &state, redactionTemplate)
 			var retry []string
 			for _, work := range results {
 				if work.baseline != nil {
-					baselines[work.id] = work.baseline
+					state.baselines[work.id] = work.baseline
 				}
 				nodeResult := machine.nodes[work.id]
 				if definition.Nodes[work.id].Loop != nil {
@@ -249,7 +209,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						}
 						if work.check != nil && work.check.Verdict == "red" {
 							outcome = "rejected"
-							if numbers[work.id] >= definition.Nodes[work.id].Loop.Attempts() {
+							if state.numbers[work.id] >= definition.Nodes[work.id].Loop.Attempts() {
 								outcome = "needs_intervention"
 							}
 							if ctx.Err() != nil {
@@ -271,7 +231,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 					}
 					machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}})
 					if outcome == "rejected" && ctx.Err() == nil {
-						feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
+						state.feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
 						retry = append(retry, work.id)
 						continue
 					}
