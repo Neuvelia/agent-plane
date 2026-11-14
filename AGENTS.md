@@ -43,7 +43,9 @@ loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
 F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
 (ADR-0019). The desktop UI observes and steers runs through that API; it never
-schedules, retries or decides state. Read the
+schedules, retries or decides state. F2.5a (presentation only) put the
+desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
+Storybook; the API and event contracts are unchanged. Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without

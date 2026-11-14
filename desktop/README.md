@@ -84,9 +84,14 @@ active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 timeline and a filterable event log. Those numbers are computed in the app from
 the event stream (`src/insight.ts`, `src/dashboard.ts`) and carry no authority
 over run state.
+R3 adds loading and error states for every engine-backed screen (a failed read is
+an error with Retry, never an empty list), a skip link and focus-to-content on
+navigation, contrast-checked colours and reduced-motion support. F2.5a is
+implemented; screenshots are in `docs/validation/F2.5a-screenshots/`.
 
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,
 Approvals (IA-17/18), New run with preflight (IA-12/13) and the YAML view of the
-graph (IA-07-11, read-only). Not implemented: Project, Runners, Settings, mobile
-approval, docs, onboarding, attempt compare, graph editing.
+graph (IA-07-11, read-only), plus Settings with only the interface language. Not
+implemented (greyed out in the sidebar where they would live): Projects, Runners,
+Docs; also mobile approval, onboarding, attempt compare and graph editing.
