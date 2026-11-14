@@ -47,6 +47,10 @@ feature contract.
 | `F2.9-run-store.md` | Implemented; ADR-0019 |
 | `F2.5-live-map.md` | Draft; ADR-0019 (accepted) |
 | `F2.5a-desktop-redesign.md` | Implemented (R0-R3); presentation only, no ADR |
+| `F2.1-graph-canvas.md` | Draft; ADR-0020, ADR-0021, ADR-0022 (proposed) |
+| `F2.2-node-inspector.md` | Draft; ADR-0020, ADR-0021 (proposed) |
+| `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (proposed, one open decision) |
+| `F2.4-graph-validation-ui.md` | Draft; ADR-0021 (proposed) |
 
 ## Later phases
 
