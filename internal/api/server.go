@@ -1,0 +1,354 @@
+package api
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/subtle"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
+	"strings"
+	"time"
+
+	"agentplane/internal/events"
+	"agentplane/internal/graph"
+	"agentplane/internal/runtime"
+	"agentplane/internal/store"
+)
+
+// StartError carries a client-facing reason for a run that could not start.
+type StartError struct {
+	Status      int
+	Message     string
+	Diagnostics []graph.Diagnostic
+}
+
+func (e *StartError) Error() string { return e.Message }
+
+// StartFunc runs one graph to completion, calling persist for every retained
+// event and decisions for human nodes. It returns an error only if the run did
+// not start (a *StartError) or failed to persist.
+type StartFunc func(ctx context.Context, graphPath string, inputs []string, persist func(events.Event) error, decisions runtime.DecisionProvider) error
+
+// ValidateFunc validates a graph file for the preflight screen.
+type ValidateFunc func(path string) (status string, diagnostics []graph.Diagnostic, err error)
+
+// Server is the loopback API. Create with New, serve with Serve.
+type Server struct {
+	Token    string
+	Store    store.Store
+	Hub      *Hub
+	Start    StartFunc
+	Validate ValidateFunc
+
+	baseCtx context.Context
+	addr    string
+}
+
+// ExpectHost pins the Host header that guard accepts. Serve sets it from the
+// listener; tests use it to exercise the check.
+func (s *Server) ExpectHost(addr string) { s.addr = addr }
+
+// NewToken returns 32 random bytes, hex encoded.
+func NewToken() (string, error) {
+	var b [32]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
+// Listen binds an ephemeral port on 127.0.0.1 only. There is deliberately no
+// way to choose another address (ADR-0019).
+func Listen() (net.Listener, error) { return net.Listen("tcp4", "127.0.0.1:0") }
+
+// Serve blocks until ctx ends, then shuts down and returns. Runs started
+// through the API are cancelled with ctx.
+func (s *Server) Serve(ctx context.Context, l net.Listener) error {
+	s.baseCtx = ctx
+	s.ExpectHost(l.Addr().String())
+	srv := &http.Server{Handler: s.Handler(), ReadHeaderTimeout: 5 * time.Second}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(l) }()
+	select {
+	case <-ctx.Done():
+		shutdown, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(shutdown)
+		_ = srv.Close()
+		return nil
+	case err := <-errc:
+		return err
+	}
+}
+
+// Handler returns the authenticated router. Exposed for tests.
+func (s *Server) Handler() http.Handler {
+	if s.baseCtx == nil {
+		s.baseCtx = context.Background()
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /runs", s.listRuns)
+	mux.HandleFunc("POST /runs", s.startRun)
+	mux.HandleFunc("GET /runs/{id}", s.getRun)
+	mux.HandleFunc("GET /runs/{id}/events", s.streamEvents)
+	mux.HandleFunc("POST /runs/{id}/decisions/{nodeRun}", s.decide)
+	mux.HandleFunc("GET /approvals", s.approvals)
+	mux.HandleFunc("POST /graphs/validate", s.validate)
+	return s.guard(mux)
+}
+
+// guard enforces the Host header (DNS-rebinding defence) and the bearer token
+// (CSRF defence). No CORS headers are ever written, so browsers cannot read
+// responses cross-origin.
+func (s *Server) guard(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if s.addr != "" && r.Host != s.addr {
+			writeError(w, http.StatusMisdirectedRequest, "host_mismatch", "request host is not the loopback address")
+			return
+		}
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || subtle.ConstantTimeCompare([]byte(got), []byte(s.Token)) != 1 || s.Token == "" {
+			w.Header().Set("WWW-Authenticate", "Bearer")
+			writeError(w, http.StatusUnauthorized, "unauthorized", "missing or invalid bearer token")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+type errorBody struct {
+	Error struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	} `json:"error"`
+	Diagnostics []graph.Diagnostic `json:"diagnostics,omitempty"`
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	var b errorBody
+	b.Error.Code, b.Error.Message = code, message
+	writeJSON(w, status, b)
+}
+
+// readJSON decodes a bounded request body, rejecting unknown fields.
+func readJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "bad_request", "invalid JSON body")
+		return false
+	}
+	return true
+}
+
+func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
+	runs, err := s.Store.List()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "store", "could not read the run store")
+		return
+	}
+	for i := range runs {
+		if live, ok := s.Hub.Live(runs[i].RunID); ok {
+			if _, done, _ := live.From(1 << 30); !done {
+				runs[i].Status = "running"
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"runs": runs})
+}
+
+func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	rec, err := s.Store.Read(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "unknown run")
+		return
+	}
+	if live, ok := s.Hub.Live(id); ok {
+		if _, done, _ := live.From(1 << 30); !done {
+			rec.Summary.Status = "running"
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"run": rec.Summary, "graph": string(rec.Graph)})
+}
+
+type startBody struct {
+	GraphPath string   `json:"graph_path"`
+	Inputs    []string `json:"inputs"`
+}
+
+func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
+	var body startBody
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.GraphPath == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "graph_path is required")
+		return
+	}
+	// The hub sink runs after StartFunc's own store write, so anything a client
+	// can see is already durable.
+	slot := s.Hub.NewSlot(nil)
+	failed := make(chan error, 1)
+	go func() {
+		failed <- s.Start(s.baseCtx, body.GraphPath, body.Inputs, slot.Sink, s.Hub)
+	}()
+	select {
+	case <-slot.Started:
+		writeJSON(w, http.StatusAccepted, map[string]string{"run_id": slot.RunID()})
+	case err := <-failed:
+		select {
+		case <-slot.Started: // the run began and already finished; it is listed normally
+			writeJSON(w, http.StatusAccepted, map[string]string{"run_id": slot.RunID()})
+			return
+		default:
+		}
+		var se *StartError
+		if errors.As(err, &se) {
+			var b errorBody
+			b.Error.Code, b.Error.Message = "cannot_start", se.Message
+			b.Diagnostics = se.Diagnostics
+			writeJSON(w, se.Status, b)
+			return
+		}
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal", "run failed to start")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal", "run ended without events")
+	case <-r.Context().Done():
+	}
+}
+
+type decisionBody struct {
+	Decision string `json:"decision"`
+	Comment  string `json:"comment"`
+}
+
+func (s *Server) decide(w http.ResponseWriter, r *http.Request) {
+	var body decisionBody
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if body.Decision != events.ApprovalApproved && body.Decision != events.ApprovalRejected {
+		writeError(w, http.StatusBadRequest, "bad_request", `decision must be "approved" or "rejected"`)
+		return
+	}
+	rec, already, err := s.Hub.Submit(r.PathValue("id"), events.NodeRunID(r.PathValue("nodeRun")), body.Decision == events.ApprovalApproved, body.Comment)
+	switch {
+	case errors.Is(err, ErrInvalidComment):
+		writeError(w, http.StatusBadRequest, "bad_request", err.Error())
+	case errors.Is(err, ErrNotPending):
+		writeError(w, http.StatusNotFound, "not_pending", err.Error())
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "internal", "could not record decision")
+	case already:
+		writeJSON(w, http.StatusConflict, map[string]any{"error": map[string]string{"code": "already_decided", "message": "this node run was already decided"}, "decision": rec})
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"decision": rec})
+	}
+}
+
+func (s *Server) approvals(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"approvals": s.Hub.Pending()})
+}
+
+type validateBody struct {
+	Path string `json:"path"`
+}
+
+func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
+	var body validateBody
+	if !readJSON(w, r, &body) {
+		return
+	}
+	if s.Validate == nil || body.Path == "" {
+		writeError(w, http.StatusBadRequest, "bad_request", "path is required")
+		return
+	}
+	status, diagnostics, err := s.Validate(body.Path)
+	if err != nil {
+		writeError(w, http.StatusUnprocessableEntity, "unreadable", err.Error())
+		return
+	}
+	if diagnostics == nil {
+		diagnostics = []graph.Diagnostic{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": status, "diagnostics": diagnostics})
+}
+
+// streamEvents replays a run from sequence zero and follows it to completion.
+// Live runs are served from memory (no gaps, no duplicates: one index walks
+// one slice); finished or foreign runs come from the store. Each SSE message
+// carries one event as JSON with id = its sequence number.
+func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "internal", "streaming unsupported")
+		return
+	}
+	send := func(e events.Event) bool {
+		data, err := json.Marshal(e)
+		if err != nil {
+			return false
+		}
+		_, err = fmt.Fprintf(w, "id: %d\nevent: event\ndata: %s\n\n", e.Sequence, data)
+		flusher.Flush()
+		return err == nil
+	}
+	header := func() {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		flusher.Flush()
+	}
+	if live, ok := s.Hub.Live(id); ok {
+		header()
+		next := 0
+		for {
+			batch, done, changed := live.From(next)
+			for _, e := range batch {
+				if !send(e) {
+					return
+				}
+			}
+			next += len(batch)
+			if done {
+				_, _ = fmt.Fprint(w, "event: end\ndata: {}\n\n")
+				flusher.Flush()
+				return
+			}
+			select {
+			case <-changed:
+			case <-r.Context().Done():
+				return
+			}
+		}
+	}
+	rec, err := s.Store.Read(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", "unknown run")
+		return
+	}
+	header()
+	for _, e := range rec.Events {
+		if !send(e) {
+			return
+		}
+	}
+	_, _ = fmt.Fprint(w, "event: end\ndata: {}\n\n")
+	flusher.Flush()
+}
