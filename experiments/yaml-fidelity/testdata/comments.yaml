@@ -1,0 +1,11 @@
+schema_version: 0
+id: comments
+inputs: {}   # no graph inputs
+nodes:   # all nodes
+  a:   # the first node
+    type: shell   # runs a command
+    config:   # command and arguments
+      command: printf
+    outputs: {}
+edges: []   # none yet
+outputs: {}
