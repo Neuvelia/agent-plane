@@ -1,0 +1,45 @@
+{
+ "text": "schema_version: 0\nid: config-error\ninputs: {}\nnodes:\n  work:\n    type: shell\n    config:\n      command: \"\"\n    outputs:\n      stdout: {type: string}\nedges: []\noutputs:\n  result: {from: work.outputs.stdout}\n",
+ "hash": "4386589b5307656288e74ce41b28ee0ebf14ff4eed2acb7bd365ee4fb08eb4bd",
+ "version": "sha256-v0:c0059d3af12d5258893cd234511575b5b4ea4b3f40fc4ff877e718d9679e7e8d",
+ "definition": {
+  "schema_version": 0,
+  "id": "config-error",
+  "inputs": {},
+  "nodes": {
+   "work": {
+    "type": "shell",
+    "config": {
+     "command": ""
+    },
+    "outputs": {
+     "stdout": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "edges": [],
+  "outputs": {
+   "result": {
+    "from": "work.outputs.stdout"
+   }
+  }
+ },
+ "diagnostics": [
+  {
+   "severity": "error",
+   "code": "E_NODE_CONFIG_INVALID",
+   "message": "shell node \"work\": command must be a nonempty string",
+   "graph_id": "config-error",
+   "location": {
+    "node_id": "work",
+    "path": "nodes.work.config"
+   },
+   "suggestion": "correct the configuration of node \"work\""
+  }
+ ],
+ "readonly_canvas": false,
+ "line_ending": "lf",
+ "label": "config-error.yaml"
+}
