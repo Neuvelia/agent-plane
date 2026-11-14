@@ -8,7 +8,6 @@ import (
 	"sort"
 	"sync"
 	"time"
-	"unicode/utf8"
 
 	"agentplane/internal/events"
 	"agentplane/internal/gitstate"
@@ -119,83 +118,20 @@ type runMachine struct {
 // failed and no run started. Runtime failures are represented in RunResult.
 // Callers must not mutate definition or inputs while Run is active.
 func Run(ctx context.Context, definition *graph.Definition, inputs map[string]graph.Value, executor Executor, options Options) (RunResult, error) {
-	if ctx == nil {
-		return RunResult{}, errors.New("run context is nil")
-	}
-	if executor == nil {
-		return RunResult{}, errors.New("node executor is nil")
-	}
-	if options.MaxConcurrency < 0 {
-		return RunResult{}, fmt.Errorf("max concurrency must not be negative: %d", options.MaxConcurrency)
-	}
-	limit := options.MaxConcurrency
-	if limit == 0 {
-		limit = 1
-	}
-	redactions := append([]string(nil), options.LogRedactions...)
-	redactionTemplate, err := newLogRedactor(redactions)
-	if err != nil {
-		return RunResult{}, fmt.Errorf("invalid log redactions: %w", err)
-	}
-
-	// Byte logs serialize as base64, but normalized/evidence string observation
-	// must not let JSON manufacture replacement runes after secret redaction.
-	if _, observed := executor.(ObservedExecutor); observed {
-		for _, value := range redactions {
-			if !utf8.ValidString(value) {
-				return RunResult{}, errors.New("invalid observed redactions: values must be valid UTF-8")
-			}
-		}
-		if !utf8.Valid(redactionTemplate.marker) {
-			return RunResult{}, errors.New("invalid observed redactions: no UTF-8-safe secret-absent marker is available")
-		}
-	}
-
-	plan, validation := graph.CompileBindings(definition)
-	if !validation.Valid() {
-		return RunResult{}, &PreflightError{Diagnostics: validation}
-	}
-	inputValidation := plan.ValidateGraphInputs(inputs)
-	if !inputValidation.Valid() {
-		return RunResult{}, &PreflightError{Diagnostics: inputValidation}
-	}
-	// Run inputs are a stable snapshot even if the caller reuses its map.
-	graphInputs := make(map[string]graph.Value, len(inputs))
-	for name, value := range inputs {
-		graphInputs[name] = value
-	}
-
-	scopes, scopeRedacted, err := unitScopes(definition, redactionTemplate)
+	prepared, err := preflightRun(ctx, definition, inputs, executor, options)
 	if err != nil {
 		return RunResult{}, err
 	}
-	if err := preflightLoops(ctx, definition, executor); err != nil {
-		return RunResult{}, err
-	}
-	if err := preflightHuman(definition, options.Decisions); err != nil {
-		return RunResult{}, err
-	}
-	machine, err := newRunMachine(ctx, definition, options.LiveEvents, options.Persist)
+	machine, dependencies, err := initializeRun(ctx, definition, options, prepared)
 	if err != nil {
 		return RunResult{}, err
 	}
-	machine.definition = definition
-	machine.decisions = options.Decisions
-	for _, id := range definition.Units {
-		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, scopes[id], scopeRedacted[id]); err != nil {
-			return RunResult{}, err
-		}
-	}
-	if definition.Units != nil {
-		machine.workspaces = inspectWorkspaces(ctx, definition)
-		machine.reportScopeConflicts(definition)
-	}
+	plan := prepared.plan
+	graphInputs := prepared.graphInputs
+	redactionTemplate := prepared.redactionTemplate
+	limit := prepared.limit
 	if limit > len(machine.ids) {
 		limit = len(machine.ids)
-	}
-	dependencies := make(map[string][]string, len(machine.ids))
-	for _, id := range machine.ids {
-		dependencies[id], _ = plan.Dependencies(id) // CompileBindings validated every node.
 	}
 
 	for {
