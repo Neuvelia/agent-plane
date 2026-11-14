@@ -80,6 +80,10 @@ type Options struct {
 	// Decisions serves human nodes. A graph with a human node and no provider
 	// fails preflight (ADR-0017).
 	Decisions DecisionProvider
+	// Persist records every retained event synchronously and in sequence order
+	// (F2.9). A failure never stops the run; it is reported in
+	// RunResult.PersistError and the caller must treat the run as not durable.
+	Persist func(events.Event) error
 }
 
 type completedNode struct {
@@ -171,7 +175,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err := preflightHuman(definition, options.Decisions); err != nil {
 		return RunResult{}, err
 	}
-	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
+	machine, err := newRunMachine(ctx, definition, options.LiveEvents, options.Persist)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -447,7 +451,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 }
 
-func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event) (*runMachine, error) {
+func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event, persist func(events.Event) error) (*runMachine, error) {
 	version, err := graph.SemanticVersion(definition)
 	if err != nil {
 		return nil, err
@@ -478,6 +482,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<
 		m.nodes[id] = &NodeResult{NodeID: id, NodeRunID: nodeRunID, State: NodePending}
 	}
 	m.emitter = events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live)
+	m.emitter.SetPersist(persist)
 	m.record("", "", string(RunRunning))
 	return m, nil
 }
@@ -672,6 +677,7 @@ func (m *runMachine) snapshot() RunResult {
 	result := m.result
 	result.Events = m.emitter.Snapshot()
 	result.ProgressStats = m.emitter.Stats()
+	result.PersistError = m.emitter.PersistError()
 	result.Nodes = make([]NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])

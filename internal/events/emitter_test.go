@@ -2,6 +2,7 @@ package events
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 )
@@ -131,5 +132,37 @@ func TestCollectorRejectsInvalidAndLateEvents(t *testing.T) {
 	}
 	if got := len(collector.Snapshot()); got != 2 {
 		t.Fatalf("late event changed collector: %d events", got)
+	}
+}
+
+func TestCollectorPersistsRetainedEventsInSequenceOrder(t *testing.T) {
+	c := NewCollector("run", "g", "sha256-v0:x")
+	var got []Event
+	c.SetPersist(func(e Event) error { got = append(got, e); return nil })
+	c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{NodeCount: 1}})
+	c.Append(Event{Type: LogChunk, NodeID: "n", NodeRunID: "nr", Payload: LogChunkPayload{Stream: Stdout, Data: []byte("x")}})
+	c.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}})
+	snapshot := c.Snapshot()
+	if len(got) != len(snapshot) {
+		t.Fatalf("persisted %d of %d retained events", len(got), len(snapshot))
+	}
+	for i := range got {
+		if got[i].Sequence != snapshot[i].Sequence || got[i].Type != snapshot[i].Type {
+			t.Fatalf("event %d persisted out of order", i)
+		}
+	}
+}
+
+func TestCollectorStopsPersistingAfterFirstErrorAndReportsIt(t *testing.T) {
+	c := NewCollector("run", "g", "sha256-v0:x")
+	calls := 0
+	c.SetPersist(func(Event) error { calls++; return errors.New("disk full") })
+	c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}})
+	c.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}})
+	if calls != 1 || c.PersistError() == nil {
+		t.Fatalf("calls=%d err=%v", calls, c.PersistError())
+	}
+	if len(c.Snapshot()) != 2 {
+		t.Fatal("a persistence failure must not drop in-memory events")
 	}
 }

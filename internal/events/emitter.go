@@ -48,6 +48,8 @@ type Collector struct {
 	queue                        []queuedEvent
 	queueBytes                   int
 	wake, stop, done             chan struct{}
+	persist                      func(Event) error
+	persistErr                   error
 }
 
 func NewCollector(runID RunID, graphID, graphVersion string) *Collector {
@@ -67,6 +69,32 @@ func NewCollectorWithLiveEvents(ctx context.Context, runID RunID, graphID, graph
 	}
 	return c
 }
+
+// SetPersist registers a synchronous, ordered recorder for every retained
+// event (lifecycle and bounded progress, including the final progress marker),
+// called under the collector lock so the durable order equals the sequence
+// order. It must be set before the first Append. After the first error the
+// recorder is no longer called and PersistError reports the cause.
+func (c *Collector) SetPersist(f func(Event) error) { c.persist = f }
+
+// PersistError is the first recorder failure, or nil.
+func (c *Collector) PersistError() error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.persistErr
+}
+
+// record must be called with c.mu held for an event that was just retained.
+func (c *Collector) record(e Event) {
+	if c.persist == nil || c.persistErr != nil {
+		return
+	}
+	e.Payload = copyPayload(e.Payload)
+	if err := c.persist(e); err != nil {
+		c.persistErr = err
+	}
+}
+
 func (c *Collector) pump(ctx context.Context) {
 	defer close(c.done)
 	for {
@@ -134,9 +162,11 @@ func (c *Collector) Append(event Event) (Event, error) {
 		if c.stats.RetainedOmittedEvents > 0 || c.stats.LiveOmittedEvents > 0 {
 			marker := c.prepare(Event{Type: ProgressOmitted, Payload: ProgressOmittedPayload{RetainedEvents: c.stats.RetainedOmittedEvents, RetainedBytes: c.stats.RetainedOmittedBytes, LiveEvents: c.stats.LiveOmittedEvents, LiveBytes: c.stats.LiveOmittedBytes, LiveStopped: c.stats.LiveStopped}})
 			c.events = append(c.events, marker)
+			c.record(marker)
 		}
 		event = c.prepare(event)
 		c.events = append(c.events, event)
+		c.record(event)
 		c.finished = true
 		c.mu.Unlock()
 		return event, nil
@@ -150,6 +180,7 @@ func (c *Collector) Append(event Event) (Event, error) {
 			c.stats.RetainedOmittedBytes += uint64(size)
 		} else {
 			c.events = append(c.events, event)
+			c.record(event)
 			c.retainedBytes += size
 			c.retainedItems++
 			c.stats.RetainedPeakBytes = c.retainedBytes
@@ -157,6 +188,7 @@ func (c *Collector) Append(event Event) (Event, error) {
 		}
 	} else {
 		c.events = append(c.events, event)
+		c.record(event)
 	}
 	if c.live != nil {
 		if c.stats.LiveStopped || len(c.queue) >= MaxLiveItems || c.queueBytes+size > MaxLiveBytes {

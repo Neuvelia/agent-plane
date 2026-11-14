@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -16,6 +17,7 @@ import (
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
+	"agentplane/internal/store"
 	"agentplane/internal/version"
 )
 
@@ -41,10 +43,13 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if len(args) >= 1 && args[0] == "run" {
 		return executeCommand(ctx, args[1:], stdout, stderr)
 	}
+	if len(args) >= 2 && args[0] == "runs" && (args[1] == "list" || args[1] == "show") {
+		return runsCommand(args[1], args[2:], stdout, stderr)
+	}
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--max-concurrency N] [--watch | --json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--max-concurrency N] [--watch | --json] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -60,15 +65,22 @@ func commandFlags(name string, args []string) (string, *flag.FlagSet, error) {
 }
 
 func readDefinition(path string) (*graph.Definition, error) {
+	def, _, err := readDefinitionBytes(path)
+	return def, err
+}
+
+// readDefinitionBytes also returns the exact bytes that were parsed so a run
+// store can snapshot the definition that actually executed.
+func readDefinitionBytes(path string) (*graph.Definition, []byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read graph file %q: %w", path, err)
+		return nil, nil, fmt.Errorf("read graph file %q: %w", path, err)
 	}
 	def, err := graph.Parse(data)
 	if err != nil {
-		return nil, fmt.Errorf("parse graph file %q: %w", path, err)
+		return nil, nil, fmt.Errorf("parse graph file %q: %w", path, err)
 	}
-	return def, nil
+	return def, data, nil
 }
 
 func validateCommand(args []string, stdout, stderr io.Writer) int {
@@ -114,6 +126,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	var inputs inputFlags
 	var redactEnv inputFlags
 	var approveNodes, rejectNodes inputFlags
+	storeDir := fs.String("store-dir", "", "persist the run under this directory (events.jsonl + graph.yaml)")
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
 	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
@@ -137,7 +150,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	def, err := readDefinition(path)
+	def, graphBytes, err := readDefinitionBytes(path)
 	if err != nil {
 		return commandError("run", "error", "graph", err, nil, *jsonMode, stdout, stderr, exitGraph)
 	}
@@ -169,6 +182,23 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
 	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions}
+	var writer *store.Writer
+	if *storeDir != "" {
+		runStore := store.Store{Dir: *storeDir}
+		if err := runStore.Check(); err != nil {
+			return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
+		}
+		for _, secret := range redactions {
+			if secret != "" && bytes.Contains(graphBytes, []byte(secret)) {
+				// The snapshot is a byte copy, so a secret embedded in the graph
+				// would be duplicated into the store. Graphs must reference
+				// secrets, never contain them (AGENTS.md).
+				return commandError("run", "error", "graph", errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run"), nil, *jsonMode, stdout, stderr, exitGraph)
+			}
+		}
+		writer = runStore.NewWriter(graphBytes)
+		opts.Persist = writer.Append
+	}
 	runCtx := ctx
 	var finishWatch func([]events.Event) error
 	if *watch {
@@ -209,6 +239,15 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
 	}
 	result, err := runtime.Run(runCtx, def, values, executor, opts)
+	if writer != nil {
+		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
+			result.PersistError = closeErr
+		}
+	}
+	if err == nil && result.PersistError != nil {
+		// Never present a non-durable run as if it had been stored.
+		return commandError("run", "error", "internal", fmt.Errorf("run was not persisted: %w", result.PersistError), nil, *jsonMode, stdout, stderr, exitInternal)
+	}
 	if finishWatch != nil {
 		if writeErr := finishWatch(result.Events); writeErr != nil {
 			return presentationError(writeErr, stderr)

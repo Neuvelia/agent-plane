@@ -14,10 +14,16 @@ observer of the same contracts. The full durable store (F3.2) and SQLite index
 ## Decision
 
 Persist each run as `<store>/<run_id>/events.jsonl` (one emitted, already
-redacted event per line, `fsync` before the emitter returns) plus
-`graph.yaml` (byte copy of the executed definition). Default store
-`.agentplane/runs`; directories 0700, files 0600. Persistence is an emitter
-sink; it does not alter events. A log without a terminal event is reported
+redacted retained event per line) plus `graph.yaml` (byte copy of the executed
+definition). Lifecycle facts are `fsync`ed before the emitter returns; log and
+progress chunks are synced with the next lifecycle fact. Directories 0700,
+files 0600; the run directory is created exclusively. `agentplane run` stores
+only with `--store-dir` (history is opt-in); `runs list/show` and the server
+default to `.agentplane/runs`. Persistence is a synchronous, ordered sink on the
+emitter (`Collector.SetPersist`, `runtime.Options.Persist`); it does not alter
+events, and a sink failure is reported in `RunResult.PersistError` without
+stopping the run. A graph containing a configured secret value is refused for
+storage. A log without a terminal event is reported
 `interrupted`; a corrupt tail is truncation, not a crash. No index, retention
 or resume. Add `runs list/show` and `--store-dir`.
 
