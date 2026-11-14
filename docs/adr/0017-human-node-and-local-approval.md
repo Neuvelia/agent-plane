@@ -38,6 +38,18 @@ dependents, exits 4. Cancellation while waiting yields `cancelled` with no
 decision event. A graph containing a human node and no provider fails
 preflight. No timeout and no approver identity in this iteration.
 
+## Dependency: golang.org/x/term
+
+The interactive CLI prompt must only run on a real terminal. `/dev/null` and
+`/dev/zero` are character devices, and the standard library has no portable
+terminal test, so a stdlib heuristic either prompts on a non-terminal (and can
+hang or grow without bound reading NULs) or needs per-OS ioctl code.
+`golang.org/x/term` (Go team, BSD-licensed) provides `IsTerminal` for Linux, macOS
+and Windows. It is a **runtime** dependency of the CLI, pulls in
+`golang.org/x/sys` (indirect), opens no network connections and reads no data. It
+is pinned to v0.27.0 because later releases raise the module's `go` directive
+above the project's 1.23.
+
 ## Alternatives considered
 
 ### Alternative A - human decision as a Gate verdict

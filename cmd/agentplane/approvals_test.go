@@ -136,6 +136,27 @@ func TestInteractivePromptStopsWhenCancelledAndQueuedPromptsDoNotStartAReader(t 
 	}
 }
 
+// With the turn free and the context already cancelled, both select cases are
+// ready and Go picks one at random. The post-acquire check must make the result
+// the same either way: no prompt is printed and no reader starts. Repeating the
+// race makes a missing check fail with overwhelming probability.
+func TestCancelledContextNeverPromptsEvenWhenTheTurnIsFree(t *testing.T) {
+	pr, pw := io.Pipe()
+	defer pw.Close()
+	for i := 0; i < 200; i++ {
+		log := newOrderedLog()
+		p := cliDecisions{prompt: bufio.NewReader(pr), out: log, turn: make(chan struct{}, 1)}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		if _, err := p.Decide(ctx, runtime.ApprovalRequest{NodeID: "alpha"}); err != context.Canceled {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+		if log.index("Approval needed") >= 0 || log.index("Approve?") >= 0 {
+			t.Fatalf("iteration %d: a cancelled run printed a prompt", i)
+		}
+	}
+}
+
 func TestOnlyARealTerminalIsInteractive(t *testing.T) {
 	for _, dev := range []string{os.DevNull, "/dev/zero"} {
 		f, err := os.Open(dev)
