@@ -15,7 +15,9 @@ new API field, event, or graph semantic is listed under "Contract gaps" and need
 2. **Deferred surfaces:** Projects, Runners, Settings and Docs are deferred. They appear in the Sidebar as
    greyed-out, non-interactive entries (see 4.2), not as working screens.
 3. **Graph editor:** specified and built as a separate feature (F2.1-F2.4) right after R1/R2.
-4. **Languages:** Polish and English. The UI is localised from the start (see 4.6).
+4. **Languages:** Polish and English. The UI is localised from the start (see 4.3a).
+5. **Storybook:** added from R0 as a development-only environment (see 4.3b), modelled on how OpenBot
+   uses it: isolated dev server, shared test data, whole screens in named states, static build in CI.
 
 ## 1. Current state
 
@@ -140,6 +142,19 @@ lost), which is real state. Search, notifications and account are omitted.
   tolerate Polish strings being ~20-30% longer (no fixed-width pills or truncated buttons).
 - Greyed-out menu entries and their "Soon" tag are localised too.
 
+### 4.3b Storybook
+
+- React + Vite Storybook in `desktop/`; `npm run storybook` (dev) and `npm run build-storybook` (static
+  build, run inside `npm run check` with telemetry off). Dev-only dependencies; excluded from the app
+  bundle (a test scans the built bundle).
+- Stories at two levels: primitives (all states, long Polish text) and **screens in named states**
+  (Dashboard empty/busy; Inspector running, waiting for human, failed after retries, connection lost;
+  Approvals; New run ready/blocked). Screens render the real components + reducer from recorded event
+  fixtures, so a story is also a regression fixture for the reducer.
+- A decorator provides an in-memory `window.agentplane` stub replaying fixtures: no sidecar, no network.
+- Toolbar globals for language (PL/EN) and viewport; axe a11y checks on every story.
+- Visual-regression screenshots and a published Storybook are deferred.
+
 ### 4.4 Screens
 
 1. **App shell.** Sidebar + top bar with breadcrumb and sidecar connection indicator; IconRail variant for
@@ -166,7 +181,7 @@ lost), which is real state. Search, notifications and account are omitted.
 
 | Phase | Content | Depends on contracts? |
 | --- | --- | --- |
-| R0 Foundation | tokens, local fonts, primitives, shell (Sidebar/TopBar/IconRail, greyed deferred entries), status vocabulary, i18n layer with PL/EN catalogues; existing screens re-hosted in the new shell | none |
+| R0 Foundation | tokens, local fonts, primitives, Storybook (setup + primitive stories; screen stories added per phase), shell (Sidebar/TopBar/IconRail, greyed deferred entries), status vocabulary, i18n layer with PL/EN catalogues; existing screens re-hosted in the new shell | none |
 | R1 Re-skin | Run Inspector, Approvals, New run restyled with primitives; node/edge styling; YAML `CodeView` | none |
 | R2 Derived insight | KPIs, DotTimeline, EventLog, Dashboard (Needs attention, Active runs, Outcomes), Handled approvals | pure selectors over events/lists; needs 5.2 if per-run summaries are required |
 | R3 Polish | keyboard navigation, `prefers-reduced-motion`, focus rings per spec, empty/error states, HelpTips copy, docs link stub | none |
