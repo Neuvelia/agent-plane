@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -181,7 +182,61 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 			rec.Summary.Status = "running"
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"run": rec.Summary, "graph": string(rec.Graph)})
+	writeJSON(w, http.StatusOK, map[string]any{"run": rec.Summary, "graph": string(rec.Graph), "graph_summary": summarizeGraph(rec.Graph)})
+}
+
+// GraphSummary is the part of a graph a map needs: nodes and data-dependency
+// edges. It is derived server-side so no client parses YAML.
+type GraphSummary struct {
+	Nodes []GraphNode `json:"nodes"`
+	Edges []GraphEdge `json:"edges"`
+}
+type GraphNode struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"`
+	MaxAttempts int    `json:"max_attempts,omitempty"`
+}
+type GraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+func summarizeGraph(source []byte) GraphSummary {
+	summary := GraphSummary{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
+	def, err := graph.Parse(source)
+	if err != nil {
+		return summary
+	}
+	ids := make([]string, 0, len(def.Nodes))
+	for id := range def.Nodes {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		n := def.Nodes[id]
+		node := GraphNode{ID: id, Type: n.Type}
+		if n.Loop != nil {
+			node.MaxAttempts = n.Loop.Attempts()
+		}
+		summary.Nodes = append(summary.Nodes, node)
+	}
+	seen := map[GraphEdge]bool{}
+	for _, e := range def.Edges {
+		from, _, _ := strings.Cut(string(e.From), ".")
+		to, _, _ := strings.Cut(string(e.To), ".")
+		edge := GraphEdge{From: from, To: to}
+		if from != "" && to != "" && !seen[edge] {
+			seen[edge] = true
+			summary.Edges = append(summary.Edges, edge)
+		}
+	}
+	sort.Slice(summary.Edges, func(i, j int) bool {
+		if summary.Edges[i].From != summary.Edges[j].From {
+			return summary.Edges[i].From < summary.Edges[j].From
+		}
+		return summary.Edges[i].To < summary.Edges[j].To
+	})
+	return summary
 }
 
 type startBody struct {

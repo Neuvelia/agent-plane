@@ -16,6 +16,10 @@ explicit static units, Return Envelopes and immutable accepted runtime values/
 provenance (ADR-0015). F1.8 adds opt-in Git-observed changed-files scope checking
 (ADR-0016). Shared files remain outside the immutability guarantee.
 
+A Phase 2 vertical slice adds a `human` approval node, a Shell correction loop,
+an opt-in local run store (`--store-dir`, `runs list/show`), a loopback `serve`
+API, and an Electron desktop shell in `desktop/` (see `desktop/README.md`).
+
 The CLI-driven Phase 0 runtime executes independent Shell nodes concurrently,
 passes explicit data between nodes, emits structured events, and finishes
 deterministically.

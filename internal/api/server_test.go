@@ -281,3 +281,27 @@ func TestCancelledWaitRemovesThePendingApproval(t *testing.T) {
 		t.Fatalf("late decision after cancellation: %v", err)
 	}
 }
+
+func TestRunDetailIncludesGraphSummaryFromTheSnapshot(t *testing.T) {
+	s, ts := newServer(t, nil)
+	source := "schema_version: 0\nid: g\ninputs: {}\nnodes:\n  a: {type: shell, outputs: {stdout: {type: string}}}\n  b: {type: shell, inputs: {x: {type: string}}, outputs: {stdout: {type: string}}}\n  c: {type: shell, inputs: {x: {type: string}, y: {type: string}}}\nedges:\n  - {from: a.outputs.stdout, to: b.inputs.x}\n  - {from: a.outputs.stdout, to: c.inputs.x}\n  - {from: b.outputs.stdout, to: c.inputs.y}\noutputs: {}\n"
+	w := s.Store.NewWriter([]byte(source))
+	w.Append(fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 3}))
+	w.Close()
+	resp, body := do(t, ts, "GET", "/runs/"+runID, "", true)
+	if resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	var detail struct {
+		Summary GraphSummary `json:"graph_summary"`
+	}
+	if err := json.Unmarshal([]byte(body), &detail); err != nil {
+		t.Fatal(err)
+	}
+	if len(detail.Summary.Nodes) != 3 || len(detail.Summary.Edges) != 3 || detail.Summary.Edges[0] != (GraphEdge{From: "a", To: "b"}) {
+		t.Fatalf("%+v", detail.Summary)
+	}
+	if got := summarizeGraph([]byte("not: [valid")); len(got.Nodes) != 0 || got.Edges == nil {
+		t.Fatalf("an unreadable snapshot must yield an empty summary, got %+v", got)
+	}
+}
