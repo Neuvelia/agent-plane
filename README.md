@@ -111,7 +111,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 8 (old schema 1–7 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 9 (old schema 1–8 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the

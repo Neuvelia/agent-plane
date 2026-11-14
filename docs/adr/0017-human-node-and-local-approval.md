@@ -17,16 +17,22 @@ unchanged). It declares output `decision` (string); approve publishes
 `"approved"` as an ordinary accepted output so downstream dependence is a real
 data edge.
 
-Add runtime state `waiting_human`. A human node is not an Executor slot holder:
-it registers a pending decision with a consumer-owned `DecisionProvider`
-(`Decide(ctx, Request) (Decision, error)` semantics via a keyed pending-set) and
-yields its concurrency slot while waiting. The coordinator owns transitions.
+Waiting is not a scheduler state. The coordinator owns node transitions and is
+blocked on the current batch, so a worker cannot move a node into a new state.
+A human node runs as a normal worker: it emits `approval_requested`, then blocks
+in a consumer-owned `DecisionProvider.Decide(ctx, ApprovalRequest)` and returns
+the outcome. "Waiting for a human" is derived from events
+(`approval_requested` without `approval_decided` for the node run). The node
+holds one concurrency slot while waiting and the batch barrier of ADR-0014 is
+unchanged: nodes in the same batch keep running, later-ready nodes start after
+the batch. An event-driven scheduler that yields the slot is deferred.
 
 Add events `approval_requested` and `approval_decided` (event schema 9,
 additive; decode of 1-8 unchanged). Payloads carry node run ID, bounded
 prompt/context/comment and the decision; redaction applies before emission.
 
-First decision per node run wins. Repeats are no-ops and return the original
+The scheduler calls the provider once per node run. A provider serving several
+channels owns first-decision-wins; repeats are no-ops that return the original
 decision. Reject fails the node (kind `rejected`, code `human_rejected`), skips
 dependents, exits 4. Cancellation while waiting yields `cancelled` with no
 decision event. A graph containing a human node and no provider fails
@@ -60,6 +66,7 @@ Cons: invisible to events/UI, not auditable, holds a slot and a process.
 ### Negative / trade-offs
 
 - A run can wait indefinitely until decision or cancellation.
+- A waiting human node holds a concurrency slot and later-batch nodes wait for the batch barrier.
 - A waiting run does not survive process death (F3.3 later).
 - Approver identity and roles are absent until Team scope.
 

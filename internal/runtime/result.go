@@ -13,6 +13,7 @@ type FailureKind string
 const (
 	FailureNeedsIntervention FailureKind = "needs_intervention"
 	FailureExecutor          FailureKind = "executor"
+	FailureRejected          FailureKind = "rejected"
 	FailureBinding           FailureKind = "binding"
 	FailureOutputContract    FailureKind = "output_contract"
 	FailureGraphOutput       FailureKind = "graph_output"

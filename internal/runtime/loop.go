@@ -156,6 +156,9 @@ func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *Correcti
 	return p
 }
 func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, number int, f *CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
+	if n.Type == "human" {
+		return m.humanNode(ctx, id, n, in, r)
+	}
 	if err := ctx.Err(); err != nil {
 		return completedNode{id: id, attemptID: aid, err: err}
 	}

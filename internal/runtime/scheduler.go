@@ -77,6 +77,9 @@ type Options struct {
 	// LogRedactions are exact byte strings replaced in log events. Redaction
 	// works across writes and is independent for stdout and stderr.
 	LogRedactions []string
+	// Decisions serves human nodes. A graph with a human node and no provider
+	// fails preflight (ADR-0017).
+	Decisions DecisionProvider
 }
 
 type completedNode struct {
@@ -105,6 +108,7 @@ type runMachine struct {
 	emitter     *events.Collector
 	startedAt   time.Time
 	nodeStarted map[string]time.Time
+	decisions   DecisionProvider
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -164,11 +168,15 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err := preflightLoops(ctx, definition, executor); err != nil {
 		return RunResult{}, err
 	}
+	if err := preflightHuman(definition, options.Decisions); err != nil {
+		return RunResult{}, err
+	}
 	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
 	if err != nil {
 		return RunResult{}, err
 	}
 	machine.definition = definition
+	machine.decisions = options.Decisions
 	for _, id := range definition.Units {
 		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, scopes[id], scopeRedacted[id]); err != nil {
 			return RunResult{}, err
@@ -366,6 +374,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						machine.transitionNode(work.id, NodeCancelled)
 					} else {
 						nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureExecutor, Err: work.err}
+						if errors.As(work.err, &rejectedError{}) {
+							nodeResult.Failure.Kind = FailureRejected
+						}
 						if len(work.diagnostics) > 0 {
 							nodeResult.Failure.Kind = FailureOutputContract
 							nodeResult.Failure.Diagnostics = work.diagnostics

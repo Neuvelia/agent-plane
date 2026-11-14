@@ -93,6 +93,13 @@ func (r *eventRenderer) Event(event events.Event) error {
 		p := event.Payload.(events.AttemptFinishedPayload)
 		_, err := fmt.Fprintf(r.stderr, "%s attempt %s: %s\n", event.NodeID, event.AttemptID, p.Outcome)
 		return err
+	case events.ApprovalRequested:
+		_, err := fmt.Fprintf(r.stderr, "%s waiting for human approval\n", event.NodeID)
+		return err
+	case events.ApprovalDecided:
+		p := event.Payload.(events.ApprovalDecidedPayload)
+		_, err := fmt.Fprintf(r.stderr, "%s human decision: %s\n", event.NodeID, p.Decision)
+		return err
 	case events.NodeReady:
 		_, err := fmt.Fprintf(r.stderr, "%s ready\n", event.NodeID)
 		return err

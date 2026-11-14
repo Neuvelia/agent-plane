@@ -44,7 +44,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--max-concurrency N] [--watch | --json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--max-concurrency N] [--watch | --json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -113,6 +113,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes")
 	var inputs inputFlags
 	var redactEnv inputFlags
+	var approveNodes, rejectNodes inputFlags
+	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
+	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
@@ -161,7 +164,11 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return presentationError(err, stderr)
 		}
 	}
-	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions}
+	decisions, err := decisionProvider(def, approveNodes, rejectNodes, stdinInteractive(), os.Stdin, stderr)
+	if err != nil {
+		return usageError("run", err, *jsonMode, stdout, stderr)
+	}
+	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions}
 	runCtx := ctx
 	var finishWatch func([]events.Event) error
 	if *watch {
