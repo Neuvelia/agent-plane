@@ -21,7 +21,7 @@ new API field, event, or graph semantic is listed under "Contract gaps" and need
 
 ### Product-owner amendments after R0 review
 
-- Brand at the top left is the Tarmind logo and name (global bar), as in the design.
+- The Tarmind logo and name sit at the very top of the Sidebar, right-aligned (not in the top bar).
 - The Sidebar is always expanded; the IconRail is not used on any screen.
 - Language moved from the top bar to Settings; Settings is enabled (language only). Projects, Runners and
   Docs stay greyed out.

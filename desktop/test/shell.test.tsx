@@ -34,6 +34,13 @@ describe('Sidebar deferred entries', () => {
     expect(out).toContain('Projekty')
     expect(out).not.toContain('>Soon<')
   })
+  it('puts the Tarmind logo and name at the very top of the sidebar, before every entry', () => {
+    const out = html('en')
+    const brand = out.indexOf('side-brand')
+    expect(brand).toBeGreaterThan(-1)
+    expect(out.slice(brand)).toMatch(/^side-brand"><img[^>]*src="[^"]*"[^>]*\/><span>Tarmind<\/span>/)
+    expect(brand).toBeLessThan(out.indexOf('data-testid="nav-runs"'))
+  })
   it('keeps Settings an enabled, real button', () => {
     expect(html('en')).toMatch(/<button[^>]*data-testid="nav-settings"/)
   })
@@ -49,10 +56,10 @@ describe('GlobalBar', () => {
         <GlobalBar lost={lost} />
       </I18nProvider>,
     )
-  it('shows the Tarmind logo and name at the left', () => {
+  it('does not carry the brand (it lives at the top of the sidebar)', () => {
     const out = bar(false)
-    expect(out).toMatch(/<img[^>]*src="[^"]*"/)
-    expect(out).toContain('>Tarmind<')
+    expect(out).not.toContain('<img')
+    expect(out).not.toContain('>Tarmind<')
   })
   it('shows the hard-coded profile initials with an accessible name', () => {
     expect(PROFILE_INITIALS).toBe('KW')

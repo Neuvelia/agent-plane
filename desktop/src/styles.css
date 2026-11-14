@@ -13,11 +13,12 @@ h1{font-size:22px;letter-spacing:-.02em;margin:0 0 12px}
 h2{font-size:17px;margin:0}
 
 /* App shell */
-.app{display:grid;grid-template-columns:var(--size-sidebar) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr);height:100%;padding:0 var(--space-8) var(--space-8);gap:var(--space-8)}
-.app>.global-bar{grid-column:1/-1}
+.app{display:grid;grid-template-columns:var(--size-sidebar) minmax(0,1fr);height:100%;padding:0 var(--space-8) var(--space-8) 0;gap:var(--space-8)}
 .app>.col{display:flex;flex-direction:column;min-width:0;min-height:0;gap:var(--space-8)}
 main{overflow:auto;min-width:0;min-height:0;flex:1;padding:var(--space-4) var(--space-6)}
-.side{display:flex;flex-direction:column;gap:var(--space-2);padding:var(--space-8) var(--space-6)}
+.side{display:flex;flex-direction:column;gap:var(--space-2);padding:0 var(--space-6) var(--space-8) var(--space-14)}
+.side-brand{display:flex;align-items:center;justify-content:flex-end;gap:9px;height:52px;flex:none;margin-bottom:var(--space-4);padding:0 var(--space-10);font-weight:600;font-size:14px;letter-spacing:-.01em}
+.side-brand img{width:28px;height:28px;object-fit:contain;flex:none}
 .side-gap{flex:1}
 .nav{display:flex;align-items:center;gap:var(--space-10);height:var(--size-nav);padding:0 var(--space-10);border:0;border-radius:var(--radius-10);background:transparent;color:var(--muted);font:inherit;font-size:var(--type-nav-size);font-weight:var(--type-nav-weight);text-align:left;cursor:pointer;transition:background-color .15s,color .15s}
 .nav:hover{background:var(--fill-4);color:var(--fg)}
@@ -31,14 +32,13 @@ main{overflow:auto;min-width:0;min-height:0;flex:1;padding:var(--space-4) var(--
 .rail-item{width:var(--size-rail-item);height:var(--size-rail-item);border:0;border-radius:var(--radius-12);background:transparent;color:var(--muted);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background-color .15s,color .15s}
 .rail-item:hover{background:var(--fill-4);color:var(--fg)}
 .rail-item.on{background:var(--raised);color:var(--fg)}
-.global-bar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-12);height:52px;padding:0 var(--space-6) 0 var(--space-4)}
-.g-brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:14px;letter-spacing:-.01em}
-.g-brand img{width:28px;height:28px;object-fit:contain;flex:none}
+.global-bar{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-12);height:52px;padding:0 var(--space-6) 0 var(--space-4)}
 .g-right{display:flex;align-items:center;gap:var(--space-12)}
 .avatar{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:linear-gradient(180deg,var(--raised-hover),var(--raised));box-shadow:inset 0 0 0 1px var(--card-line);font:600 12px/1 var(--font-sans);letter-spacing:.02em}
 /* macOS: the window has no native title bar (see electron/main.cjs). The global
-   bar is the drag area and clears the traffic lights; controls stay clickable. */
-.mac .global-bar{-webkit-app-region:drag;padding-left:84px}
+   bar and the sidebar's brand strip are the drag area; the traffic lights sit in
+   the sidebar's top-left corner, which the right-aligned brand leaves free. */
+.mac .global-bar,.mac .side-brand{-webkit-app-region:drag}
 .mac .global-bar :is(button,a,input,.seg){-webkit-app-region:no-drag}
 .topbar{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8);min-height:36px;padding:0 var(--space-6);flex-wrap:wrap}
 .crumbs{display:flex;gap:var(--space-8);align-items:center;font-size:var(--type-breadcrumb-size);font-weight:var(--type-breadcrumb-weight);color:var(--muted)}

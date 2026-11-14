@@ -44,6 +44,12 @@ export function Sidebar({ entries, deferred, footer = [] }: { entries: NavEntry[
   const { t } = useI18n()
   return (
     <nav className="side" aria-label={t('nav.main')}>
+      {/* Brand: top of the sidebar, right-aligned. On macOS the top-left corner
+          belongs to the window's traffic lights, and this strip is draggable. */}
+      <div className="side-brand">
+        <img src={logo} alt="" width={28} height={28} />
+        <span>{t('app.name')}</span>
+      </div>
       {entries.map((e) => (
         <Entry key={e.id} e={e} />
       ))}
@@ -81,17 +87,13 @@ export function IconRail({ entries }: { entries: NavEntry[] }) {
 /** Placeholder identity until accounts exist (F2.5a): initials are hard-coded. */
 export const PROFILE_INITIALS = 'KW'
 
-/** Full-width bar: brand at the left, connection state and profile at the right.
- *  On macOS the window has no native title bar, so this bar is also the drag area
- *  and leaves room for the traffic lights (see styles.css `.mac`). */
+/** Bar above the page content: connection state and profile at the right.
+ *  On macOS the window has no native title bar, so this bar (with the sidebar's
+ *  brand strip) is the drag area (see styles.css `.mac`). */
 export function GlobalBar({ lost }: { lost: boolean }) {
   const { t } = useI18n()
   return (
     <header className="global-bar">
-      <div className="g-brand">
-        <img src={logo} alt="" width={28} height={28} />
-        <span>{t('app.name')}</span>
-      </div>
       <div className="g-right">
         <span className={`conn ${lost ? 'bad' : 'ok'}`} data-testid="connection-indicator">
           <span className="dot sm" aria-hidden="true" />

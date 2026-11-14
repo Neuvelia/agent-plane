@@ -34,9 +34,9 @@ export default function App() {
   const crumb = route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : t('nav.runs')
   return (
     <div className="app">
-      <GlobalBar lost={lost} />
       <Sidebar entries={main} deferred={deferred} footer={footer} />
       <div className="col">
+        <GlobalBar lost={lost} />
         <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
         <main>
           {route.name === 'runs' && <Dashboard onOpen={(id) => setRoute({ name: 'run', id })} />}
