@@ -92,6 +92,20 @@ renderer holds no graph rules. Saving sends the hash of the text it opened
 overwritten silently. A new graph is create-only. The canvas, Visual/Split view
 and "Save and run" come in later slices.
 
+## Canvas (F2.1, slice E2.2)
+
+The Editor shows the graph beside its YAML (Visual / YAML / Split). The canvas is
+React Flow with one handle per declared port. Every gesture becomes an ADR-0020
+operation sent to `POST /graphs/edit` with the text on screen; the answer replaces
+the draft as one undo step. Whether a connection is allowed is the engine's
+`can_connect` verdict, asked once when a drag starts and shown on the target
+handles; nothing in `src/editor` decides it (`test/no-graph-rules.test.ts`).
+Moving a node writes `metadata.layout` (ADR-0022), which never changes the
+semantic version. While the YAML does not parse the canvas keeps the last good
+graph read-only; files with anchors, aliases or merge keys open read-only too.
+Everything is reachable from the keyboard: the node list, "Connect…" with its
+engine-checked target list, Rename, Delete and the connections list.
+
 CodeMirror (`@codemirror/state`, `view`, `language`, `lang-yaml`, `commands`,
 `@lezer/highlight`, all MIT, exact-pinned) is a renderer-only, development-time
 bundle dependency: it makes no network requests and is loaded lazily, so the

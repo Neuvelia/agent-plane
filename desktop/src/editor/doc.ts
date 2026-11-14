@@ -1,5 +1,5 @@
 import type { Diagnostic } from '../types'
-import type { OpenResponse, ValidateResponse } from './types'
+import type { Definition, OpenResponse, ValidateResponse } from './types'
 
 // The open document, as a pure state machine. The renderer holds the TEXT of the
 // graph (the file is the truth); everything about its meaning (diagnostics,
@@ -15,6 +15,10 @@ export interface Analysis {
   diagnostics: Diagnostic[]
   parseError?: string
   version?: string
+  /** The last definition the engine could parse. Kept while the text does not parse. */
+  definition?: Definition
+  /** Why the canvas must not edit this file (anchors, aliases, merge keys). */
+  readonlyReasons?: string[]
   /** The list describes an older text than the draft. */
   stale: boolean
 }
@@ -41,8 +45,17 @@ export interface DocState {
 
 export const isDirty = (s: DocState): boolean => s.draft !== s.savedText
 
-function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; version?: string }): Analysis {
-  return { status: 'ready', diagnostics: r.diagnostics, parseError: r.parse_error, version: r.version, stale: false }
+function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; version?: string; definition?: Definition; readonly_reasons?: string[] }, previous?: Analysis): Analysis {
+  return {
+    status: 'ready',
+    diagnostics: r.diagnostics,
+    parseError: r.parse_error,
+    version: r.version,
+    // While the text does not parse the canvas keeps the last good definition (read-only).
+    definition: r.definition ?? (r.parse_error ? previous?.definition : undefined),
+    readonlyReasons: r.readonly_reasons,
+    stale: false,
+  }
 }
 
 export function fromOpen(grant: string, r: OpenResponse): DocState {
@@ -71,6 +84,15 @@ export function type(s: DocState, text: string, now: number): DocState {
   const boundary = s.past.length === 0 || now - s.lastEditAt > COALESCE_MS
   const past = boundary ? [...s.past, s.draft].slice(-MAX_HISTORY) : s.past
   return { ...s, draft: text, past, future: [], lastEditAt: now, analysis: { ...s.analysis, stale: true } }
+}
+
+/**
+ * A change made by an operation. It is always its own undo step, and the
+ * engine's answer already describes the new text, so no validation is pending.
+ */
+export function edited(s: DocState, r: OpenResponse): DocState {
+  if (r.text === s.draft) return s
+  return { ...s, draft: r.text, past: [...s.past, s.draft].slice(-MAX_HISTORY), future: [], lastEditAt: 0, analysis: analysisOf(r) }
 }
 
 export function undo(s: DocState): DocState {
@@ -106,7 +128,7 @@ export function validating(s: DocState): DocState {
 /** A validation result counts only if it describes the text that is on screen now. */
 export function analyzed(s: DocState, forText: string, r: ValidateResponse): DocState {
   if (forText !== s.draft) return s
-  return { ...s, analysis: analysisOf(r) }
+  return { ...s, analysis: analysisOf(r, s.analysis) }
 }
 
 /** Counts for the status line. */

@@ -244,6 +244,19 @@ func TestValidateTakesTextOrGrantOrPathExactlyOnce(t *testing.T) {
 	if _, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": "schema_version: 0\nid: ["}); out["status"] != "invalid" || out["parse_error"] == nil {
 		t.Errorf("broken text: %v", out)
 	}
+	// The canvas follows typed YAML: validate returns the definition, and flags
+	// files whose canvas must stay read-only.
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": pairGraph})
+	if def, ok := out["definition"].(map[string]any); !ok || def["id"] != "pair" || out["readonly_canvas"] != nil {
+		t.Errorf("validate must return the definition: %v", out)
+	}
+	if _, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": "schema_version: 0\nid: ["}); out["definition"] != nil {
+		t.Errorf("a broken text has no definition: %v", out)
+	}
+	anchored := "x: &a 1\ny: *a\n" + pairGraph
+	if _, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": anchored}); out["readonly_canvas"] != true || out["readonly_reasons"] == nil {
+		t.Errorf("anchors must make the canvas read-only: %v", out)
+	}
 	if _, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"grant": g}); out["status"] != "valid" {
 		t.Errorf("grant: %v", out)
 	}

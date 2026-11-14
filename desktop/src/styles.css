@@ -210,3 +210,30 @@ main:focus{outline:none}
 .yaml-host{height:min(62vh,640px);min-height:320px;border-radius:var(--radius-14);overflow:hidden}
 .yaml-editor{height:100%}
 .banner.warn{background:var(--warn-soft)}
+
+/* E2.2 canvas */
+.ed-views{display:grid;gap:var(--space-12);grid-template-columns:minmax(0,1fr)}
+.ed-views.split{grid-template-columns:minmax(0,3fr) minmax(0,2fr);align-items:start}
+.ed-visual{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--space-12)}
+.ed-flow{position:relative;height:460px;border-radius:var(--radius-12);overflow:hidden;background:var(--bg)}
+.ed-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:1;pointer-events:none;text-align:center;padding:0 24px}
+.ed-strip{padding:8px var(--space-12);gap:10px}
+.ed-strip .input{min-width:180px}
+.ed-targets{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px}
+.ed-node{position:relative;border-radius:var(--radius-14);background:var(--raised);cursor:grab;font-size:12px}
+.ed-node:hover{background:var(--raised-hover)}
+.ed-node.sel{box-shadow:var(--ring-selected)}
+.ed-node-head{display:flex;justify-content:space-between;align-items:center;gap:6px;height:44px;padding:0 12px;white-space:nowrap}
+.ed-port{position:absolute;left:0;right:0;height:22px;display:flex;align-items:center;gap:6px;padding:0 14px;white-space:nowrap}
+.ed-port.out{justify-content:flex-end}
+.ed-port .mu{font-size:11px}
+.ed-node .react-flow__handle{width:12px;height:12px;background:var(--brand);border:2px solid var(--raised)}
+.ed-node .react-flow__handle.ed-ok{background:var(--ok)}
+.ed-node .react-flow__handle.ed-bad{background:var(--bad);opacity:.6}
+.react-flow__edge.ed-edge-sel .react-flow__edge-path{stroke:var(--brand);stroke-width:3}
+.ed-list{list-style:none;margin:0;padding:0 var(--space-12) var(--space-8);display:flex;flex-wrap:wrap;gap:6px}
+.ed-list-item{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-10);background:var(--raised)}
+.ed-list-item:hover{background:var(--raised-hover)}
+.ed-list-item.sel{box-shadow:var(--ring-selected)}
+.ed-list-item:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ed-selected{display:grid;gap:6px;padding:var(--space-8) var(--space-12) var(--space-12)}

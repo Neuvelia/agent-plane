@@ -1,0 +1,13 @@
+{
+ "definition": {
+  "schema_version": 0,
+  "id": "new-graph",
+  "inputs": {},
+  "nodes": {},
+  "edges": [],
+  "outputs": {}
+ },
+ "diagnostics": [],
+ "status": "valid",
+ "version": "sha256-v0:5733871fdc256241f41603973a74295f3de314d54d4dba9cdc0750c3b20ef3b2"
+}

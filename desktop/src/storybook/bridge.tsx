@@ -21,6 +21,8 @@ export interface GraphStory {
   opened?: OpenResponse
   /** Answers a validation of typed text. */
   validate?: (text: string) => ValidateResponse
+  /** Answers an operation batch with a recorded response; undefined means "the engine could not be reached". */
+  edit?: (ops: { op: string }[], text: string) => { status: number; body: unknown } | undefined
   /** How a save ends. Default: ok. */
   save?: 'ok' | 'conflict' | 'gone' | 'exists' | 'error'
   /** Makes openGraph() fail with this message. */
@@ -55,6 +57,12 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
       if (method === 'POST' && path === '/graphs/validate' && body && typeof (body as { text?: unknown }).text === 'string' && g) {
         const text = (body as { text: string }).text
         return respond(200, g.validate ? g.validate(text) : { status: 'valid', diagnostics: [] }) as ApiResponse<T>
+      }
+      if (method === 'POST' && path === '/graphs/edit' && g) {
+        const b = body as { ops?: { op: string }[]; text?: string }
+        const answer = g.edit?.(b.ops ?? [], b.text ?? '')
+        if (!answer) throw new Error('the engine could not be reached')
+        return respond(answer.status, answer.body) as ApiResponse<T>
       }
       if (method === 'POST' && path === '/graphs/stat' && g?.opened) return respond(200, { exists: true, hash: g.opened.hash, size: g.opened.text.length }) as ApiResponse<T>
       if (method === 'PUT' && path === '/graphs/save' && g) {

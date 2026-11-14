@@ -1,0 +1,54 @@
+{
+ "status": 200,
+ "body": {
+  "text": "# Two shell nodes, not yet connected.\nschema_version: 0\nid: pair\ninputs: {}\n\nnodes:\n  # the producer\n  a:\n    type: shell\n    config:\n      command: \"true\"\n    outputs:\n      stdout: {type: string}\n\n  b:\n    type: shell\n    config:\n      command: \"true\"\n    inputs:\n      text: {type: string}\n\nedges:\n  - from: a.outputs.stdout\n    to: b.inputs.text\noutputs: {}\n",
+  "hash": "3fe748a9a76fbe9a2b1159312b420839f2f584fb65af246864856a8a80de1e62",
+  "version": "sha256-v0:f5cc003aa03099ba8ab4b267f9203dd52fb32166375c03d2ef4294212db07101",
+  "definition": {
+   "schema_version": 0,
+   "id": "pair",
+   "inputs": {},
+   "nodes": {
+    "a": {
+     "type": "shell",
+     "config": {
+      "command": "true"
+     },
+     "outputs": {
+      "stdout": {
+       "type": "string"
+      }
+     }
+    },
+    "b": {
+     "type": "shell",
+     "inputs": {
+      "text": {
+       "type": "string"
+      }
+     },
+     "config": {
+      "command": "true"
+     }
+    }
+   },
+   "edges": [
+    {
+     "from": "a.outputs.stdout",
+     "to": "b.inputs.text"
+    }
+   ],
+   "outputs": {}
+  },
+  "diagnostics": [],
+  "readonly_canvas": false,
+  "line_ending": "lf",
+  "label": "edit.yaml",
+  "results": [
+   {
+    "index": 0,
+    "op": "add_edge"
+   }
+  ]
+ }
+}

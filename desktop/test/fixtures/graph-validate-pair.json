@@ -1,4 +1,35 @@
 {
+ "definition": {
+  "schema_version": 0,
+  "id": "pair",
+  "inputs": {},
+  "nodes": {
+   "a": {
+    "type": "shell",
+    "config": {
+     "command": "true"
+    },
+    "outputs": {
+     "stdout": {
+      "type": "string"
+     }
+    }
+   },
+   "b": {
+    "type": "shell",
+    "inputs": {
+     "text": {
+      "type": "string"
+     }
+    },
+    "config": {
+     "command": "true"
+    }
+   }
+  },
+  "edges": [],
+  "outputs": {}
+ },
  "diagnostics": [
   {
    "severity": "warning",

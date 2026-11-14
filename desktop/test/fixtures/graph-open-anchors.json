@@ -1,0 +1,69 @@
+{
+ "text": "---\n# Hostile fixture: constructs a hand-written graph may contain.\nschema_version: 0\nid: hostile   # trailing comment on a scalar\nname: \"Quoted # not a comment\"\n\nmetadata:\n  description: |\n    A block scalar that\n    spans lines.\n\n\ninputs:\n  message: {type: string, required: true}\n\nnodes:\n  # first node\n  a:\n    type: shell\n    config: &shell    # anchor: b reuses this mapping through a merge key\n      command: printf\n      args: [\"%s\\n\", 'single quoted', plain]   # flow sequence with a comment\n    outputs:\n      stdout: {type: string}\n\n  b:\n    type: shell\n    config:\n      <<: *shell\n      command: \"true\"\n    inputs:\n      text: {type: string}\n\nedges:\n  # the only edge\n  - from: a.outputs.stdout   # source\n    to: b.inputs.text\n\n  # a trailing comment inside the sequence\ngraph_input_bindings: []\noutputs: {}\n# trailing file comment\n",
+ "hash": "abe9c33b27163d7d186b1f87f5c0586d226afe13a58eada77ad5753c5fd2d802",
+ "version": "sha256-v0:993c565750f14c4bc687e1cc1a90239476517c32aa6e38cb7aca7502a47fe4d1",
+ "definition": {
+  "schema_version": 0,
+  "id": "hostile",
+  "name": "Quoted # not a comment",
+  "metadata": {
+   "description": "A block scalar that\nspans lines.\n"
+  },
+  "inputs": {
+   "message": {
+    "type": "string",
+    "required": true
+   }
+  },
+  "nodes": {
+   "a": {
+    "type": "shell",
+    "config": {
+     "args": [
+      "%s\n",
+      "single quoted",
+      "plain"
+     ],
+     "command": "printf"
+    },
+    "outputs": {
+     "stdout": {
+      "type": "string"
+     }
+    }
+   },
+   "b": {
+    "type": "shell",
+    "inputs": {
+     "text": {
+      "type": "string"
+     }
+    },
+    "config": {
+     "args": [
+      "%s\n",
+      "single quoted",
+      "plain"
+     ],
+     "command": "true"
+    }
+   }
+  },
+  "edges": [
+   {
+    "from": "a.outputs.stdout",
+    "to": "b.inputs.text"
+   }
+  ],
+  "outputs": {}
+ },
+ "diagnostics": [],
+ "readonly_canvas": true,
+ "readonly_reasons": [
+  "alias",
+  "anchor",
+  "merge_key"
+ ],
+ "line_ending": "lf",
+ "label": "anchors.yaml"
+}

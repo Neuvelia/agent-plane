@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GraphGrantResult, RecentGraph } from '../types'
-import { analyzed, fromNew, fromOpen, isDirty, newGraphText, redo as redoDoc, reloaded, saved, type as typeDoc, undo as undoDoc, validating, withConflict, type DocState } from './doc'
-import { openDocument, recentGraphs, saveDocument, statDocument, validateText } from './api'
+import type { Op, OpResult } from './types'
+import { analyzed, edited, fromNew, fromOpen, isDirty, newGraphText, redo as redoDoc, reloaded, saved, type as typeDoc, undo as undoDoc, validating, withConflict, type DocState } from './doc'
+import { editDocument, openDocument, recentGraphs, saveDocument, statDocument, validateText } from './api'
 
 /** How long typing pauses before the text is validated (spec F2.1, requirement 12). */
 export const VALIDATE_DELAY_MS = 300
 
-export type EditorError = { kind: 'open' | 'save'; message: string }
+export type EditorError = { kind: 'open' | 'save' | 'edit'; message: string }
+
+export type ApplyResult = { ok: true; results: OpResult[] } | { ok: false; message: string }
 
 /** Something the person asked for that would leave unsaved changes behind. */
 export interface Leave {
@@ -24,6 +27,10 @@ export interface GraphDocument {
   openRecent: (id: string) => void
   close: () => void
   type: (text: string) => void
+  /** Sends operations for the text on screen; a success replaces the draft as one undo step. */
+  applyOps: (ops: Op[], opts?: { quiet?: boolean }) => Promise<ApplyResult>
+  /** Validate the draft now instead of after the typing pause. */
+  revalidate: () => void
   undo: () => void
   redo: () => void
   save: () => Promise<void>
@@ -106,6 +113,23 @@ export function useGraphDocument(): GraphDocument {
   )
 
   const type = useCallback((text: string) => setDoc((d) => (d ? typeDoc(d, text, Date.now()) : d)), [])
+  const applyOps = useCallback(async (ops: Op[], opts?: { quiet?: boolean }): Promise<ApplyResult> => {
+    const current = docRef.current
+    if (!current) return { ok: false, message: 'no graph is open' }
+    const text = current.draft
+    const r = await editDocument(current.grant, text, ops)
+    if (!r.ok) {
+      const message = r.detail?.suggestion ? `${r.detail.message} (${r.detail.suggestion})` : r.message
+      if (!opts?.quiet) setError({ kind: 'edit', message })
+      return { ok: false, message }
+    }
+    // The person kept typing while the engine worked: their text wins.
+    if (docRef.current?.grant !== current.grant || docRef.current.draft !== text) return { ok: false, message: 'the text changed while the operation ran' }
+    setError(null)
+    setDoc((d) => (d ? edited(d, r.doc) : d))
+    return { ok: true, results: r.doc.results ?? [] }
+  }, [])
+  const revalidate = useCallback(() => setDoc((d) => (d ? { ...d, analysis: { ...d.analysis, stale: true } } : d)), [])
   const undo = useCallback(() => setDoc((d) => (d ? undoDoc(d) : d)), [])
   const redo = useCallback(() => setDoc((d) => (d ? redoDoc(d) : d)), [])
 
@@ -222,6 +246,6 @@ export function useGraphDocument(): GraphDocument {
     return () => window.removeEventListener('focus', onFocus)
   }, [grant])
 
-  return { doc, busy, error, recent, leave, open, create, openRecent, close, type, undo, redo, save, keepMine, reload, dismissError, saveAndLeave, discardAndLeave, cancelLeave }
+  return { doc, busy, error, recent, leave, open, create, openRecent, close, type, applyOps, revalidate, undo, redo, save, keepMine, reload, dismissError, saveAndLeave, discardAndLeave, cancelLeave }
 }
 

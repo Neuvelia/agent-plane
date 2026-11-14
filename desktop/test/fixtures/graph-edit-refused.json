@@ -1,0 +1,16 @@
+{
+ "status": 422,
+ "body": {
+  "error": {
+   "code": "E_EDIT_CANNOT_CONNECT",
+   "message": "reference \"nope.inputs.x\" uses missing node \"nope\""
+  },
+  "detail": {
+   "code": "E_EDIT_CANNOT_CONNECT",
+   "message": "reference \"nope.inputs.x\" uses missing node \"nope\"",
+   "op_index": 0,
+   "edge": "a.outputs.stdout -> nope.inputs.x",
+   "suggestion": "the validator refused this edge (E_EDGE_TARGET_NODE_NOT_FOUND); check the port types and that the input has no other provider"
+  }
+ }
+}

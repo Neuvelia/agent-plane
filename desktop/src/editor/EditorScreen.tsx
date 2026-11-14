@@ -1,6 +1,7 @@
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/context'
-import { Button, Card, HelpTip, ListRow, Pill, Tag } from '../ui/primitives'
+import { Button, Card, HelpTip, ListRow, Pill, SegmentedControl, Tag } from '../ui/primitives'
+import { GraphCanvas } from './GraphCanvas'
 import { counts, isDirty, type DocState } from './doc'
 import type { GraphDocument } from './useGraphDocument'
 import { LoadingState } from '../states'
@@ -29,7 +30,7 @@ export function EditorScreen({ g }: { g: GraphDocument }) {
       <h1>{doc ? doc.label : t('editor.title')}</h1>
       {g.error && (
         <div className="banner" role="alert" data-testid="editor-error">
-          <span>{t(g.error.kind === 'open' ? 'editor.openFailed' : 'editor.saveFailed', { message: g.error.message })}</span>
+          <span>{t(g.error.kind === 'open' ? 'editor.openFailed' : g.error.kind === 'edit' ? 'editor.opFailed' : 'editor.saveFailed', { message: g.error.message })}</span>
           <Button size="sm" onClick={g.dismissError}>
             {t('editor.dismiss')}
           </Button>
@@ -90,6 +91,7 @@ function Open({ g, doc }: { g: GraphDocument; doc: DocState }) {
   const dirty = isDirty(doc)
   const { errors, warnings } = counts(doc.analysis)
   const saving = g.busy === 'saving'
+  const [view, setView] = useState<'visual' | 'yaml' | 'split'>('split')
   return (
     <>
       <div className="row between">
@@ -133,13 +135,27 @@ function Open({ g, doc }: { g: GraphDocument; doc: DocState }) {
         </div>
       )}
 
-      <Card title={t('editor.yaml')} action={<HelpTip>{t('editor.yamlHelp')}</HelpTip>} testId="yaml-card">
-        <div className="yaml-host">
-          <Suspense fallback={<LoadingState />}>
-            <YamlEditor value={doc.draft} onChange={g.type} onSave={() => void g.save()} onUndo={g.undo} onRedo={g.redo} label={t('editor.yamlLabel')} />
-          </Suspense>
-        </div>
-      </Card>
+      <div className="row between">
+        <SegmentedControl
+          label={t('editor.view')}
+          value={view}
+          onChange={setView}
+          segments={(['visual', 'yaml', 'split'] as const).map((v) => ({ value: v, label: t(`editor.view.${v}`), testId: `view-${v}` }))}
+        />
+      </div>
+
+      <div className={`ed-views ${view}`}>
+        {view !== 'yaml' && <GraphCanvas g={g} doc={doc} />}
+        {view !== 'visual' && (
+          <Card title={t('editor.yaml')} action={<HelpTip>{t('editor.yamlHelp')}</HelpTip>} testId="yaml-card">
+            <div className="yaml-host">
+              <Suspense fallback={<LoadingState />}>
+                <YamlEditor value={doc.draft} onChange={g.type} onSave={() => void g.save()} onUndo={g.undo} onRedo={g.redo} label={t('editor.yamlLabel')} />
+              </Suspense>
+            </div>
+          </Card>
+        )}
+      </div>
 
       <Card
         title={t('editor.problems')}
