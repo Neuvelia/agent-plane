@@ -30,3 +30,10 @@ Phase 2 vertical slice (accepted):
 [ADR-0017 - Human node and local approval](0017-human-node-and-local-approval.md),
 [ADR-0018 - Correction loop for Shell producers](0018-shell-node-correction-loop.md),
 [ADR-0019 - Local JSONL run store and loopback API](0019-local-run-store-and-loopback-api.md).
+
+Graph editor (proposed, plan `docs/superpowers/plans/2026-11-14-graph-editor.md`):
+[ADR-0020 - Graph edit operations on the YAML tree](0020-graph-edit-operations.md),
+[ADR-0021 - Local graph document API and write trust](0021-local-graph-document-api-and-write-trust.md),
+[ADR-0022 - Canvas layout stored in `metadata.layout`](0022-graph-layout-metadata.md),
+[ADR-0023 - Recorded run values for edge inspection](0023-recorded-run-values.md)
+(proposed; one product decision open: opt-in or default-on).
