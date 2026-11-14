@@ -1,6 +1,6 @@
 # ADR-0018 - Correction loop for Shell producers
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-13
 
 ## Context

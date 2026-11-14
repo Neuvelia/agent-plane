@@ -26,7 +26,7 @@ F1.7: [ADR-0015 - Static units, Return Envelopes and immutable acceptance](0015-
 
 F1.8: [ADR-0016 - Git-observed changed-files scope checking](0016-changed-files-scope-check.md).
 
-Phase 2 vertical slice (proposed):
+Phase 2 vertical slice (accepted):
 [ADR-0017 - Human node and local approval](0017-human-node-and-local-approval.md),
 [ADR-0018 - Correction loop for Shell producers](0018-shell-node-correction-loop.md),
 [ADR-0019 - Local JSONL run store and loopback API](0019-local-run-store-and-loopback-api.md).

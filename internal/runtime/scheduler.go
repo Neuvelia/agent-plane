@@ -49,6 +49,8 @@ type LogStreamingExecutor interface {
 // observes at most one validated Gate fact, retained for green and red. Capture
 // capabilities redact before truncation without exposing configured secrets.
 type ExecutionObservation struct {
+	// AttemptNumber is the 1-based produce attempt for loop producers, else 0.
+	AttemptNumber      int
 	ScopeBaseline      *gitstate.Baseline
 	ScopeBaselineError error
 	Feedback           *CorrectionFeedback
@@ -259,9 +261,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				}
 				node := definition.Nodes[id]
 				resolved := machine.resolved[id]
-				aid, feedback, baseline := attempts[id], feedbacks[id], baselines[id]
+				aid, feedback, baseline, number := attempts[id], feedbacks[id], baselines[id], numbers[id]
 				go func(id string) {
-					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, feedback, baseline, redactionTemplate)
+					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, redactionTemplate)
 				}(id)
 				started++
 			}
@@ -717,7 +719,7 @@ func validateNodeOutputs(graphID, nodeID string, declared map[string]graph.PortD
 	return diagnostics
 }
 
-func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, feedback *CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
+func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, attemptNumber int, feedback *CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
 	nodeRunID := m.nodes[id].NodeRunID
 	var outputs map[string]graph.Value
 	var err error
@@ -855,7 +857,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
 		} else {
 			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 		}

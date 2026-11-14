@@ -1,6 +1,6 @@
 # ADR-0019 - Local JSONL run store and loopback API
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-13
 
 ## Context

@@ -10,16 +10,19 @@ func (v *definitionValidator) validateLoops() {
 			continue
 		}
 		fail := func(message string) {
-			v.error("E_LOOP_INVALID", message, DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, "declare an Agent loop with a bounded budget and explicit typed Gate bindings")
+			v.error("E_LOOP_INVALID", message, DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, "declare an Agent or Shell loop with a bounded budget and explicit typed Gate bindings")
 		}
-		if n.Type != "agent" {
-			fail("loop producer must be an Agent")
+		if n.Type != "agent" && n.Type != "shell" {
+			fail("loop producer must be an Agent or Shell node")
 		}
 		if l.Attempts() < 1 || l.Attempts() > 10 {
 			fail("max_attempts must be from 1 to 10")
 		}
-		if _, ok := n.Config["allowed_paths"]; !ok {
+		if _, ok := n.Config["allowed_paths"]; !ok && n.Type == "agent" {
 			fail("loop Agent requires explicit allowed_paths")
+		}
+		if n.Type == "shell" && l.Gate.Config["kind"] == "changed_files_scope" {
+			fail("changed_files_scope Gate requires an Agent producer")
 		}
 		if len(l.Gate.Config) == 0 {
 			fail("loop requires an embedded Gate")

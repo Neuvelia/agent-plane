@@ -114,3 +114,40 @@ func TestLoopMergedBudgetPresence(t *testing.T) {
 		}
 	}
 }
+
+func TestLoopProducerTypes(t *testing.T) {
+	doc := func(typ, config string) *Definition {
+		d, err := Parse([]byte("schema_version: 0\nid: l\ninputs: {}\nnodes:\n  work:\n    type: " + typ + "\n    config: " + config + "\n    outputs: {out: {type: json}}\n    loop:\n      gate:\n        inputs: {v: {type: json, required: true}}\n        config: {check_id: c, kind: json_predicate}\n      bindings: [{from: candidate.outputs.out, to: gate.inputs.v}]\nedges: []\noutputs: {}\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	for _, tt := range []struct {
+		name string
+		d    *Definition
+		ok   bool
+	}{
+		{"agent with allowed_paths", doc("agent", "{allowed_paths: []}"), true},
+		{"agent without allowed_paths", doc("agent", "{}"), false},
+		{"shell without allowed_paths", doc("shell", "{}"), true},
+		{"gate producer", doc("gate", "{}"), false},
+		{"human producer", doc("human", "{}"), false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Validate(tt.d).Valid(); got != tt.ok {
+				t.Fatalf("valid=%v want %v: %v", got, tt.ok, Validate(tt.d))
+			}
+		})
+	}
+}
+
+func TestShellLoopRejectsChangedFilesScopeGate(t *testing.T) {
+	d, err := Parse([]byte("schema_version: 0\nid: l\ninputs: {}\nnodes:\n  work:\n    type: shell\n    outputs: {out: {type: json}}\n    loop:\n      gate:\n        inputs: {v: {type: json, required: true}}\n        config: {check_id: c, kind: changed_files_scope}\n      bindings: [{from: candidate.outputs.out, to: gate.inputs.v}]\nedges: []\noutputs: {}\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Validate(d).Valid() {
+		t.Fatal("changed_files_scope gate must require an Agent producer")
+	}
+}

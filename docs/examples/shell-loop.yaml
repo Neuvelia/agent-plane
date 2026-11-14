@@ -1,0 +1,51 @@
+# F1.6a / ADR-0018: a Shell producer with a bounded correction loop.
+# "flaky" reports ready=false on attempt 1 and ready=true on attempt 2 using the
+# reserved AGENTPLANE_ATTEMPT variable; "fast" is an independent branch that is
+# never re-run. No LLM is involved.
+schema_version: 0
+id: shell-loop-demo
+inputs: {}
+nodes:
+  fast:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["fast-ok"]
+    outputs:
+      stdout: {type: string, required: true}
+  flaky:
+    type: shell
+    config:
+      command: /bin/sh
+      args:
+        - -c
+        - 'if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then echo "{\"ready\":false}"; else echo "{\"ready\":true}"; fi'
+      stdout_json: true
+    outputs:
+      json: {type: json, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: flaky-ready
+          kind: json_predicate
+          input: candidate
+          field: [ready]
+          operator: eq
+          expected: true
+      bindings:
+        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+  merge:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["merged\n"]
+    inputs:
+      left: {type: string, required: true}
+      right: {type: json, required: true}
+edges:
+  - {from: fast.outputs.stdout, to: merge.inputs.left}
+  - {from: flaky.outputs.json, to: merge.inputs.right}
+outputs: {}

@@ -42,10 +42,10 @@ feature contract.
 
 | Feature | Spec status |
 | --- | --- |
-| `F1.6a-shell-loop.md` | Draft; ADR-0018 (proposed) |
-| `F2.10-human-node.md` | Draft; ADR-0017 (proposed) |
-| `F2.9-run-store.md` | Draft; ADR-0019 (proposed) |
-| `F2.5-live-map.md` | Draft; ADR-0019 (proposed) |
+| `F1.6a-shell-loop.md` | Implemented; ADR-0018 |
+| `F2.10-human-node.md` | Draft; ADR-0017 (accepted) |
+| `F2.9-run-store.md` | Draft; ADR-0019 (accepted) |
+| `F2.5-live-map.md` | Draft; ADR-0019 (accepted) |
 
 ## Later phases
 
