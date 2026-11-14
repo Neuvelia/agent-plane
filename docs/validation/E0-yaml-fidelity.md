@@ -23,8 +23,7 @@ and its references), encodes with indent 2, and reports:
 Files: the three example graphs in `.agents/graphs/`, and fixtures in
 `experiments/yaml-fidelity/testdata/`: `hostile.yaml` (anchor, merge key, alias, block scalar, comments in
 odd places, quoted `#`, flow styles, document start), `comments.yaml` (trailing comments on keys),
-`comments.yaml` (trailing comments on keys), `crlf.yaml`,
-`bom.yaml`, `long.yaml` (190-character arguments, folded block scalar).
+`crlf.yaml`, `bom.yaml`, `long.yaml` (190-character arguments, folded block scalar).
 
 The measured tool uses two things beyond a plain `yaml.v3` encode: a pass that restores blank lines (the
 encoder drops all of them) and a pass that restores a byte order mark and CRLF line endings. Both are small
