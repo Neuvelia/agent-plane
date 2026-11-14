@@ -1,0 +1,31 @@
+# Fixture graph for Storybook/tests: the Gate never goes green, so the node
+# exhausts its retry budget and the run fails. Recorded with
+#   agentplane run test/fixtures/exhausted.yaml --json > test/fixtures/exhausted.json
+schema_version: 0
+id: exhausted-retries
+inputs: {}
+nodes:
+  flaky:
+    type: shell
+    config:
+      command: /bin/sh
+      args: ["-c", 'echo "{\"ready\":false}"']
+      stdout_json: true
+    outputs:
+      json: {type: json, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: flaky-ready
+          kind: json_predicate
+          input: candidate
+          field: [ready]
+          operator: eq
+          expected: true
+      bindings:
+        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+edges: []
+outputs: {}

@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { decide } from './api'
+import { useI18n } from './i18n/context'
+import { Button } from './ui/primitives'
 import { displayStatus, nodeView, type Attempt, type RunView } from './reducer'
 import { NodePill, OutcomePill, VerdictPill } from './status'
 
@@ -32,6 +34,7 @@ function Evidence({ attempt }: { attempt: Attempt }) {
 }
 
 export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = false }: { runId: string; nodeRunId: string; prompt: string; context: { name: string; value: string }[]; disabled?: boolean }) {
+  const { t } = useI18n()
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -46,31 +49,32 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
   }
   return (
     <div className="approval" data-testid="approval-box">
-      <div className="lb">Approval needed</div>
-      <p>{prompt || 'A human decision is required.'}</p>
+      <div className="lb">{t('approval.needed')}</div>
+      <p>{prompt || t('approval.defaultPrompt')}</p>
       {context.map((c) => (
         <div key={c.name} className="mono ctx">
           <span className="mu">{c.name}:</span> {c.value}
         </div>
       ))}
-      <textarea aria-label="Comment" placeholder="Comment (optional)" value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
+      <textarea aria-label={t('approval.comment')} placeholder={t('approval.commentPlaceholder')} value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
       <div className="row">
-        <button className="primary" disabled={busy || disabled} onClick={() => submit(true)}>
-          Approve
-        </button>
-        <button className="danger" disabled={busy || disabled} onClick={() => submit(false)}>
-          Reject
-        </button>
+        <Button variant="primary" disabled={busy || disabled} onClick={() => submit(true)}>
+          {t('approval.approve')}
+        </Button>
+        <Button variant="danger" disabled={busy || disabled} onClick={() => submit(false)}>
+          {t('approval.reject')}
+        </Button>
       </div>
-      {disabled && <div className="mu">Decisions are disabled while the connection to the engine is lost.</div>}
+      {disabled && <div className="mu">{t('approval.disabledLost')}</div>}
       {error && <div className="err">{error}</div>}
     </div>
   )
 }
 
 export function NodePanel({ run, nodeId, lost = false }: { run: RunView; nodeId: string | null; lost?: boolean }) {
+  const { t } = useI18n()
   const [tab, setTab] = useState<'attempts' | 'log'>('attempts')
-  if (!nodeId) return <aside className="panel empty">Select a node to see its attempts, checks and log.</aside>
+  if (!nodeId) return <aside className="panel empty">{t('node.select')}</aside>
   const n = nodeView(run, nodeId)
   const status = displayStatus(n)
   return (
@@ -90,28 +94,26 @@ export function NodePanel({ run, nodeId, lost = false }: { run: RunView; nodeId:
       )}
       {n.approval?.decision && (
         <div className="decision" data-testid="decision">
-          Decision: <b>{n.approval.decision}</b>
+          {t('node.decision')}: <b>{n.approval.decision}</b>
           {n.approval.comment && <span className="mu"> — {n.approval.comment}</span>}
         </div>
       )}
       <div className="tabs">
-        <button className={tab === 'attempts' ? 'on' : ''} onClick={() => setTab('attempts')}>
-          Attempts{n.attempts.length ? ` (${n.attempts.length})` : ''}
-        </button>
-        <button className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>
-          Log
-        </button>
+        <Button className={tab === 'attempts' ? 'on' : ''} onClick={() => setTab('attempts')}>
+          {n.attempts.length ? t('node.attemptsCount', { count: n.attempts.length }) : t('node.attempts')}
+        </Button>
+        <Button className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>
+          {t('node.log')}
+        </Button>
       </div>
       {tab === 'attempts' &&
         (n.attempts.length === 0 ? (
-          <div className="mu">This node has no correction loop, so it has a single execution.</div>
+          <div className="mu">{t('node.noLoop')}</div>
         ) : (
           n.attempts.map((a) => (
             <div className="attempt" key={a.id} data-testid="attempt">
               <div className="row between">
-                <b>
-                  Attempt {a.number}/{a.max}
-                </b>
+                <b>{t('node.attempt', { n: a.number, max: a.max })}</b>
                 <OutcomePill outcome={a.outcome} />
               </div>
               <Evidence attempt={a} />
@@ -119,7 +121,7 @@ export function NodePanel({ run, nodeId, lost = false }: { run: RunView; nodeId:
             </div>
           ))
         ))}
-      {tab === 'log' && <pre className="log" data-testid="node-log">{n.log || 'No output yet.'}</pre>}
+      {tab === 'log' && <pre className="log" data-testid="node-log">{n.log || t('node.noLog')}</pre>}
     </aside>
   )
 }

@@ -18,10 +18,13 @@ delete env.NODE_OPTIONS
 async function launch() {
   const app = await _electron.launch({
     executablePath: require('electron'),
-    args: [path.resolve(__dirname, '..'), '--no-sandbox', `--user-data-dir=${path.join(work, 'user')}`],
+    args: [path.resolve(__dirname, '..'), '--no-sandbox', '--lang=en-US', `--user-data-dir=${path.join(work, 'user')}`],
     env,
   })
   const page = await app.firstWindow()
+  // The renderer may load only its own bundle: record anything else.
+  page.external = []
+  page.on('request', (r) => { if (!/^(file|data|blob):/.test(r.url())) page.external.push(r.url()) })
   await page.setViewportSize({ width: 1440, height: 900 })
   return { app, page }
 }
@@ -46,6 +49,21 @@ async function startDemo(page) {
     // The renderer has no direct access to the sidecar, filesystem or process.
     const leaked = await page.evaluate(() => ({ require: typeof require, process: typeof process, token: JSON.stringify(window.agentplane).includes('token') }))
     assert.deepEqual(leaked, { require: 'undefined', process: 'undefined', token: false })
+
+    // R0 shell: deferred surfaces are inert, language switches without restart.
+    assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
+    for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
+    assert.equal(await page.isVisible('[data-testid="no-runs"]'), true, 'a disabled entry must not navigate')
+    assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
+    assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
+    assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
+    await page.click('[data-testid="nav-settings"]')
+    await page.click('button:has-text("PL ·")')
+    assert.match(await page.textContent('[data-testid="nav-runs"]'), /Uruchomienia/)
+    assert.equal(await page.evaluate(() => document.documentElement.lang), 'pl')
+    await page.click('button:has-text("EN ·")')
+    assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
+    await page.click('[data-testid="nav-runs"]')
 
     // 1. Run: two branches in parallel, one red -> retry, then a human gate.
     await startDemo(page)
@@ -121,6 +139,8 @@ async function startDemo(page) {
     assert.equal(await status(page, 'apply'), 'pending')
     assert.equal(await page.locator('[data-testid="approval-box"] button.primary').isDisabled(), true)
     await shot(page, '7-connection-lost')
+    assert.match(await page.textContent('[data-testid="connection-indicator"]'), /Connection lost/)
+    assert.deepEqual(page.external, [], 'no request may leave the app')
     console.log('desktop e2e: OK')
   } finally {
     await app.close().catch(() => {})

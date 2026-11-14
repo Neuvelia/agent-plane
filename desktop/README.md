@@ -20,9 +20,47 @@ retried alone, then the graph stops at the `approve` human node until you press
 ## Checks
 
 ```bash
-npm run check                # typecheck + reducer tests + production build
+npm run check                # tokens in sync, typecheck, unit tests, production build,
+                             # Storybook build, bundle scan (no Storybook code, no remote URLs)
 make desktop-e2e             # real Electron + real sidecar under xvfb
+make desktop-stories         # every story in a real browser, EN + PL: axe a11y, no network
 ```
+
+`make desktop-e2e` uses `xvfb-run` when it exists (Linux); on macOS and Windows it
+opens a real window, so do not touch the app while it runs. `make desktop-stories`
+installs Playwright's Chromium once (`npx playwright install chromium`); set
+`AP_CHROMIUM=/path/to/chrome` to use a browser you already have. Playwright is a
+pinned dev dependency used only by these two checks.
+
+## Storybook (development only, F2.5a)
+
+```bash
+npm run storybook            # http://127.0.0.1:6006, loopback only, no telemetry
+npm run build-storybook      # static build into storybook-static/ (git-ignored)
+```
+
+Stories live next to the code: `src/ui/*.stories.tsx` (primitives) and
+`src/screens.stories.tsx` (whole screens in named states). Screen stories run the
+real components, reducer and selectors over **recorded event streams**
+(`test/fixtures/*.json`, produced by `agentplane run --json`); a story never builds
+node or run state by hand. A decorator installs an in-memory `window.agentplane`
+(`src/storybook/bridge.tsx`), so no sidecar or network is involved. The toolbar
+switches language (EN/PL); viewport is Storybook's built-in toolbar. Storybook is
+a dev dependency and is never part of the packaged app.
+
+## Design system and localisation (F2.5a)
+
+- `src/design/tokens.json` is a copy of the Tarmind design system's `tokens.json`;
+  `src/design/tokens.css` is generated from it (`npm run tokens`; `npm run check`
+  fails if it is stale). `src/design/overrides.css` lists the few deliberate
+  deviations (text colours that must reach 4.5:1 contrast).
+- Geist and Geist Mono are bundled in `src/design/fonts/` (SIL OFL, licences next
+  to the files); the CSP allows no remote font.
+- UI text is localised in `src/i18n/` (`en.ts`, `pl.ts`, same keys; a test enforces
+  it). Machine values (event types, node ids, paths, diagnostic codes and engine
+  messages) are never translated. The language switch is in the top bar.
+- Sidebar entries for Projects, Runners, Docs and Settings are intentionally
+  greyed out and inert until those surfaces exist.
 
 ## Design rules
 
@@ -36,6 +74,10 @@ make desktop-e2e             # real Electron + real sidecar under xvfb
   `/runs`, `/approvals` and `/graphs` paths.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
+
+R0 of the redesign (F2.5a) provides the shell, design tokens, primitives, Storybook
+and PL/EN localisation; the screens below are re-hosted in it and are redesigned in
+R1-R2.
 
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,
