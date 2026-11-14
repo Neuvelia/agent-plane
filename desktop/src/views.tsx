@@ -2,20 +2,21 @@ import { useEffect, useState } from 'react'
 import { listApprovals, listRuns, startRun, validateGraph, type ApiFailure } from './api'
 import { GraphMap } from './GraphMap'
 import { useRunStream, usePoll } from './hooks'
-import { formatDateTime } from './i18n'
+import { formatDateTime, type Locale } from './i18n'
 import { useI18n } from './i18n/context'
 import { ApprovalBox, NodePanel } from './NodePanel'
-import { nodeView, displayStatus } from './reducer'
+import { nodeView, displayStatus, type RunView } from './reducer'
+import { filterEvents, formatDuration, runKpis, timeline, type EventFilter } from './insight'
 import { RunPill } from './status'
 import type { Diagnostic } from './types'
-import { CodeView } from './ui/data'
+import { CodeView, DotTimeline, EventLog, type EventRow } from './ui/data'
 import { canStart, preflightState } from './preflight'
-import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
+import { Button, Card, Field, HelpTip, KPI, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
 
 // R1: Run Inspector, Approvals and New run on the design system. Behaviour and
 // data are unchanged from F2.5; the Dashboard is redesigned in R2.
 
-export function Dashboard({ onOpen }: { onOpen: (id: string) => void }) {
+export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t, locale } = useI18n()
   const runs = usePoll(listRuns, [], 1500)
   return (
@@ -57,6 +58,77 @@ export function Dashboard({ onOpen }: { onOpen: (id: string) => void }) {
 
 export type GraphView = 'map' | 'yaml' | 'split'
 
+const time = (locale: Locale, iso: string) => new Intl.DateTimeFormat(locale, { timeStyle: 'medium' }).format(new Date(iso))
+
+function RunSummaryCard({ run }: { run: RunView }) {
+  const { t, locale } = useI18n()
+  const k = runKpis(run)
+  const dur = (v: number | undefined) => (v === undefined ? undefined : formatDuration(v, locale))
+  const unknown = t('kpi.unknown')
+  return (
+    <Card title={t('run.summary')} action={<HelpTip>{t('run.summaryHelp')}</HelpTip>} testId="run-summary">
+      <div className="kpis">
+        <KPI label={t('kpi.wall')} value={dur(k.wallClockMs)} unknownLabel={unknown} />
+        <KPI label={t('kpi.node')} value={dur(k.nodeTimeMs)} unknownLabel={unknown} />
+        <span className="kpi-with-tip">
+          <KPI label={t('kpi.saved')} value={dur(k.savedMs)} unknownLabel={unknown} />
+          <HelpTip>{t('kpi.savedHelp')}</HelpTip>
+        </span>
+        <KPI label={t('kpi.retries')} value={k.retries} unknownLabel={unknown} />
+        <span className="kpi-with-tip">
+          <KPI label={t('kpi.tokens')} unknownLabel={unknown} />
+          <HelpTip>{t('kpi.tokensHelp')}</HelpTip>
+        </span>
+      </div>
+      {run.status === 'running' && run.lastEventAt && <div className="mu small-print">{t('kpi.asOf', { time: time(locale, run.lastEventAt) })}</div>}
+    </Card>
+  )
+}
+
+function TimelineCard({ run }: { run: RunView }) {
+  const { t } = useI18n()
+  const tl = timeline(run)
+  return (
+    <Card title={t('run.timeline')} subtitle={tl && tl.bucketSeconds > 1 ? t('run.timelineBucket', { seconds: tl.bucketSeconds }) : undefined} action={<HelpTip>{t('run.timelineHelp')}</HelpTip>} testId="run-timeline">
+      {tl && tl.rows.length > 0 ? (
+        <DotTimeline rows={tl.rows} label={t('run.timeline')} caption={tl.bucketSeconds > 1 ? t('run.timelineBucket', { seconds: tl.bucketSeconds }) : undefined} />
+      ) : (
+        <div className="mu empty-line">{t('run.timelineEmpty')}</div>
+      )}
+    </Card>
+  )
+}
+
+function EventsCard({ run }: { run: RunView }) {
+  const { t, locale } = useI18n()
+  const [filter, setFilter] = useState<EventFilter>('all')
+  const shown = filterEvents(run.tail, filter)
+  const rows: EventRow[] = shown.map((e) => ({
+    sequence: e.sequence,
+    time: time(locale, e.timestamp),
+    type: e.type,
+    node: e.node,
+    detail: e.detail,
+    tone: e.kind === 'failed' ? 'x' : e.kind === 'human' ? 'w' : e.kind === 'retried' ? 'b' : undefined,
+  }))
+  return (
+    <Card
+      title={t('run.eventsTitle')}
+      subtitle={run.eventCount > run.tail.length ? t('events.showing', { count: run.tail.length, total: run.eventCount }) : undefined}
+      action={<HelpTip>{t('run.eventsHelp')}</HelpTip>}
+      testId="run-events"
+    >
+      <SegmentedControl
+        label={t('events.filter')}
+        value={filter}
+        onChange={setFilter}
+        segments={(['all', 'failed', 'retried', 'human'] as const).map((f) => ({ value: f, label: t(`events.${f}`), testId: `events-${f}` }))}
+      />
+      <EventLog rows={rows} emptyLabel={t('events.empty')} label={t('run.eventsTitle')} />
+    </Card>
+  )
+}
+
 export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack: () => void; onLost?: (lost: boolean) => void }) {
   const { t } = useI18n()
   const { run, graph, yaml, following, notFound, lost, reconnect } = useRunStream(runId)
@@ -95,7 +167,9 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
           <Button onClick={reconnect}>{t('run.reconnect')}</Button>
         </div>
       )}
+      <RunSummaryCard run={run} />
       <div className="split">
+        <div className="stack">
         <Card
           title={t('run.liveGraph')}
           testId="graph-card"
@@ -120,7 +194,12 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
             {view !== 'map' && <CodeView text={yaml} testId="graph-yaml" label={t('run.view.yaml')} />}
           </div>
         </Card>
-        <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} />
+        <TimelineCard run={run} />
+        </div>
+        <div className="stack">
+          <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} />
+          <EventsCard run={run} />
+        </div>
       </div>
     </section>
   )
@@ -170,9 +249,9 @@ export function Approvals({ onOpen }: { onOpen: (runId: string) => void }) {
 
 const SEVERITY_TONE: Record<string, 'x' | 'w' | 'n'> = { error: 'x', warning: 'w' }
 
-export function RunConfig({ onStarted }: { onStarted: (runId: string) => void }) {
+export function RunConfig({ onStarted, initialPath }: { onStarted: (runId: string) => void; initialPath?: string }) {
   const { t } = useI18n()
-  const [path, setPath] = useState('')
+  const [path, setPath] = useState(initialPath ?? '')
   const [inputs, setInputs] = useState('')
   const [result, setResult] = useState<{ status: string; diagnostics: Diagnostic[] } | null>(null)
   const [error, setError] = useState<ApiFailure | null>(null)
@@ -201,6 +280,11 @@ export function RunConfig({ onStarted }: { onStarted: (runId: string) => void })
     if ('message' in r) setError(r)
     else onStarted(r.runId)
   }
+  // Opened with a graph already chosen (Dashboard "Open graph"): validate it right away.
+  useEffect(() => {
+    if (initialPath) void validate(initialPath)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPath])
   const state = preflightState(result)
   const diagnostics = [...(result?.diagnostics ?? []), ...(error?.diagnostics ?? [])]
   const pill = state === 'ready' ? <Pill tone="p" testId="preflight-status">{t('config.ready')}</Pill> : state === 'warnings' ? <Pill tone="w" testId="preflight-status">{t('config.warnings')}</Pill> : state === 'blocked' ? <Pill tone="x" testId="preflight-status">{t('config.blocked')}</Pill> : null

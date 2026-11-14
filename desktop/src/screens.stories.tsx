@@ -3,7 +3,8 @@ import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
 import { approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
-import { Approvals, Dashboard, RunConfig, RunInspector } from './views'
+import { Dashboard } from './dashboardView'
+import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import type { ApEvent } from './types'
 
 const meta: Meta = { title: 'Screens' }
@@ -43,17 +44,18 @@ export const InspectorFirstAttempt: S = {
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
 export const InspectorConnectionLost: S = inspector(waitingForHuman, 'running', 'lost')
+export const InspectorFailedEvents: S = { ...inspector(demoReject, 'failed', 'end'), play: clickTestId('events-failed') }
 export const InspectorRunNotFound: S = {
   parameters: { bridge: { runs: [] } satisfies BridgeData },
   render: () => <RunInspector runId="missing" onBack={noop} />,
 }
 
-export const DashboardEmpty: S = { parameters: { bridge: { runs: [] } }, render: () => <Dashboard onOpen={noop} /> }
-export const DashboardBusy: S = {
+export const RunsListEmpty: S = { parameters: { bridge: { runs: [] } }, render: () => <RunsList onOpen={noop} /> }
+export const RunsListBusy: S = {
   parameters: {
     bridge: { runs: [run(runningParallel, 'running', 'open'), run(demoReject, 'failed', 'end'), run(exhaustedRetries, 'failed', 'end', false)] } satisfies BridgeData,
   },
-  render: () => <Dashboard onOpen={noop} />,
+  render: () => <RunsList onOpen={noop} />,
 }
 
 const pending = approvalsOf(waitingForHuman)
@@ -113,3 +115,16 @@ export const FullAppShell: S = {
 }
 
 export const SettingsLanguage: S = { parameters: { bridge: { runs: [] } }, render: () => <Settings /> }
+
+// Dashboard: "now" is pinned just after the recordings so the 7-day window is stable.
+const afterFixtures = new Date(Math.max(...[demoApprove, demoReject, exhaustedRetries].map((e) => Date.parse(e[0]!.timestamp))) + 3600 * 1000)
+const dashboard = (b: BridgeData): S => ({
+  parameters: { bridge: b },
+  render: () => <Dashboard onOpenRun={noop} onNewRun={noop} onOpenGraph={noop} onAllRuns={noop} nowOverride={afterFixtures} />,
+})
+export const DashboardEmpty: S = dashboard({ runs: [] })
+export const DashboardBusy: S = dashboard({ runs: [run(runningParallel, 'running', 'open'), run(demoReject, 'succeeded', 'end'), run(exhaustedRetries, 'succeeded', 'end', false)] })
+export const DashboardNeedsAttention: S = dashboard({
+  runs: [run(waitingForHuman, 'running', 'open'), run(demoReject, 'failed', 'end'), run(exhaustedRetries, 'interrupted', 'end', false)],
+  approvals: pending,
+})
