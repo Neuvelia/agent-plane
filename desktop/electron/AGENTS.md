@@ -1,0 +1,71 @@
+# Electron boundary guidance
+
+The root `AGENTS.md` applies here. This file adds rules for
+`desktop/electron/` source. Read `desktop/README.md` and the active feature
+spec before changing an IPC or API boundary.
+
+## Find the owner
+
+| Concern | Start here |
+| --- | --- |
+| Sidecar lifecycle, token, API forwarding, SSE and window setup | `main.cjs` |
+| Exact renderer request routes | `allowlist.cjs` |
+| The narrow `window.agentplane` bridge and subscriptions | `preload.cjs` |
+| Native graph dialogs, grant registration and revocation | `graphs.cjs` |
+| Recent graph paths held in main-process user data | `recents.cjs` |
+| Renderer bridge types and API wrappers | `desktop/src/types.ts`, `desktop/src/api.ts`, `desktop/src/editor/api.ts` |
+| Go API routes, grant checks and run decisions | `internal/api/AGENTS.md` |
+
+## Preserve these contracts
+
+- Electron main owns the `agentplane serve` process and its loopback port and
+  bearer token. The renderer uses the preload bridge; do not expose the token,
+  sidecar address, Node APIs or a general network/filesystem primitive to it.
+  Keep `contextIsolation`, the renderer sandbox, navigation/window blocking and
+  the `desktop/index.html` CSP aligned with this boundary. Do not forward
+  sidecar stderr or graph content to logs.
+- `ap:request` must pass only exact method/path pairs from `allowlist.cjs`.
+  Keep `/graphs/grants` and its revocation route inaccessible through generic
+  renderer requests; adding an API route must not make it reachable by prefix.
+  SSE uses separate `ap:subscribe`/`ap:unsubscribe` IPC and main-process
+  authenticated `fetch`, since `EventSource` cannot set the bearer header.
+  Abort subscriptions on unsubscribe, renderer navigation and app shutdown;
+  pass stream endings to the renderer without inventing run/node state.
+- Open/new graph file choices occur in main through native dialogs. Main
+  registers the chosen path with the sidecar and returns only an opaque grant,
+  label and existence flag to the renderer. A recent item is reopened from
+  main's stored path with a fresh grant; the recent list exposes only ids and
+  labels. `touchRecent` accepts only grants main issued; `closeGraph` requests
+  revocation and reports whether it succeeded. Recents are a convenience:
+  read/write failure must not block editing.
+- The legacy New run flow still has `pickGraph`, which returns a path, and
+  `POST /runs` still accepts `graph_path`. Do not describe all renderer reads
+  and runs as grant-only. Keep graph-document writes grant-only; the Go API
+  owns path checks, conflict detection and atomic save. Electron main and
+  preload do not implement graph validation, scheduling, retry or run-state
+  reduction; the renderer derives run state from events.
+- Keep the sidecar's stdin connected for shutdown, cancel streams before
+  quit, and retain the bounded forced-kill fallback. Sidecar/API failures
+  must remain visible as connection or request errors rather than a guessed
+  execution outcome.
+
+The contracts are in `docs/features/F2.5-live-map.md`,
+`docs/features/F2.1-graph-canvas.md`,
+`docs/adr/0019-local-run-store-and-loopback-api.md`, and
+`docs/adr/0021-local-graph-document-api-and-write-trust.md`. F2.1 is being
+delivered in slices: use current code and the active slice, not future canvas
+requirements, when describing implemented behavior.
+
+## Choose regression tests
+
+- Generic route exposure and path escapes: `desktop/test/allowlist.test.ts`.
+- Graph dialogs, grants and revocation: `desktop/test/graphs-handlers.test.ts`.
+- Recent-list privacy, ordering and failure: `desktop/test/recents.test.ts`.
+- Real bridge, sidecar, API and editor path: `desktop/e2e/demo.cjs`.
+- API auth, SSE and grant checks: `internal/api/server_test.go`,
+  `internal/api/docs_test.go`.
+
+Run the focused desktop tests first, then `npm run check` in `desktop/` and
+repository `make check`. For a changed IPC, process or file boundary, also run
+`make desktop-e2e` when the required browser/display is available. Update this
+guide in the same PR when a named owner, bridge method or trust rule changes.
