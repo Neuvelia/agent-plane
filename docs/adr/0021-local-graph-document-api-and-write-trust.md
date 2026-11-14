@@ -1,6 +1,6 @@
 # ADR-0021 - Local graph document API and write trust
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-14
 
 ## Context
@@ -45,9 +45,9 @@ gate and agent config errors surface only when a run starts (executors' `Validat
    | `POST /graphs/grants` | main only: register a canonical path; returns the grant |
    | `POST /graphs/open {grant}` | source text, source hash (sha256 of the bytes), typed definition DTO, semantic version, diagnostics (graph and node config), field descriptors for the node types in use |
    | `POST /graphs/stat {grant}` | current hash and size, cheap, for change detection |
-   | `POST /graphs/edit {grant, base_hash, ops}` | apply ADR-0020 operations to the stored text; returns the new text, definition, version and diagnostics; **does not write** |
-   | `POST /graphs/validate {text}` or `{grant}` | validate unsaved text or a granted file; `{path}` stays for compatibility |
-   | `PUT /graphs/save {grant, base_hash, text}` | atomic write; 409 if the file changed since `base_hash` |
+   | `POST /graphs/edit {grant, base_hash, text?, ops_version, ops}` | apply ADR-0020 operations; returns the new text, definition, version, diagnostics and a result per operation; **does not write**. `base_hash` identifies the text the client holds: the text the server holds for the grant (else 409 `stale_base` with `current_hash`), or `text` sent by the client after typing in the YAML view (then `base_hash` must be that text's hash). The server's held text advances to each successful result |
+   | `POST /graphs/validate {text}` or `{grant}` | validate unsaved text or the granted file as it is on disk; exactly one of `path`, `text`, `grant`; `{path}` keeps its original behaviour. Text that does not parse answers 200 with `status: invalid` and `parse_error` |
+   | `PUT /graphs/save {grant, base_hash, text}` | atomic write; here `base_hash` is the hash of the **file's** bytes the client last saw (`null` creates a file that must not exist); 409 `conflict` (with `current_hash`), `exists`, `gone`, `not_regular` or `path_changed` otherwise |
 
 5. **Save semantics.** The sidecar requires the grant to exist, the extension to be `.yaml` or `.yml`, the
    target to be a regular file or absent in an existing directory, and the final path component not to be a
@@ -75,6 +75,10 @@ gate and agent config errors surface only when a run starts (executors' `Validat
    grant-only, the renderer cannot create a new graph to run. Moving run start to grants is a recommended
    follow-up (it would remove the typed-path box on New run) and is deliberately not part of this ADR.
 10. **Run uses saved bytes.** The editor offers "Save and run"; a run never reads unsaved editor state.
+    So the renderer can start a run of a graph it holds only as a grant, `POST /runs` additionally accepts
+    `graph_grant` in place of `graph_path` (exactly one of the two); the sidecar resolves the grant to the
+    saved file. Run start keeps `graph.Validate` as `agentplane run` does, so a node-configuration error
+    fails the node when it executes; the editor gates its Run button on the full diagnostics (F2.4).
 
 ## Alternatives considered
 

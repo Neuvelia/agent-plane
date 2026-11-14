@@ -247,3 +247,79 @@ func TestServeWithAnUnwritableStoreRunsNothingAndReportsFailure(t *testing.T) {
 		t.Fatal("a node executed although its run could not be stored")
 	}
 }
+
+// The real server, end to end: grant, open, edit, save, and a run from the grant.
+func TestServeEditsAndSavesAGraphThroughGrants(t *testing.T) {
+	s := startServe(t)
+	defer s.closeStdin()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "g.yaml")
+	text := "schema_version: 0\nid: g\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n"
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	decode := func(body string) map[string]any {
+		var out map[string]any
+		if err := json.Unmarshal([]byte(body), &out); err != nil {
+			t.Fatalf("not JSON: %s", body)
+		}
+		return out
+	}
+	status, body := s.call(t, "POST", "/graphs/grants", `{"path":`+quote(path)+`,"mode":"open"}`)
+	if status != http.StatusCreated {
+		t.Fatalf("grant: %d %s", status, body)
+	}
+	grant := decode(body)["grant"].(string)
+	status, body = s.call(t, "POST", "/graphs/open", `{"grant":`+quote(grant)+`}`)
+	doc := decode(body)
+	if status != 200 || doc["definition"] == nil {
+		t.Fatalf("open: %d %s", status, body)
+	}
+	// A starter shell node has no command yet: the editor must be told, before any run.
+	status, body = s.call(t, "POST", "/graphs/edit", `{"grant":`+quote(grant)+`,"base_hash":`+quote(doc["hash"].(string))+`,"ops_version":1,"ops":[{"op":"add_node","id":"work","type":"shell"}]}`)
+	edited := decode(body)
+	if status != 200 {
+		t.Fatalf("edit: %d %s", status, body)
+	}
+	var config bool
+	for _, d := range edited["diagnostics"].([]any) {
+		if d.(map[string]any)["code"] == nodeConfigCode {
+			config = true
+		}
+	}
+	if !config {
+		t.Errorf("the API did not report the starter node's missing command: %v", edited["diagnostics"])
+	}
+	status, body = s.call(t, "PUT", "/graphs/save", `{"grant":`+quote(grant)+`,"base_hash":`+quote(doc["hash"].(string))+`,"text":`+quote(edited["text"].(string))+`}`)
+	if status != 200 {
+		t.Fatalf("save: %d %s", status, body)
+	}
+	if disk, _ := os.ReadFile(path); string(disk) != edited["text"].(string) {
+		t.Errorf("the saved file is not the edited text:\n%s", disk)
+	}
+	// Running from the grant reads the saved bytes: the stored snapshot is the saved file.
+	// (Run start keeps graph.Validate, as `agentplane run` does; the empty command
+	// fails when the node executes, not at start.)
+	status, body = s.call(t, "POST", "/runs", `{"graph_grant":`+quote(grant)+`}`)
+	if status != http.StatusAccepted {
+		t.Fatalf("run from a grant: %d %s", status, body)
+	}
+	runID := decode(body)["run_id"].(string)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		status, body = s.call(t, "GET", "/runs/"+runID, "")
+		if status == 200 && decode(body)["graph"] != nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("run %s never became readable: %d %s", runID, status, body)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if got := decode(body)["graph"].(string); got != edited["text"].(string) {
+		t.Errorf("the run executed %q, not the saved file", got)
+	}
+}

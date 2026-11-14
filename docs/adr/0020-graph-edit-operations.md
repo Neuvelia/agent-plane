@@ -1,6 +1,6 @@
 # ADR-0020 - Graph edit operations on the YAML tree
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-14
 
 ## Context

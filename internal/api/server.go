@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -53,7 +54,11 @@ type Server struct {
 	Hub      *Hub
 	Start    StartFunc
 	Validate ValidateFunc
+	// ValidateDefinition is the full validation of a parsed graph: graph rules
+	// plus each node's static configuration. Nil means graph rules only.
+	ValidateDefinition func(*graph.Definition) []graph.Diagnostic
 
+	docs     docState // graph document grants (ADR-0021)
 	baseCtx  context.Context
 	addr     string
 	active   sync.WaitGroup // runs started through the API and not yet returned
@@ -122,6 +127,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /runs/{id}/decisions/{nodeRun}", s.decide)
 	mux.HandleFunc("GET /approvals", s.approvals)
 	mux.HandleFunc("POST /graphs/validate", s.validate)
+	mux.HandleFunc("POST /graphs/grants", s.grants)
+	mux.HandleFunc("POST /graphs/open", s.openDoc)
+	mux.HandleFunc("POST /graphs/stat", s.statDoc)
+	mux.HandleFunc("POST /graphs/edit", s.editDoc)
+	mux.HandleFunc("PUT /graphs/save", s.saveDoc)
 	return s.guard(mux)
 }
 
@@ -150,6 +160,10 @@ type errorBody struct {
 		Message string `json:"message"`
 	} `json:"error"`
 	Diagnostics []graph.Diagnostic `json:"diagnostics,omitempty"`
+	// Detail carries the structured editing error; CurrentHash the hash a stale
+	// client should reconcile with.
+	Detail      any    `json:"detail,omitempty"`
+	CurrentHash string `json:"current_hash,omitempty"`
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -267,8 +281,9 @@ func summarizeGraph(source []byte) GraphSummary {
 }
 
 type startBody struct {
-	GraphPath string   `json:"graph_path"`
-	Inputs    []string `json:"inputs"`
+	GraphPath  string   `json:"graph_path"`
+	GraphGrant string   `json:"graph_grant"`
+	Inputs     []string `json:"inputs"`
 }
 
 func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
@@ -276,9 +291,22 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
-	if body.GraphPath == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "graph_path is required")
+	if (body.GraphPath == "") == (body.GraphGrant == "") {
+		writeError(w, http.StatusBadRequest, "bad_request", "exactly one of graph_path and graph_grant is required")
 		return
+	}
+	graphPath := body.GraphPath
+	if body.GraphGrant != "" {
+		// A granted graph runs from its saved bytes, never from unsaved editor text.
+		g := s.lookup(w, body.GraphGrant)
+		if g == nil {
+			return
+		}
+		if info, err := os.Lstat(g.path); err != nil || !info.Mode().IsRegular() {
+			writeError(w, http.StatusConflict, "not_regular", "the graph file is missing or no longer a regular file")
+			return
+		}
+		graphPath = g.path
 	}
 	// The hub sink runs after StartFunc's own store write, so anything a client
 	// can see is already durable.
@@ -294,7 +322,7 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	go func() {
 		defer s.active.Done()
-		err := s.Start(s.baseCtx, body.GraphPath, body.Inputs, slot.Sink, s.Hub)
+		err := s.Start(s.baseCtx, graphPath, body.Inputs, slot.Sink, s.Hub)
 		var storage *StorageError
 		if errors.As(err, &storage) {
 			slot.Fail(err) // a started run that could not be stored is stopped and flagged
@@ -361,28 +389,83 @@ func (s *Server) approvals(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"approvals": s.Hub.Pending()})
 }
 
+// validateBody names exactly one graph to validate: a file path (the original
+// contract), unsaved text, or a grant (the granted file as it is on disk).
 type validateBody struct {
-	Path string `json:"path"`
+	Path  string  `json:"path"`
+	Text  *string `json:"text"`
+	Grant string  `json:"grant"`
 }
 
 func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	var body validateBody
-	if !readJSON(w, r, &body) {
+	if !readJSONLimit(w, r, &body, docBodyLimit) {
 		return
 	}
-	if s.Validate == nil || body.Path == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "path is required")
+	given := 0
+	for _, set := range []bool{body.Path != "", body.Text != nil, body.Grant != ""} {
+		if set {
+			given++
+		}
+	}
+	if given != 1 {
+		writeError(w, http.StatusBadRequest, "bad_request", "exactly one of path, text and grant is required")
 		return
 	}
-	status, diagnostics, err := s.Validate(body.Path)
+	if body.Path != "" {
+		if s.Validate == nil {
+			writeError(w, http.StatusBadRequest, "bad_request", "path is required")
+			return
+		}
+		status, diagnostics, err := s.Validate(body.Path)
+		if err != nil {
+			writeError(w, http.StatusUnprocessableEntity, "unreadable", err.Error())
+			return
+		}
+		if diagnostics == nil {
+			diagnostics = []graph.Diagnostic{}
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": status, "diagnostics": diagnostics})
+		return
+	}
+	var text []byte
+	if body.Text != nil {
+		text = []byte(*body.Text)
+	} else {
+		g := s.lookup(w, body.Grant)
+		if g == nil {
+			return
+		}
+		data, _, err := readGranted(g)
+		if err != nil {
+			readError(w, err)
+			return
+		}
+		text = data
+	}
+	if !checkText(w, text) {
+		return
+	}
+	out := map[string]any{"diagnostics": []graph.Diagnostic{}}
+	def, err := graph.Parse(text)
 	if err != nil {
-		writeError(w, http.StatusUnprocessableEntity, "unreadable", err.Error())
+		out["status"], out["parse_error"] = "invalid", err.Error()
+		writeJSON(w, http.StatusOK, out)
 		return
 	}
-	if diagnostics == nil {
-		diagnostics = []graph.Diagnostic{}
+	diags := s.diagnostics(def)
+	out["diagnostics"] = diags
+	out["status"] = "valid"
+	for _, d := range diags {
+		if d.Severity == graph.SeverityError {
+			out["status"] = "invalid"
+			break
+		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"status": status, "diagnostics": diagnostics})
+	if v, err := graph.SemanticVersion(def); err == nil {
+		out["version"] = v
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // streamEvents replays a run from sequence zero and follows it to completion.

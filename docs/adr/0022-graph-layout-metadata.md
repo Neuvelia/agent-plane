@@ -1,6 +1,6 @@
 # ADR-0022 - Canvas layout stored in `metadata.layout`
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-14
 
 ## Context
