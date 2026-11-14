@@ -1,0 +1,39 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { describe, expect, it } from 'vitest'
+
+function* walk(dir: string): Generator<string> {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name)
+    if (statSync(p).isDirectory()) yield* walk(p)
+    else yield p
+  }
+}
+const src = new URL('../src', import.meta.url).pathname
+const files = [...walk(src)].filter((f) => /\.tsx$/.test(f) && !f.endsWith('.stories.tsx'))
+const styles = readFileSync(join(src, 'styles.css'), 'utf8')
+
+describe('interactive elements are native', () => {
+  it('no div or span has a click or key handler, and nothing fakes a button or link role', () => {
+    for (const f of files) {
+      const text = readFileSync(f, 'utf8')
+      expect(text, f).not.toMatch(/<(div|span|li|td|tr)\b[^>]*\bon(Click|KeyDown|KeyUp|MouseDown)\b/)
+      expect(text, f).not.toMatch(/role=["'](button|link|tab|menuitem|switch|checkbox)["']/)
+    }
+  })
+})
+
+describe('focus and motion', () => {
+  it('draws the 2px focus outline for every control and never removes it without a replacement', () => {
+    expect(styles).toMatch(/:focus-visible\{outline:2px solid var\(--focus\);outline-offset:2px\}/)
+    // The only outline:none is the programmatic focus target (main), which is not a control.
+    const removed = styles.split('\n').filter((l) => /outline:\s*none/.test(l))
+    expect(removed.every((l) => l.startsWith('main:focus'))).toBe(true)
+  })
+  it('removes all transitions and animations under prefers-reduced-motion', () => {
+    expect(styles).toMatch(/@media \(prefers-reduced-motion:reduce\)\{\*\{transition:none!important;animation:none!important\}\}/)
+  })
+  it('has no scroll-behavior smooth that the reduced-motion rule would not cover', () => {
+    expect(styles).not.toMatch(/scroll-behavior:\s*smooth/)
+  })
+})

@@ -13,7 +13,8 @@
     "tokens": "node scripts/sync-tokens.mjs",
     "storybook": "storybook dev -p 6006 --host 127.0.0.1 --no-open --disable-telemetry",
     "build-storybook": "storybook build --disable-telemetry -o storybook-static",
-    "stories:test": "node scripts/stories-smoke.cjs"
+    "stories:test": "node scripts/stories-smoke.cjs",
+    "screenshots": "node scripts/screenshots.cjs"
   },
   "dependencies": {
     "@dagrejs/dagre": "^3.1.3",

@@ -1,7 +1,7 @@
 import dagre from '@dagrejs/dagre'
 import { Background, Handle, Position, ReactFlow, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useEffect, useMemo } from 'react'
+import { createContext, useContext, useEffect, useMemo } from 'react'
 import { useI18n } from './i18n/context'
 import { displayStatus, nodeView, type RunView } from './reducer'
 import { NodePill } from './status'
@@ -10,21 +10,26 @@ import type { GraphSummary } from './types'
 const W = 250
 const H = 76
 
+// Node objects are STATIC (id, kind, position, size). The run state and the
+// selection reach the node component through this context instead of node.data:
+// replacing node objects on every event batch makes React Flow drop its handle
+// measurements, and then it silently draws no edges.
+const StateCtx = createContext<{ run: RunView; selected: string | null }>({ run: { status: 'running', nodeCount: 0, nodes: {}, order: [], lastSequence: 0, eventCount: 0, tail: [] }, selected: null })
+
 interface ApNodeData extends Record<string, unknown> {
   id: string
   kind: string
-  run: RunView
-  selected: boolean
 }
 
 function ApNode({ data }: NodeProps<Node<ApNodeData>>) {
   const { t } = useI18n()
-  const n = nodeView(data.run, data.id)
+  const { run, selected } = useContext(StateCtx)
+  const n = nodeView(run, data.id)
   const status = displayStatus(n)
   const last = n.attempts[n.attempts.length - 1]
   const label = status === 'retrying' && last ? t('status.node.retryingOf', { n: last.number, max: last.max }) : undefined
   return (
-    <div className={`ap-node s-${status}${data.selected ? ' sel' : ''}`} data-testid={`node-${data.id}`} data-status={status}>
+    <div className={`ap-node s-${status}${selected === data.id ? ' sel' : ''}`} data-testid={`node-${data.id}`} data-status={status}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <div className="ap-node-top">
         <b>{data.id}</b>
@@ -76,26 +81,21 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
     return Object.fromEntries(graph.nodes.map((n) => [n.id, g.node(n.id)]))
   }, [graph])
 
-  // Rebuilding every node object on each 30 ms event batch makes React Flow
-  // re-adopt and re-measure the whole graph. Recompute only when the graph, the
-  // reduced run state or the selection actually changed.
+  // Only the graph (never run state or selection) may change these objects.
   const nodes = useMemo<Node<ApNodeData>[]>(
     () =>
       graph.nodes.map((n) => ({
         id: n.id,
         type: 'ap',
         position: { x: (positions[n.id]?.x ?? 0) - W / 2, y: (positions[n.id]?.y ?? 0) - H / 2 },
-        data: { id: n.id, kind: n.type, run, selected: selected === n.id },
-        // Fixed, known size. React Flow keeps a node hidden until it has measured
-        // it; we replace the node objects on every event batch, which can drop the
-        // measurement, and ResizeObserver will not fire again for an unchanged
-        // size. Declaring the size makes the node visible without measuring.
+        data: { id: n.id, kind: n.type },
+        // Fixed, known size, so a node is visible without waiting for a measurement.
         width: W,
         height: H,
         draggable: false,
         connectable: false,
       })),
-    [graph, positions, run, selected],
+    [graph, positions],
   )
   const edges = useMemo<Edge[]>(
     () =>
@@ -110,6 +110,7 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
 
   return (
     <div className="map" data-testid="graph-map">
+      <StateCtx.Provider value={{ run, selected }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -126,6 +127,7 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
         <Background gap={22} color="#242424" />
         <FitOnResize />
       </ReactFlow>
+      </StateCtx.Provider>
     </div>
   )
 }

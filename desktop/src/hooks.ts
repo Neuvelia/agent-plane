@@ -3,16 +3,29 @@ import { getRun } from './api'
 import { classifyEnd, initialRun, presentRun, reduce, streamLost, type RunView } from './reducer'
 import type { ApEvent, GraphSummary } from './types'
 
+export type PollStatus = 'loading' | 'ready' | 'error'
+
+export interface Polled<T> {
+  /** The last successful read. Undefined until the first one. */
+  data: T | undefined
+  /** loading: no answer yet. error: the latest read failed, so `data` may be stale and must not be shown as current. */
+  status: PollStatus
+  retry: () => void
+}
+
 // usePoll re-reads a list on an interval. It is for lists (runs, approvals),
-// never for node state, which comes only from the event stream.
-export function usePoll<T>(read: () => Promise<T>, initial: T, ms = 1500): T {
-  const [value, setValue] = useState<T>(initial)
+// never for node state, which comes only from the event stream. A failed read is
+// reported (status 'error'), not swallowed, so screens can say the engine is unreachable.
+export function usePoll<T>(read: () => Promise<T>, ms = 1500): Polled<T> {
+  const [state, setState] = useState<{ data: T | undefined; status: PollStatus }>({ data: undefined, status: 'loading' })
+  const [nonce, setNonce] = useState(0)
   useEffect(() => {
     let alive = true
     const tick = () =>
-      read()
-        .then((v) => alive && setValue(v))
-        .catch(() => undefined)
+      read().then(
+        (v) => alive && setState({ data: v, status: 'ready' }),
+        () => alive && setState((p) => ({ data: p.data, status: 'error' })),
+      )
     tick()
     const t = setInterval(tick, ms)
     return () => {
@@ -20,8 +33,8 @@ export function usePoll<T>(read: () => Promise<T>, initial: T, ms = 1500): T {
       clearInterval(t)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ms])
-  return value
+  }, [ms, nonce])
+  return { ...state, retry: () => setNonce((n) => n + 1) }
 }
 
 export interface RunStream {
@@ -30,7 +43,7 @@ export interface RunStream {
   yaml: string
   following: boolean
   notFound: boolean
-  /** Set when the stream ended for any reason other than the run's normal end. */
+  /** Set (to a StreamEnd code) when the stream ended for any reason other than the run's normal end. */
   lost: string | null
   reconnect: () => void
 }
@@ -76,7 +89,7 @@ export function useRunStream(runId: string): RunStream {
         if (timer) clearTimeout(timer)
         flush()
         const end = classifyEnd(reason)
-        if (end.kind === 'lost') setLost(end.message)
+        if (end.kind === 'lost') setLost(end.code)
         else setEnded(true)
       },
     )

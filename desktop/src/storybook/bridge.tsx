@@ -20,6 +20,10 @@ export interface BridgeData {
   validate?: { status: string; diagnostics: unknown[] }
   /** Path returned by the "Choose…" dialog. */
   pickedGraph?: string | null
+  /** Every request rejects, as when the sidecar is not running. */
+  unreachable?: boolean
+  /** Every request stays pending forever: the loading state. */
+  hang?: boolean
   /** Makes every approval decision fail with this HTTP status and message. */
   decisionFailure?: { status: number; message: string }
 }
@@ -28,6 +32,8 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
   const respond = <T,>(status: number, body: T): ApiResponse<T> => ({ status, body })
   return {
     request: async <T,>(method: 'GET' | 'POST', path: string): Promise<ApiResponse<T>> => {
+      if (data.hang) return new Promise<ApiResponse<T>>(() => undefined)
+      if (data.unreachable) throw new Error('the agentplane sidecar is not running')
       const run = /^\/runs\/([^/]+)$/.exec(path)
       if (method === 'GET' && path === '/runs') return respond(200, { runs: data.runs.map((r) => r.summary) }) as ApiResponse<T>
       if (method === 'GET' && run) {

@@ -138,3 +138,13 @@ export function KeyValue({ rows }: { rows: { name: string; value: ReactNode }[] 
     </dl>
   )
 }
+
+/** One component for every empty, loading and error state, so screens say these things the same way. */
+export function StateMessage({ kind, children, action, testId }: { kind: 'empty' | 'loading' | 'error'; children: ReactNode; action?: ReactNode; testId?: string }) {
+  return (
+    <div className={`empty-state ${kind}`} role={kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : undefined} data-testid={testId ?? (kind === 'empty' ? undefined : `${kind}-state`)}>
+      <div>{children}</div>
+      {action}
+    </div>
+  )
+}

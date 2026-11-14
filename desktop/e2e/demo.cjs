@@ -50,6 +50,14 @@ async function startDemo(page) {
     const leaked = await page.evaluate(() => ({ require: typeof require, process: typeof process, token: JSON.stringify(window.agentplane).includes('token') }))
     assert.deepEqual(leaked, { require: 'undefined', process: 'undefined', token: false })
 
+    // R3 keyboard: the first Tab stop is the skip link; Enter moves focus into the content.
+    await page.keyboard.press('Tab')
+    assert.equal(await page.evaluate(() => document.activeElement?.className), 'skip-link')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'content')
+    // Disabled entries are not tab stops; enabled navigation entries are real buttons.
+    assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
+
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
@@ -74,6 +82,16 @@ async function startDemo(page) {
     assert.equal(await page.textContent('[data-testid="run-status"]'), 'Running')
     assert.equal(await page.textContent('[data-testid="approvals-badge"]'), '1')
     await shot(page, '1-waiting-for-human')
+
+    // R3 motion: the flowing edge animates normally and stops under reduced motion.
+    await page.waitForSelector('.react-flow__edge.animated path', { state: 'attached' })
+    // Regression: React Flow draws no edges at all if node objects are replaced per event batch.
+    assert.equal(await page.locator('.react-flow__edge').count(), 3)
+    const edgeAnimation = () => page.evaluate(() => getComputedStyle(document.querySelector('.react-flow__edge.animated path')).animationName)
+    assert.notEqual(await edgeAnimation(), 'none')
+    await page.emulateMedia({ reducedMotion: 'reduce' })
+    assert.equal(await edgeAnimation(), 'none')
+    await page.emulateMedia({ reducedMotion: 'no-preference' })
 
     // 2. Only the failing node was retried; its red check has reason + evidence.
     await page.click('[data-testid="node-flaky"]')
