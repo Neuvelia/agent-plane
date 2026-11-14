@@ -65,6 +65,7 @@ export interface OpenResponse {
   results?: OpResult[]
   diagnostics: Diagnostic[]
   parse_error?: string
+  parse_line?: number
   readonly_canvas: boolean
   readonly_reasons?: string[]
   line_ending: 'lf' | 'crlf'
@@ -75,6 +76,7 @@ export interface ValidateResponse {
   status: 'valid' | 'invalid'
   diagnostics: Diagnostic[]
   parse_error?: string
+  parse_line?: number
   version?: string
   definition?: Definition
   readonly_canvas?: boolean

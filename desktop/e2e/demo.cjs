@@ -148,7 +148,7 @@ async function startDemo(page) {
     await page.click('[data-testid="yaml-content"]')
     await page.keyboard.press(`${mod}+End`)
     await page.keyboard.type('\nid: [\n')
-    await page.waitForSelector('[data-testid="parse-error"]')
+    await page.waitForSelector('[data-testid="issue"][data-code="YAML"]')
     // The file changes on disk while there are unsaved edits: conflict, nothing is overwritten.
     fs.writeFileSync(doc2, original + '# elsewhere\n')
     await page.click('[data-testid="editor-save"]')
@@ -332,6 +332,89 @@ async function startDemo(page) {
     exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
     await page.click('[data-testid="nav-editor"]')
     await page.click('[data-testid="editor-close"]').catch(() => {})
+    await page.click('[data-testid="nav-dashboard"]')
+
+    // F2.4: the Issues panel. Config errors show before any run; issues take you to their element and line.
+    const activeId = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid'))
+    const mixedText = 'schema_version: 0\nid: mixed\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: ""}\n    outputs:\n      out: {type: string}\n      spare: {type: string}\n  b:\n    type: shell\n    config: {command: /usr/bin/true}\n    inputs:\n      n: {type: number, required: true}\n      free: {type: string, required: true}\nedges:\n  - {from: a.outputs.out, to: b.inputs.n}\noutputs: {}\n'
+    const issuesFile = path.join(graphDir, 'issues.yaml')
+    fs.writeFileSync(issuesFile, mixedText)
+    await stubOpen(issuesFile)
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-open"]')
+    await page.waitForSelector('[data-testid="issue"]')
+    // Same diagnostics as the CLI, and the config error is there before any run.
+    const cliOut = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', issuesFile, '--json'], { encoding: 'utf8' }).stdout)
+    const panelCodes = await page.$$eval('[data-testid="issue"]', (els) => els.map((e) => e.getAttribute('data-code')).sort())
+    assert.deepEqual(panelCodes, cliOut.diagnostics.map((d) => d.code).sort(), 'the panel shows exactly the CLI diagnostics')
+    assert.ok(panelCodes.includes('E_NODE_CONFIG_INVALID'))
+    // Errors first.
+    const severities = await page.$$eval('[data-testid="issue"]', (els) => els.map((e) => e.getAttribute('data-severity')))
+    assert.deepEqual(severities, [...severities].sort((x, y) => (x === 'error' ? 0 : 1) - (y === 'error' ? 0 : 1)))
+    // Run is blocked by errors, names the count, and its action focuses the first error.
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    assert.match(await page.textContent('[data-testid="run-blocked"]'), /4 errors/)
+    await page.click('[data-testid="run-blocked-focus"]')
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'selected-heading')
+    // Filter, badges and focus on an edge issue, with the YAML scrolled to its line.
+    await page.click('[data-testid="issues-filter-warning"]')
+    assert.equal(await page.locator('[data-testid="issue"][data-severity="error"]').count(), 0)
+    await page.click('[data-testid="issues-filter-all"]')
+    assert.ok((await page.textContent('[data-testid="node-a"]')).includes('✖'), 'a node with an error carries a glyph, not only colour')
+    await page.click('[data-testid="issue"][data-code="E_BINDING_TYPE_MISMATCH"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="selected-heading"]')?.textContent?.includes('a.outputs.out'))
+    assert.match(await page.textContent('.cm-activeLine'), /from: a\.outputs\.out/)
+    await page.click('[data-testid="issue"][data-code="E_NODE_CONFIG_INVALID"]')
+    await page.waitForFunction(() => document.querySelector('.cm-activeLine')?.textContent?.includes('config:'))
+    // Typing broken YAML shows one blocking issue with its line, quickly, and fixing it clears it.
+    await page.click('[data-testid="yaml-content"]')
+    await page.keyboard.press(`${mod}+End`)
+    await page.keyboard.type('x: [')
+    // Measured inside the page, from the last keystroke to the issue being in the DOM (Playwright's own polling is not part of the product).
+    const parseMs = await page.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const t0 = performance.now()
+          const done = () => document.querySelector('[data-testid="issue"][data-code="YAML"]') && (obs.disconnect(), resolve(performance.now() - t0))
+          const obs = new MutationObserver(done)
+          obs.observe(document.body, { childList: true, subtree: true })
+          document.execCommand('insertText', false, '\n')
+        }),
+    )
+    assert.ok(parseMs < 500, `the parse error must show within 500 ms of the last keystroke, took ${parseMs} ms`)
+    assert.equal(await page.locator('[data-testid="issue"]').count(), 1, 'a text that does not parse has one issue')
+    assert.match(await page.textContent('[data-testid="issue"]'), /line \d+/)
+    await page.click('[data-testid="editor-undo"]')
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid="issue"][data-code="YAML"]').length === 0)
+    await page.click('[data-testid="editor-close"]')
+    // Graph-level issue focuses the graph header.
+    const badId = path.join(graphDir, 'badid.yaml')
+    fs.writeFileSync(badId, 'schema_version: 0\nid: Bad_ID\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\nedges: []\noutputs: {}\n')
+    await stubOpen(badId)
+    await page.click('[data-testid="editor-open"]')
+    await page.click('[data-testid="issue"][data-code="E_GRAPH_ID_INVALID"]')
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'graph-heading')
+    await page.click('[data-testid="editor-close"]')
+    // Warnings never block a run.
+    const warnOnly = path.join(graphDir, 'warn.yaml')
+    fs.writeFileSync(warnOnly, 'schema_version: 0\nid: warn\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    outputs:\n      o: {type: string}\nedges: []\noutputs: {}\n')
+    await stubOpen(warnOnly)
+    await page.click('[data-testid="editor-open"]')
+    await page.waitForSelector('[data-testid="issue"][data-severity="warning"]')
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), false)
+    await page.click('[data-testid="editor-close"]')
+    // Keyboard only: filter, move through the issues, focus one, and land on its inspector heading.
+    await stubOpen(issuesFile)
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="issue"]')
+    await key('issues-filter-error')
+    assert.equal(await page.locator('[data-testid="issue"][data-severity="warning"]').count(), 0)
+    await page.focus('[data-testid="issue"]')
+    await page.keyboard.press('Tab')
+    assert.equal(await activeId(), 'issue')
+    await page.keyboard.press('Enter')
+    await page.waitForFunction(() => ['selected-heading', 'graph-heading'].includes(document.activeElement?.getAttribute('data-testid') || ''))
+    await page.click('[data-testid="editor-close"]')
     await page.click('[data-testid="nav-dashboard"]')
 
     // R0 shell: deferred surfaces are inert, language switches without restart.

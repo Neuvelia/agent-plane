@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GraphGrantResult, RecentGraph } from '../types'
 import type { Op, OpResult } from './types'
-import { analyzed, edited, fromNew, fromOpen, isDirty, newGraphText, redo as redoDoc, reloaded, saved, type as typeDoc, undo as undoDoc, validating, withConflict, type DocState } from './doc'
+import { analyzed, edited, fromNew, fromOpen, isDirty, newGraphText, redo as redoDoc, reloaded, saved, type as typeDoc, undo as undoDoc, validating, validationFailed, withConflict, type DocState } from './doc'
 import { editDocument, openDocument, runGrant, recentGraphs, saveDocument, statDocument, validateText } from './api'
 
 /** How long typing pauses before the text is validated (spec F2.1, requirement 12). */
@@ -57,6 +57,7 @@ export function useGraphDocument(): GraphDocument {
   const docRef = useRef(doc)
   docRef.current = doc
   const validateSeq = useRef(0)
+  const [tick, setTick] = useState(0)
 
   const refreshRecent = useCallback(() => void recentGraphs().then(setRecent), [])
   useEffect(refreshRecent, [refreshRecent])
@@ -131,7 +132,10 @@ export function useGraphDocument(): GraphDocument {
     setDoc((d) => (d ? edited(d, r.doc) : d))
     return { ok: true, results: r.doc.results ?? [] }
   }, [])
-  const revalidate = useCallback(() => setDoc((d) => (d ? { ...d, analysis: { ...d.analysis, stale: true } } : d)), [])
+  const revalidate = useCallback(() => {
+    setDoc((d) => (d ? { ...d, analysis: { ...d.analysis, stale: true } } : d))
+    setTick((n) => n + 1)
+  }, [])
   const undo = useCallback(() => setDoc((d) => (d ? undoDoc(d) : d)), [])
   const redo = useCallback(() => setDoc((d) => (d ? redoDoc(d) : d)), [])
 
@@ -241,11 +245,11 @@ export function useGraphDocument(): GraphDocument {
     const timer = setTimeout(async () => {
       setDoc((d) => (d && d.draft === draft ? validating(d) : d))
       const result = await validateText(draft)
-      if (seq !== validateSeq.current || !result) return
-      setDoc((d) => (d ? analyzed(d, draft, result) : d))
+      if (seq !== validateSeq.current) return
+      setDoc((d) => (d ? (result ? analyzed(d, draft, result) : validationFailed(d, draft)) : d))
     }, VALIDATE_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [draft, grant, stale])
+  }, [draft, grant, stale, tick])
 
   // On window focus, look at the file: a clean draft follows the file silently, a
   // dirty one is told about the change and chooses (spec F2.1, requirement 18).

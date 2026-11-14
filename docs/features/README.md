@@ -50,7 +50,7 @@ feature contract.
 | `F2.1-graph-canvas.md` | Implemented (E1, E2.1-E2.3); ADR-0020, ADR-0021, ADR-0022 (accepted) |
 | `F2.2-node-inspector.md` | Draft; ADR-0020, ADR-0021 (accepted) |
 | `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (proposed, one open decision) |
-| `F2.4-graph-validation-ui.md` | Draft; ADR-0021 (accepted) |
+| `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
 
 ## Later phases
 

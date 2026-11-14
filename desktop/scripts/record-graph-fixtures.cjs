@@ -68,6 +68,27 @@ graph_input_bindings:
 edges: []
 outputs: {}
 `,
+  // errors and warnings on a node, an edge and ports
+  mixed: `schema_version: 0
+id: mixed
+inputs: {}
+nodes:
+  a:
+    type: shell
+    config: {command: ""}
+    outputs:
+      out: {type: string}
+      spare: {type: string}
+  b:
+    type: shell
+    config: {command: /usr/bin/true}
+    inputs:
+      n: {type: number, required: true}
+      free: {type: string, required: true}
+edges:
+  - {from: a.outputs.out, to: b.inputs.n}
+outputs: {}
+`,
   // what a new graph starts as
   empty: 'schema_version: 0\nid: new-graph\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n',
   // YAML the engine cannot read

@@ -18,7 +18,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useI18n } from '../i18n/context'
 import { Button, Card, Pill, Tag } from '../ui/primitives'
 import type { DocState } from './doc'
-import { NODE_TYPES, diagnosticCounts, freeSpot, makeRef, nodeSize, parseRef, placements, removalImpact, rowY, suggestId, type Point } from './layout'
+import { NODE_TYPES, freeSpot, makeRef, nodeSize, parseRef, placements, removalImpact, rowY, suggestId, type Point } from './layout'
+import { badgesOf, type Badge, type Badges, type FocusReq } from './issues'
 import type { Definition, Op, QueryResult } from './types'
 import type { GraphDocument } from './useGraphDocument'
 
@@ -44,13 +45,15 @@ interface EdData extends Record<string, unknown> {
 
 interface CanvasState {
   selectedNode: string | null
-  counts: Record<string, { errors: number; warnings: number }>
+  badges: Badges
+  /** The port an issue pointed at, outlined until something else is selected. */
+  focusPort: string | null
   readOnly: boolean
   /** While a connection is being dragged: the engine's verdict per target input. */
   reasons: Record<string, QueryResult>
 }
 
-const Ctx = createContext<CanvasState>({ selectedNode: null, counts: {}, readOnly: true, reasons: {} })
+const Ctx = createContext<CanvasState>({ selectedNode: null, badges: { nodes: {}, edges: {}, ports: {} }, focusPort: null, readOnly: true, reasons: {} })
 
 const portList = (ports: Record<string, { type: string; required?: boolean }> | undefined): PortData[] =>
   Object.entries(ports ?? {}).map(([name, p]) => ({ name, type: p.type, required: p.required === true }))
@@ -59,14 +62,14 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
   const { t } = useI18n()
   const c = useContext(Ctx)
   const size = nodeSize({ type: data.kind, inputs: Object.fromEntries(data.inputs.map((p) => [p.name, p])), outputs: Object.fromEntries(data.outputs.map((p) => [p.name, p])) })
-  const n = c.counts[data.id]
+  const n = c.badges.nodes[data.id]
   return (
     <div className={`ed-node${c.selectedNode === data.id ? ' sel' : ''}`} style={{ width: size.w, height: size.h }} data-testid={`node-${data.id}`}>
       <div className="ed-node-head">
         <b>{data.id}</b>
         <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-          {n && n.errors > 0 && <Pill tone="x" small>{t('editor.nodeErrors', { count: n.errors })}</Pill>}
-          {n && n.warnings > 0 && <Pill tone="w" small>{t('editor.nodeWarnings', { count: n.warnings })}</Pill>}
+          {n && n.errors > 0 && <Pill tone="x" small>{'✖ '}{t('editor.nodeErrors', { count: n.errors })}</Pill>}
+          {n && n.warnings > 0 && <Pill tone="w" small>{'⚠ '}{t('editor.nodeWarnings', { count: n.warnings })}</Pill>}
           <span className="tag">{data.kind}</span>
         </span>
       </div>
@@ -74,22 +77,37 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
         const ref = makeRef(data.id, 'inputs', p.name)
         const verdict = c.reasons[ref]
         const bad = verdict !== undefined && !verdict.ok
+        const badge = c.badges.ports[ref]
         return (
-          <div className="ed-port in" style={{ top: rowY(i) - 11 }} key={`in:${p.name}`}>
+          <div className={`ed-port in${c.focusPort === ref ? ' focus' : ''}`} style={{ top: rowY(i) - 11 }} key={`in:${p.name}`}>
             <Handle type="target" position={Position.Left} id={`in:${p.name}`} style={{ top: rowY(i) }} isConnectable={!c.readOnly} className={bad ? 'ed-bad' : verdict?.ok ? 'ed-ok' : ''} title={bad ? verdict.message : undefined} data-testid={`handle-${ref}`} />
             <span className="mono">{p.name}</span>
             <span className="mu">{p.type}</span>
+            <PortBadge badge={badge} />
           </div>
         )
       })}
       {data.outputs.map((p, i) => (
-        <div className="ed-port out" style={{ top: rowY(i) - 11 }} key={`out:${p.name}`}>
+        <div className={`ed-port out${c.focusPort === makeRef(data.id, 'outputs', p.name) ? ' focus' : ''}`} style={{ top: rowY(i) - 11 }} key={`out:${p.name}`}>
+          <PortBadge badge={c.badges.ports[makeRef(data.id, 'outputs', p.name)]} />
           <span className="mu">{p.type}</span>
           <span className="mono">{p.name}</span>
           <Handle type="source" position={Position.Right} id={`out:${p.name}`} style={{ top: rowY(i) }} isConnectable={!c.readOnly} data-testid={`handle-${makeRef(data.id, 'outputs', p.name)}`} />
         </div>
       ))}
     </div>
+  )
+}
+
+// A port with an issue says so in words for screen readers and in a glyph for everyone; never colour alone.
+function PortBadge({ badge }: { badge?: Badge }) {
+  const { t } = useI18n()
+  if (!badge) return null
+  const err = badge.errors > 0
+  return (
+    <span className={`ed-port-badge ${err ? 'err' : 'warn'}`} role="img" aria-label={err ? t('editor.nodeErrors', { count: badge.errors }) : t('editor.nodeWarnings', { count: badge.warnings })}>
+      {err ? '✖' : '⚠'}
+    </span>
   )
 }
 
@@ -130,7 +148,7 @@ type Sel = { kind: 'node'; id: string } | { kind: 'edge'; from: string; to: stri
 
 export type CanvasBlock = 'parse' | 'anchors' | null
 
-export function GraphCanvas(props: { g: GraphDocument; doc: DocState }) {
+export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null }) {
   return (
     <ReactFlowProvider>
       <Inner {...props} />
@@ -138,7 +156,7 @@ export function GraphCanvas(props: { g: GraphDocument; doc: DocState }) {
   )
 }
 
-function Inner({ g, doc }: { g: GraphDocument; doc: DocState }) {
+function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null }) {
   const { t } = useI18n()
   const def = doc.analysis.definition
   // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
@@ -172,8 +190,38 @@ function Inner({ g, doc }: { g: GraphDocument; doc: DocState }) {
     })
   }, [def])
 
-  const counts = useMemo(() => diagnosticCounts(doc.analysis.diagnostics), [doc.analysis.diagnostics])
-  const ctx = useMemo<CanvasState>(() => ({ selectedNode: sel?.kind === 'node' ? sel.id : null, counts, readOnly, reasons }), [sel, counts, readOnly, reasons])
+  const badges = useMemo(() => badgesOf(doc.analysis.diagnostics, def), [doc.analysis.diagnostics, def])
+  const [focusPort, setFocusPort] = useState<string | null>(null)
+  const [focusTick, setFocusTick] = useState(0)
+  const ctx = useMemo<CanvasState>(() => ({ selectedNode: sel?.kind === 'node' ? sel.id : null, badges, focusPort, readOnly, reasons }), [sel, badges, focusPort, readOnly, reasons])
+  const graphHead = useRef<HTMLDivElement>(null)
+  const selectedHead = useRef<HTMLElement>(null)
+
+  // An issue was chosen: select and reveal its element, then move keyboard focus to its heading.
+  useEffect(() => {
+    if (!focusReq || !def) return
+    const t = focusReq.target
+    setFocusPort(null)
+    if (t.kind === 'node') setSel({ kind: 'node', id: t.id })
+    else if (t.kind === 'port') {
+      setSel({ kind: 'node', id: t.node })
+      setFocusPort(makeRef(t.node, t.side, t.port))
+    } else if (t.kind === 'edge') setSel({ kind: 'edge', from: t.from, to: t.to })
+    else if (t.kind === 'binding') {
+      const to = parseRef(t.to)
+      if (to) {
+        setSel({ kind: 'node', id: to.node })
+        setFocusPort(t.to)
+      }
+    } else setSel(null)
+    setFocusTick(focusReq.nonce) // focus once the selection below has rendered
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusReq?.nonce])
+  useEffect(() => {
+    if (!focusReq || focusTick === 0) return
+    ;(focusReq.target.kind === 'graph' ? graphHead.current : selectedHead.current)?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusTick])
 
   const edges = useMemo<Edge[]>(
     () =>
@@ -182,9 +230,11 @@ function Inner({ g, doc }: { g: GraphDocument; doc: DocState }) {
         const b = parseRef(e.to)
         if (!a || !b) return []
         const selected = sel?.kind === 'edge' && sel.from === e.from && sel.to === e.to
-        return [{ id: `${e.from}->${e.to}`, source: a.node, target: b.node, sourceHandle: `out:${a.port}`, targetHandle: `in:${b.port}`, selected, ariaLabel: `${e.from} → ${e.to}`, className: selected ? 'ed-edge-sel' : '' }]
+        const badge = badges.edges[`${e.from} -> ${e.to}`]
+        const label = badge ? (badge.errors > 0 ? `✖ ${t('editor.nodeErrors', { count: badge.errors })}` : `⚠ ${t('editor.nodeWarnings', { count: badge.warnings })}`) : undefined
+        return [{ id: `${e.from}->${e.to}`, source: a.node, target: b.node, sourceHandle: `out:${a.port}`, targetHandle: `in:${b.port}`, selected, ariaLabel: `${e.from} → ${e.to}`, className: selected ? 'ed-edge-sel' : '', label, labelStyle: { fill: 'var(--fg)', fontSize: 11 }, labelBgStyle: { fill: 'var(--raised)' } }]
       }),
-    [def, sel],
+    [def, sel, badges, t],
   )
 
   const run = useCallback(
@@ -428,6 +478,11 @@ function Inner({ g, doc }: { g: GraphDocument; doc: DocState }) {
             )}
           </div>
         )}
+        {def && (
+          <div className="ed-graph-head" tabIndex={-1} ref={graphHead} data-testid="graph-heading">
+            <b>{def.name ?? def.id}</b>
+          </div>
+        )}
         <div className="ed-flow" data-testid="editor-canvas" role="region" aria-label={t('editor.canvasLabel')}>
           {def && Object.keys(def.nodes).length === 0 && <div className="ed-empty mu">{t('editor.canvas.emptyGraph')}</div>}
           {!def && <div className="ed-empty mu">{t('editor.canvas.noGraph')}</div>}
@@ -482,7 +537,7 @@ function Inner({ g, doc }: { g: GraphDocument; doc: DocState }) {
           ))}
         </ul>
         {def && sel && (
-          <Selected def={def} sel={sel} onRemoveEdge={(from, to) => void run([{ op: 'remove_edge', from, to }]).then((r) => r.ok && sel.kind === 'edge' && setSel(null))} readOnly={readOnly} />
+          <Selected headRef={selectedHead} def={def} sel={sel} onRemoveEdge={(from, to) => void run([{ op: 'remove_edge', from, to }]).then((r) => r.ok && sel.kind === 'edge' && setSel(null))} readOnly={readOnly} />
         )}
       </Card>
     </div>
@@ -495,16 +550,18 @@ function placementsAuto(def: Definition): Record<string, Point> {
   return Object.fromEntries(Object.entries(auto).map(([id, p]) => [id, { x: p.x, y: p.y }]))
 }
 
-function Selected({ def, sel, onRemoveEdge, readOnly }: { def: Definition; sel: NonNullable<Sel>; onRemoveEdge: (from: string, to: string) => void; readOnly: boolean }) {
+function Selected({ def, sel, onRemoveEdge, readOnly, headRef }: { def: Definition; sel: NonNullable<Sel>; onRemoveEdge: (from: string, to: string) => void; readOnly: boolean; headRef: React.RefObject<HTMLElement | null> }) {
   const { t } = useI18n()
   const conns = sel.kind === 'node' ? def.edges.filter((e) => parseRef(e.from)?.node === sel.id || parseRef(e.to)?.node === sel.id) : def.edges.filter((e) => e.from === sel.from && e.to === sel.to)
   const node = sel.kind === 'node' ? def.nodes[sel.id] : undefined
   return (
     <div className="ed-selected" data-testid="selected">
+      <b className="ed-selected-head mono" tabIndex={-1} ref={headRef as React.RefObject<HTMLElement>} data-testid="selected-heading">
+        {sel.kind === 'node' ? sel.id : `${sel.from} → ${sel.to}`}
+      </b>
       {sel.kind === 'node' && node && (
         <>
           <div className="row">
-            <b className="mono">{sel.id}</b>
             <Tag>{node.type}</Tag>
           </div>
           <div className="mu">{t('editor.ports.inputs')}: {portList(node.inputs).map((p) => `${p.name}: ${p.type}${p.required ? '' : '?'}`).join(', ') || t('editor.ports.none')}</div>

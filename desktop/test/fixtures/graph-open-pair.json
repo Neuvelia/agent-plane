@@ -43,7 +43,8 @@
     "node_id": "a",
     "path": "nodes.a.outputs.stdout"
    },
-   "suggestion": "remove the output or bind it to an edge or graph output"
+   "suggestion": "remove the output or bind it to an edge or graph output",
+   "line": 13
   }
  ],
  "readonly_canvas": false,

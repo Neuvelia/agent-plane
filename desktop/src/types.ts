@@ -42,7 +42,9 @@ export interface Diagnostic {
   code: string
   message: string
   suggestion?: string
-  location?: { node_id?: string; path?: string }
+  location?: { node_id?: string; edge_index?: number; graph_input_binding_index?: number; path?: string }
+  /** 1-based source line, when the engine could resolve it (document API only). */
+  line?: number
 }
 
 export interface ApiResponse<T = unknown> {

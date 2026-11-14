@@ -33,7 +33,8 @@
     "node_id": "work",
     "path": "nodes.work.config"
    },
-   "suggestion": "correct the configuration of node \"work\""
+   "suggestion": "correct the configuration of node \"work\"",
+   "line": 7
   }
  ],
  "status": "invalid",

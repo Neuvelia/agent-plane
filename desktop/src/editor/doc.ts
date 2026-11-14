@@ -14,6 +14,7 @@ export interface Analysis {
   status: 'ready' | 'validating'
   diagnostics: Diagnostic[]
   parseError?: string
+  parseLine?: number
   version?: string
   /** The last definition the engine could parse. Kept while the text does not parse. */
   definition?: Definition
@@ -21,6 +22,8 @@ export interface Analysis {
   readonlyReasons?: string[]
   /** The list describes an older text than the draft. */
   stale: boolean
+  /** The last validation could not reach the engine. */
+  unreachable?: boolean
 }
 
 export type Conflict = { kind: 'changed'; currentHash: string } | { kind: 'gone' } | { kind: 'exists' }
@@ -45,11 +48,12 @@ export interface DocState {
 
 export const isDirty = (s: DocState): boolean => s.draft !== s.savedText
 
-function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; version?: string; definition?: Definition; readonly_reasons?: string[] }, previous?: Analysis): Analysis {
+function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; parse_line?: number; version?: string; definition?: Definition; readonly_reasons?: string[] }, previous?: Analysis): Analysis {
   return {
     status: 'ready',
     diagnostics: r.diagnostics,
     parseError: r.parse_error,
+    parseLine: r.parse_line,
     version: r.version,
     // While the text does not parse the canvas keeps the last good definition (read-only).
     definition: r.definition ?? (r.parse_error ? previous?.definition : undefined),
@@ -135,13 +139,23 @@ export function analyzed(s: DocState, forText: string, r: ValidateResponse): Doc
  * Why "Save and run" is unavailable, or null when it may run. The engine's
  * diagnostics decide; this only reads them (F2.1 requirement 20).
  */
-export type RunBlock = 'parse' | 'checking' | 'errors' | 'empty'
+export type RunBlock = 'parse' | 'unreachable' | 'checking' | 'errors' | 'empty'
 export function runBlock(a: Analysis): RunBlock | null {
   if (a.parseError) return 'parse'
+  if (a.unreachable) return 'unreachable'
   if (a.stale || a.status === 'validating') return 'checking'
   if (a.diagnostics.some((d) => d.severity === 'error')) return 'errors'
   if (!a.definition || Object.keys(a.definition.nodes).length === 0) return 'empty'
   return null
+}
+
+/**
+ * The engine could not be reached for this text. The previous list stays,
+ * marked out of date, and nothing may run until a validation succeeds.
+ */
+export function validationFailed(s: DocState, forText: string): DocState {
+  if (forText !== s.draft) return s
+  return { ...s, analysis: { ...s.analysis, status: 'ready', stale: true, unreachable: true } }
 }
 
 /** Counts for the status line. */

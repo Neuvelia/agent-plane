@@ -23,6 +23,10 @@ export interface GraphStory {
   validate?: (text: string) => ValidateResponse
   /** Answers an operation batch with a recorded response; undefined means "the engine could not be reached". */
   edit?: (ops: { op: string }[], text: string) => { status: number; body: unknown } | undefined
+  /** Validation of typed text never answers (the "validating" state). */
+  validateHang?: boolean
+  /** Validation of typed text cannot reach the engine. */
+  validateFails?: boolean
   /** How starting a run from the grant ends. Default: ok. */
   run?: 'ok' | 'error'
   /** How a save ends. Default: ok. */
@@ -58,6 +62,8 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
       if (method === 'POST' && path === '/graphs/open' && g?.opened) return respond(200, g.opened) as ApiResponse<T>
       if (method === 'POST' && path === '/graphs/validate' && body && typeof (body as { text?: unknown }).text === 'string' && g) {
         const text = (body as { text: string }).text
+        if (g.validateHang) return new Promise<ApiResponse<T>>(() => undefined)
+        if (g.validateFails) throw new Error('the agentplane sidecar is not running')
         return respond(200, g.validate ? g.validate(text) : { status: 'valid', diagnostics: [] }) as ApiResponse<T>
       }
       if (method === 'POST' && path === '/graphs/edit' && g) {

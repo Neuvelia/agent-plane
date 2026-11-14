@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COALESCE_MS, MAX_HISTORY, analyzed, counts, edited, runBlock, fromNew, fromOpen, isDirty, newGraphText, redo, reloaded, saved, type, undo, validating, withConflict } from '../src/editor/doc'
+import { COALESCE_MS, MAX_HISTORY, analyzed, counts, edited, runBlock, validationFailed, fromNew, fromOpen, isDirty, newGraphText, redo, reloaded, saved, type, undo, validating, withConflict } from '../src/editor/doc'
 import type { OpenResponse } from '../src/editor/types'
 
 const open = (text = 'a\n'): OpenResponse => ({ text, hash: 'h0', version: 'v0', diagnostics: [], readonly_canvas: false, line_ending: 'lf', label: 'g.yaml' })
@@ -207,5 +207,35 @@ describe('runBlock ("Save and run" gating reads the engine, decides nothing)', (
     expect(runBlock({ ...ready, diagnostics: [{ severity: 'error', code: 'E', message: '' }] as never })).toBe('errors')
     expect(runBlock({ ...ready, definition: { id: 'g', nodes: {}, edges: [], outputs: {} } })).toBe('empty')
     expect(runBlock({ ...ready, definition: undefined })).toBe('empty')
+  })
+})
+
+describe('stale and unreachable results (F2.4)', () => {
+  const ok = { status: 'valid' as const, diagnostics: [{ severity: 'warning', code: 'W', message: 'w' }] }
+  it('after an edit the old list stays, marked stale, until the new result arrives', () => {
+    let s = analyzed(type(start('a\n'), 'b\n', 5000), 'b\n', ok)
+    expect(s.analysis.stale).toBe(false)
+    s = type(s, 'c\n', 9000)
+    expect(s.analysis.stale).toBe(true)
+    expect(s.analysis.diagnostics).toHaveLength(1)
+    // a result for the older text never replaces the newer draft's state
+    expect(analyzed(s, 'b\n', { status: 'valid', diagnostics: [] }).analysis.diagnostics).toHaveLength(1)
+    expect(analyzed(s, 'c\n', { status: 'valid', diagnostics: [] }).analysis.stale).toBe(false)
+  })
+  it('an unreachable engine keeps the list, marks it stale and blocks running until a result arrives', () => {
+    let s = analyzed(type(start('a\n'), 'b\n', 5000), 'b\n', { ...ok, definition: { id: 'g', nodes: { a: { type: 'shell' } }, edges: [], outputs: {} } })
+    s = type(s, 'c\n', 9000)
+    s = validationFailed(s, 'c\n')
+    expect(s.analysis).toMatchObject({ unreachable: true, stale: true, status: 'ready' })
+    expect(s.analysis.diagnostics).toHaveLength(1)
+    expect(runBlock(s.analysis)).toBe('unreachable')
+    expect(validationFailed(s, 'other\n')).toBe(s)
+    s = analyzed(s, 'c\n', { ...ok, definition: s.analysis.definition })
+    expect(s.analysis.unreachable).toBeUndefined()
+    expect(runBlock(s.analysis)).toBeNull()
+  })
+  it('carries the parse line', () => {
+    const s = analyzed(type(start(), 'x [\n', 5000), 'x [\n', { status: 'invalid', diagnostics: [], parse_error: 'bad', parse_line: 4 })
+    expect(s.analysis.parseLine).toBe(4)
   })
 })
