@@ -2,7 +2,7 @@ import type { MessageKey } from './en'
 
 // Polish catalogue. Product owner review pending (F2.5a open question).
 export const pl: Record<MessageKey, string> = {
-  'app.name': 'AgentPlane',
+  'app.name': 'Tarmind',
   'nav.main': 'Nawigacja główna',
   'nav.dashboard': 'Pulpit',
   'nav.runs': 'Uruchomienia',
@@ -14,7 +14,8 @@ export const pl: Record<MessageKey, string> = {
   'nav.settings': 'Ustawienia',
   'nav.soon': 'Wkrótce',
   'nav.soonHint': 'Jeszcze niedostępne',
-  'topbar.language': 'Język',
+  'topbar.breadcrumb': 'Ścieżka',
+  'topbar.profile': 'Profil',
   'topbar.connected': 'Silnik połączony',
   'topbar.lost': 'Utracono połączenie',
   'status.run.running': 'W toku',
@@ -83,6 +84,10 @@ export const pl: Record<MessageKey, string> = {
   'config.run': 'Uruchom',
   'config.ready': 'Gotowe',
   'config.blocked': 'Zablokowane',
+  'settings.title': 'Ustawienia',
+  'settings.application': 'Aplikacja',
+  'settings.language': 'Język',
+  'settings.languageHelp': 'Język interfejsu. Typy zdarzeń, identyfikatory węzłów, ścieżki i komunikaty silnika nie są tłumaczone.',
   'help.label': 'Pomoc',
   'common.loading': 'Wczytywanie…',
 }

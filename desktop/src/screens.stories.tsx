@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
 import { approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { Settings } from './settings'
 import { Approvals, Dashboard, RunConfig, RunInspector } from './views'
 import type { ApEvent } from './types'
 
@@ -94,3 +95,5 @@ export const FullAppShell: S = {
     </div>
   ),
 }
+
+export const SettingsLanguage: S = { parameters: { bridge: { runs: [] } }, render: () => <Settings /> }

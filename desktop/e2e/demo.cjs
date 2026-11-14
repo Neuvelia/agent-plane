@@ -52,15 +52,18 @@ async function startDemo(page) {
 
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
-    await page.click('[data-testid="nav-projects"]', { force: true })
-    await page.click('[data-testid="nav-settings"]', { force: true })
+    for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
     assert.equal(await page.isVisible('[data-testid="no-runs"]'), true, 'a disabled entry must not navigate')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
-    await page.click('button:text-is("PL")')
+    assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
+    assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
+    await page.click('[data-testid="nav-settings"]')
+    await page.click('button:has-text("PL ·")')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Uruchomienia/)
     assert.equal(await page.evaluate(() => document.documentElement.lang), 'pl')
-    await page.click('button:text-is("EN")')
+    await page.click('button:has-text("EN ·")')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
+    await page.click('[data-testid="nav-runs"]')
 
     // 1. Run: two branches in parallel, one red -> retry, then a human gate.
     await startDemo(page)

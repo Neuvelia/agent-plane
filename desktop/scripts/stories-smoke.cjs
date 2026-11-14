@@ -18,10 +18,11 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
 const REQUIRED = [
   'ui-primitives--pills', 'ui-primitives--buttons', 'ui-primitives--card-with-header', 'ui-primitives--segmented', 'ui-primitives--kpis', 'ui-primitives--fields',
   'ui-data--outcomes', 'ui-data--events', 'ui-data--timeline', 'ui-data--yaml',
-  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--rail', 'ui-shell--top-bar-connected', 'ui-shell--top-bar-lost',
+  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--breadcrumbs',
   'screens--dashboard-empty', 'screens--dashboard-busy',
   'screens--inspector-running', 'screens--inspector-waiting-for-human', 'screens--inspector-failed-after-retries', 'screens--inspector-succeeded', 'screens--inspector-connection-lost', 'screens--inspector-run-not-found',
   'screens--approvals-empty', 'screens--approvals-one-pending', 'screens--approvals-many-pending', 'screens--approvals-decision-error',
+  'screens--settings-language',
   'screens--new-run-no-file', 'screens--new-run-ready', 'screens--new-run-warnings', 'screens--new-run-blocked',
 ]
 

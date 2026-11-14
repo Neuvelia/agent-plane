@@ -2,7 +2,7 @@
 // keys and the same {parameter} names (enforced by test/i18n.test.ts).
 // Plural messages use the CLDR categories one / few / many / other.
 export const en = {
-  'app.name': 'AgentPlane',
+  'app.name': 'Tarmind',
   'nav.main': 'Main navigation',
   'nav.dashboard': 'Dashboard',
   'nav.runs': 'Runs',
@@ -14,7 +14,8 @@ export const en = {
   'nav.settings': 'Settings',
   'nav.soon': 'Soon',
   'nav.soonHint': 'Not available yet',
-  'topbar.language': 'Language',
+  'topbar.breadcrumb': 'Breadcrumb',
+  'topbar.profile': 'Profile',
   'topbar.connected': 'Engine connected',
   'topbar.lost': 'Connection lost',
   'status.run.running': 'Running',
@@ -83,6 +84,10 @@ export const en = {
   'config.run': 'Run',
   'config.ready': 'Ready',
   'config.blocked': 'Blocked',
+  'settings.title': 'Settings',
+  'settings.application': 'Application',
+  'settings.language': 'Language',
+  'settings.languageHelp': 'The interface language. Event types, node ids, paths and messages from the engine are never translated.',
   'help.label': 'Help',
   'common.loading': 'Loading…',
 } as const

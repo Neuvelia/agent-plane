@@ -126,7 +126,10 @@ function createWindow() {
     width: 1440,
     height: 900,
     backgroundColor: '#000000',
-    title: 'AgentPlane',
+    title: 'Tarmind',
+    // macOS: hide the native title bar so the window is black edge to edge. The
+    // renderer's global bar becomes the drag area (class "mac" in styles.css).
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 18 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
-import { LOCALES, LOCALE_LABEL } from '../i18n'
+import logo from '../design/tarmind-logo.png'
 import { useI18n } from '../i18n/context'
 import type { MessageKey } from '../i18n'
 import { Icon, type IconName } from './icons'
-import { SegmentedControl } from './primitives'
 
 export interface NavEntry {
   id: string
@@ -41,17 +40,19 @@ function Entry({ e }: { e: NavEntry }) {
   )
 }
 
-export function Sidebar({ entries, deferred }: { entries: NavEntry[]; deferred: NavEntry[] }) {
+export function Sidebar({ entries, deferred, footer = [] }: { entries: NavEntry[]; deferred: NavEntry[]; footer?: NavEntry[] }) {
   const { t } = useI18n()
   return (
     <nav className="side" aria-label={t('nav.main')}>
-      <div className="brand">{t('app.name')}</div>
       {entries.map((e) => (
         <Entry key={e.id} e={e} />
       ))}
       <div className="side-gap" />
       {deferred.map((e) => (
         <Entry key={e.id} e={{ ...e, disabled: true }} />
+      ))}
+      {footer.map((e) => (
+        <Entry key={e.id} e={e} />
       ))}
     </nav>
   )
@@ -77,10 +78,38 @@ export function IconRail({ entries }: { entries: NavEntry[] }) {
   )
 }
 
-export function TopBar({ crumbs, lost, children }: { crumbs: ReactNode[]; lost: boolean; children?: ReactNode }) {
-  const { t, locale, setLocale } = useI18n()
+/** Placeholder identity until accounts exist (F2.5a): initials are hard-coded. */
+export const PROFILE_INITIALS = 'KW'
+
+/** Full-width bar: brand at the left, connection state and profile at the right.
+ *  On macOS the window has no native title bar, so this bar is also the drag area
+ *  and leaves room for the traffic lights (see styles.css `.mac`). */
+export function GlobalBar({ lost }: { lost: boolean }) {
+  const { t } = useI18n()
   return (
-    <header className="topbar">
+    <header className="global-bar">
+      <div className="g-brand">
+        <img src={logo} alt="" width={28} height={28} />
+        <span>{t('app.name')}</span>
+      </div>
+      <div className="g-right">
+        <span className={`conn ${lost ? 'bad' : 'ok'}`} data-testid="connection-indicator">
+          <span className="dot sm" aria-hidden="true" />
+          {lost ? t('topbar.lost') : t('topbar.connected')}
+        </span>
+        <span className="avatar" role="img" aria-label={`${t('topbar.profile')}: ${PROFILE_INITIALS}`} data-testid="profile">
+          {PROFILE_INITIALS}
+        </span>
+      </div>
+    </header>
+  )
+}
+
+export function TopBar({ crumbs }: { crumbs: ReactNode[] }) {
+  const { t } = useI18n()
+  return (
+    // A nav, not a header: the global bar is the page's only banner landmark.
+    <nav className="topbar" aria-label={t('topbar.breadcrumb')}>
       <div className="crumbs">
         {crumbs.map((c, i) => (
           <span key={i} className={i === crumbs.length - 1 ? 'crumb cur' : 'crumb'}>
@@ -88,14 +117,6 @@ export function TopBar({ crumbs, lost, children }: { crumbs: ReactNode[]; lost: 
           </span>
         ))}
       </div>
-      <div className="topbar-right">
-        {children}
-        <span className={`conn ${lost ? 'bad' : 'ok'}`} data-testid="connection-indicator">
-          <span className="dot sm" aria-hidden="true" />
-          {lost ? t('topbar.lost') : t('topbar.connected')}
-        </span>
-        <SegmentedControl label={t('topbar.language')} value={locale} onChange={setLocale} segments={LOCALES.map((l) => ({ value: l, label: LOCALE_LABEL[l] }))} />
-      </div>
-    </header>
+    </nav>
   )
 }

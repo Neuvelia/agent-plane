@@ -19,6 +19,15 @@ new API field, event, or graph semantic is listed under "Contract gaps" and need
 5. **Storybook:** added from R0 as a development-only environment (see 4.3b), modelled on how OpenBot
    uses it: isolated dev server, shared test data, whole screens in named states, static build in CI.
 
+### Product-owner amendments after R0 review
+
+- Brand at the top left is the Tarmind logo and name (global bar), as in the design.
+- The Sidebar is always expanded; the IconRail is not used on any screen.
+- Language moved from the top bar to Settings; Settings is enabled (language only). Projects, Runners and
+  Docs stay greyed out.
+- A profile avatar with hard-coded initials ("KW") sits at the top right.
+- macOS uses a frameless-title-bar window so the top strip is black like the app background.
+
 ## 1. Current state
 
 `desktop/` is an Electron shell plus a React renderer (~1,100 lines) with four screens: Runs list, Run
