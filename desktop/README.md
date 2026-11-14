@@ -26,6 +26,12 @@ make desktop-e2e             # real Electron + real sidecar under xvfb
 make desktop-stories         # every story in a real browser, EN + PL: axe a11y, no network
 ```
 
+`make desktop-e2e` uses `xvfb-run` when it exists (Linux); on macOS and Windows it
+opens a real window, so do not touch the app while it runs. `make desktop-stories`
+installs Playwright's Chromium once (`npx playwright install chromium`); set
+`AP_CHROMIUM=/path/to/chrome` to use a browser you already have. Playwright is a
+pinned dev dependency used only by these two checks.
+
 ## Storybook (development only, F2.5a)
 
 ```bash

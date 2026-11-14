@@ -23,10 +23,14 @@ clean:
 desktop-check: build
 	cd desktop && npm ci && npm run check
 
+# A virtual display is needed (and available) only on Linux; macOS and Windows
+# open a real window. Override with `make desktop-e2e XVFB=` to force none.
+XVFB ?= $(if $(shell command -v xvfb-run 2>/dev/null),xvfb-run -a,)
+
 # Drives the real Electron app against bin/agentplane under a virtual display.
 desktop-e2e: build
-	cd desktop && npm ci && npm run build && xvfb-run -a node e2e/demo.cjs
+	cd desktop && npm ci && npm run build && $(XVFB) node e2e/demo.cjs
 
 # Opens every Storybook story in a real browser (EN and PL): a11y, no network.
 desktop-stories:
-	cd desktop && npm ci && npm run build-storybook && npm run stories:test
+	cd desktop && npm ci && (npx playwright install chromium || echo 'browser download failed; set AP_CHROMIUM=/path/to/chrome to use an installed one') && npm run build-storybook && npm run stories:test

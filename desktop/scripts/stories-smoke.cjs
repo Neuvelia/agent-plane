@@ -1,5 +1,6 @@
 'use strict'
 // node scripts/stories-smoke.cjs   (after `npm run build-storybook`)
+// AP_CHROMIUM=/path/to/chrome uses an installed browser instead of Playwright's.
 // Opens every story in a real browser, in English and Polish, and fails on:
 //   - a missing required story (screen states of F2.5a 6c, every primitive),
 //   - any request that is not served by the static Storybook itself,
@@ -28,6 +29,7 @@ const REQUIRED = [
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, 'http://127.0.0.1')
+  if (url.pathname === '/favicon.ico') return res.writeHead(204).end() // some browsers always ask
   let file = path.join(root, decodeURIComponent(url.pathname))
   if (!file.startsWith(root)) return res.writeHead(403).end()
   if (fs.existsSync(file) && fs.statSync(file).isDirectory()) file = path.join(file, 'index.html')
@@ -44,7 +46,9 @@ const server = http.createServer((req, res) => {
   const missing = REQUIRED.filter((id) => !ids.includes(id))
   assert.deepEqual(missing, [], `missing stories: ${missing.join(', ')}`)
 
-  const browser = await chromium.launch()
+  const browser = await chromium.launch(process.env.AP_CHROMIUM ? { executablePath: process.env.AP_CHROMIUM, args: ['--no-sandbox'] } : {}).catch((e) => {
+    throw new Error(`${e.message}\nInstall the browser once with: npx playwright install chromium`)
+  })
   const failures = []
   for (const locale of ['en', 'pl']) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
