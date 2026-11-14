@@ -49,6 +49,19 @@ cd ../agentplane-F0.1
 
 Use one active feature per worktree when possible.
 
+## Task continuity
+
+For implementation work with more than a few steps, maintain a root
+`TASKS.md` in that worktree. Keep it short: objective and branch; links to the
+active spec and plan; a checklist of completed and remaining steps; the last
+verification command and result; blockers; and the next concrete action.
+Update it when a meaningful step finishes and before handing off or pausing.
+When resuming, read the journal and compare it with `git status` and the current
+branch before continuing. The journal is ignored by Git and stays local to the
+worktree; it is not the feature spec, implementation plan, or PR description.
+Do not record secrets, raw model output, or sensitive repository content.
+Small one-step tasks do not need a journal.
+
 ## Planning session
 
 Use `prompts/plan.md`.

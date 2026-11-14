@@ -186,6 +186,15 @@ Before implementation, report:
 
 If the requested task is implementation and the user has already approved the plan, continue. Otherwise stop after planning when explicitly asked for plan-only work.
 
+For work with more than a few steps, keep a `TASKS.md` checklist at the
+worktree root. Record the objective, branch, spec or plan, completed and next
+steps, last verification result, and any blocker. Update it after meaningful
+progress and before a handoff or context compaction. On resumption, read it and
+check `git status` before acting; the journal may be stale. Keep secrets, raw
+model output, and sensitive repository content out of it. `TASKS.md` is ignored
+by Git and does not replace the feature spec, implementation plan, or final
+report. One-step work does not need a journal.
+
 ### Step 3: Implement only the active scope
 
 Use the feature ID from `docs/features/` as the scope boundary.

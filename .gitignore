@@ -14,6 +14,9 @@ coverage.out
 *.db-shm
 *.db-wal
 
+# Worktree-local coding-agent task state
+/TASKS.md
+
 # Experiment output generated locally
 experiments/out/
 
