@@ -15,6 +15,7 @@ The core model is:
 
 Read these files before making architectural changes:
 
+- `docs/codebase-map.md`
 - `docs/architecture.md`
 - `docs/domain-model.md`
 - `docs/graph-spec.md`
@@ -135,7 +136,14 @@ cmd/agentplane/          CLI entrypoint
 internal/graph/          graph schema, parsing, validation, bindings
 internal/runtime/        scheduler and execution state transitions
 internal/events/         event contracts and event emission
+internal/agent/          provider-neutral Agent contract and adapters
+internal/shell/          Shell execution
+internal/gate/           deterministic checks
+internal/gitstate/       Git-observed workspace state
+internal/store/          local run history
+internal/api/            loopback API for local clients
 internal/version/        build/runtime version metadata
+desktop/                 Electron shell and React renderer
 .agents/graphs/          example graph definitions
 docs/                    architecture and product contracts
 docs/features/           executable feature specifications
@@ -145,7 +153,8 @@ experiments/             thesis/development measurement data
 scripts/                 developer automation
 ```
 
-The future UI and cloud backend should be added as separate top-level components. Do not put cloud concerns inside `internal/runtime`.
+The desktop UI is a separate top-level component. A future cloud backend
+should also be separate; do not put cloud concerns inside `internal/runtime`.
 
 ## Development workflow for every feature
 
