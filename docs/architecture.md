@@ -23,6 +23,10 @@ It should not become:
 
 ## Architectural layers
 
+The diagram below describes conceptual ownership. The current Go packages,
+loopback API, run store and desktop client are mapped in
+`docs/codebase-map.md`.
+
 ```text
 +-----------------------------------------------------------+
 | Future UI / IDE                                           |
