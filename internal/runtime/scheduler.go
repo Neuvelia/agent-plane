@@ -49,6 +49,8 @@ type LogStreamingExecutor interface {
 // observes at most one validated Gate fact, retained for green and red. Capture
 // capabilities redact before truncation without exposing configured secrets.
 type ExecutionObservation struct {
+	// AttemptNumber is the 1-based produce attempt for loop producers, else 0.
+	AttemptNumber      int
 	ScopeBaseline      *gitstate.Baseline
 	ScopeBaselineError error
 	Feedback           *CorrectionFeedback
@@ -75,6 +77,13 @@ type Options struct {
 	// LogRedactions are exact byte strings replaced in log events. Redaction
 	// works across writes and is independent for stdout and stderr.
 	LogRedactions []string
+	// Decisions serves human nodes. A graph with a human node and no provider
+	// fails preflight (ADR-0017).
+	Decisions DecisionProvider
+	// Persist records every retained event synchronously and in sequence order
+	// (F2.9). A failure never stops the run; it is reported in
+	// RunResult.PersistError and the caller must treat the run as not durable.
+	Persist func(events.Event) error
 }
 
 type completedNode struct {
@@ -103,6 +112,7 @@ type runMachine struct {
 	emitter     *events.Collector
 	startedAt   time.Time
 	nodeStarted map[string]time.Time
+	decisions   DecisionProvider
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -162,11 +172,15 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err := preflightLoops(ctx, definition, executor); err != nil {
 		return RunResult{}, err
 	}
-	machine, err := newRunMachine(ctx, definition, options.LiveEvents)
+	if err := preflightHuman(definition, options.Decisions); err != nil {
+		return RunResult{}, err
+	}
+	machine, err := newRunMachine(ctx, definition, options.LiveEvents, options.Persist)
 	if err != nil {
 		return RunResult{}, err
 	}
 	machine.definition = definition
+	machine.decisions = options.Decisions
 	for _, id := range definition.Units {
 		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, scopes[id], scopeRedacted[id]); err != nil {
 			return RunResult{}, err
@@ -259,9 +273,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				}
 				node := definition.Nodes[id]
 				resolved := machine.resolved[id]
-				aid, feedback, baseline := attempts[id], feedbacks[id], baselines[id]
+				aid, feedback, baseline, number := attempts[id], feedbacks[id], baselines[id], numbers[id]
 				go func(id string) {
-					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, feedback, baseline, redactionTemplate)
+					completed <- machine.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, redactionTemplate)
 				}(id)
 				started++
 			}
@@ -364,6 +378,9 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 						machine.transitionNode(work.id, NodeCancelled)
 					} else {
 						nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureExecutor, Err: work.err}
+						if errors.As(work.err, &rejectedError{}) {
+							nodeResult.Failure.Kind = FailureRejected
+						}
 						if len(work.diagnostics) > 0 {
 							nodeResult.Failure.Kind = FailureOutputContract
 							nodeResult.Failure.Diagnostics = work.diagnostics
@@ -434,7 +451,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 }
 
-func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event) (*runMachine, error) {
+func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event, persist func(events.Event) error) (*runMachine, error) {
 	version, err := graph.SemanticVersion(definition)
 	if err != nil {
 		return nil, err
@@ -465,6 +482,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<
 		m.nodes[id] = &NodeResult{NodeID: id, NodeRunID: nodeRunID, State: NodePending}
 	}
 	m.emitter = events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live)
+	m.emitter.SetPersist(persist)
 	m.record("", "", string(RunRunning))
 	return m, nil
 }
@@ -659,6 +677,7 @@ func (m *runMachine) snapshot() RunResult {
 	result := m.result
 	result.Events = m.emitter.Snapshot()
 	result.ProgressStats = m.emitter.Stats()
+	result.PersistError = m.emitter.PersistError()
 	result.Nodes = make([]NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])
@@ -717,7 +736,7 @@ func validateNodeOutputs(graphID, nodeID string, declared map[string]graph.PortD
 	return diagnostics
 }
 
-func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, feedback *CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
+func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, attemptNumber int, feedback *CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
 	nodeRunID := m.nodes[id].NodeRunID
 	var outputs map[string]graph.Value
 	var err error
@@ -855,7 +874,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
 		} else {
 			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 		}

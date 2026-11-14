@@ -2,8 +2,10 @@ package events
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestLiveEventsRemainPrefixAfterCancellationDropsAnEvent(t *testing.T) {
@@ -131,5 +133,84 @@ func TestCollectorRejectsInvalidAndLateEvents(t *testing.T) {
 	}
 	if got := len(collector.Snapshot()); got != 2 {
 		t.Fatalf("late event changed collector: %d events", got)
+	}
+}
+
+func TestCollectorPersistsRetainedEventsInSequenceOrder(t *testing.T) {
+	c := NewCollector("run", "g", "sha256-v0:x")
+	var got []Event
+	c.SetPersist(func(e Event) error { got = append(got, e); return nil })
+	c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{NodeCount: 1}})
+	c.Append(Event{Type: LogChunk, NodeID: "n", NodeRunID: "nr", Payload: LogChunkPayload{Stream: Stdout, Data: []byte("x")}})
+	c.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}})
+	snapshot := c.Snapshot()
+	if len(got) != len(snapshot) {
+		t.Fatalf("persisted %d of %d retained events", len(got), len(snapshot))
+	}
+	for i := range got {
+		if got[i].Sequence != snapshot[i].Sequence || got[i].Type != snapshot[i].Type {
+			t.Fatalf("event %d persisted out of order", i)
+		}
+	}
+}
+
+func TestCollectorStopsPersistingAfterFirstErrorAndReportsIt(t *testing.T) {
+	c := NewCollector("run", "g", "sha256-v0:x")
+	calls := 0
+	c.SetPersist(func(Event) error { calls++; return errors.New("disk full") })
+	c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}})
+	c.Append(Event{Type: RunFinished, Payload: RunFinishedPayload{Status: "succeeded"}})
+	if calls != 1 || c.PersistError() == nil {
+		t.Fatalf("calls=%d err=%v", calls, c.PersistError())
+	}
+	if len(c.Snapshot()) != 2 {
+		t.Fatal("a persistence failure must not drop in-memory events")
+	}
+}
+
+// Persistence runs under the collector lock (ADR-0019): a blocked sink delays
+// every later Append, and releasing it preserves sequence order. This pins the
+// documented behaviour so a change to it is deliberate.
+func TestBlockedPersistSinkDelaysLaterAppendsAndKeepsOrder(t *testing.T) {
+	c := NewCollector("run", "g", "sha256-v0:x")
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var order []uint64
+	first := true
+	c.SetPersist(func(e Event) error {
+		if first {
+			first = false
+			close(entered)
+			<-release
+		}
+		mu.Lock()
+		order = append(order, e.Sequence)
+		mu.Unlock()
+		return nil
+	})
+	done := make(chan struct{}, 2)
+	secondCalling := make(chan struct{})
+	go func() { c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); done <- struct{}{} }()
+	<-entered
+	go func() {
+		close(secondCalling) // the second Append is about to be issued
+		c.Append(Event{Type: NodeReady, NodeID: "n", NodeRunID: "nr", Payload: NodeReadyPayload{}})
+		done <- struct{}{}
+	}()
+	<-secondCalling
+	// Bounded absence check: neither Append may finish while the sink blocks.
+	select {
+	case <-done:
+		t.Fatal("an Append completed while the sink was blocked")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	<-done
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
+		t.Fatalf("order after release: %v", order)
 	}
 }

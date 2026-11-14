@@ -13,6 +13,7 @@ type FailureKind string
 const (
 	FailureNeedsIntervention FailureKind = "needs_intervention"
 	FailureExecutor          FailureKind = "executor"
+	FailureRejected          FailureKind = "rejected"
 	FailureBinding           FailureKind = "binding"
 	FailureOutputContract    FailureKind = "output_contract"
 	FailureGraphOutput       FailureKind = "graph_output"
@@ -58,6 +59,8 @@ type StateTransition struct {
 // RunResult is ordered by node ID and graph output name. A started run has
 // exactly one terminal State when Run returns.
 type RunResult struct {
+	// PersistError is the first Options.Persist failure, if any.
+	PersistError  error
 	GraphID       string
 	GraphVersion  string
 	RunID         events.RunID

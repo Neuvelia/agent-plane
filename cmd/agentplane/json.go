@@ -8,6 +8,7 @@ import (
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/store"
 )
 
 type cliError struct {
@@ -47,6 +48,8 @@ type cliDocument struct {
 	Nodes         *[]cliNode         `json:"nodes,omitempty"`
 	Outputs       *[]cliOutput       `json:"outputs,omitempty"`
 	Events        *[]events.Event    `json:"events,omitempty"`
+	Runs          *[]store.Summary   `json:"runs,omitempty"`
+	Truncated     bool               `json:"truncated,omitempty"`
 	Failure       *cliFailure        `json:"failure"`
 	Error         *cliError          `json:"error"`
 }

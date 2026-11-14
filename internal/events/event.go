@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 8
+const SchemaVersion = 9
 
 type RunID string
 type NodeRunID string
@@ -160,6 +160,22 @@ func (e Event) Validate() error {
 		if p.SourceRunID != e.RunID || p.SourceNodeID != e.NodeID || p.SourceNodeRunID != e.NodeRunID || p.AttemptID != e.AttemptID || p.SourceGraphVersion != e.GraphVersion {
 			return errors.New("return envelope source does not match event")
 		}
+	case ApprovalRequestedPayload:
+		payloadType = ApprovalRequested
+		if err := validateApproval(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case ApprovalDecidedPayload:
+		payloadType = ApprovalDecided
+		if err := validateApproval(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
 	case DeclaredScopeConflictsPayload:
 		payloadType = DeclaredScopeConflicts
 		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
@@ -293,6 +309,10 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = ReturnEnvelopePayload{}
 	case DeclaredScopeConflicts:
 		payload = DeclaredScopeConflictsPayload{}
+	case ApprovalRequested:
+		payload = ApprovalRequestedPayload{}
+	case ApprovalDecided:
+		payload = ApprovalDecidedPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -343,6 +363,16 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		payload = p
 	case DeclaredScopeConflictsPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ApprovalRequestedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ApprovalDecidedPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}

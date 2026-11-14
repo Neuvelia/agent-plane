@@ -155,7 +155,10 @@ func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *Correcti
 	}
 	return p
 }
-func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, f *CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
+func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, number int, f *CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
+	if n.Type == "human" {
+		return m.humanNode(ctx, id, n, in, r)
+	}
 	if err := ctx.Err(); err != nil {
 		return completedNode{id: id, attemptID: aid, err: err}
 	}
@@ -172,7 +175,7 @@ func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.N
 			baseline = &captured
 		}
 	}
-	work := m.invoke(ctx, e, id, n, in, aid, f, baseline, baselineError, r)
+	work := m.invoke(ctx, e, id, n, in, aid, number, f, baseline, baselineError, r)
 	work.baseline = baseline
 	if n.Loop == nil {
 		return work
@@ -212,7 +215,7 @@ func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.N
 			return work
 		}
 	}
-	gate := m.invoke(ctx, e, id, n.Loop.GateNode(), bound, aid, nil, baseline, baselineError, r)
+	gate := m.invoke(ctx, e, id, n.Loop.GateNode(), bound, aid, 0, nil, baseline, baselineError, r)
 	valid := !gate.checkInvalid && gate.check != nil && gate.evidence == nil
 	if valid && gate.check.Verdict == "red" {
 		var v interface{ GateVerdict() string }

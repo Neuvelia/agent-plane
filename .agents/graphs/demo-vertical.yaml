@@ -1,0 +1,61 @@
+# Phase 2 vertical slice demo (F1.6a, F2.10): two independent branches run
+# concurrently, "flaky" is rejected by its Gate on attempt 1 and retried alone,
+# then a human node waits for approval before "apply" runs. No LLM involved.
+#   agentplane run .agents/graphs/demo-vertical.yaml --approve approve --watch
+schema_version: 0
+id: demo-vertical
+inputs: {}
+nodes:
+  fast:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["fast branch done"]
+    outputs:
+      stdout: {type: string, required: true}
+  flaky:
+    type: shell
+    config:
+      command: /bin/sh
+      args:
+        - -c
+        - 'if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then echo "{\"ready\":false}"; else echo "{\"ready\":true}"; fi'
+      stdout_json: true
+    outputs:
+      json: {type: json, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: flaky-ready
+          kind: json_predicate
+          input: candidate
+          field: [ready]
+          operator: eq
+          expected: true
+      bindings:
+        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+  approve:
+    type: human
+    config:
+      prompt: Both branches are green. Approve applying the result?
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+      evidence: {type: json, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  apply:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["applied\n"]
+    inputs:
+      decision: {type: string, required: true}
+edges:
+  - {from: fast.outputs.stdout, to: approve.inputs.summary}
+  - {from: flaky.outputs.json, to: approve.inputs.evidence}
+  - {from: approve.outputs.decision, to: apply.inputs.decision}
+outputs: {}

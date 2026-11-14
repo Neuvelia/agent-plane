@@ -25,7 +25,7 @@ func (e nodeExecutor) ExecuteNodeObserved(ctx context.Context, id string, n grap
 	if n.Type == "agent" {
 		return e.agents.ExecuteNodeObserved(ctx, id, n, in, o)
 	}
-	values, err := (shell.Executor{}).ExecuteNodeWithLogs(ctx, id, n, in, o.Log)
+	values, err := (shell.Executor{}).ExecuteNodeAttempt(ctx, id, n, in, o.Log, o.AttemptNumber)
 	return values, nil, err
 }
 
@@ -33,8 +33,14 @@ func (e nodeExecutor) ValidateNodeConfig(id string, n graph.NodeDefinition) erro
 	if n.Type == "gate" {
 		return (gate.Executor{}).ValidateNodeConfig(id, n)
 	}
+	if n.Type == "shell" {
+		return (shell.Executor{}).ValidateNodeConfig(id, n)
+	}
 	return e.agents.ValidateNodeConfig(id, n)
 }
 func (e nodeExecutor) PreflightNode(ctx context.Context, id string, n graph.NodeDefinition) error {
+	if n.Type == "shell" {
+		return nil // no provider capability to detect for a local process
+	}
 	return e.agents.PreflightNode(ctx, id, n)
 }

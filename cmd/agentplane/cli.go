@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -8,6 +9,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"time"
 
 	"agentplane/internal/agent"
@@ -16,6 +19,7 @@ import (
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
+	"agentplane/internal/store"
 	"agentplane/internal/version"
 )
 
@@ -41,10 +45,16 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if len(args) >= 1 && args[0] == "run" {
 		return executeCommand(ctx, args[1:], stdout, stderr)
 	}
+	if len(args) >= 1 && args[0] == "serve" {
+		return serveCommand(ctx, args[1:], stdout, stderr)
+	}
+	if len(args) >= 2 && args[0] == "runs" && (args[1] == "list" || args[1] == "show") {
+		return runsCommand(args[1], args[2:], stdout, stderr)
+	}
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--max-concurrency N] [--watch | --json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--max-concurrency N] [--watch | --json] | agentplane serve [--store-dir DIR] [--max-concurrency N] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -60,15 +70,22 @@ func commandFlags(name string, args []string) (string, *flag.FlagSet, error) {
 }
 
 func readDefinition(path string) (*graph.Definition, error) {
+	def, _, err := readDefinitionBytes(path)
+	return def, err
+}
+
+// readDefinitionBytes also returns the exact bytes that were parsed so a run
+// store can snapshot the definition that actually executed.
+func readDefinitionBytes(path string) (*graph.Definition, []byte, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("read graph file %q: %w", path, err)
+		return nil, nil, fmt.Errorf("read graph file %q: %w", path, err)
 	}
 	def, err := graph.Parse(data)
 	if err != nil {
-		return nil, fmt.Errorf("parse graph file %q: %w", path, err)
+		return nil, nil, fmt.Errorf("parse graph file %q: %w", path, err)
 	}
-	return def, nil
+	return def, data, nil
 }
 
 func validateCommand(args []string, stdout, stderr io.Writer) int {
@@ -113,6 +130,10 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes")
 	var inputs inputFlags
 	var redactEnv inputFlags
+	var approveNodes, rejectNodes inputFlags
+	storeDir := fs.String("store-dir", "", "persist the run under this directory (events.jsonl + graph.yaml)")
+	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
+	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
@@ -134,7 +155,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	def, err := readDefinition(path)
+	def, graphBytes, err := readDefinitionBytes(path)
 	if err != nil {
 		return commandError("run", "error", "graph", err, nil, *jsonMode, stdout, stderr, exitGraph)
 	}
@@ -161,7 +182,28 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return presentationError(err, stderr)
 		}
 	}
-	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions}
+	decisions, err := decisionProvider(def, approveNodes, rejectNodes, stdinInteractive(), os.Stdin, stderr)
+	if err != nil {
+		return usageError("run", err, *jsonMode, stdout, stderr)
+	}
+	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions}
+	var writer persister
+	if *storeDir != "" {
+		runStore := store.Store{Dir: *storeDir}
+		if err := runStore.Check(); err != nil {
+			return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
+		}
+		for _, secret := range redactions {
+			if secret != "" && (bytes.Contains(graphBytes, []byte(secret)) || definitionHoldsSecret(def, secret)) {
+				// The snapshot is a byte copy, so a secret embedded in the graph
+				// would be duplicated into the store. Graphs must reference
+				// secrets, never contain them (AGENTS.md).
+				return commandError("run", "error", "graph", errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run"), nil, *jsonMode, stdout, stderr, exitGraph)
+			}
+		}
+		writer = openPersister(runStore, graphBytes)
+		opts.Persist = writer.Append
+	}
 	runCtx := ctx
 	var finishWatch func([]events.Event) error
 	if *watch {
@@ -193,7 +235,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	var executor runtime.Executor = shell.Executor{}
 	for _, node := range def.Nodes {
-		if node.Type != "shell" {
+		if node.Type != "shell" || node.Loop != nil {
 			executor = nodeExecutor{}
 			break
 		}
@@ -202,6 +244,17 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
 	}
 	result, err := runtime.Run(runCtx, def, values, executor, opts)
+	if writer != nil {
+		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
+			result.PersistError = closeErr
+		}
+	}
+	// A persistence failure never hides what the run did: the result is still
+	// shown, and the command exits 1 with the run ID and the partial log path.
+	var persistFailure error
+	if err == nil && result.PersistError != nil {
+		persistFailure = fmt.Errorf("run %s was not persisted (a partial log may exist under %s): %w", result.RunID, filepath.Join(*storeDir, string(result.RunID)), result.PersistError)
+	}
 	if finishWatch != nil {
 		if writeErr := finishWatch(result.Events); writeErr != nil {
 			return presentationError(writeErr, stderr)
@@ -221,8 +274,15 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if result.State == runtime.RunCancelled {
 		code = exitInterrupted
 	}
+	if persistFailure != nil {
+		code = exitInternal
+	}
 	if *jsonMode {
-		return writeJSON(stdout, stderr, documentForRun(result, allDiagnostics), code)
+		doc := documentForRun(result, allDiagnostics)
+		if persistFailure != nil {
+			doc.Error = &cliError{Kind: "internal", Message: persistFailure.Error()}
+		}
+		return writeJSON(stdout, stderr, doc, code)
 	}
 	if !*watch {
 		renderer := newEventRenderer(stdout, stderr, false)
@@ -237,7 +297,58 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return presentationError(err, stderr)
 		}
 	}
+	if persistFailure != nil {
+		if _, err := fmt.Fprintln(stderr, persistFailure); err != nil {
+			return presentationError(err, stderr)
+		}
+	}
 	return code
+}
+
+// persister is the run store's write side, a seam so a mid-run write failure
+// can be exercised without relying on filesystem permissions.
+type persister interface {
+	Append(events.Event) error
+	Close() error
+}
+
+var openPersister = func(s store.Store, graph []byte) persister { return s.NewWriter(graph) }
+
+// definitionHoldsSecret reports whether any string in the parsed definition -
+// values, map keys such as node and port IDs, edge references, bindings - holds
+// the secret. It walks the whole structure by reflection so no field can be
+// forgotten, and it compares parsed values, so YAML escapes, folding and unicode
+// escapes cannot hide a secret from the byte-level check on the stored snapshot.
+func definitionHoldsSecret(def *graph.Definition, secret string) bool {
+	var walk func(v reflect.Value) bool
+	walk = func(v reflect.Value) bool {
+		switch v.Kind() {
+		case reflect.String:
+			return strings.Contains(v.String(), secret)
+		case reflect.Interface, reflect.Pointer:
+			return !v.IsNil() && walk(v.Elem())
+		case reflect.Slice, reflect.Array:
+			for i := 0; i < v.Len(); i++ {
+				if walk(v.Index(i)) {
+					return true
+				}
+			}
+		case reflect.Map:
+			for _, k := range v.MapKeys() {
+				if walk(k) || walk(v.MapIndex(k)) {
+					return true
+				}
+			}
+		case reflect.Struct:
+			for i := 0; i < v.NumField(); i++ {
+				if v.Type().Field(i).IsExported() && walk(v.Field(i)) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return def != nil && walk(reflect.ValueOf(def))
 }
 
 func wantsJSON(args []string) bool {

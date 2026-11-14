@@ -79,10 +79,10 @@ type config struct {
 // argument text as shell syntax. Only inputs listed in input_env enter the
 // child process environment.
 func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
-	return execute(ctx, nodeID, node, inputs, nil)
+	return execute(ctx, nodeID, node, inputs, nil, 0)
 }
 
-func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (Result, error) {
+func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int) (Result, error) {
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -102,6 +102,9 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	cmd := exec.CommandContext(ctx, cfg.command, cfg.args...)
 	cmd.Dir = cfg.cwd
 	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
+	if attempt > 0 {
+		cmd.Env = append(cmd.Env, AttemptEnv+"="+strconv.Itoa(attempt))
+	}
 	// A descendant may inherit stdout or stderr after the direct child exits.
 	// Bound the pipe drain so Wait can finish without managing the process tree.
 	cmd.WaitDelay = time.Second
@@ -160,7 +163,26 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 // ExecuteNodeWithLogs streams bounded chunks while retaining F0.5's complete
 // stdout and stderr result evidence. The observer must tolerate concurrent
 // calls from the two output-copy goroutines.
-func (Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
+func (e Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
+	return e.ExecuteNodeAttempt(ctx, nodeID, node, inputs, observe, 0)
+}
+
+// AttemptEnv is the reserved child variable carrying the 1-based loop attempt
+// number (ADR-0018). It is only set for loop producers and cannot be set by
+// node configuration.
+const AttemptEnv = "AGENTPLANE_ATTEMPT"
+
+// ValidateNodeConfig checks static shell configuration without running it.
+func (Executor) ValidateNodeConfig(id string, node graph.NodeDefinition) error {
+	if _, err := parseConfig(node); err != nil {
+		return fmt.Errorf("shell node %q: %w", id, err)
+	}
+	return nil
+}
+
+// ExecuteNodeAttempt is ExecuteNodeWithLogs for a loop producer attempt.
+// attempt 0 means "not a loop attempt" and adds no variable.
+func (Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int) (map[string]graph.Value, error) {
 	cfg, configErr := parseConfig(node)
 	if configErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
@@ -181,7 +203,7 @@ func (Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node gra
 			return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: fmt.Errorf("unsupported shell output %q", name)}
 		}
 	}
-	result, err := execute(ctx, nodeID, node, inputs, observe)
+	result, err := execute(ctx, nodeID, node, inputs, observe, attempt)
 	if err != nil {
 		return nil, err
 	}
@@ -323,6 +345,25 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 		cfg.stdoutJSON, ok = value.(bool)
 		if !ok {
 			return cfg, errors.New("stdout_json must be a boolean")
+		}
+	}
+	// AGENTPLANE_ATTEMPT belongs to the runtime for every shell node (ADR-0018):
+	// it may not be set, inherited from the host or mapped from an input, in any
+	// letter case, so a child can always trust the value it sees.
+	reserved := func(name string) bool { return strings.EqualFold(name, AttemptEnv) }
+	for key := range cfg.env {
+		if reserved(key) {
+			return cfg, fmt.Errorf("env %s is reserved for the runtime", AttemptEnv)
+		}
+	}
+	for _, key := range cfg.envAllowlist {
+		if reserved(key) {
+			return cfg, fmt.Errorf("env_allowlist %s is reserved for the runtime", AttemptEnv)
+		}
+	}
+	for _, variable := range cfg.inputEnv {
+		if reserved(variable) {
+			return cfg, fmt.Errorf("input_env cannot map to %s, which is reserved for the runtime", AttemptEnv)
 		}
 	}
 	return cfg, nil
