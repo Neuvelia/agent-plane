@@ -6,5 +6,5 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   build: { outDir: 'dist', emptyOutDir: true, target: 'chrome140' },
-  test: { environment: 'node', include: ['test/**/*.test.ts'] },
+  test: { environment: 'node', include: ['test/**/*.test.{ts,tsx}'] },
 })

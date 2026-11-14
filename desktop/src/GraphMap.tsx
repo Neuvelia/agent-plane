@@ -2,6 +2,7 @@ import dagre from '@dagrejs/dagre'
 import { Background, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useMemo } from 'react'
+import { useI18n } from './i18n/context'
 import { displayStatus, nodeView, type RunView } from './reducer'
 import { NodePill } from './status'
 import type { GraphSummary } from './types'
@@ -17,10 +18,11 @@ interface ApNodeData extends Record<string, unknown> {
 }
 
 function ApNode({ data }: NodeProps<Node<ApNodeData>>) {
+  const { t } = useI18n()
   const n = nodeView(data.run, data.id)
   const status = displayStatus(n)
   const last = n.attempts[n.attempts.length - 1]
-  const label = status === 'retrying' && last ? `Retrying ${last.number}/${last.max}` : undefined
+  const label = status === 'retrying' && last ? t('status.node.retryingOf', { n: last.number, max: last.max }) : undefined
   return (
     <div className={`ap-node s-${status}${data.selected ? ' sel' : ''}`} data-testid={`node-${data.id}`} data-status={status}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
@@ -30,7 +32,7 @@ function ApNode({ data }: NodeProps<Node<ApNodeData>>) {
       </div>
       <div className="ap-node-bottom">
         <NodePill status={status} label={label} />
-        {n.attempts.length > 1 && <span className="tag">{n.attempts.length} attempts</span>}
+        {n.attempts.length > 1 && <span className="tag">{t('node.attemptCount', { count: n.attempts.length })}</span>}
         {n.durationMs !== undefined && <span className="mu mono">{n.durationMs} ms</span>}
       </div>
       <Handle type="source" position={Position.Right} isConnectable={false} />

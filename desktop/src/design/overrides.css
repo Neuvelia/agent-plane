@@ -1,0 +1,8 @@
+/* Local deviations from the design system tokens. Each one exists because the
+   token pair fails the 4.5:1 text contrast required by F2.5a (verified by axe in
+   `npm run stories:test`). Keep this list short and report them upstream.
+
+   --bad-text: the design's `bad` (#FF453A) on `bad-soft` (15% red over black)
+   measures 4.34:1, and 3.77:1 over `warn-wash`. A lighter red for TEXT on those
+   soft backgrounds passes; the `bad` token itself is still used for fills/dots. */
+:root{--bad-text:#FF6961}

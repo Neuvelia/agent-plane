@@ -1,4 +1,4 @@
-.PHONY: fmt test vet check build clean desktop-check desktop-e2e
+.PHONY: fmt test vet check build clean desktop-check desktop-e2e desktop-stories
 
 fmt:
 	gofmt -w ./cmd ./internal
@@ -26,3 +26,7 @@ desktop-check: build
 # Drives the real Electron app against bin/agentplane under a virtual display.
 desktop-e2e: build
 	cd desktop && npm ci && npm run build && xvfb-run -a node e2e/demo.cjs
+
+# Opens every Storybook story in a real browser (EN and PL): a11y, no network.
+desktop-stories:
+	cd desktop && npm ci && npm run build-storybook && npm run stories:test
