@@ -55,7 +55,8 @@
      "node_id": "a",
      "path": "nodes.a.outputs.stdout"
     },
-    "suggestion": "remove the output or bind it to an edge or graph output"
+    "suggestion": "remove the output or bind it to an edge or graph output",
+    "line": 17
    }
   ],
   "readonly_canvas": false,

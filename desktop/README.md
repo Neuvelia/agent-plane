@@ -106,6 +106,21 @@ graph read-only; files with anchors, aliases or merge keys open read-only too.
 Everything is reachable from the keyboard: the node list, "Connect…" with its
 engine-checked target list, Rename, Delete and the connections list.
 
+## Issues panel (F2.4, slice E3.2)
+
+The Issues card lists the engine's diagnostics as received: errors first, then
+warnings, then by element, code and message (`src/editor/issues.ts`). Filter
+All / Errors / Warnings; each issue is a button. Choosing one selects its node,
+edge, port or binding on the canvas, puts the caret on its YAML line (when the
+YAML is shown) and moves keyboard focus to the selection's heading; a graph-level
+issue focuses the graph header. Nodes, edges and ports carry an error or warning
+badge (a glyph and a word, never colour alone). While a result is out of date or
+pending the list is kept and marked; if the engine cannot be reached the list is
+marked out of date and running is blocked until a check succeeds. "Save and run"
+names the reason it is blocked ("2 errors") and offers "Show first error".
+Warnings never block a run. A text that does not parse shows one issue with its
+line.
+
 ## Save and run (F2.1, slice E2.3)
 
 "Save and run" saves a changed draft first (a refused save, such as a conflict,

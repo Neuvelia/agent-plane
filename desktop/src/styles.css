@@ -240,3 +240,19 @@ main:focus{outline:none}
 
 .ed-inputs{display:grid;gap:6px}
 .ed-inputs textarea{min-height:64px}
+
+/* F2.4 issues */
+.issues{display:grid;gap:var(--space-8)}
+.issues-filter{padding:0 var(--space-12)}
+.issue-list{list-style:none;margin:0;padding:0 var(--space-8) var(--space-8);display:grid;gap:4px}
+.issue-list.stale{opacity:.6}
+.issue{all:unset;box-sizing:border-box;width:100%;cursor:pointer;display:flex;align-items:flex-start;gap:var(--space-12);padding:var(--space-8) var(--space-12);border-radius:var(--radius-12)}
+.issue:hover{background:var(--fill-4)}
+.issue:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.issue-body{display:grid;gap:4px;min-width:0;font-size:13px}
+.ed-graph-head{padding:var(--space-8) var(--space-12) 0}
+.ed-graph-head:focus-visible,.ed-selected-head:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ed-port-badge{font-size:11px;font-weight:600}
+.ed-port-badge.err{color:var(--bad-text)}
+.ed-port-badge.warn{color:var(--warn)}
+.ed-port.focus{background:var(--fill-8,var(--fill-4));border-radius:6px}

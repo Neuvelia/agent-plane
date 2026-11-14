@@ -47,9 +47,11 @@ export interface YamlEditorProps {
   onRedo: () => void
   /** The accessible name of the editor. */
   label: string
+  /** Scroll to this 1-based line (and put the caret there) whenever `nonce` changes. */
+  reveal?: { line: number; nonce: number }
 }
 
-export function YamlEditor({ value, onChange, onSave, onUndo, onRedo, label }: YamlEditorProps) {
+export function YamlEditor({ value, onChange, onSave, onUndo, onRedo, label, reveal }: YamlEditorProps) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   // Handlers change every render; the editor is created once and reads the latest.
@@ -109,6 +111,16 @@ export function YamlEditor({ value, onChange, onSave, onUndo, onRedo, label }: Y
     v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: value }, selection: { anchor: head } })
     applying.current = false
   }, [value])
+
+  // Show the line an issue names. This moves the caret and the scroll position, not keyboard focus.
+  useEffect(() => {
+    const v = view.current
+    if (!v || !reveal) return
+    const line = Math.min(Math.max(reveal.line, 1), v.state.doc.lines)
+    const pos = v.state.doc.line(line).from
+    v.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'center' }) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reveal?.nonce])
 
   return <div className="yaml-editor" ref={host} data-testid="yaml-editor" />
 }

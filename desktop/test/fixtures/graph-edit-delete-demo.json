@@ -87,7 +87,8 @@
      "node_id": "approve",
      "path": "nodes.approve.inputs.evidence"
     },
-    "suggestion": "add one compatible edge or graph input binding"
+    "suggestion": "add one compatible edge or graph input binding",
+    "line": 23
    }
   ],
   "readonly_canvas": false,

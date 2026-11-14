@@ -1,0 +1,126 @@
+{
+ "text": "schema_version: 0\nid: mixed\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: \"\"}\n    outputs:\n      out: {type: string}\n      spare: {type: string}\n  b:\n    type: shell\n    config: {command: /usr/bin/true}\n    inputs:\n      n: {type: number, required: true}\n      free: {type: string, required: true}\nedges:\n  - {from: a.outputs.out, to: b.inputs.n}\noutputs: {}\n",
+ "hash": "912495a01a3337cf7e1212500aa09735ed5df0236b23301585a70c438953fe4e",
+ "version": "sha256-v0:ee34b61455e445882ffa6cc495a757088beaea103d308352e41ea6ec94006dd3",
+ "definition": {
+  "schema_version": 0,
+  "id": "mixed",
+  "inputs": {},
+  "nodes": {
+   "a": {
+    "type": "shell",
+    "config": {
+     "command": ""
+    },
+    "outputs": {
+     "out": {
+      "type": "string"
+     },
+     "spare": {
+      "type": "string"
+     }
+    }
+   },
+   "b": {
+    "type": "shell",
+    "inputs": {
+     "free": {
+      "type": "string",
+      "required": true
+     },
+     "n": {
+      "type": "number",
+      "required": true
+     }
+    },
+    "config": {
+     "command": "/usr/bin/true"
+    }
+   }
+  },
+  "edges": [
+   {
+    "from": "a.outputs.out",
+    "to": "b.inputs.n"
+   }
+  ],
+  "outputs": {}
+ },
+ "diagnostics": [
+  {
+   "severity": "error",
+   "code": "E_BINDING_TYPE_MISMATCH",
+   "message": "edge binds \"a.outputs.out\" (string) to \"b.inputs.n\" (number)",
+   "graph_id": "mixed",
+   "location": {
+    "edge_index": 0,
+    "path": "edges[0]"
+   },
+   "suggestion": "bind ports with the same declared type",
+   "line": 18
+  },
+  {
+   "severity": "error",
+   "code": "E_REQUIRED_INPUT_UNBOUND",
+   "message": "required input \"free\" on node \"b\" has no valid binding",
+   "graph_id": "mixed",
+   "location": {
+    "node_id": "b",
+    "path": "nodes.b.inputs.free"
+   },
+   "suggestion": "add one compatible edge or graph input binding",
+   "line": 16
+  },
+  {
+   "severity": "error",
+   "code": "E_REQUIRED_INPUT_UNBOUND",
+   "message": "required input \"n\" on node \"b\" has no valid binding",
+   "graph_id": "mixed",
+   "location": {
+    "node_id": "b",
+    "path": "nodes.b.inputs.n"
+   },
+   "suggestion": "add one compatible edge or graph input binding",
+   "line": 15
+  },
+  {
+   "severity": "warning",
+   "code": "W_DECLARED_OUTPUT_UNUSED",
+   "message": "output \"out\" on node \"a\" is not consumed",
+   "graph_id": "mixed",
+   "location": {
+    "node_id": "a",
+    "path": "nodes.a.outputs.out"
+   },
+   "suggestion": "remove the output or bind it to an edge or graph output",
+   "line": 9
+  },
+  {
+   "severity": "warning",
+   "code": "W_DECLARED_OUTPUT_UNUSED",
+   "message": "output \"spare\" on node \"a\" is not consumed",
+   "graph_id": "mixed",
+   "location": {
+    "node_id": "a",
+    "path": "nodes.a.outputs.spare"
+   },
+   "suggestion": "remove the output or bind it to an edge or graph output",
+   "line": 10
+  },
+  {
+   "severity": "error",
+   "code": "E_NODE_CONFIG_INVALID",
+   "message": "shell node \"a\": command must be a nonempty string",
+   "graph_id": "mixed",
+   "location": {
+    "node_id": "a",
+    "path": "nodes.a.config"
+   },
+   "suggestion": "correct the configuration of node \"a\"",
+   "line": 7
+  }
+ ],
+ "readonly_canvas": false,
+ "line_ending": "lf",
+ "label": "mixed.yaml"
+}

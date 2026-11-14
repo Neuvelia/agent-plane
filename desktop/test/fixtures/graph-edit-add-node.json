@@ -61,7 +61,8 @@
      "node_id": "a",
      "path": "nodes.a.outputs.stdout"
     },
-    "suggestion": "remove the output or bind it to an edge or graph output"
+    "suggestion": "remove the output or bind it to an edge or graph output",
+    "line": 17
    },
    {
     "severity": "error",
@@ -72,7 +73,8 @@
      "node_id": "shell_1",
      "path": "nodes.shell_1.config"
     },
-    "suggestion": "correct the configuration of node \"shell_1\""
+    "suggestion": "correct the configuration of node \"shell_1\"",
+    "line": 27
    }
   ],
   "readonly_canvas": false,

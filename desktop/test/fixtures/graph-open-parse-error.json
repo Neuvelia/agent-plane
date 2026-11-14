@@ -3,6 +3,7 @@
  "hash": "5b70556ea37f2c715b12440b8ac0e5b26bf12f9484a07bbf0ad302d07270fade",
  "diagnostics": [],
  "parse_error": "parse graph definition: yaml: line 1: did not find expected ',' or ']'",
+ "parse_line": 1,
  "readonly_canvas": true,
  "readonly_reasons": [
   "parse_error"

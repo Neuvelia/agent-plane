@@ -3,6 +3,7 @@ import configErrorOpen from '../../test/fixtures/graph-open-config-error.json'
 import anchorsOpen from '../../test/fixtures/graph-open-anchors.json'
 import demoOpen from '../../test/fixtures/graph-open-demo.json'
 import inputsOpen from '../../test/fixtures/graph-open-with-inputs.json'
+import mixedOpen from '../../test/fixtures/graph-open-mixed.json'
 import pairOpen from '../../test/fixtures/graph-open-pair.json'
 import parseErrorOpen from '../../test/fixtures/graph-open-parse-error.json'
 import parseErrorValidate from '../../test/fixtures/graph-validate-parse-error.json'
@@ -208,3 +209,58 @@ export const OpeningGraph: S = {
     await until(canvasElement, '[data-testid="editor-open"][disabled]')
   },
 }
+
+// ---- the Issues panel (F2.4) -----------------------------------------------------
+const mixed: GraphStory = { ...base, opened: mixedOpen as unknown as OpenResponse }
+const issueButton = async (root: Element, code: string) => (await until(root, `[data-testid="issue"][data-code="${code}"]`)) as HTMLElement
+
+export const IssuesNone: S = story({ ...base, opened: demoOpen as unknown as OpenResponse }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="issues-empty"]')
+})
+export const IssuesWarningsOnly: S = story(base, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="issue"]')
+})
+export const IssuesErrorsAndWarnings: S = story(mixed, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="issue"]')
+  await wait(300)
+})
+export const IssuesFiltered: S = story(mixed, async (root) => {
+  await open(root)
+  await click(root, 'issues-filter-warning')
+  await until(root, '[data-testid="issue"][data-severity="warning"]')
+})
+export const IssuesFocusedEdge: S = story(mixed, async (root) => {
+  await open(root)
+  ;(await issueButton(root, 'E_BINDING_TYPE_MISMATCH')).click()
+  await until(root, '[data-testid="selected-heading"]')
+  await wait(300)
+})
+export const IssuesFocusedNode: S = story(mixed, async (root) => {
+  await open(root)
+  ;(await issueButton(root, 'E_NODE_CONFIG_INVALID')).click()
+  await until(root, '[data-testid="selected-heading"]')
+  await wait(300)
+})
+export const IssuesFocusedPort: S = story(mixed, async (root) => {
+  await open(root)
+  ;(await issueButton(root, 'E_REQUIRED_INPUT_UNBOUND')).click()
+  await until(root, '.ed-port.focus')
+})
+export const IssuesParseError: S = story(base, async (root) => {
+  await open(root)
+  await typeIn(root, 'id: [\n')
+  await until(root, '[data-testid="issue"][data-code="YAML"]')
+})
+export const IssuesValidating: S = story({ ...mixed, validateHang: true }, async (root) => {
+  await open(root)
+  await typeIn(root, '# note\n')
+  await until(root, '[data-testid="validating"]')
+})
+export const IssuesEngineUnreachable: S = story({ ...mixed, validateFails: true }, async (root) => {
+  await open(root)
+  await typeIn(root, '# note\n')
+  await until(root, '[data-testid="issues-unreachable"]')
+})

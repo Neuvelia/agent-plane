@@ -2,7 +2,9 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button, Card, HelpTip, ListRow, Pill, SegmentedControl, Tag } from '../ui/primitives'
 import { GraphCanvas } from './GraphCanvas'
-import { counts, isDirty, runBlock, type DocState } from './doc'
+import { IssuesPanel, issuesOf } from './IssuesPanel'
+import { firstError, issueCounts, type FocusReq, type Issue } from './issues'
+import { isDirty, runBlock, type DocState } from './doc'
 import type { GraphDocument } from './useGraphDocument'
 import { LoadingState } from '../states'
 
@@ -89,12 +91,16 @@ function Empty({ g }: { g: GraphDocument }) {
 function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (runId: string) => void }) {
   const { t } = useI18n()
   const dirty = isDirty(doc)
-  const { errors, warnings } = counts(doc.analysis)
   const saving = g.busy === 'saving'
   const [runInputs, setRunInputs] = useState('')
   const block = runBlock(doc.analysis)
   const hasInputs = Object.keys(doc.analysis.definition?.inputs ?? {}).length > 0
   const [view, setView] = useState<'visual' | 'yaml' | 'split'>('split')
+  const [focusReq, setFocusReq] = useState<FocusReq | null>(null)
+  const issues = issuesOf(doc.analysis)
+  const errorCount = issueCounts(issues).error
+  // Choosing an issue (or "show first error") takes the person to the element, and to its line when the YAML is on screen.
+  const focusIssue = (i: Issue) => setFocusReq((r) => ({ target: i.target, line: i.line, nonce: (r?.nonce ?? 0) + 1 }))
   return (
     <>
       <div className="row between">
@@ -116,7 +122,7 @@ function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (run
             size="sm"
             variant="primary"
             disabled={block !== null || g.busy !== null}
-            title={block ? t(`editor.runBlocked.${block}`) : undefined}
+            title={block ? t(`editor.runBlocked.${block}`, { count: errorCount }) : undefined}
             onClick={() => void g.saveAndRun(runInputs.split('\n').map((l) => l.trim()).filter(Boolean)).then((id) => id && onRun?.(id))}
             data-testid="editor-save-run"
           >
@@ -135,8 +141,13 @@ function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (run
       </div>
 
       {block && (
-        <div className="mu" data-testid="run-blocked">
-          {t(`editor.runBlocked.${block}`)}
+        <div className="row mu" data-testid="run-blocked">
+          <span>{t(`editor.runBlocked.${block}`, { count: errorCount })}</span>
+          {block === 'errors' && firstError(issues) && (
+            <Button size="sm" onClick={() => focusIssue(firstError(issues)!)} data-testid="run-blocked-focus">
+              {t('editor.runBlocked.showFirst')}
+            </Button>
+          )}
         </div>
       )}
       {hasInputs && (
@@ -170,64 +181,19 @@ function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (run
       </div>
 
       <div className={`ed-views ${view}`}>
-        {view !== 'yaml' && <GraphCanvas g={g} doc={doc} />}
+        {view !== 'yaml' && <GraphCanvas g={g} doc={doc} focusReq={focusReq} />}
         {view !== 'visual' && (
           <Card title={t('editor.yaml')} action={<HelpTip>{t('editor.yamlHelp')}</HelpTip>} testId="yaml-card">
             <div className="yaml-host">
               <Suspense fallback={<LoadingState />}>
-                <YamlEditor value={doc.draft} onChange={g.type} onSave={() => void g.save()} onUndo={g.undo} onRedo={g.redo} label={t('editor.yamlLabel')} />
+                <YamlEditor value={doc.draft} onChange={g.type} onSave={() => void g.save()} onUndo={g.undo} onRedo={g.redo} label={t('editor.yamlLabel')} reveal={focusReq?.line ? { line: focusReq.line, nonce: focusReq.nonce } : undefined} />
               </Suspense>
             </div>
           </Card>
         )}
       </div>
 
-      <Card
-        title={t('editor.problems')}
-        testId="problems"
-        action={
-          <span className="row">
-            {doc.analysis.status === 'validating' && <span className="mu" data-testid="validating">{t('editor.validating')}</span>}
-            {doc.analysis.stale && doc.analysis.status !== 'validating' && <span className="mu">{t('editor.stale')}</span>}
-            {doc.analysis.parseError ? (
-              <Pill tone="x" testId="analysis">{t('editor.parseError')}</Pill>
-            ) : errors > 0 ? (
-              <Pill tone="x" testId="analysis">{t('editor.errors', { count: errors })}</Pill>
-            ) : warnings > 0 ? (
-              <Pill tone="w" testId="analysis">{t('editor.warnings', { count: warnings })}</Pill>
-            ) : (
-              <Pill tone="p" testId="analysis">{t('editor.valid')}</Pill>
-            )}
-          </span>
-        }
-      >
-        {doc.analysis.parseError && (
-          <div className="check-row diag" data-testid="parse-error">
-            <Pill tone="x" small>{t('editor.parseError')}</Pill>
-            <div className="check-text mono">{doc.analysis.parseError}</div>
-          </div>
-        )}
-        {!doc.analysis.parseError && doc.analysis.diagnostics.length === 0 && <div className="mu empty-line">{t('editor.noProblems')}</div>}
-        {doc.analysis.diagnostics.slice(0, 50).map((d, i) => (
-          <div className="check-row diag" key={i} data-testid="problem">
-            <Pill tone={d.severity === 'error' ? 'x' : 'w'} small>
-              {d.severity === 'error' ? t('config.severity.error') : t('config.severity.warning')}
-            </Pill>
-            <div className="check-text">
-              <div>
-                <b className="mono">{d.code}</b> {d.message}
-                {d.location?.node_id && (
-                  <>
-                    {' '}
-                    <Tag>{d.location.node_id}</Tag>
-                  </>
-                )}
-              </div>
-              {d.suggestion && <div className="mu">{d.suggestion}</div>}
-            </div>
-          </div>
-        ))}
-      </Card>
+      <IssuesPanel analysis={doc.analysis} onFocus={focusIssue} onRetry={g.revalidate} />
     </>
   )
 }
