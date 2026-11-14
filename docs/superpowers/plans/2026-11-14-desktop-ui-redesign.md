@@ -245,5 +245,5 @@ failed, connection lost), Approvals and New run (ready, blocked) are attached to
 ## 8. Immediate next steps
 
 1. Decisions in section 0 are confirmed; remaining open items in section 7 are risks, not blockers.
-2. Write `docs/features/F2.5a-desktop-redesign.md` from this plan.
+2. Spec written: `docs/features/F2.5a-desktop-redesign.md`.
 3. Implement R0 on its own branch/PR, then R1, R2, R3 as separate PRs.
