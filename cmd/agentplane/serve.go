@@ -59,8 +59,9 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}()
 	server := &api.Server{
 		Token: token, Store: runStore, Hub: api.NewHub(),
-		Validate: validateForAPI,
-		Start:    starter(runStore, *concurrency),
+		Validate:           validateForAPI,
+		ValidateDefinition: diagnosticsFor,
+		Start:              starter(runStore, *concurrency),
 	}
 	if onServe != nil {
 		onServe(server)
@@ -87,7 +88,7 @@ func validateForAPI(path string) (string, []graph.Diagnostic, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	validation := graph.Validate(def)
+	validation := validateGraph(def)
 	status := "valid"
 	if validation.HasErrors() {
 		status = "invalid"

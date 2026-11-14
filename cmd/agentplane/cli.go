@@ -101,7 +101,7 @@ func validateCommand(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		return commandError("graph validate", "error", "graph", err, nil, *jsonMode, stdout, stderr, exitGraph)
 	}
-	validation := graph.Validate(def)
+	validation := validateGraph(def)
 	status, code := "valid", exitOK
 	if validation.HasErrors() {
 		status, code = "invalid", exitGraph
