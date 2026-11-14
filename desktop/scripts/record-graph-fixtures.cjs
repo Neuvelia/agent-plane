@@ -52,6 +52,22 @@ edges: []
 outputs:
   result: {from: work.outputs.stdout}
 `,
+  // a graph that declares a required input
+  'with-inputs': `schema_version: 0
+id: with-inputs
+inputs:
+  topic: {type: string, required: true}
+nodes:
+  echo:
+    type: shell
+    config: {command: /usr/bin/printf, args: ["%s\\n"]}
+    inputs:
+      topic: {type: string, required: true}
+graph_input_bindings:
+  - {from: inputs.topic, to: echo.inputs.topic}
+edges: []
+outputs: {}
+`,
   // what a new graph starts as
   empty: 'schema_version: 0\nid: new-graph\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n',
   // YAML the engine cannot read

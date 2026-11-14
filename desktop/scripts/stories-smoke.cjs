@@ -26,6 +26,7 @@ const REQUIRED = [
   'screens--settings-language',
   'screens-editor--empty', 'screens-editor--empty-no-recent', 'screens-editor--opened', 'screens-editor--opened-config-error', 'screens-editor--opened-parse-error', 'screens-editor--unsaved', 'screens-editor--yaml-error-while-typing', 'screens-editor--new-graph', 'screens-editor--save-conflict', 'screens-editor--file-gone', 'screens-editor--save-failed', 'screens-editor--leave-prompt', 'screens-editor--open-failed',
   'screens-editor--canvas-graph', 'screens-editor--canvas-node-selected', 'screens-editor--canvas-connect-list', 'screens-editor--canvas-rename', 'screens-editor--canvas-delete-confirm', 'screens-editor--canvas-add-node', 'screens-editor--canvas-operation-refused', 'screens-editor--canvas-read-only-anchors', 'screens-editor--canvas-yaml-broken', 'screens-editor--canvas-empty-graph',
+  'screens-editor--run-inputs-required', 'screens-editor--run-blocked-by-errors', 'screens-editor--run-failed-to-start', 'screens-editor--run-after-save-conflict', 'screens-editor--opening-graph',
   'screens--runs-list-loading', 'screens--runs-list-error', 'screens--dashboard-loading', 'screens--dashboard-error', 'screens--approvals-loading', 'screens--approvals-error', 'screens--new-run-validating', 'screens--full-app-shell-engine-down',
   'screens--new-run-no-file', 'screens--new-run-ready', 'screens--new-run-warnings', 'screens--new-run-blocked',
 ]

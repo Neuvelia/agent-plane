@@ -131,6 +131,19 @@ export function analyzed(s: DocState, forText: string, r: ValidateResponse): Doc
   return { ...s, analysis: analysisOf(r, s.analysis) }
 }
 
+/**
+ * Why "Save and run" is unavailable, or null when it may run. The engine's
+ * diagnostics decide; this only reads them (F2.1 requirement 20).
+ */
+export type RunBlock = 'parse' | 'checking' | 'errors' | 'empty'
+export function runBlock(a: Analysis): RunBlock | null {
+  if (a.parseError) return 'parse'
+  if (a.stale || a.status === 'validating') return 'checking'
+  if (a.diagnostics.some((d) => d.severity === 'error')) return 'errors'
+  if (!a.definition || Object.keys(a.definition.nodes).length === 0) return 'empty'
+  return null
+}
+
 /** Counts for the status line. */
 export function counts(a: Analysis): { errors: number; warnings: number } {
   let errors = 0

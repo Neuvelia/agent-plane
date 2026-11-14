@@ -2,14 +2,14 @@ import { Suspense, lazy, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button, Card, HelpTip, ListRow, Pill, SegmentedControl, Tag } from '../ui/primitives'
 import { GraphCanvas } from './GraphCanvas'
-import { counts, isDirty, type DocState } from './doc'
+import { counts, isDirty, runBlock, type DocState } from './doc'
 import type { GraphDocument } from './useGraphDocument'
 import { LoadingState } from '../states'
 
 // CodeMirror is loaded when the editor is first shown, not at application start.
 const YamlEditor = lazy(() => import('./YamlEditor').then((m) => ({ default: m.YamlEditor })))
 
-export function EditorScreen({ g }: { g: GraphDocument }) {
+export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: string) => void }) {
   const { t } = useI18n()
   const { doc } = g
 
@@ -30,7 +30,7 @@ export function EditorScreen({ g }: { g: GraphDocument }) {
       <h1>{doc ? doc.label : t('editor.title')}</h1>
       {g.error && (
         <div className="banner" role="alert" data-testid="editor-error">
-          <span>{t(g.error.kind === 'open' ? 'editor.openFailed' : g.error.kind === 'edit' ? 'editor.opFailed' : 'editor.saveFailed', { message: g.error.message })}</span>
+          <span>{t(g.error.kind === 'open' ? 'editor.openFailed' : g.error.kind === 'edit' ? 'editor.opFailed' : g.error.kind === 'run' ? 'editor.runFailed' : 'editor.saveFailed', { message: g.error.message })}</span>
           <Button size="sm" onClick={g.dismissError}>
             {t('editor.dismiss')}
           </Button>
@@ -52,7 +52,7 @@ export function EditorScreen({ g }: { g: GraphDocument }) {
           </span>
         </div>
       )}
-      {doc ? <Open g={g} doc={doc} /> : <Empty g={g} />}
+      {doc ? <Open g={g} doc={doc} onRun={onRun} /> : <Empty g={g} />}
     </section>
   )
 }
@@ -86,11 +86,14 @@ function Empty({ g }: { g: GraphDocument }) {
   )
 }
 
-function Open({ g, doc }: { g: GraphDocument; doc: DocState }) {
+function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (runId: string) => void }) {
   const { t } = useI18n()
   const dirty = isDirty(doc)
   const { errors, warnings } = counts(doc.analysis)
   const saving = g.busy === 'saving'
+  const [runInputs, setRunInputs] = useState('')
+  const block = runBlock(doc.analysis)
+  const hasInputs = Object.keys(doc.analysis.definition?.inputs ?? {}).length > 0
   const [view, setView] = useState<'visual' | 'yaml' | 'split'>('split')
   return (
     <>
@@ -109,6 +112,16 @@ function Open({ g, doc }: { g: GraphDocument; doc: DocState }) {
           <Button size="sm" variant="primary" onClick={() => void g.save()} disabled={saving || (!dirty && !doc.isNew)} data-testid="editor-save">
             {saving ? t('editor.saving') : t('editor.save')}
           </Button>
+          <Button
+            size="sm"
+            variant="primary"
+            disabled={block !== null || g.busy !== null}
+            title={block ? t(`editor.runBlocked.${block}`) : undefined}
+            onClick={() => void g.saveAndRun(runInputs.split('\n').map((l) => l.trim()).filter(Boolean)).then((id) => id && onRun?.(id))}
+            data-testid="editor-save-run"
+          >
+            {g.busy === 'starting' ? t('editor.starting') : t('editor.saveRun')}
+          </Button>
           <Button size="sm" onClick={g.open} data-testid="editor-open">
             {t('editor.open')}
           </Button>
@@ -120,6 +133,18 @@ function Open({ g, doc }: { g: GraphDocument; doc: DocState }) {
           </Button>
         </div>
       </div>
+
+      {block && (
+        <div className="mu" data-testid="run-blocked">
+          {t(`editor.runBlocked.${block}`)}
+        </div>
+      )}
+      {hasInputs && (
+        <div className="ed-inputs">
+          <label htmlFor="run-inputs">{t('editor.runInputs')}</label>
+          <textarea id="run-inputs" value={runInputs} onChange={(e) => setRunInputs(e.target.value)} placeholder="name=value" data-testid="run-inputs" />
+        </div>
+      )}
 
       {doc.conflict && (
         <div className="banner warn" role="alert" data-testid="conflict-banner">

@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import configErrorOpen from '../../test/fixtures/graph-open-config-error.json'
 import anchorsOpen from '../../test/fixtures/graph-open-anchors.json'
 import demoOpen from '../../test/fixtures/graph-open-demo.json'
+import inputsOpen from '../../test/fixtures/graph-open-with-inputs.json'
 import pairOpen from '../../test/fixtures/graph-open-pair.json'
 import parseErrorOpen from '../../test/fixtures/graph-open-parse-error.json'
 import parseErrorValidate from '../../test/fixtures/graph-validate-parse-error.json'
@@ -27,7 +28,7 @@ type S = StoryObj
 
 function Harness() {
   const g = useGraphDocument()
-  return <EditorScreen g={g} />
+  return <EditorScreen g={g} onRun={() => undefined} />
 }
 
 const pair = pairOpen as unknown as OpenResponse
@@ -177,3 +178,33 @@ export const CanvasEmptyGraph: S = story({ ...base, validate: () => emptyValidat
   await until(root, '[data-testid="editor-canvas"]')
   await wait(400)
 })
+
+// ---- Save and run, loading (E2.3) ------------------------------------------------
+export const RunInputsRequired: S = story({ ...base, opened: inputsOpen as unknown as OpenResponse }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="run-inputs"]')
+})
+export const RunBlockedByErrors: S = story({ ...base, opened: configErrorOpen as unknown as OpenResponse }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="run-blocked"]')
+})
+export const RunFailedToStart: S = story({ ...base, run: 'error' }, async (root) => {
+  await open(root)
+  await click(root, 'editor-save-run')
+  await until(root, '[data-testid="editor-error"]')
+})
+export const RunAfterSaveConflict: S = story({ ...base, save: 'conflict' }, async (root) => {
+  await open(root)
+  await typeIn(root, '# mine\n')
+  await wait(500)
+  await click(root, 'editor-save-run')
+  await until(root, '[data-testid="conflict-banner"]')
+})
+export const OpeningGraph: S = {
+  parameters: { bridge: { runs: [], graph: base, hang: true } },
+  render: () => <Harness />,
+  play: async ({ canvasElement }) => {
+    await click(canvasElement, 'editor-open')
+    await until(canvasElement, '[data-testid="editor-open"][disabled]')
+  },
+}
