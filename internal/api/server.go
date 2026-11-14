@@ -455,11 +455,14 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	def, err := graph.Parse(text)
 	if err != nil {
 		out["status"], out["parse_error"] = "invalid", err.Error()
+		if line := edit.ParseErrorLine(err.Error()); line > 0 {
+			out["parse_line"] = line
+		}
 		writeJSON(w, http.StatusOK, out)
 		return
 	}
 	diags := s.diagnostics(def)
-	out["diagnostics"] = diags
+	out["diagnostics"] = withLines(text, diags)
 	out["definition"] = toDefinitionDTO(def)
 	out["status"] = "valid"
 	for _, d := range diags {

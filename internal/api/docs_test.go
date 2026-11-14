@@ -234,6 +234,35 @@ func TestFullValidationIsUsedForDocuments(t *testing.T) {
 	}
 }
 
+func TestDiagnosticsCarryTheSourceLine(t *testing.T) {
+	_, ts, dir := docServer(t)
+	g := grantFor(t, ts, writeGraph(t, dir, "lines.yaml", pairGraph), "open")
+	for name, out := range map[string]map[string]any{
+		"validate": func() map[string]any {
+			_, o := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": pairGraph})
+			return o
+		}(),
+		"open": func() map[string]any {
+			_, o := call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g})
+			return o
+		}(),
+	} {
+		diags := out["diagnostics"].([]any)
+		if len(diags) == 0 {
+			t.Fatalf("%s: no diagnostics", name)
+		}
+		line, _ := diags[0].(map[string]any)["line"].(float64)
+		want := float64(1 + strings.Count(pairGraph[:strings.Index(pairGraph, "stdout")], "\n"))
+		if line != want {
+			t.Errorf("%s: line %v, want %v (the stdout port)", name, line, want)
+		}
+	}
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": "schema_version: 0\nid: g\nnodes: [\n"})
+	if out["parse_line"] == nil {
+		t.Errorf("a parse error carries its line: %v", out)
+	}
+}
+
 func TestValidateTakesTextOrGrantOrPathExactlyOnce(t *testing.T) {
 	_, ts, dir := docServer(t)
 	path := writeGraph(t, dir, "pair.yaml", pairGraph)
