@@ -123,6 +123,61 @@ async function startDemo(page) {
     assert.equal(viaRecent.ok, true)
     assert.equal(viaRecent.label, 'fresh.yaml')
 
+    // E2.1: the YAML editor. Open through the real dialog path, type, save with the keyboard.
+    const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
+    const typeInEditor = async (t) => {
+      await page.click('[data-testid="yaml-content"]')
+      await page.keyboard.press(`${mod}+End`)
+      await page.keyboard.type(t)
+    }
+    const doc2 = path.join(graphDir, 'edit-me.yaml')
+    fs.writeFileSync(doc2, original)
+    await stubOpen(doc2)
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-open"]')
+    await page.waitForSelector('[data-testid="yaml-content"]')
+    assert.match(await page.textContent('[data-testid="doc-state"]'), /Saved/i)
+    await typeInEditor('\n# added in the editor\n')
+    assert.match(await page.textContent('[data-testid="doc-state"]'), /Unsaved/i)
+    await page.keyboard.press(`${mod}+s`)
+    await page.waitForFunction(() => /Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    assert.equal(fs.readFileSync(doc2, 'utf8'), original + '\n# added in the editor\n', 'Ctrl+S writes exactly the typed text')
+    await page.click('[data-testid="editor-undo"]')
+    assert.match(await page.textContent('[data-testid="doc-state"]'), /Unsaved/i)
+    // Broken YAML is reported, not saved over silently.
+    await page.click('[data-testid="yaml-content"]')
+    await page.keyboard.press(`${mod}+End`)
+    await page.keyboard.type('\nid: [\n')
+    await page.waitForSelector('[data-testid="parse-error"]')
+    // The file changes on disk while there are unsaved edits: conflict, nothing is overwritten.
+    fs.writeFileSync(doc2, original + '# elsewhere\n')
+    await page.click('[data-testid="editor-save"]')
+    await page.waitForSelector('[data-testid="conflict-banner"]')
+    assert.equal(fs.readFileSync(doc2, 'utf8'), original + '# elsewhere\n')
+    await page.click('[data-testid="reload"]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="conflict-banner"]'))
+    assert.match(await page.textContent('[data-testid="doc-state"]'), /Saved/i)
+    // Leaving with unsaved edits asks first.
+    await typeInEditor('# draft\n')
+    await page.click('[data-testid="editor-close"]')
+    await page.waitForSelector('[data-testid="leave-prompt"]')
+    await page.click('[data-testid="leave-cancel"]')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
+    await page.waitForSelector('[data-testid="editor-empty"]')
+    assert.equal(fs.readFileSync(doc2, 'utf8'), original + '# elsewhere\n', 'discard leaves the file alone')
+    // A new graph is create-only and starts from a valid skeleton.
+    await stubSave(path.join(graphDir, 'brand-new'))
+    await page.click('[data-testid="editor-new"]')
+    await page.waitForSelector('[data-testid="yaml-content"]')
+    assert.equal(fs.existsSync(path.join(graphDir, 'brand-new.yaml')), false, 'nothing is written before the first save')
+    await page.keyboard.press(`${mod}+s`)
+    await page.waitForFunction(() => /Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    assert.match(fs.readFileSync(path.join(graphDir, 'brand-new.yaml'), 'utf8'), /schema_version: 0/)
+    await shot(page, '8-editor')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="nav-dashboard"]')
+
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })

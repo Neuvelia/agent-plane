@@ -81,6 +81,24 @@ a dev dependency and is never part of the packaged app.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 
+## YAML editor (F2.1, slice E2.1)
+
+The Editor entry opens a graph file through the native dialog, shows its YAML in
+CodeMirror 6 and saves it with Ctrl/Cmd+S. The draft, undo/redo history, dirty
+state and conflict handling live in `src/editor/doc.ts` and
+`useGraphDocument.ts`; validation is the engine's (`POST /graphs/validate`), the
+renderer holds no graph rules. Saving sends the hash of the text it opened
+(`base_hash`); a file changed on disk is reported as a conflict and is never
+overwritten silently. A new graph is create-only. The canvas, Visual/Split view
+and "Save and run" come in later slices.
+
+CodeMirror (`@codemirror/state`, `view`, `language`, `lang-yaml`, `commands`,
+`@lezer/highlight`, all MIT, exact-pinned) is a renderer-only, development-time
+bundle dependency: it makes no network requests and is loaded lazily, so the
+editor chunk (about 106 kB gzipped) is not part of the first paint. A plain
+`<textarea>` cannot give accessible YAML highlighting, line numbers, or a
+programmable keymap without reimplementing an editor.
+
 F2.5a R0 provides the shell, design tokens, primitives, Storybook and PL/EN
 localisation. R1 redesigns Run Inspector (live graph card with Map / YAML / Split,
 node detail with one attempt shown at a time), Approvals (inbox and review panes)

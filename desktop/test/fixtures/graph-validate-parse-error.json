@@ -1,0 +1,5 @@
+{
+ "diagnostics": [],
+ "parse_error": "parse graph definition: yaml: line 1: did not find expected ',' or ']'",
+ "status": "invalid"
+}

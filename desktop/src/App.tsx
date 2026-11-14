@@ -4,11 +4,13 @@ import { ConnectionProvider, useConnectionReport } from './connection'
 import { Dashboard } from './dashboardView'
 import { usePoll } from './hooks'
 import { useI18n } from './i18n/context'
+import { EditorScreen } from './editor/EditorScreen'
+import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 
-type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; path?: string } | { name: 'settings' } | { name: 'run'; id: string }
+type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; path?: string } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string }
 
 export default function App() {
   // Every screen that cannot reach the engine reports here; the global bar says so while any does.
@@ -34,6 +36,8 @@ function Shell({ lost }: { lost: boolean }) {
   const [route, setRoute] = useState<Route>({ name: 'dashboard' })
   const polled = usePoll(listApprovals, 1500)
   const pending = polled.data?.length ?? 0
+  // The open graph lives here so it survives moving to another screen and back.
+  const editor = useGraphDocument()
   useConnectionReport('badge', polled.status === 'error')
   useEffect(() => {
     document.documentElement.lang = locale
@@ -57,6 +61,7 @@ function Shell({ lost }: { lost: boolean }) {
     { id: 'runs', icon: 'runs', label: 'nav.runs', active: route.name === 'runs' || route.name === 'run', onSelect: go('runs') },
     { id: 'approvals', icon: 'approvals', label: 'nav.approvals', badge: pending, active: route.name === 'approvals', onSelect: go('approvals') },
     { id: 'new', icon: 'new', label: 'nav.new', active: route.name === 'new', onSelect: go('new') },
+    { id: 'editor', icon: 'editor', label: 'nav.editor', active: route.name === 'editor', onSelect: go('editor') },
   ]
   const footer: NavEntry[] = [{ id: 'settings', icon: 'settings', label: 'nav.settings', active: route.name === 'settings', onSelect: go('settings') }]
   // Surfaces deferred by F2.5a: greyed out, never navigable.
@@ -65,7 +70,7 @@ function Shell({ lost }: { lost: boolean }) {
     { id: 'runners', icon: 'runners', label: 'nav.runners' },
     { id: 'docs', icon: 'docs', label: 'nav.docs' },
   ]
-  const crumb = route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
+  const crumb = route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
   return (
     <div className="app">
       <a
@@ -95,6 +100,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
+          {route.name === 'editor' && <EditorScreen g={editor} />}
           {route.name === 'new' && <RunConfig key={route.path ?? ''} initialPath={route.path} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

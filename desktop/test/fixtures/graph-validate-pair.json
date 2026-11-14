@@ -1,0 +1,17 @@
+{
+ "diagnostics": [
+  {
+   "severity": "warning",
+   "code": "W_DECLARED_OUTPUT_UNUSED",
+   "message": "output \"stdout\" on node \"a\" is not consumed",
+   "graph_id": "pair",
+   "location": {
+    "node_id": "a",
+    "path": "nodes.a.outputs.stdout"
+   },
+   "suggestion": "remove the output or bind it to an edge or graph output"
+  }
+ ],
+ "status": "valid",
+ "version": "sha256-v0:2ea1fe134ff33d453a0d9ef2bfae681c3cc6a50f57cead827e29d5ab08d4e027"
+}

@@ -202,3 +202,11 @@ main:focus{outline:none}
 .row-link{all:unset;cursor:pointer;color:inherit}
 .row-link::after{content:'';position:absolute;inset:0}
 .row-link:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:var(--radius-10)}
+
+/* E2.1: graph editor */
+.editor{display:flex;flex-direction:column;gap:var(--space-8)}
+.editor h1{margin:0}
+.editor>.card,.editor>.row{margin-bottom:0}
+.yaml-host{height:min(62vh,640px);min-height:320px;border-radius:var(--radius-14);overflow:hidden}
+.yaml-editor{height:100%}
+.banner.warn{background:var(--warn-soft)}

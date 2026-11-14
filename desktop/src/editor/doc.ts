@@ -1,0 +1,132 @@
+import type { Diagnostic } from '../types'
+import type { OpenResponse, ValidateResponse } from './types'
+
+// The open document, as a pure state machine. The renderer holds the TEXT of the
+// graph (the file is the truth); everything about its meaning (diagnostics,
+// version, parse errors) comes from the sidecar. No graph rule lives here.
+
+/** Undo steps kept (spec F2.1, requirement 17). */
+export const MAX_HISTORY = 200
+/** Typing within this window is one undo step. */
+export const COALESCE_MS = 800
+
+export interface Analysis {
+  status: 'ready' | 'validating'
+  diagnostics: Diagnostic[]
+  parseError?: string
+  version?: string
+  /** The list describes an older text than the draft. */
+  stale: boolean
+}
+
+export type Conflict = { kind: 'changed'; currentHash: string } | { kind: 'gone' } | { kind: 'exists' }
+
+export interface DocState {
+  grant: string
+  label: string
+  /** The file does not exist yet: the first save creates it. */
+  isNew: boolean
+  /** The text of the file as last opened or saved. */
+  savedText: string
+  /** Hash of the file's bytes, null while the file does not exist. */
+  savedHash: string | null
+  draft: string
+  /** Older drafts, oldest first. */
+  past: string[]
+  future: string[]
+  lastEditAt: number
+  analysis: Analysis
+  conflict?: Conflict
+}
+
+export const isDirty = (s: DocState): boolean => s.draft !== s.savedText
+
+function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; version?: string }): Analysis {
+  return { status: 'ready', diagnostics: r.diagnostics, parseError: r.parse_error, version: r.version, stale: false }
+}
+
+export function fromOpen(grant: string, r: OpenResponse): DocState {
+  return { grant, label: r.label, isNew: false, savedText: r.text, savedHash: r.hash, draft: r.text, past: [], future: [], lastEditAt: 0, analysis: analysisOf(r) }
+}
+
+/** A graph that exists only in the editor until its first save. */
+export function fromNew(grant: string, label: string, text: string): DocState {
+  return {
+    grant,
+    label,
+    isNew: true,
+    savedText: '',
+    savedHash: null,
+    draft: text,
+    past: [],
+    future: [],
+    lastEditAt: 0,
+    analysis: { status: 'validating', diagnostics: [], stale: true },
+  }
+}
+
+/** A change made by typing. Typing close together is one undo step. */
+export function type(s: DocState, text: string, now: number): DocState {
+  if (text === s.draft) return s
+  const boundary = s.past.length === 0 || now - s.lastEditAt > COALESCE_MS
+  const past = boundary ? [...s.past, s.draft].slice(-MAX_HISTORY) : s.past
+  return { ...s, draft: text, past, future: [], lastEditAt: now, analysis: { ...s.analysis, stale: true } }
+}
+
+export function undo(s: DocState): DocState {
+  const previous = s.past[s.past.length - 1]
+  if (previous === undefined) return s
+  return { ...s, draft: previous, past: s.past.slice(0, -1), future: [s.draft, ...s.future].slice(0, MAX_HISTORY), lastEditAt: 0, analysis: { ...s.analysis, stale: true } }
+}
+
+export function redo(s: DocState): DocState {
+  const [next, ...rest] = s.future
+  if (next === undefined) return s
+  return { ...s, draft: next, past: [...s.past, s.draft].slice(-MAX_HISTORY), future: rest, lastEditAt: 0, analysis: { ...s.analysis, stale: true } }
+}
+
+/** The text that was sent is now the file. Anything typed since stays a draft. */
+export function saved(s: DocState, text: string, hash: string): DocState {
+  return { ...s, isNew: false, savedText: text, savedHash: hash, conflict: undefined }
+}
+
+/** The file was read again (Reload, or a clean draft after an outside change): the draft is replaced. */
+export function reloaded(s: DocState, r: OpenResponse): DocState {
+  return { ...fromOpen(s.grant, r), label: r.label }
+}
+
+export function withConflict(s: DocState, conflict: Conflict | undefined): DocState {
+  return { ...s, conflict }
+}
+
+export function validating(s: DocState): DocState {
+  return { ...s, analysis: { ...s.analysis, status: 'validating' } }
+}
+
+/** A validation result counts only if it describes the text that is on screen now. */
+export function analyzed(s: DocState, forText: string, r: ValidateResponse): DocState {
+  if (forText !== s.draft) return s
+  return { ...s, analysis: analysisOf(r) }
+}
+
+/** Counts for the status line. */
+export function counts(a: Analysis): { errors: number; warnings: number } {
+  let errors = 0
+  let warnings = 0
+  for (const d of a.diagnostics) {
+    if (d.severity === 'error') errors++
+    else if (d.severity === 'warning') warnings++
+  }
+  return { errors, warnings }
+}
+
+/**
+ * The starting text of a new graph: valid schema v0 with empty collections. The
+ * id is derived from the file name and always satisfies the identifier grammar
+ * (a lowercase letter, then lowercase letters, digits, hyphens or underscores).
+ */
+export function newGraphText(label: string): string {
+  const base = label.replace(/\.ya?ml$/i, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z]+/, '').replace(/-+$/, '')
+  const id = base || 'graph'
+  return `schema_version: 0\nid: ${id}\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n`
+}
