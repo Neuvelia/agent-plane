@@ -168,3 +168,47 @@ func TestServeRejectsAnInvalidGraphWithDiagnosticsAndStartsNothing(t *testing.T)
 }
 
 func quote(s string) string { b, _ := json.Marshal(s); return string(b) }
+
+// Stopping the server while a run waits for a human must cancel it and leave a
+// complete log (run_finished cancelled), not a half-written run.
+func TestServeStopWhileWaitingForApprovalCancelsAndFinishesTheRun(t *testing.T) {
+	s := startServe(t)
+	graphPath, _ := filepath.Abs(filepath.Join("..", "..", ".agents", "graphs", "demo-vertical.yaml"))
+	_, body := s.call(t, "POST", "/runs", `{"graph_path":`+quote(graphPath)+`}`)
+	var started struct {
+		RunID string `json:"run_id"`
+	}
+	json.Unmarshal([]byte(body), &started)
+	// Wait for the human node to be pending, using the API's own approvals list.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		_, b := s.call(t, "GET", "/approvals", "")
+		if strings.Contains(b, started.RunID) {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the run never reached its human node")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// While it waits, the run is reported as running.
+	if _, b := s.call(t, "GET", "/runs", ""); !strings.Contains(b, `"status":"running"`) {
+		t.Fatalf("a waiting run must be listed as running: %s", b)
+	}
+	if _, b := s.call(t, "GET", "/runs/"+started.RunID, ""); !strings.Contains(b, `"status":"running"`) {
+		t.Fatalf("run detail must say running: %s", b)
+	}
+	s.closeStdin()
+	select {
+	case code := <-s.exit:
+		if code != 0 {
+			t.Fatalf("serve exit %d", code)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not exit")
+	}
+	_, out, _ := cli(t, "runs", "list", "--store-dir", s.dir, "--json")
+	if !strings.Contains(out, `"status":"cancelled"`) || strings.Contains(out, `"status":"interrupted"`) {
+		t.Fatalf("the cancelled run must have a terminal event: %s", out)
+	}
+}

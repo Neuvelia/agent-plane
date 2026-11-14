@@ -11,7 +11,7 @@ const storeDir = process.env.AGENTPLANE_STORE_DIR || path.join(app.getPath('user
 let sidecar = null
 let api = null // { base, token } - kept in this process only
 let ready = null
-const streams = new Map() // subId -> AbortController
+const streams = new Map() // subId -> { controller, sender }
 
 function startSidecar() {
   return new Promise((resolve, reject) => {
@@ -69,7 +69,7 @@ async function request(method, requestPath, body) {
 // Authorization header). Each event is forwarded as the decoded JSON object.
 async function stream(sender, subId, runId) {
   const controller = new AbortController()
-  streams.set(subId, controller)
+  streams.set(subId, { controller, sender })
   const end = (reason) => {
     streams.delete(subId)
     if (!sender.isDestroyed()) sender.send('ap:end', subId, reason)
@@ -93,6 +93,7 @@ async function stream(sender, subId, runId) {
         const data = /^data: (.*)$/m.exec(message)?.[1]
         if (name === 'event' && data && !sender.isDestroyed()) sender.send('ap:event', subId, JSON.parse(data))
         if (name === 'end') return end('end')
+        if (name === 'error') return end('server_error')
       }
     }
     end('closed')
@@ -109,7 +110,7 @@ ipcMain.handle('ap:request', (_e, method, requestPath, body) => {
   return request(method, requestPath, body)
 })
 ipcMain.on('ap:subscribe', (e, subId, runId) => void stream(e.sender, subId, String(runId)))
-ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.abort())
+ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.controller.abort())
 ipcMain.handle('ap:pickGraph', async (e) => {
   const win = BrowserWindow.fromWebContents(e.sender)
   const result = await dialog.showOpenDialog(win, {
@@ -136,6 +137,12 @@ function createWindow() {
   })
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
   win.webContents.on('will-navigate', (event) => event.preventDefault())
+  // A reload drops the renderer's subscriptions without telling us; stop their
+  // streams so they do not keep following runs for a page that no longer exists.
+  win.webContents.on('did-start-navigation', (_e, _url, _inPlace, isMainFrame) => {
+    if (!isMainFrame) return
+    for (const [id, s] of streams) if (s.sender === win.webContents) s.controller.abort()
+  })
   win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
 }
 
@@ -149,7 +156,7 @@ app.whenReady().then(() => {
 })
 app.on('window-all-closed', () => app.quit())
 app.on('before-quit', () => {
-  for (const c of streams.values()) c.abort()
+  for (const s of streams.values()) s.controller.abort()
   // Closing stdin makes `agentplane serve` cancel active runs and exit.
   sidecar?.stdin?.end()
   setTimeout(() => sidecar?.kill(), 1500).unref()

@@ -47,7 +47,7 @@ export function Dashboard({ onOpen }: { onOpen: (id: string) => void }) {
 }
 
 export function RunInspector({ runId, onBack }: { runId: string; onBack: () => void }) {
-  const { run, graph, yaml, following, notFound } = useRunStream(runId)
+  const { run, graph, yaml, following, notFound, lost, reconnect } = useRunStream(runId)
   const [selected, setSelected] = useState<string | null>(null)
   const [showYaml, setShowYaml] = useState(false)
   if (notFound) return <section><button onClick={onBack}>← Runs</button><div className="empty-state">This run is not in the local store.</div></section>
@@ -59,7 +59,7 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
         <div className="row">
           <button onClick={onBack}>← Runs</button>
           <h1>{run.graphId ?? 'Run'}</h1>
-          <RunPill status={run.status} />
+          {lost ? <Pill tone="x" testId="run-status">Connection lost</Pill> : <RunPill status={run.status} />}
           {following && run.status === 'running' && <span className="mu">live</span>}
           {run.failureKind && <span className="tag">{run.failureKind}</span>}
         </div>
@@ -68,6 +68,12 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
           <button onClick={() => setShowYaml((v) => !v)}>{showYaml ? 'Map' : 'YAML'}</button>
         </div>
       </div>
+      {lost && (
+        <div className="banner" role="alert" data-testid="connection-lost">
+          <span>{lost} Node states below are the last events received, not the current state.</span>
+          <button onClick={reconnect}>Reconnect</button>
+        </div>
+      )}
       <div className="split">
         <div className="main">
           {showYaml ? (
@@ -78,7 +84,7 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
             <div className="empty-state">Loading graph…</div>
           )}
         </div>
-        <NodePanel run={run} nodeId={focus} />
+        <NodePanel run={run} nodeId={focus} lost={lost !== null} />
       </div>
     </section>
   )

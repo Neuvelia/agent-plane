@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { getRun } from './api'
-import { initialRun, reduce, settle, type RunView } from './reducer'
+import { classifyEnd, initialRun, presentRun, reduce, type RunView } from './reducer'
 import type { ApEvent, GraphSummary } from './types'
 
 // usePoll re-reads a list on an interval. It is for lists (runs, approvals),
@@ -30,6 +30,9 @@ export interface RunStream {
   yaml: string
   following: boolean
   notFound: boolean
+  /** Set when the stream ended for any reason other than the run's normal end. */
+  lost: string | null
+  reconnect: () => void
 }
 
 // useRunStream replays a run's events from sequence zero and follows it. The
@@ -40,11 +43,14 @@ export function useRunStream(runId: string): RunStream {
   const [graph, setGraph] = useState<GraphSummary | null>(null)
   const [yaml, setYaml] = useState('')
   const [notFound, setNotFound] = useState(false)
+  const [lost, setLost] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
 
+  // The inspector is keyed by runId, so state starts fresh per run. A reconnect
+  // re-subscribes without clearing it: replayed events are ignored by sequence.
   useEffect(() => {
-    setRun(initialRun())
     setEnded(false)
-    setGraph(null)
+    setLost(null)
     setNotFound(false)
     let pending: ApEvent[] = []
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -66,17 +72,19 @@ export function useRunStream(runId: string): RunStream {
         pending.push(e)
         timer ??= setTimeout(flush, 30)
       },
-      () => {
+      (reason) => {
         if (timer) clearTimeout(timer)
         flush()
-        setEnded(true)
+        const end = classifyEnd(reason)
+        if (end.kind === 'lost') setLost(end.message)
+        else setEnded(true)
       },
     )
     return () => {
       stop()
       if (timer) clearTimeout(timer)
     }
-  }, [runId])
+  }, [runId, attempt])
 
-  return { run: settle(run, !ended), graph, yaml, following: !ended, notFound }
+  return { run: presentRun(run, ended, lost !== null), graph, yaml, following: !ended && !lost, notFound, lost, reconnect: () => setAttempt((n) => n + 1) }
 }

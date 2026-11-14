@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,19 +101,5 @@ func TestApproveFlagMustNameAHumanNode(t *testing.T) {
 		if code, _, _ := runDemo(t, flags...); code != 2 {
 			t.Fatalf("flags %v: code=%d, want usage error 2", flags, code)
 		}
-	}
-}
-
-func TestDevNullStdinIsNotInteractive(t *testing.T) {
-	f, err := os.Open(os.DevNull)
-	if err != nil {
-		t.Skip(err)
-	}
-	defer f.Close()
-	old := os.Stdin
-	os.Stdin = f
-	defer func() { os.Stdin = old }()
-	if stdinInteractive() {
-		t.Fatal("/dev/null must not count as a terminal")
 	}
 }

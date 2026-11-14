@@ -305,9 +305,6 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 			return cfg, err
 		}
 	}
-	if _, reserved := cfg.env[AttemptEnv]; reserved {
-		return cfg, fmt.Errorf("env %s is reserved for loop attempts", AttemptEnv)
-	}
 	if value, present := node.Config["input_env"]; present {
 		cfg.inputEnv, err = stringMap(value, "input_env")
 		if err != nil {
@@ -348,6 +345,25 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 		cfg.stdoutJSON, ok = value.(bool)
 		if !ok {
 			return cfg, errors.New("stdout_json must be a boolean")
+		}
+	}
+	// AGENTPLANE_ATTEMPT belongs to the runtime for every shell node (ADR-0018):
+	// it may not be set, inherited from the host or mapped from an input, in any
+	// letter case, so a child can always trust the value it sees.
+	reserved := func(name string) bool { return strings.EqualFold(name, AttemptEnv) }
+	for key := range cfg.env {
+		if reserved(key) {
+			return cfg, fmt.Errorf("env %s is reserved for the runtime", AttemptEnv)
+		}
+	}
+	for _, key := range cfg.envAllowlist {
+		if reserved(key) {
+			return cfg, fmt.Errorf("env_allowlist %s is reserved for the runtime", AttemptEnv)
+		}
+	}
+	for _, variable := range cfg.inputEnv {
+		if reserved(variable) {
+			return cfg, fmt.Errorf("input_env cannot map to %s, which is reserved for the runtime", AttemptEnv)
 		}
 	}
 	return cfg, nil

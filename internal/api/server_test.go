@@ -4,10 +4,12 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -227,9 +229,7 @@ func TestDecisionsAreIdempotentScopedToTheRunAndValidated(t *testing.T) {
 		d, _ := s2.Hub.Decide(context.Background(), runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-1", Prompt: "ship?"})
 		decided <- d
 	}()
-	for i := 0; i < 200 && len(s2.Hub.Pending()) == 0; i++ {
-		time.Sleep(5 * time.Millisecond)
-	}
+	waitPending(t, s2.Hub, 1)
 	if p := s2.Hub.Pending(); len(p) != 1 || p[0].Prompt != "ship?" {
 		t.Fatalf("pending %+v", p)
 	}
@@ -269,9 +269,7 @@ func TestCancelledWaitRemovesThePendingApproval(t *testing.T) {
 			t.Error("cancelled wait returned no error")
 		}
 	}()
-	for i := 0; i < 200 && len(h.Pending()) == 0; i++ {
-		time.Sleep(5 * time.Millisecond)
-	}
+	waitPending(t, h, 1)
 	cancel()
 	wg.Wait()
 	if len(h.Pending()) != 0 {
@@ -303,5 +301,99 @@ func TestRunDetailIncludesGraphSummaryFromTheSnapshot(t *testing.T) {
 	}
 	if got := summarizeGraph([]byte("not: [valid")); len(got.Nodes) != 0 || got.Edges == nil {
 		t.Fatalf("an unreadable snapshot must yield an empty summary, got %+v", got)
+	}
+}
+
+func waitPending(t *testing.T, h *Hub, n int) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := h.WaitPending(ctx, n); err != nil {
+		t.Fatalf("approval never became pending: %v", err)
+	}
+}
+
+// Submit may be accepted at the very moment the run is cancelled. Both select
+// cases are then ready; the accepted decision must still reach the run, because
+// the client was told it was recorded (finding: decision lost on cancel race).
+func TestDecisionAcceptedDuringCancellationIsNotLost(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		h := NewHub()
+		ctx, cancel := context.WithCancel(context.Background())
+		h.afterRegister = func() {
+			if _, _, err := h.Submit(runID, "nr", true, "yes"); err != nil {
+				t.Errorf("submit: %v", err)
+			}
+			cancel() // both the decision and the cancellation are now ready
+		}
+		d, err := h.Decide(ctx, runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr"})
+		if err != nil || !d.Approve || d.Comment != "yes" {
+			t.Fatalf("iteration %d: decision lost: %+v %v", i, d, err)
+		}
+	}
+}
+
+func TestDecisionForAnotherRunNeverRevealsAnEarlierDecision(t *testing.T) {
+	h := NewHub()
+	go h.Decide(context.Background(), runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-9"})
+	waitPending(t, h, 1)
+	if _, already, err := h.Submit(runID, "nr-9", true, "secret comment"); err != nil || already {
+		t.Fatalf("%v %v", err, already)
+	}
+	rec, already, err := h.Submit("55555555-5555-4555-8555-555555555555", "nr-9", false, "")
+	if err != ErrNotPending || already || rec.Comment != "" {
+		t.Fatalf("another run saw %+v already=%v err=%v", rec, already, err)
+	}
+	if rec, already, err := h.Submit(runID, "nr-9", false, ""); err != nil || !already || rec.Comment != "secret comment" {
+		t.Fatalf("the owning run must still get the original: %+v %v %v", rec, already, err)
+	}
+}
+
+// A run that cannot be stored is stopped and flagged; a stream must end with an
+// error event, never with a normal end (the UI shows "connection lost").
+func TestUnstorableRunEndsStreamWithErrorAndIsFlagged(t *testing.T) {
+	s, ts := newServer(t, func(_ context.Context, _ string, _ []string, persist func(events.Event) error, _ runtime.DecisionProvider) error {
+		persist(fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}))
+		return errors.New("disk full")
+	})
+	w := s.Store.NewWriter([]byte("schema_version: 0\n")) // the store holds the partial log
+	w.Append(fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}))
+	w.Close()
+	if resp, body := do(t, ts, "POST", "/runs", `{"graph_path":"/x"}`, true); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	live, ok := s.Hub.Live(runID)
+	if !ok {
+		t.Fatal("run not registered")
+	}
+	deadline := time.After(5 * time.Second)
+	for live.Err() == "" {
+		_, _, changed := live.From(1 << 20)
+		select {
+		case <-changed:
+		case <-deadline:
+			t.Fatal("run was never flagged")
+		}
+	}
+	resp, body := do(t, ts, "GET", "/runs/"+runID+"/events", "", true)
+	if resp.StatusCode != 200 || !strings.Contains(body, "event: error") || strings.Contains(body, "event: end") {
+		t.Fatalf("stream must end with an error event:\n%s", body)
+	}
+	if _, body := do(t, ts, "GET", "/runs", "", true); !strings.Contains(body, "could not be stored") {
+		t.Fatalf("runs list must flag the run: %s", body)
+	}
+}
+
+func TestListShowsCorruptRunsInsteadOfDroppingThem(t *testing.T) {
+	s, ts := newServer(t, nil)
+	dir := s.Store.Dir + "/" + runID
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(dir+"/graph.yaml", []byte("x"), 0o600)
+	os.WriteFile(dir+"/events.jsonl", []byte("garbage\n{}\n"), 0o600)
+	_, body := do(t, ts, "GET", "/runs", "", true)
+	if !strings.Contains(body, `"status":"corrupt"`) || !strings.Contains(body, runID) {
+		t.Fatalf("%s", body)
 	}
 }

@@ -53,20 +53,31 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
     return Object.fromEntries(graph.nodes.map((n) => [n.id, g.node(n.id)]))
   }, [graph])
 
-  const nodes: Node<ApNodeData>[] = graph.nodes.map((n) => ({
-    id: n.id,
-    type: 'ap',
-    position: { x: (positions[n.id]?.x ?? 0) - W / 2, y: (positions[n.id]?.y ?? 0) - H / 2 },
-    data: { id: n.id, kind: n.type, run, selected: selected === n.id },
-    draggable: false,
-    connectable: false,
-  }))
-  const edges: Edge[] = graph.edges.map((e) => {
-    const from = nodeView(run, e.from).status
-    const to = displayStatus(nodeView(run, e.to))
-    const flowing = from === 'succeeded' && (to === 'running' || to === 'retrying' || to === 'waiting_human')
-    return { id: `${e.from}->${e.to}`, source: e.from, target: e.to, animated: flowing, className: flowing ? 'flow' : '' }
-  })
+  // Rebuilding every node object on each 30 ms event batch makes React Flow
+  // re-adopt and re-measure the whole graph. Recompute only when the graph, the
+  // reduced run state or the selection actually changed.
+  const nodes = useMemo<Node<ApNodeData>[]>(
+    () =>
+      graph.nodes.map((n) => ({
+        id: n.id,
+        type: 'ap',
+        position: { x: (positions[n.id]?.x ?? 0) - W / 2, y: (positions[n.id]?.y ?? 0) - H / 2 },
+        data: { id: n.id, kind: n.type, run, selected: selected === n.id },
+        draggable: false,
+        connectable: false,
+      })),
+    [graph, positions, run, selected],
+  )
+  const edges = useMemo<Edge[]>(
+    () =>
+      graph.edges.map((e) => {
+        const from = nodeView(run, e.from).status
+        const to = displayStatus(nodeView(run, e.to))
+        const flowing = from === 'succeeded' && (to === 'running' || to === 'retrying' || to === 'waiting_human')
+        return { id: `${e.from}->${e.to}`, source: e.from, target: e.to, animated: flowing, className: flowing ? 'flow' : '' }
+      }),
+    [graph, run],
+  )
 
   return (
     <div className="map" data-testid="graph-map">

@@ -46,7 +46,32 @@ type LiveRun struct {
 	id      string
 	events  []events.Event
 	done    bool
+	err     string // set when the run could not be persisted; the run is stopped
 	changed chan struct{}
+}
+
+// Finished reports whether the run reached run_finished or failed to persist.
+func (r *LiveRun) Finished() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.done
+}
+
+// Err is the persistence failure that stopped the run, or "".
+func (r *LiveRun) Err() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.err
+}
+
+func (r *LiveRun) fail(msg string) {
+	r.mu.Lock()
+	r.err = msg
+	r.done = true
+	old := r.changed
+	r.changed = make(chan struct{})
+	r.mu.Unlock()
+	close(old)
 }
 
 func (r *LiveRun) append(e events.Event) {
@@ -79,11 +104,22 @@ type Hub struct {
 	mu      sync.Mutex
 	runs    map[string]*LiveRun
 	pending map[events.NodeRunID]*pending
-	decided map[events.NodeRunID]Recorded
+	decided map[events.NodeRunID]decidedRecord
+	// afterRegister is a test seam called once a wait is registered and before
+	// Decide blocks. It is nil in production.
+	afterRegister func()
+	registered    chan struct{} // closed and replaced whenever an approval registers
+}
+
+// decidedRecord keeps the run a decision belongs to, so a repeat from another
+// run is "not pending" (404) and never reveals this decision.
+type decidedRecord struct {
+	runID string
+	rec   Recorded
 }
 
 func NewHub() *Hub {
-	return &Hub{runs: map[string]*LiveRun{}, pending: map[events.NodeRunID]*pending{}, decided: map[events.NodeRunID]Recorded{}}
+	return &Hub{runs: map[string]*LiveRun{}, pending: map[events.NodeRunID]*pending{}, decided: map[events.NodeRunID]decidedRecord{}, registered: make(chan struct{})}
 }
 
 // Slot is a run that has been requested but whose ID is not known until its
@@ -123,12 +159,40 @@ func (s *Slot) Sink(e events.Event) error {
 	return err
 }
 
+// Fail marks the run as stopped by a persistence failure. Streams end with an
+// error event instead of pretending the run completed.
+func (s *Slot) Fail(err error) {
+	select {
+	case <-s.Started:
+		s.live.fail(err.Error())
+	default:
+	}
+}
+
 // Live returns the in-memory run, if this process started it.
 func (h *Hub) Live(runID string) (*LiveRun, bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	r, ok := h.runs[runID]
 	return r, ok
+}
+
+// WaitPending blocks until at least n approvals are pending or ctx ends. It
+// lets tests and callers wait on a fact instead of polling.
+func (h *Hub) WaitPending(ctx context.Context, n int) error {
+	for {
+		h.mu.Lock()
+		have, changed := len(h.pending), h.registered
+		h.mu.Unlock()
+		if have >= n {
+			return nil
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 // Pending lists approvals that are waiting right now.
@@ -147,14 +211,28 @@ func (h *Hub) Decide(ctx context.Context, req runtime.ApprovalRequest) (runtime.
 	p := &pending{ch: make(chan runtime.Decision, 1), info: PendingApproval{RunID: string(req.RunID), NodeID: req.NodeID, NodeRunID: req.NodeRunID, Prompt: req.Prompt, Context: append([]events.ApprovalContext{}, req.Context...)}}
 	h.mu.Lock()
 	h.pending[req.NodeRunID] = p
+	old := h.registered
+	h.registered = make(chan struct{})
+	hook := h.afterRegister
 	h.mu.Unlock()
+	close(old)
+	if hook != nil {
+		hook()
+	}
 	select {
 	case d := <-p.ch:
 		return d, nil
 	case <-ctx.Done():
 		h.mu.Lock()
+		defer h.mu.Unlock()
+		// A decision accepted by Submit before cancellation took effect must
+		// not be lost: the client was told it was recorded.
+		select {
+		case d := <-p.ch:
+			return d, nil
+		default:
+		}
 		delete(h.pending, req.NodeRunID)
-		h.mu.Unlock()
 		return runtime.Decision{}, ctx.Err()
 	}
 }
@@ -169,7 +247,10 @@ func (h *Hub) Submit(runID string, nodeRunID events.NodeRunID, approve bool, com
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	if prior, ok := h.decided[nodeRunID]; ok {
-		return prior, true, nil
+		if prior.runID != runID {
+			return Recorded{}, false, ErrNotPending
+		}
+		return prior.rec, true, nil
 	}
 	p, ok := h.pending[nodeRunID]
 	if !ok || p.info.RunID != runID {
@@ -180,7 +261,7 @@ func (h *Hub) Submit(runID string, nodeRunID events.NodeRunID, approve bool, com
 		verdict = events.ApprovalApproved
 	}
 	rec = Recorded{Decision: verdict, Comment: comment}
-	h.decided[nodeRunID] = rec
+	h.decided[nodeRunID] = decidedRecord{runID: runID, rec: rec}
 	delete(h.pending, nodeRunID)
 	p.ch <- runtime.Decision{Approve: approve, Comment: comment}
 	return rec, false, nil

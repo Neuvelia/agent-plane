@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"agentplane/internal/agent"
@@ -185,21 +186,21 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
 	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions}
-	var writer *store.Writer
+	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}
 		if err := runStore.Check(); err != nil {
 			return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 		}
 		for _, secret := range redactions {
-			if secret != "" && bytes.Contains(graphBytes, []byte(secret)) {
+			if secret != "" && (bytes.Contains(graphBytes, []byte(secret)) || definitionHoldsSecret(def, secret)) {
 				// The snapshot is a byte copy, so a secret embedded in the graph
 				// would be duplicated into the store. Graphs must reference
 				// secrets, never contain them (AGENTS.md).
 				return commandError("run", "error", "graph", errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run"), nil, *jsonMode, stdout, stderr, exitGraph)
 			}
 		}
-		writer = runStore.NewWriter(graphBytes)
+		writer = openPersister(runStore, graphBytes)
 		opts.Persist = writer.Append
 	}
 	runCtx := ctx
@@ -247,9 +248,11 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			result.PersistError = closeErr
 		}
 	}
+	// A persistence failure never hides what the run did: the result is still
+	// shown, and the command exits 1 with the run ID and the partial log path.
+	var persistFailure error
 	if err == nil && result.PersistError != nil {
-		// Never present a non-durable run as if it had been stored.
-		return commandError("run", "error", "internal", fmt.Errorf("run was not persisted: %w", result.PersistError), nil, *jsonMode, stdout, stderr, exitInternal)
+		persistFailure = fmt.Errorf("run %s was not persisted (a partial log may exist under %s): %w", result.RunID, filepath.Join(*storeDir, string(result.RunID)), result.PersistError)
 	}
 	if finishWatch != nil {
 		if writeErr := finishWatch(result.Events); writeErr != nil {
@@ -270,8 +273,15 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if result.State == runtime.RunCancelled {
 		code = exitInterrupted
 	}
+	if persistFailure != nil {
+		code = exitInternal
+	}
 	if *jsonMode {
-		return writeJSON(stdout, stderr, documentForRun(result, allDiagnostics), code)
+		doc := documentForRun(result, allDiagnostics)
+		if persistFailure != nil {
+			doc.Error = &cliError{Kind: "internal", Message: persistFailure.Error()}
+		}
+		return writeJSON(stdout, stderr, doc, code)
 	}
 	if !*watch {
 		renderer := newEventRenderer(stdout, stderr, false)
@@ -286,7 +296,69 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return presentationError(err, stderr)
 		}
 	}
+	if persistFailure != nil {
+		if _, err := fmt.Fprintln(stderr, persistFailure); err != nil {
+			return presentationError(err, stderr)
+		}
+	}
 	return code
+}
+
+// persister is the run store's write side, a seam so a mid-run write failure
+// can be exercised without relying on filesystem permissions.
+type persister interface {
+	Append(events.Event) error
+	Close() error
+}
+
+var openPersister = func(s store.Store, graph []byte) persister { return s.NewWriter(graph) }
+
+// definitionHoldsSecret compares a secret with the parsed string values of the
+// definition, so YAML escaping, folding or unicode escapes cannot hide it from
+// the byte-level check that guards the stored graph snapshot.
+func definitionHoldsSecret(def *graph.Definition, secret string) bool {
+	var walk func(v any) bool
+	walk = func(v any) bool {
+		switch x := v.(type) {
+		case string:
+			return strings.Contains(x, secret)
+		case []string:
+			for _, s := range x {
+				if strings.Contains(s, secret) {
+					return true
+				}
+			}
+		case []any:
+			for _, e := range x {
+				if walk(e) {
+					return true
+				}
+			}
+		case map[string]any:
+			for k, e := range x {
+				if strings.Contains(k, secret) || walk(e) {
+					return true
+				}
+			}
+		case graph.NodeConfig:
+			return walk(map[string]any(x))
+		case graph.Metadata:
+			return walk(map[string]any(x))
+		}
+		return false
+	}
+	if strings.Contains(def.ID, secret) || strings.Contains(def.Name, secret) || walk(def.Metadata) {
+		return true
+	}
+	for _, n := range def.Nodes {
+		if walk(n.Config) {
+			return true
+		}
+		if n.Loop != nil && walk(n.Loop.Gate.Config) {
+			return true
+		}
+	}
+	return false
 }
 
 func wantsJSON(args []string) bool {

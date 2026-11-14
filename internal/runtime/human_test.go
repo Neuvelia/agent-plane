@@ -228,3 +228,123 @@ func mustJSON(t *testing.T, e events.Event) []byte {
 	}
 	return b
 }
+
+func humanWithSource(secretText string) *graph.Definition {
+	def := humanDef(map[string]graph.NodeDefinition{
+		"src": {Type: "shell", Outputs: map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString, Required: true}}},
+	})
+	n := def.Nodes["gate"]
+	n.Inputs = map[string]graph.PortDefinition{"summary": {Type: graph.ValueTypeString, Required: true}}
+	n.Config = map[string]any{"prompt": "ship?", "context_inputs": []any{"summary"}}
+	def.Nodes["gate"] = n
+	def.Edges = []graph.EdgeDefinition{{From: "src.outputs.stdout", To: "gate.inputs.summary"}}
+	return def
+}
+
+func srcExecutor(text string) Executor {
+	return executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
+		if id == "src" {
+			return map[string]graph.Value{"stdout": graph.NewStringValue(text)}, nil
+		}
+		return map[string]graph.Value{}, nil
+	})
+}
+
+// Redaction must run before truncation: a secret that straddles the limit would
+// otherwise leave a readable prefix behind.
+func TestHumanRedactionHappensBeforeTruncation(t *testing.T) {
+	const secret = "QZXSECRETVALUE"
+	prompt := strings.Repeat("p", 900) + secret // graph validation already bounds the prompt, so only redaction matters here
+	def := humanWithSource("")
+	n := def.Nodes["gate"]
+	n.Config = map[string]any{"prompt": prompt, "context_inputs": []any{"summary"}}
+	def.Nodes["gate"] = n
+	context1 := strings.Repeat("c", events.MaxApprovalContextValue-4) + secret // and in a context value
+	comment := strings.Repeat("m", events.MaxApprovalComment-4) + secret       // and in the comment
+	result, err := Run(context.Background(), def, nil, srcExecutor(context1), Options{LogRedactions: []string{secret}, Decisions: providerFunc(func(_ context.Context, r ApprovalRequest) (Decision, error) {
+		for _, c := range r.Context {
+			if strings.Contains(c.Value, "QZ") {
+				t.Errorf("provider saw a secret prefix in context: %q", c.Value[len(c.Value)-12:])
+			}
+		}
+		if strings.Contains(r.Prompt, "QZ") {
+			t.Errorf("provider saw a secret prefix in the prompt")
+		}
+		return Decision{Approve: true, Comment: comment}, nil
+	})})
+	if err != nil || result.State != RunSucceeded {
+		t.Fatalf("err=%v state=%s", err, result.State)
+	}
+	for _, e := range result.Events {
+		if strings.Contains(string(mustJSON(t, e)), "QZ") {
+			t.Fatalf("a secret fragment reached %s", e.Type)
+		}
+	}
+	req, _ := humanEvents(result)
+	if got := req[0].Payload.(events.ApprovalRequestedPayload).Context; len(got) != 1 || got[0].Name != "summary" {
+		t.Fatalf("context_inputs was not carried: %+v", got)
+	}
+}
+
+func TestHumanProviderFailureFailsNodeWithSafeCodeAndNoDecisionEvent(t *testing.T) {
+	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+		return Decision{}, errors.New("boom")
+	})})
+	if err != nil || result.State != RunFailed {
+		t.Fatalf("err=%v state=%s", err, result.State)
+	}
+	if got := nodeResult(t, result, "gate").State; got != NodeFailed {
+		t.Fatalf("gate=%s", got)
+	}
+	var codes []string
+	for _, e := range result.Events {
+		if p, ok := e.Payload.(events.NodeFinishedPayload); ok && e.NodeID == "gate" {
+			codes = p.DiagnosticCodes
+		}
+	}
+	if len(codes) != 1 || codes[0] != "human_decision_invalid" {
+		t.Fatalf("codes=%v", codes)
+	}
+	req, dec := humanEvents(result)
+	if len(req) != 1 || len(dec) != 0 {
+		t.Fatalf("a provider failure must close the wait with node_finished only: req=%d dec=%d", len(req), len(dec))
+	}
+}
+
+// The provider is asked exactly once per human node run, in every outcome.
+func TestHumanProviderIsAskedOncePerNodeRun(t *testing.T) {
+	for _, approve := range []bool{true, false} {
+		var calls int
+		var mu sync.Mutex
+		result, _ := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+			mu.Lock()
+			calls++
+			mu.Unlock()
+			return Decision{Approve: approve}, nil
+		})})
+		_, dec := humanEvents(result)
+		if calls != 1 || len(dec) != 1 {
+			t.Fatalf("approve=%v calls=%d decided=%d", approve, calls, len(dec))
+		}
+	}
+}
+
+// A decision the provider returned while cancellation arrived is still a fact
+// the person acted on: it is recorded and the node ends cancelled.
+func TestHumanDecisionReturnedDuringCancellationIsRecorded(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+		cancel()
+		return Decision{Approve: true, Comment: "late"}, nil
+	})})
+	if err != nil || result.State != RunCancelled {
+		t.Fatalf("err=%v state=%s", err, result.State)
+	}
+	if got := nodeResult(t, result, "gate").State; got != NodeCancelled {
+		t.Fatalf("gate=%s", got)
+	}
+	_, dec := humanEvents(result)
+	if len(dec) != 1 || dec[0].Payload.(events.ApprovalDecidedPayload).Comment != "late" {
+		t.Fatalf("the accepted decision was lost: %d events", len(dec))
+	}
+}

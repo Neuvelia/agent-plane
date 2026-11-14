@@ -122,15 +122,20 @@ func starter(runStore store.Store, concurrency int) api.StartFunc {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: "graph inputs are invalid", Diagnostics: all}
 		}
 		writer := runStore.NewWriter(graphBytes)
+		runCtx, stop := context.WithCancel(ctx)
+		defer stop()
+		// The store write comes first and a client sees an event only after it is
+		// durable. If the write fails the run is stopped and nothing further is
+		// forwarded, so the UI never shows what is not on disk (ADR-0019).
 		sink := func(e events.Event) error {
-			werr := writer.Append(e)
-			if perr := persist(e); werr == nil {
-				werr = perr
+			if werr := writer.Append(e); werr != nil {
+				stop()
+				return werr
 			}
-			return werr
+			return persist(e)
 		}
 		opts := runtime.Options{MaxConcurrency: concurrency, Decisions: decisions, Persist: sink}
-		result, err := runtime.Run(ctx, def, values, serveExecutor(def), opts)
+		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr
 		}

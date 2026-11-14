@@ -143,14 +143,53 @@ func TestShellLoopNonZeroExitIsFatalNotRetried(t *testing.T) {
 	}
 }
 
-func TestShellEnvRejectsReservedAttemptVariable(t *testing.T) {
+func TestShellEnvRejectsReservedAttemptVariableWithAClearMessage(t *testing.T) {
 	graph := strings.Replace(shellLoopGraph(`echo '{"ready":true}'`, 3), "stdout_json: true}", "stdout_json: true, env: {AGENTPLANE_ATTEMPT: '9'}}", 1)
 	path := filepath.Join(t.TempDir(), "graph.yaml")
 	if err := os.WriteFile(path, []byte(graph), 0600); err != nil {
 		t.Fatal(err)
 	}
 	var out, errout bytes.Buffer
-	if code := runCommand(context.Background(), []string{"run", path, "--json"}, &out, &errout); code == 0 {
-		t.Fatalf("reserved variable accepted: %s", &out)
+	code := runCommand(context.Background(), []string{"run", path, "--json"}, &out, &errout)
+	if code == 0 || !strings.Contains(out.String(), "reserved") {
+		t.Fatalf("code=%d out=%s", code, &out)
+	}
+}
+
+// Downstream must see the green candidate's value and never a red one.
+func TestShellLoopDownstreamReceivesTheGreenValueOnly(t *testing.T) {
+	graph := shellLoopGraph(`if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then echo '{"ready":false,"v":"RED"}'; else echo '{"ready":true,"v":"GREEN"}'; fi`, 3)
+	graph = strings.Replace(graph, "outputs: {json: {type: json, required: true}}", "outputs: {json: {type: json, required: true}, stdout: {type: string, required: true}}", 1)
+	graph = strings.Replace(graph, `config: {command: /usr/bin/printf, args: [merged]}
+    inputs: {left: {type: string, required: true}, right: {type: json, required: true}}`, `config: {command: /usr/bin/printenv, args: [GOT], input_env: {right: GOT}}
+    inputs: {left: {type: string, required: true}, right: {type: string, required: true}}`, 1)
+	graph = strings.Replace(graph, "flaky.outputs.json, to: merge.inputs.right", "flaky.outputs.stdout, to: merge.inputs.right", 1)
+	code, doc := runShellLoop(t, graph)
+	if code != 0 {
+		t.Fatalf("code=%d", code)
+	}
+	var seen strings.Builder
+	for _, e := range doc.Events {
+		if c, ok := e.Payload.(events.LogChunkPayload); ok && e.NodeID == "merge" {
+			seen.Write(c.Data)
+		}
+	}
+	if !strings.Contains(seen.String(), "GREEN") || strings.Contains(seen.String(), "RED") {
+		t.Fatalf("merge saw %q", seen.String())
+	}
+}
+
+func TestShellLoopRunThatIsAlreadyCancelledStartsNoAttempt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "graph.yaml")
+	os.WriteFile(path, []byte(shellLoopGraph(`echo '{"ready":true}'`, 3)), 0600)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	var out, errout bytes.Buffer
+	code := runCommand(ctx, []string{"run", path, "--json"}, &out, &errout)
+	if code != 130 {
+		t.Fatalf("code=%d out=%s", code, &out)
+	}
+	if strings.Contains(out.String(), `"type":"attempt_started"`) {
+		t.Fatal("a cancelled run must not start an attempt")
 	}
 }

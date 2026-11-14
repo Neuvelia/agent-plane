@@ -254,10 +254,28 @@ export function displayStatus(n: NodeView): NodeStatus {
   return n.status
 }
 
+// classifyEnd interprets why an event stream ended. Only the server's explicit
+// "end" means the run's stored events are complete; anything else is a lost
+// connection, and the UI must say so instead of inventing a run status.
+export type StreamEnd = { kind: 'complete' } | { kind: 'lost'; message: string }
+
+export function classifyEnd(reason: string): StreamEnd {
+  if (reason === 'end') return { kind: 'complete' }
+  if (reason === 'server_error') return { kind: 'lost', message: 'The engine stopped this run because it could not be stored.' }
+  return { kind: 'lost', message: 'The connection to the engine ended unexpectedly.' }
+}
+
 // A run that has no terminal event and is not being followed is interrupted.
 export function settle(run: RunView, live: boolean): RunView {
   if (run.status === 'running' && !live && run.eventCount > 0) return { ...run, status: 'interrupted' }
   return run
+}
+
+// presentRun is what the inspector shows for a stream in a given end state:
+// a normally ended log without a terminal event is "interrupted"; a stream that
+// is still followed, or whose connection was lost, keeps the reduced status.
+export function presentRun(run: RunView, endedNormally: boolean, lost: boolean): RunView {
+  return settle(run, !endedNormally || lost)
 }
 
 export function pendingApprovals(run: RunView): NodeView[] {

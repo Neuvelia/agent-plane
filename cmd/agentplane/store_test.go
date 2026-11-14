@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"agentplane/internal/events"
+	"agentplane/internal/store"
 )
 
 func cli(t *testing.T, args ...string) (int, string, string) {
@@ -204,5 +206,111 @@ outputs: {}
 	}
 	if entries, _ := os.ReadDir(dir); len(entries) != 0 {
 		t.Fatalf("nothing may be stored, found %v", entries)
+	}
+}
+
+// failingPersister succeeds for the first n events, then fails like a full disk.
+type failingPersister struct {
+	n, seen int
+	closed  bool
+}
+
+func (f *failingPersister) Append(events.Event) error {
+	f.seen++
+	if f.seen > f.n {
+		return os.ErrClosed
+	}
+	return nil
+}
+func (f *failingPersister) Close() error { f.closed = true; return nil }
+
+func withFailingStore(t *testing.T, n int) *failingPersister {
+	t.Helper()
+	fp := &failingPersister{n: n}
+	old := openPersister
+	openPersister = func(store.Store, []byte) persister { return fp }
+	t.Cleanup(func() { openPersister = old })
+	return fp
+}
+
+// A write failure mid-run must not hide what the run did: the result is still
+// reported, with the run ID and partial log location, and the exit code is 1.
+func TestPersistFailureStillReportsTheRunResultAndExitsOne(t *testing.T) {
+	fp := withFailingStore(t, 5)
+	dir := t.TempDir()
+	code, out, _ := cli(t, "run", demoGraphPath(t), "--approve", "approve", "--store-dir", dir, "--json")
+	if code != 1 {
+		t.Fatalf("code=%d, want 1", code)
+	}
+	var doc struct {
+		Status string         `json:"status"`
+		RunID  string         `json:"run_id"`
+		Events []events.Event `json:"events"`
+		Nodes  []struct{}     `json:"nodes"`
+		Error  struct {
+			Kind    string `json:"kind"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if doc.Status != "succeeded" || doc.RunID == "" || len(doc.Events) < 20 || len(doc.Nodes) != 4 {
+		t.Fatalf("the run result was hidden: status=%q run=%q events=%d", doc.Status, doc.RunID, len(doc.Events))
+	}
+	if doc.Error.Kind != "internal" || !strings.Contains(doc.Error.Message, doc.RunID) || !strings.Contains(doc.Error.Message, filepath.Join(dir, doc.RunID)) {
+		t.Fatalf("error must name the run and its partial log: %+v", doc.Error)
+	}
+	if !fp.closed {
+		t.Fatal("the writer must be closed after a failure")
+	}
+}
+
+func TestPersistFailureInWatchModeFinishesTheWatchAndReports(t *testing.T) {
+	withFailingStore(t, 3)
+	done := make(chan struct{})
+	var code int
+	var out, errout string
+	go func() {
+		code, out, errout = cli(t, "run", demoGraphPath(t), "--approve", "approve", "--store-dir", t.TempDir(), "--watch")
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("--watch hung after a persistence failure")
+	}
+	_ = out
+	if code != 1 || !strings.Contains(errout, "was not persisted") || !strings.Contains(errout, "Run succeeded") {
+		t.Fatalf("code=%d stderr=%s", code, errout)
+	}
+}
+
+// The byte-level secret check cannot see a secret that YAML escaping, folding or
+// unicode escapes hide in the file; the parsed values must be checked as well.
+func TestEscapedOrFoldedSecretInAGraphIsRefusedForStorage(t *testing.T) {
+	const secret = `a"b-secret-value`
+	t.Setenv("AP_ESC_SECRET", secret)
+	for name, args := range map[string]string{
+		"quote escape":   `["a\"b-secret-value"]`,
+		"unicode escape": `["\u0061\"b-secret-value"]`,
+		"folded scalar":  "[\"a\\\"b-secret-\\\n    value\"]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			graph := filepath.Join(t.TempDir(), "g.yaml")
+			doc := "schema_version: 0\nid: esc\ninputs: {}\nnodes:\n  s:\n    type: shell\n    config: {command: /usr/bin/printf, args: " + args + "}\nedges: []\noutputs: {}\n"
+			os.WriteFile(graph, []byte(doc), 0o600)
+			if strings.Contains(doc, secret) {
+				t.Fatal("test graph must not contain the literal secret, or it would not prove anything")
+			}
+			code, _, errout := cli(t, "run", graph, "--redact-env", "AP_ESC_SECRET", "--store-dir", dir)
+			if code != 3 || !strings.Contains(errout, "redact-env") {
+				t.Fatalf("code=%d stderr=%s", code, errout)
+			}
+			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+				t.Fatalf("nothing may be stored: %v", entries)
+			}
+		})
 	}
 }

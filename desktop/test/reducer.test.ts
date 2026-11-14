@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import approveEvents from './fixtures/demo-approve.json'
 import rejectEvents from './fixtures/demo-reject.json'
-import { MAX_LOG_CHARS, displayStatus, initialRun, nodeView, pendingApprovals, reduce, reduceAll, settle } from '../src/reducer'
+import { MAX_LOG_CHARS, classifyEnd, displayStatus, initialRun, nodeView, pendingApprovals, presentRun, reduce, reduceAll, settle } from '../src/reducer'
 import type { ApEvent } from '../src/types'
 
 // Both fixtures are real event streams recorded from `agentplane run
@@ -137,5 +137,25 @@ describe('reducer properties', () => {
       state = reduce(state, { ...base, sequence: i, payload: { stream: 'stdout', data: big } })
     }
     expect(state.nodes[base.node_id!]!.log.length).toBe(MAX_LOG_CHARS)
+  })
+})
+
+describe('stream end classification', () => {
+  it('treats only the server end event as a complete run', () => {
+    expect(classifyEnd('end')).toEqual({ kind: 'complete' })
+  })
+  it('reports everything else as a lost connection, never as an interrupted run', () => {
+    for (const reason of ['closed', 'aborted', 'http 500', 'fetch failed', '']) {
+      expect(classifyEnd(reason).kind).toBe('lost')
+    }
+    const storage = classifyEnd('server_error')
+    expect(storage.kind === 'lost' && storage.message).toMatch(/could not be stored/)
+  })
+  it('does not invent a terminal status when the connection is lost mid-run', () => {
+    const cut = reduceAll(approve.slice(0, 12))
+    expect(presentRun(cut, false, true).status).toBe('running') // lost: keep what the events said
+    expect(presentRun(cut, false, false).status).toBe('running') // still following
+    expect(presentRun(cut, true, false).status).toBe('interrupted') // ended normally, no terminal event
+    expect(presentRun(reduceAll(approve), true, false).status).toBe('succeeded')
   })
 })

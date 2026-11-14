@@ -117,15 +117,18 @@ func (m *runMachine) humanNode(ctx context.Context, id string, n graph.NodeDefin
 		}
 		return done(nil, decisionError{"decision provider failed"})
 	}
-	if err := ctx.Err(); err != nil {
-		return done(nil, err)
-	}
+	// A decision a provider already accepted is a fact the person acted on, so it
+	// is recorded even if cancellation arrived at the same moment; the node is
+	// then cancelled rather than succeeded or failed.
 	comment, _ := truncateUTF8(redactText(r, decision.Comment), events.MaxApprovalComment)
 	verdict := events.ApprovalRejected
 	if decision.Approve {
 		verdict = events.ApprovalApproved
 	}
 	m.appendEvent(events.Event{Type: events.ApprovalDecided, NodeID: id, NodeRunID: nodeRunID, Payload: events.ApprovalDecidedPayload{Decision: verdict, Comment: comment}})
+	if err := ctx.Err(); err != nil {
+		return done(nil, err)
+	}
 	if !decision.Approve {
 		return done(nil, rejectedError{})
 	}

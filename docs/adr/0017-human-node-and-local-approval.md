@@ -65,6 +65,14 @@ Cons: invisible to events/UI, not auditable, holds a slot and a process.
 
 ### Negative / trade-offs
 
+- The wait ends with `approval_decided`, or - when the provider fails or the run
+  is cancelled with no decision - only with the node's terminal event. Consumers
+  must treat `node_finished`/`node_terminated` as also ending the wait.
+- A decision a provider already accepted is recorded as `approval_decided` even
+  if cancellation arrives at the same moment; the node then ends `cancelled`.
+  A client that was told "recorded" therefore always finds the event.
+- Interactive CLI prompts are serialized: one question at a time, and an answer
+  is attributed to the node it was asked for.
 - A run can wait indefinitely until decision or cancellation.
 - A waiting human node holds a concurrency slot and later-batch nodes wait for the batch barrier.
 - A waiting run does not survive process death (F3.3 later).

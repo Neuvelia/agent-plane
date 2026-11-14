@@ -166,3 +166,46 @@ func TestCollectorStopsPersistingAfterFirstErrorAndReportsIt(t *testing.T) {
 		t.Fatal("a persistence failure must not drop in-memory events")
 	}
 }
+
+// Persistence runs under the collector lock (ADR-0019): a blocked sink delays
+// every later Append, and releasing it preserves sequence order. This pins the
+// documented behaviour so a change to it is deliberate.
+func TestBlockedPersistSinkDelaysLaterAppendsAndKeepsOrder(t *testing.T) {
+	c := NewCollector("run", "g", "sha256-v0:x")
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var order []uint64
+	first := true
+	c.SetPersist(func(e Event) error {
+		if first {
+			first = false
+			close(entered)
+			<-release
+		}
+		mu.Lock()
+		order = append(order, e.Sequence)
+		mu.Unlock()
+		return nil
+	})
+	done := make(chan struct{}, 2)
+	go func() { c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); done <- struct{}{} }()
+	<-entered
+	go func() {
+		c.Append(Event{Type: NodeReady, NodeID: "n", NodeRunID: "nr", Payload: NodeReadyPayload{}})
+		done <- struct{}{}
+	}()
+	select {
+	case <-done:
+		t.Fatal("an Append completed while the sink was blocked")
+	default:
+	}
+	close(release)
+	<-done
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != 1 || order[1] != 2 {
+		t.Fatalf("order after release: %v", order)
+	}
+}

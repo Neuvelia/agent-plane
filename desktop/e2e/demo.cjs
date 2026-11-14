@@ -108,6 +108,19 @@ async function startDemo(page) {
     assert.equal(await status(page, 'approve'), 'failed')
     assert.equal(await status(page, 'apply'), 'skipped')
     await shot(page, '6-rejected')
+    // 6. If the engine dies mid-run the UI says the connection was lost and keeps
+    //    the last events it received; it must not invent a run status.
+    await startDemo(page)
+    await waitStatus(page, 'approve', 'waiting_human')
+    // SIGKILL simulates a crash (SIGTERM would be a graceful, complete shutdown).
+    // "[a]gentplane" keeps the pattern from matching pkill's own shell.
+    require('node:child_process').execSync(`pkill -9 -f "bin/[a]gentplane serve" || true`)
+    await page.waitForSelector('[data-testid="connection-lost"]', { timeout: 15000 })
+    assert.equal(await page.textContent('[data-testid="run-status"]'), 'Connection lost')
+    assert.equal(await status(page, 'approve'), 'waiting_human')
+    assert.equal(await status(page, 'apply'), 'pending')
+    assert.equal(await page.locator('[data-testid="approval-box"] button.primary').isDisabled(), true)
+    await shot(page, '7-connection-lost')
     console.log('desktop e2e: OK')
   } finally {
     await app.close().catch(() => {})

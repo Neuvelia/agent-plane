@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"agentplane/internal/events"
@@ -47,6 +48,7 @@ type Server struct {
 
 	baseCtx context.Context
 	addr    string
+	active  sync.WaitGroup // runs started through the API and not yet returned
 }
 
 // ExpectHost pins the Host header that guard accepts. Serve sets it from the
@@ -80,6 +82,14 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 		_ = srv.Close()
+		// Runs were cancelled with ctx; give them a bounded moment to record
+		// their terminal event so a stopped server leaves no half-written run.
+		drained := make(chan struct{})
+		go func() { s.active.Wait(); close(drained) }()
+		select {
+		case <-drained:
+		case <-time.After(5 * time.Second):
+		}
 		return nil
 	case err := <-errc:
 		return err
@@ -162,7 +172,9 @@ func (s *Server) listRuns(w http.ResponseWriter, r *http.Request) {
 	}
 	for i := range runs {
 		if live, ok := s.Hub.Live(runs[i].RunID); ok {
-			if _, done, _ := live.From(1 << 30); !done {
+			if msg := live.Err(); msg != "" {
+				runs[i].Error = "run stopped: could not be stored (" + msg + ")"
+			} else if !live.Finished() {
 				runs[i].Status = "running"
 			}
 		}
@@ -178,7 +190,9 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if live, ok := s.Hub.Live(id); ok {
-		if _, done, _ := live.From(1 << 30); !done {
+		if msg := live.Err(); msg != "" {
+			rec.Summary.Error = "run stopped: could not be stored (" + msg + ")"
+		} else if !live.Finished() {
 			rec.Summary.Status = "running"
 		}
 	}
@@ -257,8 +271,15 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	// can see is already durable.
 	slot := s.Hub.NewSlot(nil)
 	failed := make(chan error, 1)
+	s.active.Add(1)
 	go func() {
-		failed <- s.Start(s.baseCtx, body.GraphPath, body.Inputs, slot.Sink, s.Hub)
+		defer s.active.Done()
+		err := s.Start(s.baseCtx, body.GraphPath, body.Inputs, slot.Sink, s.Hub)
+		var se *StartError
+		if err != nil && !errors.As(err, &se) {
+			slot.Fail(err) // a started run that could not be stored is stopped and flagged
+		}
+		failed <- err
 	}()
 	select {
 	case <-slot.Started:
@@ -381,6 +402,12 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			next += len(batch)
+			if done && live.Err() != "" {
+				body, _ := json.Marshal(map[string]string{"message": "the run was stopped because it could not be stored"})
+				_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", body)
+				flusher.Flush()
+				return
+			}
 			if done {
 				_, _ = fmt.Fprint(w, "event: end\ndata: {}\n\n")
 				flusher.Flush()

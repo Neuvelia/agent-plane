@@ -31,7 +31,7 @@ function Evidence({ attempt }: { attempt: Attempt }) {
   )
 }
 
-export function ApprovalBox({ runId, nodeRunId, prompt, context }: { runId: string; nodeRunId: string; prompt: string; context: { name: string; value: string }[] }) {
+export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = false }: { runId: string; nodeRunId: string; prompt: string; context: { name: string; value: string }[]; disabled?: boolean }) {
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -55,19 +55,20 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context }: { runId: stri
       ))}
       <textarea aria-label="Comment" placeholder="Comment (optional)" value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
       <div className="row">
-        <button className="primary" disabled={busy} onClick={() => submit(true)}>
+        <button className="primary" disabled={busy || disabled} onClick={() => submit(true)}>
           Approve
         </button>
-        <button className="danger" disabled={busy} onClick={() => submit(false)}>
+        <button className="danger" disabled={busy || disabled} onClick={() => submit(false)}>
           Reject
         </button>
       </div>
+      {disabled && <div className="mu">Decisions are disabled while the connection to the engine is lost.</div>}
       {error && <div className="err">{error}</div>}
     </div>
   )
 }
 
-export function NodePanel({ run, nodeId }: { run: RunView; nodeId: string | null }) {
+export function NodePanel({ run, nodeId, lost = false }: { run: RunView; nodeId: string | null; lost?: boolean }) {
   const [tab, setTab] = useState<'attempts' | 'log'>('attempts')
   if (!nodeId) return <aside className="panel empty">Select a node to see its attempts, checks and log.</aside>
   const n = nodeView(run, nodeId)
@@ -85,7 +86,7 @@ export function NodePanel({ run, nodeId }: { run: RunView; nodeId: string | null
         </div>
       )}
       {status === 'waiting_human' && n.approval && run.runId && n.nodeRunId && (
-        <ApprovalBox runId={run.runId} nodeRunId={n.nodeRunId} prompt={n.approval.prompt} context={n.approval.context} />
+        <ApprovalBox runId={run.runId} nodeRunId={n.nodeRunId} prompt={n.approval.prompt} context={n.approval.context} disabled={lost} />
       )}
       {n.approval?.decision && (
         <div className="decision" data-testid="decision">

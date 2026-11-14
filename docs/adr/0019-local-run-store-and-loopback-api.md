@@ -38,6 +38,28 @@ stdin closes, cancelling active runs.
 The Electron app is a client of this API. The UI derives state only by reducing
 events; it does not schedule, retry or decide state.
 
+Decisions are scoped to the run: a repeat for a node run that belongs to another
+run is "not pending" (404) and never reveals the earlier decision. A decision the
+hub accepted is delivered to the run even if cancellation races it. If a store
+write fails during a served run, the run is stopped, nothing further is forwarded
+to clients, streams end with an `error` event, and the run is listed with an
+`error` explaining that it could not be stored. On shutdown the server cancels
+active runs and waits up to five seconds for their terminal events.
+
+`graph_path` is read by the sidecar with the local user's own permissions. The
+desktop allows a typed path as well as a picked one, so it is not bound to the
+file dialog; the trust model is that the person at the keyboard chooses which
+graph to execute, exactly as with `agentplane run`.
+
+Durability scope: lifecycle events survive the process being killed. They are
+not guaranteed across power loss: the run directory entry and `graph.yaml` are
+not fsynced. Persistence runs under the collector lock, so a hung filesystem
+blocks the run; there is no timeout.
+
+Known limitations of this slice: `serve` has no `--redact-env` and no cap on
+concurrent runs; finished runs stay in memory for the server's lifetime; a run
+started by another process is replayed from the store but not followed.
+
 ## Alternatives considered
 
 ### Alternative A - SQLite now

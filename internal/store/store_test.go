@@ -173,3 +173,99 @@ func TestCheckFailsForUnwritableDirectory(t *testing.T) {
 		t.Fatal("a store under a regular file must fail its check")
 	}
 }
+
+// recordingFile counts writes and syncs so durability behaviour is observable.
+type recordingFile struct {
+	ops      []string
+	writeErr error
+	syncErr  error
+}
+
+func (f *recordingFile) Write(p []byte) (int, error) {
+	if f.writeErr != nil {
+		return 0, f.writeErr
+	}
+	f.ops = append(f.ops, "write")
+	return len(p), nil
+}
+func (f *recordingFile) Sync() error {
+	if f.syncErr != nil {
+		return f.syncErr
+	}
+	f.ops = append(f.ops, "sync")
+	return nil
+}
+func (f *recordingFile) Close() error { f.ops = append(f.ops, "close"); return nil }
+
+func TestLifecycleEventsAreSyncedAndProgressEventsAreNot(t *testing.T) {
+	f := &recordingFile{}
+	w := &Writer{file: f}
+	now := time.Now().UTC()
+	log := ev(runA, 2, events.LogChunk, events.LogChunkPayload{Stream: events.Stdout, Data: []byte("x")}, now)
+	log.NodeID, log.NodeRunID = "n", "nr"
+	for _, e := range []events.Event{started(runA, now), log, log, finished(runA, 3, "succeeded", now)} {
+		if err := w.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// lifecycle: write+sync; two log chunks: write only; final lifecycle: write+sync.
+	if got := strings.Join(f.ops, ","); got != "write,sync,write,write,write,sync" {
+		t.Fatalf("durability sequence = %s", got)
+	}
+}
+
+func TestWriterReportsAndLatchesWriteAndSyncFailures(t *testing.T) {
+	now := time.Now().UTC()
+	for name, f := range map[string]*recordingFile{"write": {writeErr: os.ErrClosed}, "sync": {syncErr: os.ErrClosed}} {
+		t.Run(name, func(t *testing.T) {
+			w := &Writer{file: f}
+			if err := w.Append(started(runA, now)); err == nil {
+				t.Fatal("a failed " + name + " was swallowed")
+			}
+			calls := len(f.ops)
+			if err := w.Append(finished(runA, 2, "succeeded", now)); err == nil || len(f.ops) != calls {
+				t.Fatalf("after a failure the writer must stay failed and write nothing more (ops %v, err %v)", f.ops, err)
+			}
+		})
+	}
+	if err := (&Writer{file: &recordingFile{}}).Append(events.Event{}); err == nil {
+		t.Fatal("an unencodable event must be an error")
+	}
+}
+
+func TestReaderRejectsLogsThatDoNotStartWithRunStartedOrContinueAfterRunFinished(t *testing.T) {
+	now := time.Now().UTC()
+	for name, evs := range map[string][]events.Event{
+		"first event is not run_started": {ev(runA, 1, events.NodeReady, events.NodeReadyPayload{}, now), finished(runA, 2, "succeeded", now)},
+		"events after run_finished":      {started(runA, now), finished(runA, 2, "succeeded", now), finished(runA, 3, "failed", now)},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := Store{Dir: t.TempDir()}
+			write(t, s, runA, evs...)
+			if _, err := s.Read(runA); err == nil {
+				t.Fatal("accepted")
+			}
+		})
+	}
+}
+
+func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	write(t, s, runA, started(runA, time.Now().UTC()))
+	path := filepath.Join(s.Dir, runA, "events.jsonl")
+	data, _ := os.ReadFile(path)
+	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":9`, `"event_schema_version":99`, 1)), 0o600)
+	if _, err := s.Read(runA); err == nil {
+		t.Fatal("an event from a future schema was accepted")
+	}
+}
+
+func TestListReportsUnreadableRunsAsCorruptWithTheReason(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	write(t, s, runA, started(runA, time.Now().UTC()))
+	os.Remove(filepath.Join(s.Dir, runA, "graph.yaml"))
+	list, err := s.List()
+	if err != nil || len(list) != 1 || list[0].Status != StatusCorrupt || list[0].Error == "" || list[0].RunID != runA {
+		t.Fatalf("%v %+v", err, list)
+	}
+}

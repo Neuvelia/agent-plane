@@ -30,6 +30,7 @@ const (
 // "interrupted" for a store reader; a live server overlays "running" itself.
 const (
 	StatusInterrupted = "interrupted"
+	StatusCorrupt     = "corrupt"
 )
 
 var runIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
@@ -49,6 +50,9 @@ type Summary struct {
 	Status     string    `json:"status"`
 	EventCount int       `json:"event_count"`
 	Truncated  bool      `json:"truncated,omitempty"`
+	// Error explains a run that cannot be read or was stopped; Status is
+	// "corrupt" for an unreadable log.
+	Error string `json:"error,omitempty"`
 }
 
 // Record is a fully read run.
@@ -63,8 +67,15 @@ type Record struct {
 type Writer struct {
 	store Store
 	graph []byte
-	file  *os.File
+	file  logFile
 	err   error
+}
+
+// logFile is the part of *os.File the writer needs; a seam for fault injection.
+type logFile interface {
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
 }
 
 // NewWriter returns a Writer that will persist graph (the exact definition
@@ -129,6 +140,11 @@ func (w *Writer) open(first events.Event) error {
 	return nil
 }
 
+// Durability scope: a lifecycle event is fsynced before Append returns, so it
+// survives the process being killed. The run directory entry and graph.yaml are
+// not fsynced, so after power loss a run directory or its graph snapshot can be
+// missing or empty; that is outside this store's guarantee (ADR-0019).
+
 // Close flushes and closes the log. It is safe to call without any Append.
 func (w *Writer) Close() error {
 	if w.file == nil {
@@ -176,6 +192,8 @@ func (s Store) List() ([]Summary, error) {
 		}
 		record, err := s.Read(entry.Name())
 		if err != nil {
+			// Never drop a run silently: an unreadable one is listed as corrupt.
+			out = append(out, Summary{RunID: entry.Name(), Status: StatusCorrupt, Error: err.Error()})
 			continue
 		}
 		out = append(out, record.Summary)
@@ -209,12 +227,15 @@ func (s Store) Read(runID string) (Record, error) {
 	rec := Record{Graph: graph, Summary: Summary{RunID: runID, Status: StatusInterrupted}}
 	reader := bufio.NewReader(f)
 	var lastSequence uint64
+	finished := false
 	for {
 		line, readErr := reader.ReadBytes('\n')
 		complete := len(line) > 0 && line[len(line)-1] == '\n'
 		line = bytes.TrimSpace(line)
 		if len(line) > 0 {
 			var e events.Event
+			// Unmarshal also validates the event envelope and payload, including
+			// the schema version, so an unsupported record is an error here.
 			if err := json.Unmarshal(line, &e); err != nil || string(e.RunID) != runID || e.Sequence <= lastSequence {
 				if readErr == io.EOF && !complete {
 					rec.Summary.Truncated = true
@@ -225,6 +246,12 @@ func (s Store) Read(runID string) (Record, error) {
 				}
 				return Record{}, fmt.Errorf("corrupt event log %s: %w", runID, err)
 			}
+			if len(rec.Events) == 0 && e.Type != events.RunStarted {
+				return Record{}, fmt.Errorf("corrupt event log %s: first event is %q, not run_started", runID, e.Type)
+			}
+			if finished {
+				return Record{}, fmt.Errorf("corrupt event log %s: events after run_finished", runID)
+			}
 			lastSequence = e.Sequence
 			rec.Events = append(rec.Events, e)
 			if rec.Summary.GraphID == "" {
@@ -233,6 +260,7 @@ func (s Store) Read(runID string) (Record, error) {
 			}
 			if p, ok := e.Payload.(events.RunFinishedPayload); ok {
 				rec.Summary.Status = p.Status
+				finished = true
 			}
 		}
 		if readErr != nil {

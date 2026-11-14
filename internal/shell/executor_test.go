@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -651,5 +652,52 @@ func releaseAndWaitForHolder(t *testing.T, ready, release, done string) {
 			return
 		}
 		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func attemptNode(extra map[string]any) graph.NodeDefinition {
+	cfg := map[string]any{"command": "/usr/bin/printenv", "args": []any{"AGENTPLANE_ATTEMPT"}}
+	for k, v := range extra {
+		cfg[k] = v
+	}
+	return graph.NodeDefinition{Type: "shell", Config: cfg, Outputs: map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}}}
+}
+
+// The child must see exactly the attempt number the runtime assigned.
+func TestExecuteNodeAttemptInjectsTheAttemptNumberOnlyForLoopAttempts(t *testing.T) {
+	for _, attempt := range []int{1, 2, 7} {
+		out, err := Executor{}.ExecuteNodeAttempt(context.Background(), "n", attemptNode(nil), nil, nil, attempt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := out["stdout"].AsString(); got != strconv.Itoa(attempt)+"\n" {
+			t.Fatalf("attempt %d: child saw %q", attempt, got)
+		}
+	}
+	// attempt 0 is "not a loop attempt": nothing is injected, printenv exits 1.
+	if _, err := (Executor{}).ExecuteNodeAttempt(context.Background(), "n", attemptNode(nil), nil, nil, 0); err == nil {
+		t.Fatal("a non-loop execution must not receive the variable")
+	}
+}
+
+func TestReservedAttemptVariableIsRejectedEverywhereInAnyCase(t *testing.T) {
+	declared := map[string]graph.PortDefinition{"x": {Type: graph.ValueTypeString}}
+	for name, node := range map[string]graph.NodeDefinition{
+		"env":               attemptNode(map[string]any{"env": map[string]any{"AGENTPLANE_ATTEMPT": "9"}}),
+		"env lower case":    attemptNode(map[string]any{"env": map[string]any{"agentplane_attempt": "9"}}),
+		"env_allowlist":     attemptNode(map[string]any{"env_allowlist": []any{"AGENTPLANE_ATTEMPT"}}),
+		"allowlist mixed":   attemptNode(map[string]any{"env_allowlist": []any{"AgentPlane_Attempt"}}),
+		"input_env mapping": {Type: "shell", Inputs: declared, Config: map[string]any{"command": "/usr/bin/true", "input_env": map[string]any{"x": "AGENTPLANE_ATTEMPT"}}},
+		"input_env mixed":   {Type: "shell", Inputs: declared, Config: map[string]any{"command": "/usr/bin/true", "input_env": map[string]any{"x": "agentplane_attempt"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := Executor{}.ValidateNodeConfig("n", node)
+			if err == nil || !strings.Contains(err.Error(), "reserved") {
+				t.Fatalf("want a 'reserved' error, got %v", err)
+			}
+		})
+	}
+	if err := (Executor{}).ValidateNodeConfig("n", attemptNode(nil)); err != nil {
+		t.Fatalf("an ordinary node was rejected: %v", err)
 	}
 }
