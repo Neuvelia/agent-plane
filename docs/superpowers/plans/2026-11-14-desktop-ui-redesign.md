@@ -8,6 +8,15 @@ ADR-0019, event schema 9) implement today.
 new API field, event, or graph semantic is listed under "Contract gaps" and needs its own feature spec
 (and ADR where AGENTS.md requires one) before implementation.
 
+## 0. Decisions (confirmed by the product owner)
+
+1. **Fonts:** Geist and Geist Mono are bundled locally in `desktop/` (OFL licence file included); no
+   network font loading, CSP stays closed apart from `font-src 'self'`.
+2. **Deferred surfaces:** Projects, Runners, Settings and Docs are deferred. They appear in the Sidebar as
+   greyed-out, non-interactive entries (see 4.2), not as working screens.
+3. **Graph editor:** specified and built as a separate feature (F2.1-F2.4) right after R1/R2.
+4. **Languages:** Polish and English. The UI is localised from the start (see 4.6).
+
 ## 1. Current state
 
 `desktop/` is an Electron shell plus a React renderer (~1,100 lines) with four screens: Runs list, Run
@@ -73,8 +82,9 @@ that implies a cloud account. Showing them would misrepresent a local-first prod
 
 1. **Presentation only.** No scheduling, retry, or state rules in the UI. New numbers are pure functions
    over events or API lists, unit-tested like the reducer.
-2. **No dead UI.** A control exists only when a contract backs it. Missing features show nothing, or a
-   clearly labelled "not available" state, never a fake action.
+2. **No dead actions.** An action exists only when a contract backs it. The only exception is the
+   greyed-out deferred navigation entries (4.2): they are `aria-disabled`, not focusable as links, carry a
+   "Soon" tag, navigate nowhere and trigger nothing.
 3. **Unknown is not zero.** Missing data (tokens, latest event of an unopened run) renders as unknown.
 4. **Offline and sandbox-safe.** Fonts and icons are bundled; CSP stays `default-src 'none'` (no Google
    Fonts link as in the artboards).
@@ -88,6 +98,11 @@ Sidebar (224px)            IconRail (52px, canvas screens)
   Runs         (list)        Graph map
   Approvals    (badge)       Timeline
   New run                    Log
+  -- greyed out, "Soon" --
+  Projects
+  Runners
+  Docs
+  Settings
 ```
 
 Routes (client state, no URL router needed): `dashboard`, `runs`, `run/:id`, `approvals[/:nodeRunId]`,
@@ -108,6 +123,22 @@ lost), which is real state. Search, notifications and account are omitted.
   `DotTimeline`, `IconRail`, `Sidebar`, `TopBar`, plus an inline SVG icon set (solid, 24px grid).
 - Replace `styles.css` with token-based styles; status vocabulary centralised in `status.tsx` (extend the
   existing `NODE`/`RUN` maps with the design's wording, e.g. "Retrying 2/3", "Human", "Waiting for human").
+
+### 4.3a Localisation (PL / EN)
+
+- Add a small dependency-free i18n layer in `desktop/src/i18n/`: typed message catalogues `en.ts` and
+  `pl.ts` (same key set, enforced by a unit test that fails on a missing or extra key), a `t(key, params)`
+  function and Polish plural rules via `Intl.PluralRules`. No i18n framework (dependency policy).
+- Language setting: default from `app.getLocale()` exposed read-only by main, fallback English; a PL/EN
+  switch in the top bar; the choice is kept in renderer `localStorage` (no new preload method, no secrets).
+  Dates, times and numbers use `Intl` with the selected locale.
+- **Not translated, by design:** machine names stay literal (event types, node ids, paths, commands, YAML,
+  run ids, diagnostic codes), as the design system requires. Runtime messages from the sidecar
+  (diagnostic `message`/`suggestion`) arrive in English and are shown as received; only UI chrome is
+  localised.
+- Status vocabulary (4.3) is keyed through the catalogue ("Failed" / "Niepowodzenie" etc.); layouts must
+  tolerate Polish strings being ~20-30% longer (no fixed-width pills or truncated buttons).
+- Greyed-out menu entries and their "Soon" tag are localised too.
 
 ### 4.4 Screens
 
@@ -135,7 +166,7 @@ lost), which is real state. Search, notifications and account are omitted.
 
 | Phase | Content | Depends on contracts? |
 | --- | --- | --- |
-| R0 Foundation | tokens, fonts, primitives, shell (Sidebar/TopBar/IconRail), status vocabulary; existing screens re-hosted unchanged in the new shell | none |
+| R0 Foundation | tokens, local fonts, primitives, shell (Sidebar/TopBar/IconRail, greyed deferred entries), status vocabulary, i18n layer with PL/EN catalogues; existing screens re-hosted in the new shell | none |
 | R1 Re-skin | Run Inspector, Approvals, New run restyled with primitives; node/edge styling; YAML `CodeView` | none |
 | R2 Derived insight | KPIs, DotTimeline, EventLog, Dashboard (Needs attention, Active runs, Outcomes), Handled approvals | pure selectors over events/lists; needs 5.2 if per-run summaries are required |
 | R3 Polish | keyboard navigation, `prefers-reduced-motion`, focus rings per spec, empty/error states, HelpTips copy, docs link stub | none |
@@ -176,6 +207,8 @@ API change to ADR-0019 and should be a tiny spec/ADR amendment. R2 can ship with
 - **Security regression:** assert CSP remains `default-src 'none'` apart from `font-src 'self'`/bundled
   assets, no external requests (fonts bundled), preload surface unchanged, forwarded path allowlist
   unchanged.
+- **i18n:** catalogue key-parity test (en vs pl); plural-form tests for Polish (1 / 2-4 / 5+); e2e smoke in
+  both languages; greyed-out entries are not focusable links and fire no navigation.
 - **Accessibility:** contrast per tokens (design documents 7.3:1 `muted` on `bg`), visible focus ring on
   every control, real `button`/`input` elements, `aria-label` on icon-only buttons, status never colour-only.
 - **Manual:** update `docs/validation/F2.5-desktop-demo.md` with a visual checklist per screen.
@@ -187,29 +220,30 @@ failed, connection lost), Approvals and New run (ready, blocked) are attached to
 
 ## 7. Risks, ambiguities, decisions needed
 
-- **Fonts/dependencies.** Geist is not a system font and CSP forbids the Google Fonts link used in the
-  artboards. Decision: vendor the font files (OFL licence) into `desktop/`, or use a dev-only package such
-  as `@fontsource/geist`. Per the dependency policy this must be explained in the implementing PR
-  (runtime asset, no network, no security impact). Fallback stack stays `ui-sans-serif, system-ui`.
+- **Fonts (decided: local).** Vendor Geist / Geist Mono woff2 files and their OFL licence into
+  `desktop/` (runtime asset, no network, no security impact; note it in the implementing PR). Fallback
+  stack stays `ui-sans-serif, system-ui`. Check that the subset covers Polish diacritics (ą ć ę ł ń ó ś ź ż).
 - **Tokens source of truth.** The design system lives in an artifact; the repo needs a committed copy of
   `tokens.json` (or the generated `tokens.css`) so the build does not depend on it.
-- **Design vs. product scope.** The canvas is cloud-first in places (hosted, accounts, runner fleet). The
-  plan implements the local subset only. Confirm that Projects, Runners, Settings and Docs are deferred.
-- **Graph editor.** The most visible artboard is a feature (F2.1-F2.4), not a restyle. Confirm it should be
-  specified separately, next after R1/R2.
+- **Design vs. product scope (decided).** The canvas is cloud-first in places. The plan implements the
+  local subset; Projects, Runners, Settings and Docs are greyed-out placeholders.
+- **Graph editor (decided).** Separate feature spec (F2.1-F2.4) after R1/R2.
+- **i18n risks.** Strings split across components, plural forms and text overflow are the usual failures;
+  mitigate with the key-parity test, an e2e run in both languages, and no string concatenation for
+  sentences (parameterised messages only).
 - **Derived metrics correctness.** "Node time" and "saved time" are renderer calculations; they must be
   labelled as computed from events and unit-tested, and must not be presented as runtime-authoritative.
 - **Performance.** Event log and timeline over very long runs need bounded buffers (reducer already caps
   node logs at 64 KiB); the EventLog tail and DotTimeline must be bounded the same way.
 - **React Flow styling.** Custom node components must keep node ids and `data-testid`s used by e2e.
-- **Language.** The canvas has Polish labels in one board (`Main`); product UI copy is English per the
-  design system README. Confirm English-only for now.
+- **Language (decided: PL + EN).** Design copy is English; Polish translations need review by the product
+  owner. Sentence-case and "buttons are verbs" rules apply to both languages.
 - **Roadmap hygiene.** Per AGENTS.md, a non-trivial behaviour change needs a feature spec. Before R0 starts,
   add `docs/features/F2.5a-desktop-redesign.md` (from `_template.md`) containing section 6's acceptance
   criteria, and update `desktop/README.md` "Not implemented" once screens land.
 
 ## 8. Immediate next steps
 
-1. Review and confirm the decisions in section 7 (fonts, scope deferrals, English copy).
+1. Decisions in section 0 are confirmed; remaining open items in section 7 are risks, not blockers.
 2. Write `docs/features/F2.5a-desktop-redesign.md` from this plan.
 3. Implement R0 on its own branch/PR, then R1, R2, R3 as separate PRs.
