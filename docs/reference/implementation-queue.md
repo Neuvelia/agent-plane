@@ -1,4 +1,8 @@
-# Implementation queue
+# Historical implementation queue
+
+This archived checklist records the Phase 0 and Phase 1 implementation sequence.
+For current product priorities, use `docs/roadmap.md` and the active feature
+specification. Root `TASKS.md` is now a local, Git-ignored worktree journal.
 
 The ordering below is intentional. Complete one vertical contract before moving to the next.
 

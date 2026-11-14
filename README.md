@@ -160,12 +160,15 @@ lifecycle/evidence remains complete and progress loss is explicit.
 
 ## Current milestone
 
-`TASKS.md` records completed Phase 0 work and the Phase 1 queue. The detailed
-feature catalog is in `docs/reference/full-roadmap-features.md`; an active
-feature needs its own measurable spec under `docs/features/` before coding.
+`docs/roadmap.md` is the current engineering index. The historical Phase 0 and
+Phase 1 checklist is in `docs/reference/implementation-queue.md`. A root
+`TASKS.md`, when present, is a local worktree journal for ongoing agent work.
+The detailed feature catalog is in `docs/reference/full-roadmap-features.md`;
+an active feature needs its own measurable spec under `docs/features/` before
+coding.
 
-Keep Phase 1 work within its active feature spec. The visual IDE, cloud control
-plane, billing, and managed execution remain later roadmap phases.
+Keep each active feature within its own spec. The cloud control plane, billing,
+and managed execution remain later roadmap phases.
 
 ## Working with Codex
 
