@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { listApprovals, listRuns, startRun, validateGraph, type ApiFailure } from './api'
+import { useConnectionReport } from './connection'
+import { EngineErrorState, LoadingState } from './states'
 import { GraphMap } from './GraphMap'
 import { useRunStream, usePoll } from './hooks'
 import { formatDateTime, type Locale } from './i18n'
@@ -18,11 +20,16 @@ import { Button, Card, Field, HelpTip, KPI, ListRow, Pill, SegmentedControl, Ste
 
 export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t, locale } = useI18n()
-  const runs = usePoll(listRuns, [], 1500)
+  const { data: runs, status, retry } = usePoll(listRuns, 1500)
+  useConnectionReport('runs', status === 'error')
   return (
     <section>
       <h1>{t('runs.title')}</h1>
-      {runs.length === 0 ? (
+      {status === 'error' ? (
+        <EngineErrorState onRetry={retry} />
+      ) : !runs ? (
+        <LoadingState />
+      ) : runs.length === 0 ? (
         <div className="empty-state" data-testid="no-runs">
           {t('runs.empty')}
         </div>
@@ -39,11 +46,16 @@ export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
           </thead>
           <tbody>
             {runs.map((r) => (
-              <tr key={r.run_id} onClick={() => onOpen(r.run_id)} data-testid="run-row">
+              <tr key={r.run_id} data-testid="run-row">
                 <td>
                   <RunPill status={r.status} />
                 </td>
-                <td>{r.graph_id}</td>
+                {/* A real button; its ::after stretches over the row so the whole row is clickable. */}
+                <td>
+                  <button type="button" className="row-link" onClick={() => onOpen(r.run_id)} data-testid="run-open">
+                    {r.graph_id}
+                  </button>
+                </td>
                 <td className="mono">{formatDateTime(locale, r.started_at)}</td>
                 <td className="mono">{r.event_count}</td>
                 <td className="mono mu">{r.run_id.slice(0, 8)}</td>
@@ -129,16 +141,13 @@ function EventsCard({ run }: { run: RunView }) {
   )
 }
 
-export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack: () => void; onLost?: (lost: boolean) => void }) {
+export function RunInspector({ runId, onBack }: { runId: string; onBack: () => void }) {
   const { t } = useI18n()
   const { run, graph, yaml, following, notFound, lost, reconnect } = useRunStream(runId)
   const [selected, setSelected] = useState<string | null>(null)
   const [view, setView] = useState<GraphView>('map')
   const isLost = lost !== null
-  useEffect(() => {
-    onLost?.(isLost)
-    return () => onLost?.(false)
-  }, [isLost, onLost])
+  useConnectionReport('run', isLost)
   if (notFound)
     return (
       <section>
@@ -163,7 +172,7 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
       </div>
       {lost && (
         <div className="banner" role="alert" data-testid="connection-lost">
-          <span>{t('run.lostBanner', { message: lost })}</span>
+          <span>{t('run.lostBanner', { message: t(lost === 'storage' ? 'run.lost.storage' : 'run.lost.connection') })}</span>
           <Button onClick={reconnect}>{t('run.reconnect')}</Button>
         </div>
       )}
@@ -207,15 +216,22 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
 
 export function Approvals({ onOpen }: { onOpen: (runId: string) => void }) {
   const { t } = useI18n()
-  const approvals = usePoll(listApprovals, [], 1000)
+  const { data: approvals, status, retry } = usePoll(listApprovals, 1000)
   const [chosen, setChosen] = useState<string | null>(null)
-  if (approvals.length === 0)
+  useConnectionReport('approvals', status === 'error')
+  if (status === 'error' || !approvals || approvals.length === 0)
     return (
       <section>
         <h1>{t('approvals.title')}</h1>
-        <div className="empty-state" data-testid="no-approvals">
-          {t('approvals.empty')}
-        </div>
+        {status === 'error' ? (
+          <EngineErrorState onRetry={retry} />
+        ) : !approvals ? (
+          <LoadingState />
+        ) : (
+          <div className="empty-state" data-testid="no-approvals">
+            {t('approvals.empty')}
+          </div>
+        )}
       </section>
     )
   // Unless the person picked one that is still pending, show the first.
@@ -256,11 +272,13 @@ export function RunConfig({ onStarted, initialPath }: { onStarted: (runId: strin
   const [result, setResult] = useState<{ status: string; diagnostics: Diagnostic[] } | null>(null)
   const [error, setError] = useState<ApiFailure | null>(null)
   const [busy, setBusy] = useState(false)
+  const [validating, setValidating] = useState(false)
 
   async function validate(p = path) {
     setError(null)
     setResult(null)
-    const r = await validateGraph(p)
+    setValidating(true)
+    const r = await validateGraph(p).finally(() => setValidating(false))
     if ('message' in r) setError(r)
     else setResult(r)
   }
@@ -306,7 +324,8 @@ export function RunConfig({ onStarted, initialPath }: { onStarted: (runId: strin
         </Field>
       </Step>
       <Step n={3} title={t('config.step.preflight')} action={<span className="row">{pill}<HelpTip>{t('config.preflightHelp')}</HelpTip></span>} testId="preflight-card">
-        {state === 'idle' && diagnostics.length === 0 && !error && <div className="mu empty-line">{t('config.preflightIdle')}</div>}
+        {validating && <div className="mu empty-line" role="status" data-testid="validating">{t('config.validating')}</div>}
+        {state === 'idle' && !validating && diagnostics.length === 0 && !error && <div className="mu empty-line">{t('config.preflightIdle')}</div>}
         {state === 'ready' && diagnostics.length === 0 && (
           <div className="check-row">
             <Pill tone="p" small>{t('config.ready')}</Pill>

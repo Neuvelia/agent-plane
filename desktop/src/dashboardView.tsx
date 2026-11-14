@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { listApprovals, listRuns } from './api'
 import { activeRuns, ATTENTION_PREVIEW, needsAttention, outcomes } from './dashboard'
+import { useConnectionReport } from './connection'
 import { usePoll } from './hooks'
+import { EngineErrorState, LoadingState } from './states'
 import { formatDateTime } from './i18n'
 import { useI18n } from './i18n/context'
 import { formatDuration } from './insight'
@@ -12,8 +14,12 @@ import { Button, Card, HelpTip, ListRow, Pill } from './ui/primitives'
 /** `nowOverride` exists so stories and tests are deterministic; the app passes nothing. */
 export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride }: { onOpenRun: (id: string) => void; onNewRun: () => void; onOpenGraph: (path: string) => void; onAllRuns: () => void; nowOverride?: Date }) {
   const { t, locale } = useI18n()
-  const runs = usePoll(listRuns, [], 1500)
-  const approvals = usePoll(listApprovals, [], 1000)
+  const polledRuns = usePoll(listRuns, 1500)
+  const polledApprovals = usePoll(listApprovals, 1000)
+  const failed = polledRuns.status === 'error' || polledApprovals.status === 'error'
+  useConnectionReport('dashboard', failed)
+  const runs = polledRuns.data ?? []
+  const approvals = polledApprovals.data ?? []
   const [expanded, setExpanded] = useState(false)
   const now = nowOverride ?? new Date()
   const items = needsAttention(runs, approvals)
@@ -26,6 +32,13 @@ export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOver
     if (picked) onOpenGraph(picked)
   }
 
+  if (failed || !polledRuns.data || !polledApprovals.data)
+    return (
+      <section className="dashboard" data-testid="dashboard">
+        <h1>{t('dash.title')}</h1>
+        {failed ? <EngineErrorState onRetry={() => { polledRuns.retry(); polledApprovals.retry() }} /> : <LoadingState />}
+      </section>
+    )
   return (
     <section className="dashboard" data-testid="dashboard">
       <h1>{t('dash.title')}</h1>

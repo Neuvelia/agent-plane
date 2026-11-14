@@ -128,3 +128,26 @@ export const DashboardNeedsAttention: S = dashboard({
   runs: [run(waitingForHuman, 'running', 'open'), run(demoReject, 'failed', 'end'), run(exhaustedRetries, 'interrupted', 'end', false)],
   approvals: pending,
 })
+
+// Loading and error states of every screen that reads from the engine.
+const hang: BridgeData = { runs: [], hang: true }
+const down: BridgeData = { runs: [], unreachable: true }
+export const RunsListLoading: S = { parameters: { bridge: hang }, render: () => <RunsList onOpen={noop} /> }
+export const RunsListError: S = { parameters: { bridge: down }, render: () => <RunsList onOpen={noop} /> }
+export const DashboardLoading: S = dashboard(hang)
+export const DashboardError: S = dashboard(down)
+export const ApprovalsLoading: S = { parameters: { bridge: hang }, render: () => <Approvals onOpen={noop} /> }
+export const ApprovalsError: S = { parameters: { bridge: down }, render: () => <Approvals onOpen={noop} /> }
+export const NewRunValidating: S = {
+  parameters: { bridge: { runs: [], pickedGraph: '/work/graph.yaml', hang: true } satisfies BridgeData },
+  render: () => <RunConfig onStarted={noop} />,
+  play: choose,
+}
+export const FullAppShellEngineDown: S = {
+  parameters: { bridge: down },
+  render: () => (
+    <div style={{ height: '100vh' }}>
+      <App />
+    </div>
+  ),
+}

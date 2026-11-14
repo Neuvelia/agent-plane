@@ -325,12 +325,13 @@ export function displayStatus(n: NodeView): NodeStatus {
 // classifyEnd interprets why an event stream ended. Only the server's explicit
 // "end" means the run's stored events are complete; anything else is a lost
 // connection, and the UI must say so instead of inventing a run status.
-export type StreamEnd = { kind: 'complete' } | { kind: 'lost'; message: string }
+/** `code` is what the UI translates; `message` is the English text, kept for logs and tests. */
+export type StreamEnd = { kind: 'complete' } | { kind: 'lost'; code: 'storage' | 'connection'; message: string }
 
 export function classifyEnd(reason: string): StreamEnd {
   if (reason === 'end') return { kind: 'complete' }
-  if (reason === 'server_error') return { kind: 'lost', message: 'The engine stopped this run because it could not be stored.' }
-  return { kind: 'lost', message: 'The connection to the engine ended unexpectedly.' }
+  if (reason === 'server_error') return { kind: 'lost', code: 'storage', message: 'The engine stopped this run because it could not be stored.' }
+  return { kind: 'lost', code: 'connection', message: 'The connection to the engine ended unexpectedly.' }
 }
 
 // A run that has no terminal event and is not being followed is interrupted.

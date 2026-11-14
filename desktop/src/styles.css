@@ -115,7 +115,7 @@ textarea{min-height:64px;resize:vertical}
 table.runs{width:100%;border-collapse:collapse}
 .runs th{text-align:left;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 10px;font-weight:500}
 .runs td{padding:10px;border-top:1px solid var(--hairline)}
-.runs tbody tr{cursor:pointer}.runs tbody tr:hover{background:var(--fill-4)}
+.runs tbody tr:hover{background:var(--fill-4)}
 .empty-state{padding:36px;border-radius:var(--radius-16);background:var(--surface);color:var(--muted);text-align:center}
 .inspector{display:flex;flex-direction:column;gap:14px;height:100%}
 .inspector h1{margin:0}
@@ -190,3 +190,15 @@ table.runs{width:100%;border-collapse:collapse}
 .inspector{height:auto;min-height:100%}
 .inspector .split{align-items:start}
 @media (max-width:1100px){.dash-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* R3: skip link, content focus, state messages */
+.skip-link{position:absolute;left:var(--space-8);top:-48px;z-index:100;padding:8px 14px;border-radius:var(--radius-pill);background:linear-gradient(0deg,var(--silver-top),var(--silver-bottom));color:var(--on-silver);font-weight:500;text-decoration:none}
+.skip-link:focus{top:var(--space-8)}
+main:focus{outline:none}
+.empty-state{display:flex;flex-direction:column;align-items:center;gap:var(--space-12)}
+.empty-state.error{background:var(--bad-soft);color:var(--fg)}
+.empty-state.error .mu{margin-top:2px}
+.runs tbody tr{position:relative}
+.row-link{all:unset;cursor:pointer;color:inherit}
+.row-link::after{content:'';position:absolute;inset:0}
+.row-link:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:var(--radius-10)}

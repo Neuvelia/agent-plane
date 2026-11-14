@@ -4,5 +4,10 @@
 
    --bad-text: the design's `bad` (#FF453A) on `bad-soft` (15% red over black)
    measures 4.34:1, and 3.77:1 over `warn-wash`. A lighter red for TEXT on those
-   soft backgrounds passes; the `bad` token itself is still used for fills/dots. */
-:root{--bad-text:#FF6961}
+   soft backgrounds passes; the `bad` token itself is still used for fills/dots.
+
+   --focus: the design's focus ring is `brand` at 60% opacity, which measures 2.6:1
+   against the black ground, below the 3:1 WCAG asks of a focus indicator (1.4.11).
+   The solid `brand` colour (5.6:1 on the ground) is used instead.
+   (Verified by test/contrast.test.ts.) */
+:root{--bad-text:#FF6961;--focus:#0A84FF}

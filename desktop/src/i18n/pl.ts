@@ -61,6 +61,8 @@ export const pl: Record<MessageKey, string> = {
   'run.notFound': 'Tego uruchomienia nie ma w lokalnym magazynie.',
   'run.lostBanner': '{message} Stany węzłów poniżej to ostatnie odebrane zdarzenia, a nie stan bieżący.',
   'run.reconnect': 'Połącz ponownie',
+  'run.lost.connection': 'Połączenie z silnikiem zakończyło się nieoczekiwanie.',
+  'run.lost.storage': 'Silnik zatrzymał to uruchomienie, bo nie udało się go zapisać.',
   'run.summary': 'Podsumowanie uruchomienia',
   'run.summaryHelp': 'Obliczane w tej aplikacji z dziennika zdarzeń, a nie zgłaszane przez silnik. W trakcie uruchomienia kończy się na ostatnim odebranym zdarzeniu; nigdy nie jest ekstrapolowane.',
   'kpi.wall': 'Czas zegarowy',
@@ -161,4 +163,9 @@ export const pl: Record<MessageKey, string> = {
   'settings.languageHelp': 'Język interfejsu. Typy zdarzeń, identyfikatory węzłów, ścieżki i komunikaty silnika nie są tłumaczone.',
   'help.label': 'Pomoc',
   'common.loading': 'Wczytywanie…',
+  'state.errorTitle': 'Brak połączenia z silnikiem',
+  'state.errorBody': 'Lokalny silnik nie odpowiada, więc nic tutaj nie jest aktualne.',
+  'state.retry': 'Spróbuj ponownie',
+  'config.validating': 'Sprawdzanie…',
+  'a11y.skip': 'Przejdź do treści',
 }

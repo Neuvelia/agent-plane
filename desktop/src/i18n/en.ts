@@ -61,6 +61,8 @@ export const en = {
   'run.notFound': 'This run is not in the local store.',
   'run.lostBanner': '{message} Node states below are the last events received, not the current state.',
   'run.reconnect': 'Reconnect',
+  'run.lost.connection': 'The connection to the engine ended unexpectedly.',
+  'run.lost.storage': 'The engine stopped this run because it could not be stored.',
   'run.summary': 'Run summary',
   'run.summaryHelp': 'Computed in this app from the event log, not reported by the engine. While a run is going it stops at the newest event received; it is never extrapolated.',
   'kpi.wall': 'Wall clock',
@@ -161,6 +163,11 @@ export const en = {
   'settings.languageHelp': 'The interface language. Event types, node ids, paths and messages from the engine are never translated.',
   'help.label': 'Help',
   'common.loading': 'Loading…',
+  'state.errorTitle': 'Cannot reach the engine',
+  'state.errorBody': 'The local engine did not answer, so nothing here is current.',
+  'state.retry': 'Retry',
+  'config.validating': 'Validating…',
+  'a11y.skip': 'Skip to content',
 } as const
 
 export type MessageKey = keyof typeof en

@@ -161,6 +161,9 @@ describe('stream end classification', () => {
     }
     const storage = classifyEnd('server_error')
     expect(storage.kind === 'lost' && storage.message).toMatch(/could not be stored/)
+    expect(storage.kind === 'lost' && storage.code).toBe('storage')
+    const dropped = classifyEnd('eof')
+    expect(dropped.kind === 'lost' && dropped.code).toBe('connection')
   })
   it('does not invent a terminal status when the connection is lost mid-run', () => {
     const cut = reduceAll(approve.slice(0, 12))
