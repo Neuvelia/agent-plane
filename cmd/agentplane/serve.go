@@ -62,6 +62,9 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Validate: validateForAPI,
 		Start:    starter(runStore, *concurrency),
 	}
+	if onServe != nil {
+		onServe(server)
+	}
 	tcp, ok := listener.Addr().(*net.TCPAddr)
 	if !ok {
 		return commandError("serve", "error", "internal", errors.New("listener is not TCP"), nil, false, stdout, stderr, exitInternal)
@@ -146,9 +149,16 @@ func starter(runStore store.Store, concurrency int) api.StartFunc {
 			}
 			return err
 		}
-		return result.PersistError
+		if result.PersistError != nil {
+			return &api.StorageError{Err: result.PersistError}
+		}
+		return nil
 	}
 }
+
+// onServe lets tests reach the running server (for example its Hub) without
+// polling HTTP; it is nil in production.
+var onServe func(*api.Server)
 
 // serveExecutor mirrors `run` without an agent adapter: shell, gate and human
 // graphs are served; an agent node fails with the adapter's own error.

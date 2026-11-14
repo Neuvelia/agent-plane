@@ -270,6 +270,10 @@ func (s Store) Read(runID string) (Record, error) {
 			break
 		}
 	}
+	if len(rec.Events) == 0 {
+		// Nothing readable was ever recorded: not a run that can be shown.
+		return Record{}, fmt.Errorf("corrupt event log %s: no readable events", runID)
+	}
 	rec.Summary.EventCount = len(rec.Events)
 	return rec, nil
 }

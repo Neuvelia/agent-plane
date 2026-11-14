@@ -354,7 +354,7 @@ func TestDecisionForAnotherRunNeverRevealsAnEarlierDecision(t *testing.T) {
 func TestUnstorableRunEndsStreamWithErrorAndIsFlagged(t *testing.T) {
 	s, ts := newServer(t, func(_ context.Context, _ string, _ []string, persist func(events.Event) error, _ runtime.DecisionProvider) error {
 		persist(fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}))
-		return errors.New("disk full")
+		return &StorageError{Err: errors.New("disk full")}
 	})
 	w := s.Store.NewWriter([]byte("schema_version: 0\n")) // the store holds the partial log
 	w.Append(fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}))
@@ -395,5 +395,37 @@ func TestListShowsCorruptRunsInsteadOfDroppingThem(t *testing.T) {
 	_, body := do(t, ts, "GET", "/runs", "", true)
 	if !strings.Contains(body, `"status":"corrupt"`) || !strings.Contains(body, runID) {
 		t.Fatalf("%s", body)
+	}
+}
+
+// Only a storage failure may claim "could not be stored"; any other error after
+// a run began is not mislabelled.
+func TestNonStorageFailureAfterStartIsNotFlaggedAsUnstored(t *testing.T) {
+	s, ts := newServer(t, func(_ context.Context, _ string, _ []string, persist func(events.Event) error, _ runtime.DecisionProvider) error {
+		persist(fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}))
+		persist(fakeEvent(2, events.RunFinished, events.RunFinishedPayload{Status: "failed"}))
+		return errors.New("something else broke")
+	})
+	if resp, body := do(t, ts, "POST", "/runs", `{"graph_path":"/x"}`, true); resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	live, _ := s.Hub.Live(runID)
+	<-time.After(0)
+	if live.Err() != "" {
+		t.Fatalf("a non-storage error was reported as a storage failure: %q", live.Err())
+	}
+}
+
+func TestNoNewRunIsAdmittedOnceShutdownBegan(t *testing.T) {
+	started := false
+	s, ts := newServer(t, func(context.Context, string, []string, func(events.Event) error, runtime.DecisionProvider) error {
+		started = true
+		return nil
+	})
+	s.mu.Lock()
+	s.draining = true
+	s.mu.Unlock()
+	if resp, body := do(t, ts, "POST", "/runs", `{"graph_path":"/x"}`, true); resp.StatusCode != http.StatusServiceUnavailable || started {
+		t.Fatalf("%d %s started=%v", resp.StatusCode, body, started)
 	}
 }

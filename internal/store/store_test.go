@@ -260,6 +260,24 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	}
 }
 
+func TestEmptyOrHeaderOnlyLogIsCorruptNotAnInterruptedRun(t *testing.T) {
+	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":9,"type":"run_st`} {
+		t.Run(name, func(t *testing.T) {
+			s := Store{Dir: t.TempDir()}
+			dir := filepath.Join(s.Dir, runA)
+			os.MkdirAll(dir, 0o700)
+			os.WriteFile(filepath.Join(dir, "graph.yaml"), []byte("x"), 0o600)
+			os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(content), 0o600)
+			if _, err := s.Read(runA); err == nil {
+				t.Fatal("a log with no readable event was presented as a run")
+			}
+			if list, _ := s.List(); len(list) != 1 || list[0].Status != StatusCorrupt {
+				t.Fatalf("%+v", list)
+			}
+		})
+	}
+}
+
 func TestListReportsUnreadableRunsAsCorruptWithTheReason(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	write(t, s, runA, started(runA, time.Now().UTC()))

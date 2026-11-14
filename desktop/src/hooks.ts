@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { getRun } from './api'
-import { classifyEnd, initialRun, presentRun, reduce, type RunView } from './reducer'
+import { classifyEnd, initialRun, presentRun, reduce, streamLost, type RunView } from './reducer'
 import type { ApEvent, GraphSummary } from './types'
 
 // usePoll re-reads a list on an interval. It is for lists (runs, approvals),
@@ -86,5 +86,8 @@ export function useRunStream(runId: string): RunStream {
     }
   }, [runId, attempt])
 
-  return { run: presentRun(run, ended, lost !== null), graph, yaml, following: !ended && !lost, notFound, lost, reconnect: () => setAttempt((n) => n + 1) }
+  // Memoized so an unchanged stream keeps the same object and downstream memos hold.
+  const shown = useMemo(() => presentRun(run, ended, lost !== null), [run, ended, lost])
+  const activeLost = streamLost(shown, lost)
+  return { run: shown, graph, yaml, following: !ended && !activeLost, notFound, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
 }

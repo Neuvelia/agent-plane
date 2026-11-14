@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"time"
 
@@ -313,52 +314,41 @@ type persister interface {
 
 var openPersister = func(s store.Store, graph []byte) persister { return s.NewWriter(graph) }
 
-// definitionHoldsSecret compares a secret with the parsed string values of the
-// definition, so YAML escaping, folding or unicode escapes cannot hide it from
-// the byte-level check that guards the stored graph snapshot.
+// definitionHoldsSecret reports whether any string in the parsed definition -
+// values, map keys such as node and port IDs, edge references, bindings - holds
+// the secret. It walks the whole structure by reflection so no field can be
+// forgotten, and it compares parsed values, so YAML escapes, folding and unicode
+// escapes cannot hide a secret from the byte-level check on the stored snapshot.
 func definitionHoldsSecret(def *graph.Definition, secret string) bool {
-	var walk func(v any) bool
-	walk = func(v any) bool {
-		switch x := v.(type) {
-		case string:
-			return strings.Contains(x, secret)
-		case []string:
-			for _, s := range x {
-				if strings.Contains(s, secret) {
+	var walk func(v reflect.Value) bool
+	walk = func(v reflect.Value) bool {
+		switch v.Kind() {
+		case reflect.String:
+			return strings.Contains(v.String(), secret)
+		case reflect.Interface, reflect.Pointer:
+			return !v.IsNil() && walk(v.Elem())
+		case reflect.Slice, reflect.Array:
+			for i := 0; i < v.Len(); i++ {
+				if walk(v.Index(i)) {
 					return true
 				}
 			}
-		case []any:
-			for _, e := range x {
-				if walk(e) {
+		case reflect.Map:
+			for _, k := range v.MapKeys() {
+				if walk(k) || walk(v.MapIndex(k)) {
 					return true
 				}
 			}
-		case map[string]any:
-			for k, e := range x {
-				if strings.Contains(k, secret) || walk(e) {
+		case reflect.Struct:
+			for i := 0; i < v.NumField(); i++ {
+				if v.Type().Field(i).IsExported() && walk(v.Field(i)) {
 					return true
 				}
 			}
-		case graph.NodeConfig:
-			return walk(map[string]any(x))
-		case graph.Metadata:
-			return walk(map[string]any(x))
 		}
 		return false
 	}
-	if strings.Contains(def.ID, secret) || strings.Contains(def.Name, secret) || walk(def.Metadata) {
-		return true
-	}
-	for _, n := range def.Nodes {
-		if walk(n.Config) {
-			return true
-		}
-		if n.Loop != nil && walk(n.Loop.Gate.Config) {
-			return true
-		}
-	}
-	return false
+	return def != nil && walk(reflect.ValueOf(def))
 }
 
 func wantsJSON(args []string) bool {

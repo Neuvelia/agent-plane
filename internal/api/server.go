@@ -30,6 +30,14 @@ type StartError struct {
 
 func (e *StartError) Error() string { return e.Message }
 
+// StorageError wraps a failure to persist a run's events. Only this kind of
+// error marks a started run as "could not be stored"; any other failure after a
+// run began is an ordinary internal error.
+type StorageError struct{ Err error }
+
+func (e *StorageError) Error() string { return e.Err.Error() }
+func (e *StorageError) Unwrap() error { return e.Err }
+
 // StartFunc runs one graph to completion, calling persist for every retained
 // event and decisions for human nodes. It returns an error only if the run did
 // not start (a *StartError) or failed to persist.
@@ -46,9 +54,11 @@ type Server struct {
 	Start    StartFunc
 	Validate ValidateFunc
 
-	baseCtx context.Context
-	addr    string
-	active  sync.WaitGroup // runs started through the API and not yet returned
+	baseCtx  context.Context
+	addr     string
+	active   sync.WaitGroup // runs started through the API and not yet returned
+	mu       sync.Mutex
+	draining bool // set once shutdown begins; no new run may be admitted
 }
 
 // ExpectHost pins the Host header that guard accepts. Serve sets it from the
@@ -82,6 +92,9 @@ func (s *Server) Serve(ctx context.Context, l net.Listener) error {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 		_ = srv.Close()
+		s.mu.Lock()
+		s.draining = true
+		s.mu.Unlock()
 		// Runs were cancelled with ctx; give them a bounded moment to record
 		// their terminal event so a stopped server leaves no half-written run.
 		drained := make(chan struct{})
@@ -271,12 +284,19 @@ func (s *Server) startRun(w http.ResponseWriter, r *http.Request) {
 	// can see is already durable.
 	slot := s.Hub.NewSlot(nil)
 	failed := make(chan error, 1)
+	s.mu.Lock()
+	if s.draining {
+		s.mu.Unlock()
+		writeError(w, http.StatusServiceUnavailable, "shutting_down", "the server is shutting down")
+		return
+	}
 	s.active.Add(1)
+	s.mu.Unlock()
 	go func() {
 		defer s.active.Done()
 		err := s.Start(s.baseCtx, body.GraphPath, body.Inputs, slot.Sink, s.Hub)
-		var se *StartError
-		if err != nil && !errors.As(err, &se) {
+		var storage *StorageError
+		if errors.As(err, &storage) {
 			slot.Fail(err) // a started run that could not be stored is stopped and flagged
 		}
 		failed <- err

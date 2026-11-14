@@ -6,16 +6,20 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"agentplane/internal/api"
 	"agentplane/internal/events"
+	"agentplane/internal/store"
 )
 
 type servedAPI struct {
+	hub         *api.Hub
 	base, token string
 	closeStdin  func()
 	exit        chan int
@@ -31,6 +35,10 @@ func startServe(t *testing.T) *servedAPI {
 	serveStdin = stdinR
 	t.Cleanup(func() { serveStdin = old })
 	exit := make(chan int, 1)
+	hubc := make(chan *api.Hub, 1)
+	oldHook := onServe
+	onServe = func(srv *api.Server) { hubc <- srv.Hub }
+	t.Cleanup(func() { onServe = oldHook })
 	go func() {
 		exit <- runCommand(context.Background(), []string{"serve", "--store-dir", dir}, stdoutW, io.Discard)
 		stdoutW.Close()
@@ -47,7 +55,7 @@ func startServe(t *testing.T) *servedAPI {
 		t.Fatalf("announce %q: %v", line, err)
 	}
 	closed := false
-	s := &servedAPI{base: "http://127.0.0.1:" + itoa(info.Port), token: info.Token, exit: exit, dir: dir, closeStdin: func() {
+	s := &servedAPI{hub: <-hubc, base: "http://127.0.0.1:" + itoa(info.Port), token: info.Token, exit: exit, dir: dir, closeStdin: func() {
 		if !closed {
 			closed = true
 			stdinW.Close()
@@ -91,18 +99,15 @@ func TestServeRunsTheDemoThroughTheAPIAndPersistsIt(t *testing.T) {
 		RunID string `json:"run_id"`
 	}
 	json.Unmarshal([]byte(body), &started)
+	waitForApproval(t, s.hub)
 	var approval struct {
 		Approvals []struct {
 			NodeRunID string `json:"node_run_id"`
 			NodeID    string `json:"node_id"`
 		} `json:"approvals"`
 	}
-	deadline := time.Now().Add(5 * time.Second)
-	for len(approval.Approvals) == 0 && time.Now().Before(deadline) {
-		_, b := s.call(t, "GET", "/approvals", "")
-		json.Unmarshal([]byte(b), &approval)
-		time.Sleep(10 * time.Millisecond)
-	}
+	_, b := s.call(t, "GET", "/approvals", "")
+	json.Unmarshal([]byte(b), &approval)
 	if len(approval.Approvals) != 1 || approval.Approvals[0].NodeID != "approve" {
 		t.Fatalf("no pending approval: %+v", approval)
 	}
@@ -167,6 +172,15 @@ func TestServeRejectsAnInvalidGraphWithDiagnosticsAndStartsNothing(t *testing.T)
 	}
 }
 
+func waitForApproval(t *testing.T, hub *api.Hub) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := hub.WaitPending(ctx, 1); err != nil {
+		t.Fatalf("the run never reached its human node: %v", err)
+	}
+}
+
 func quote(s string) string { b, _ := json.Marshal(s); return string(b) }
 
 // Stopping the server while a run waits for a human must cancel it and leave a
@@ -179,18 +193,7 @@ func TestServeStopWhileWaitingForApprovalCancelsAndFinishesTheRun(t *testing.T) 
 		RunID string `json:"run_id"`
 	}
 	json.Unmarshal([]byte(body), &started)
-	// Wait for the human node to be pending, using the API's own approvals list.
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		_, b := s.call(t, "GET", "/approvals", "")
-		if strings.Contains(b, started.RunID) {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("the run never reached its human node")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	waitForApproval(t, s.hub)
 	// While it waits, the run is reported as running.
 	if _, b := s.call(t, "GET", "/runs", ""); !strings.Contains(b, `"status":"running"`) {
 		t.Fatalf("a waiting run must be listed as running: %s", b)
@@ -210,5 +213,37 @@ func TestServeStopWhileWaitingForApprovalCancelsAndFinishesTheRun(t *testing.T) 
 	_, out, _ := cli(t, "runs", "list", "--store-dir", s.dir, "--json")
 	if !strings.Contains(out, `"status":"cancelled"`) || strings.Contains(out, `"status":"interrupted"`) {
 		t.Fatalf("the cancelled run must have a terminal event: %s", out)
+	}
+}
+
+// With the real starter and a store that cannot be written, the run must not
+// execute any node and the failure must be reported, not swallowed.
+func TestServeWithAnUnwritableStoreRunsNothingAndReportsFailure(t *testing.T) {
+	dir := t.TempDir()
+	stdinR, stdinW := io.Pipe()
+	defer stdinW.Close()
+	old := serveStdin
+	serveStdin = stdinR
+	defer func() { serveStdin = old }()
+	file := filepath.Join(dir, "afile")
+	os.WriteFile(file, []byte("x"), 0o600)
+	srv := &api.Server{Token: "t", Store: store.Store{Dir: filepath.Join(file, "runs")}, Hub: api.NewHub(), Start: starter(store.Store{Dir: filepath.Join(file, "runs")}, 2)}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	marker := filepath.Join(dir, "executed")
+	graph := filepath.Join(dir, "g.yaml")
+	os.WriteFile(graph, []byte("schema_version: 0\nid: g\ninputs: {}\nnodes:\n  touch:\n    type: shell\n    config: {command: /usr/bin/touch, args: ["+quote(marker)+"]}\nedges: []\noutputs: {}\n"), 0o600)
+	req, _ := http.NewRequest("POST", ts.URL+"/runs", strings.NewReader(`{"graph_path":`+quote(graph)+`}`))
+	req.Header.Set("Authorization", "Bearer t")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("status %d, want 500: the run could not be stored", resp.StatusCode)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a node executed although its run could not be stored")
 	}
 }

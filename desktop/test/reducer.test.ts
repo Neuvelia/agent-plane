@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import approveEvents from './fixtures/demo-approve.json'
 import rejectEvents from './fixtures/demo-reject.json'
-import { MAX_LOG_CHARS, classifyEnd, displayStatus, initialRun, nodeView, pendingApprovals, presentRun, reduce, reduceAll, settle } from '../src/reducer'
+import { MAX_LOG_CHARS, classifyEnd, streamLost, displayStatus, initialRun, nodeView, pendingApprovals, presentRun, reduce, reduceAll, settle } from '../src/reducer'
 import type { ApEvent } from '../src/types'
 
 // Both fixtures are real event streams recorded from `agentplane run
@@ -137,6 +137,17 @@ describe('reducer properties', () => {
       state = reduce(state, { ...base, sequence: i, payload: { stream: 'stdout', data: big } })
     }
     expect(state.nodes[base.node_id!]!.log.length).toBe(MAX_LOG_CHARS)
+  })
+})
+
+describe('lost connection after the run already finished', () => {
+  it('is not reported once the terminal event was received', () => {
+    expect(streamLost(reduceAll(approve), 'dropped')).toBeNull()
+    expect(streamLost(reduceAll(reject), 'dropped')).toBeNull()
+  })
+  it('is reported while the run is still open', () => {
+    expect(streamLost(reduceAll(approve.slice(0, 12)), 'dropped')).toBe('dropped')
+    expect(streamLost(reduceAll(approve.slice(0, 12)), null)).toBeNull()
   })
 })
 

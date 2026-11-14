@@ -278,6 +278,13 @@ export function presentRun(run: RunView, endedNormally: boolean, lost: boolean):
   return settle(run, !endedNormally || lost)
 }
 
+// streamLost is the lost-connection message worth showing, or null. Once the
+// reduced events contain the run's terminal event there is nothing left to
+// follow, so a later drop (before the server's end marker) is not a problem.
+export function streamLost(run: RunView, lost: string | null): string | null {
+  return run.status === 'running' ? lost : null
+}
+
 export function pendingApprovals(run: RunView): NodeView[] {
   return run.order.map((id) => run.nodes[id]!).filter((n) => n.status === 'waiting_human')
 }

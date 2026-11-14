@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"time"
 )
 
 func TestLiveEventsRemainPrefixAfterCancellationDropsAnEvent(t *testing.T) {
@@ -189,16 +190,20 @@ func TestBlockedPersistSinkDelaysLaterAppendsAndKeepsOrder(t *testing.T) {
 		return nil
 	})
 	done := make(chan struct{}, 2)
+	secondCalling := make(chan struct{})
 	go func() { c.Append(Event{Type: RunStarted, Payload: RunStartedPayload{}}); done <- struct{}{} }()
 	<-entered
 	go func() {
+		close(secondCalling) // the second Append is about to be issued
 		c.Append(Event{Type: NodeReady, NodeID: "n", NodeRunID: "nr", Payload: NodeReadyPayload{}})
 		done <- struct{}{}
 	}()
+	<-secondCalling
+	// Bounded absence check: neither Append may finish while the sink blocks.
 	select {
 	case <-done:
 		t.Fatal("an Append completed while the sink was blocked")
-	default:
+	case <-time.After(100 * time.Millisecond):
 	}
 	close(release)
 	<-done

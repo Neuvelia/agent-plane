@@ -209,6 +209,45 @@ outputs: {}
 	}
 }
 
+// The secret check must cover every string in the definition, including map
+// keys: a node ID is copied into every event of the run.
+func TestSecretHiddenInNodeIDOrPortNameIsRefusedForStorage(t *testing.T) {
+	t.Setenv("AP_ID_SECRET", "secretnodeid")
+	for name, doc := range map[string]string{
+		"escaped node id":     "schema_version: 0\nid: g\ninputs: {}\nnodes:\n  \"\\x73ecretnodeid\":\n    type: shell\n    config: {command: /usr/bin/true}\nedges: []\noutputs: {}\n",
+		"escaped output port": "schema_version: 0\nid: g\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    outputs: {\"\\x73ecretnodeid\": {type: string}}\nedges: []\noutputs: {}\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if strings.Contains(doc, "secretnodeid") {
+				t.Fatal("test graph must hide the secret from a byte search")
+			}
+			dir := t.TempDir()
+			graph := filepath.Join(t.TempDir(), "g.yaml")
+			os.WriteFile(graph, []byte(doc), 0o600)
+			code, _, errout := cli(t, "run", graph, "--redact-env", "AP_ID_SECRET", "--store-dir", dir)
+			if code != 3 || !strings.Contains(errout, "redact-env") {
+				t.Fatalf("code=%d stderr=%s", code, errout)
+			}
+			if entries, _ := os.ReadDir(dir); len(entries) != 0 {
+				t.Fatalf("nothing may be stored: %v", entries)
+			}
+		})
+	}
+}
+
+func TestDefinitionHoldsSecretHasNoFalsePositiveOnCleanGraphs(t *testing.T) {
+	def, err := readDefinition(demoGraphPath(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if definitionHoldsSecret(def, "definitely-not-in-the-demo-graph") {
+		t.Fatal("false positive")
+	}
+	if !definitionHoldsSecret(def, "flaky-ready") { // a real value from the demo gate
+		t.Fatal("the walk missed a string it must see")
+	}
+}
+
 // failingPersister succeeds for the first n events, then fails like a full disk.
 type failingPersister struct {
 	n, seen int
@@ -263,6 +302,32 @@ func TestPersistFailureStillReportsTheRunResultAndExitsOne(t *testing.T) {
 	}
 	if !fp.closed {
 		t.Fatal("the writer must be closed after a failure")
+	}
+}
+
+// Pinned choice: a persistence failure is exit 1 even when the run itself failed
+// or was cancelled, because the run cannot be trusted to be on disk. The JSON
+// status still says what the run did.
+func TestPersistFailureKeepsTheRunStatusButExitsOneForAFailedRun(t *testing.T) {
+	withFailingStore(t, 4)
+	code, out, _ := cli(t, "run", demoGraphPath(t), "--reject", "approve", "--store-dir", t.TempDir(), "--json")
+	if code != 1 {
+		t.Fatalf("code=%d, want 1", code)
+	}
+	var doc struct {
+		Status  string `json:"status"`
+		Failure struct {
+			Kind string `json:"kind"`
+		} `json:"failure"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(out), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Status != "failed" || doc.Failure.Kind != "rejected" || !strings.Contains(doc.Error.Message, "not persisted") {
+		t.Fatalf("%+v", doc)
 	}
 }
 
