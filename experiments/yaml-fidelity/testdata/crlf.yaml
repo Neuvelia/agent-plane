@@ -1,0 +1,55 @@
+schema_version: 0
+id: hello-parallel
+name: Hello Parallel
+
+inputs: {}
+
+nodes:
+  left:
+    type: shell
+    config:
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, left]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+    outputs:
+      stdout:
+        type: string
+
+  right:
+    type: shell
+    config:
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, right]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+    outputs:
+      stdout:
+        type: string
+
+  merge:
+    type: shell
+    inputs:
+      left_text:
+        type: string
+      right_text:
+        type: string
+    config:
+      command: go
+      args: [run, ./.agents/graphs/phase0-helper.go, join]
+      env_allowlist: [GOCACHE, HOME, XDG_CACHE_HOME, USERPROFILE, LOCALAPPDATA, APPDATA, TMPDIR, TEMP, TMP]
+      env: {GOTOOLCHAIN: local, GOPROXY: "off"}
+      input_env: {left_text: LEFT_TEXT, right_text: RIGHT_TEXT}
+    outputs:
+      stdout:
+        type: string
+
+edges:
+  - from: left.outputs.stdout
+    to: merge.inputs.left_text
+  - from: right.outputs.stdout
+    to: merge.inputs.right_text
+
+outputs:
+  result:
+    from: merge.outputs.stdout
