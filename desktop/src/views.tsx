@@ -9,10 +9,11 @@ import { nodeView, displayStatus } from './reducer'
 import { RunPill } from './status'
 import type { Diagnostic } from './types'
 import { CodeView } from './ui/data'
-import { Button, Field, Pill, Tag } from './ui/primitives'
+import { canStart, preflightState } from './preflight'
+import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
 
-// R0 re-hosts the F2.5 screens in the new shell. Their behaviour is unchanged;
-// R1 redesigns them.
+// R1: Run Inspector, Approvals and New run on the design system. Behaviour and
+// data are unchanged from F2.5; the Dashboard is redesigned in R2.
 
 export function Dashboard({ onOpen }: { onOpen: (id: string) => void }) {
   const { t, locale } = useI18n()
@@ -54,11 +55,13 @@ export function Dashboard({ onOpen }: { onOpen: (id: string) => void }) {
   )
 }
 
+export type GraphView = 'map' | 'yaml' | 'split'
+
 export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack: () => void; onLost?: (lost: boolean) => void }) {
   const { t } = useI18n()
   const { run, graph, yaml, following, notFound, lost, reconnect } = useRunStream(runId)
   const [selected, setSelected] = useState<string | null>(null)
-  const [showYaml, setShowYaml] = useState(false)
+  const [view, setView] = useState<GraphView>('map')
   const isLost = lost !== null
   useEffect(() => {
     onLost?.(isLost)
@@ -73,6 +76,7 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
     )
   const waiting = run.order.filter((id) => displayStatus(nodeView(run, id)) === 'waiting_human')
   const focus = selected ?? waiting[0] ?? run.order.find((id) => nodeView(run, id).status === 'failed') ?? null
+  const map = graph ? <GraphMap graph={graph} run={run} selected={focus} onSelect={setSelected} /> : <div className="empty-state">{t('run.loadingGraph')}</div>
   return (
     <section className="inspector">
       <div className="row between">
@@ -83,10 +87,7 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
           {following && run.status === 'running' && <span className="mu">{t('status.live')}</span>}
           {run.failureKind && <Tag>{run.failureKind}</Tag>}
         </div>
-        <div className="row">
-          <span className="mono mu" data-testid="event-count">{t('run.events', { count: run.eventCount })}</span>
-          <Button onClick={() => setShowYaml((v) => !v)}>{showYaml ? t('run.mapView') : t('run.yamlView')}</Button>
-        </div>
+        <span className="mono mu" data-testid="event-count">{t('run.events', { count: run.eventCount })}</span>
       </div>
       {lost && (
         <div className="banner" role="alert" data-testid="connection-lost">
@@ -95,16 +96,31 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
         </div>
       )}
       <div className="split">
-        <div className="main">
-          {showYaml ? (
-            <CodeView text={yaml} testId="graph-yaml" />
-          ) : graph ? (
-            <GraphMap graph={graph} run={run} selected={focus} onSelect={setSelected} />
-          ) : (
-            <div className="empty-state">{t('run.loadingGraph')}</div>
-          )}
-        </div>
-        <NodePanel run={run} nodeId={focus} lost={lost !== null} />
+        <Card
+          title={t('run.liveGraph')}
+          testId="graph-card"
+          action={
+            <span className="row">
+              <SegmentedControl
+                label={t('run.view')}
+                value={view}
+                onChange={setView}
+                segments={[
+                  { value: 'map', label: t('run.view.map'), testId: 'view-map' },
+                  { value: 'yaml', label: t('run.view.yaml'), testId: 'view-yaml' },
+                  { value: 'split', label: t('run.view.split'), testId: 'view-split' },
+                ]}
+              />
+              <HelpTip>{t('run.liveGraphHelp')}</HelpTip>
+            </span>
+          }
+        >
+          <div className={`graph-body view-${view}`}>
+            {view !== 'yaml' && <div className="graph-map">{map}</div>}
+            {view !== 'map' && <CodeView text={yaml} testId="graph-yaml" label={t('run.view.yaml')} />}
+          </div>
+        </Card>
+        <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} />
       </div>
     </section>
   )
@@ -113,27 +129,46 @@ export function RunInspector({ runId, onBack, onLost }: { runId: string; onBack:
 export function Approvals({ onOpen }: { onOpen: (runId: string) => void }) {
   const { t } = useI18n()
   const approvals = usePoll(listApprovals, [], 1000)
-  return (
-    <section>
-      <h1>{t('approvals.title')}</h1>
-      {approvals.length === 0 ? (
+  const [chosen, setChosen] = useState<string | null>(null)
+  if (approvals.length === 0)
+    return (
+      <section>
+        <h1>{t('approvals.title')}</h1>
         <div className="empty-state" data-testid="no-approvals">
           {t('approvals.empty')}
         </div>
-      ) : (
-        approvals.map((a) => (
-          <div className="card" key={a.node_run_id} data-testid="approval-card">
-            <div className="row between">
-              <b>{a.node_id}</b>
-              <Button onClick={() => onOpen(a.run_id)}>{t('approval.openRun')}</Button>
-            </div>
-            <ApprovalBox runId={a.run_id} nodeRunId={a.node_run_id} prompt={a.prompt} context={a.context} />
-          </div>
-        ))
-      )}
+      </section>
+    )
+  // Unless the person picked one that is still pending, show the first.
+  const current = approvals.find((a) => a.node_run_id === chosen) ?? approvals[0]!
+  return (
+    <section>
+      <h1>{t('approvals.title')}</h1>
+      <div className="approvals-grid">
+        <Card title={t('approvals.inbox')} subtitle={t('approvals.pendingCount', { count: approvals.length })} action={<HelpTip>{t('approvals.inboxHelp')}</HelpTip>} testId="approvals-inbox">
+          {approvals.map((a) => (
+            <ListRow key={a.node_run_id} selected={a.node_run_id === current.node_run_id} onClick={() => setChosen(a.node_run_id)} testId="approval-row">
+              <Pill tone="w" small>{t('status.approval.pending')}</Pill>
+              <span style={{ flex: 1 }}>{a.node_id}</span>
+              <span className="mono mu">{a.run_id.slice(0, 8)}</span>
+            </ListRow>
+          ))}
+        </Card>
+        <Card
+          key={current.node_run_id}
+          title={current.node_id}
+          subtitle={t('approvals.run', { id: current.run_id.slice(0, 8) })}
+          action={<Button size="sm" onClick={() => onOpen(current.run_id)}>{t('approval.openRun')}</Button>}
+          testId="approval-card"
+        >
+          <ApprovalBox runId={current.run_id} nodeRunId={current.node_run_id} prompt={current.prompt} context={current.context} />
+        </Card>
+      </div>
     </section>
   )
 }
+
+const SEVERITY_TONE: Record<string, 'x' | 'w' | 'n'> = { error: 'x', warning: 'w' }
 
 export function RunConfig({ onStarted }: { onStarted: (runId: string) => void }) {
   const { t } = useI18n()
@@ -166,33 +201,51 @@ export function RunConfig({ onStarted }: { onStarted: (runId: string) => void })
     if ('message' in r) setError(r)
     else onStarted(r.runId)
   }
-  const blocked = !result || result.status !== 'valid'
+  const state = preflightState(result)
   const diagnostics = [...(result?.diagnostics ?? []), ...(error?.diagnostics ?? [])]
+  const pill = state === 'ready' ? <Pill tone="p" testId="preflight-status">{t('config.ready')}</Pill> : state === 'warnings' ? <Pill tone="w" testId="preflight-status">{t('config.warnings')}</Pill> : state === 'blocked' ? <Pill tone="x" testId="preflight-status">{t('config.blocked')}</Pill> : null
   return (
     <section className="config">
       <h1>{t('config.title')}</h1>
-      <Field label={t('config.graphFile')} htmlFor="graph-path">
-        <div className="row">
-          <input id="graph-path" data-testid="graph-path" value={path} placeholder="/path/to/graph.yaml" onChange={(e) => { setPath(e.target.value); setResult(null) }} />
-          <Button data-testid="choose" onClick={choose}>{t('config.choose')}</Button>
-          <Button data-testid="validate" disabled={!path} onClick={() => validate()}>{t('config.validate')}</Button>
-        </div>
-      </Field>
-      <Field label={t('config.inputs')} htmlFor="inputs">
-        <textarea id="inputs" value={inputs} onChange={(e) => setInputs(e.target.value)} />
-      </Field>
+      <Step n={1} title={t('config.step.graph')}>
+        <Field label={t('config.graphFile')} htmlFor="graph-path">
+          <div className="row">
+            <input id="graph-path" data-testid="graph-path" value={path} placeholder="/path/to/graph.yaml" onChange={(e) => { setPath(e.target.value); setResult(null) }} />
+            <Button data-testid="choose" onClick={choose}>{t('config.choose')}</Button>
+            <Button data-testid="validate" disabled={!path} onClick={() => validate()}>{t('config.validate')}</Button>
+          </div>
+        </Field>
+      </Step>
+      <Step n={2} title={t('config.step.inputs')}>
+        <Field label={t('config.inputs')} htmlFor="inputs">
+          <textarea id="inputs" value={inputs} onChange={(e) => setInputs(e.target.value)} />
+        </Field>
+      </Step>
+      <Step n={3} title={t('config.step.preflight')} action={<span className="row">{pill}<HelpTip>{t('config.preflightHelp')}</HelpTip></span>} testId="preflight-card">
+        {state === 'idle' && diagnostics.length === 0 && !error && <div className="mu empty-line">{t('config.preflightIdle')}</div>}
+        {state === 'ready' && diagnostics.length === 0 && (
+          <div className="check-row">
+            <Pill tone="p" small>{t('config.ready')}</Pill>
+            <span>{t('config.graphValid')}</span>
+          </div>
+        )}
+        {error && <div className="err empty-line">{error.message}</div>}
+        {diagnostics.map((d, i) => (
+          <div className="check-row diag" key={i} data-testid="diagnostic">
+            <Pill tone={SEVERITY_TONE[d.severity] ?? 'n'} small>{d.severity === 'error' || d.severity === 'warning' ? t(`config.severity.${d.severity}`) : t('config.severity.info')}</Pill>
+            <div className="check-text">
+              <div>
+                <b className="mono">{d.code}</b> {d.message}
+                {d.location?.node_id && <> <Tag>{d.location.node_id}</Tag></>}
+              </div>
+              {d.suggestion && <div className="mu">{d.suggestion}</div>}
+            </div>
+          </div>
+        ))}
+      </Step>
       <div className="row">
-        <Button variant="primary" data-testid="run" disabled={blocked || busy} onClick={run}>{t('config.run')}</Button>
-        {result && <Pill tone={result.status === 'valid' ? 'p' : 'x'} testId="preflight-status">{result.status === 'valid' ? t('config.ready') : t('config.blocked')}</Pill>}
+        <Button variant="primary" data-testid="run" disabled={!canStart(state) || busy} onClick={run}>{t('config.run')}</Button>
       </div>
-      {error && <div className="err">{error.message}</div>}
-      {diagnostics.map((d, i) => (
-        <div className={`diag ${d.severity}`} key={i}>
-          <b>{d.code}</b> {d.message}
-          {d.location?.node_id && <Tag>{d.location.node_id}</Tag>}
-          {d.suggestion && <div className="mu">{d.suggestion}</div>}
-        </div>
-      ))}
     </section>
   )
 }

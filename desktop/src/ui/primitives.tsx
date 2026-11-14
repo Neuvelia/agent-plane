@@ -42,6 +42,7 @@ export function Button({ variant = 'default', size = 'md', className = '', type 
 export interface Segment<T extends string> {
   value: T
   label: ReactNode
+  testId?: string
 }
 
 /** A pill-shaped single-choice control. Native buttons: Tab moves between segments, Enter/Space picks one. */
@@ -49,7 +50,7 @@ export function SegmentedControl<T extends string>({ value, onChange, segments, 
   return (
     <div className="seg" role="group" aria-label={label}>
       {segments.map((s) => (
-        <button key={s.value} type="button" aria-pressed={s.value === value} onClick={() => onChange(s.value)}>
+        <button key={s.value} type="button" aria-pressed={s.value === value} onClick={() => onChange(s.value)} data-testid={s.testId}>
           {s.label}
         </button>
       ))}
@@ -101,5 +102,39 @@ export function Field({ label, htmlFor, children }: { label: ReactNode; htmlFor:
       </label>
       {children}
     </div>
+  )
+}
+
+/** A numbered step of a form: a card whose title carries its number. */
+export function Step({ n, title, action, children, testId }: { n: number; title: ReactNode; action?: ReactNode; children?: ReactNode; testId?: string }) {
+  return (
+    <Card
+      testId={testId}
+      title={
+        <span className="step-title">
+          <span className="step-no" aria-hidden="true">
+            {n}
+          </span>
+          {title}
+        </span>
+      }
+      action={action}
+    >
+      {children}
+    </Card>
+  )
+}
+
+/** Label/value rows. Values are machine output (ids, paths): shown literally, in mono. */
+export function KeyValue({ rows }: { rows: { name: string; value: ReactNode }[] }) {
+  return (
+    <dl className="kv">
+      {rows.map((r) => (
+        <div key={r.name}>
+          <dt className="mu mono">{r.name}</dt>
+          <dd className="mono">{r.value}</dd>
+        </div>
+      ))}
+    </dl>
   )
 }

@@ -24,6 +24,22 @@ const inspector = (events: ApEvent[], status: string, ending: StreamEnding, demo
 export const InspectorRunning: S = inspector(runningParallel, 'running', 'open')
 export const InspectorWaitingForHuman: S = inspector(waitingForHuman, 'running', 'open')
 export const InspectorSucceeded: S = inspector(demoApprove, 'succeeded', 'end')
+const clickTestId = (id: string): S['play'] => async ({ canvasElement }) => {
+  await new Promise((r) => setTimeout(r, 100))
+  canvasElement.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)?.click()
+  await new Promise((r) => setTimeout(r, 100))
+}
+export const InspectorYamlView: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: clickTestId('view-yaml') }
+export const InspectorSplitView: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: clickTestId('view-split') }
+export const InspectorFirstAttempt: S = {
+  ...inspector(demoApprove, 'succeeded', 'end'),
+  play: async (ctx) => {
+    await new Promise((r) => setTimeout(r, 300))
+    ctx.canvasElement.querySelector<HTMLButtonElement>('[data-testid="node-flaky"]')?.click()
+    await new Promise((r) => setTimeout(r, 100))
+    await clickTestId('attempt-tab-1')!(ctx)
+  },
+}
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
 export const InspectorConnectionLost: S = inspector(waitingForHuman, 'running', 'lost')

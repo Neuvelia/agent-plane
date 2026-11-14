@@ -54,6 +54,14 @@ export function VerdictPill({ verdict }: { verdict: string }) {
   return <Pill tone={tone}>{t(key)}</Pill>
 }
 
+/** A human gate's decision (machine values "approved" / "rejected") or its pending state. */
+export function ApprovalPill({ decision }: { decision?: string }) {
+  const { t } = useI18n()
+  if (decision === 'approved') return <Pill tone="p">{t('status.approval.approved')}</Pill>
+  if (decision === 'rejected') return <Pill tone="x">{t('status.approval.rejected')}</Pill>
+  return <Pill tone="w">{t('status.approval.pending')}</Pill>
+}
+
 export function OutcomePill({ outcome }: { outcome?: string }) {
   const { t } = useI18n()
   if (!outcome) return <Pill tone="b">{t('status.inProgress')}</Pill>

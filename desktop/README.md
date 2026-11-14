@@ -75,9 +75,10 @@ a dev dependency and is never part of the packaged app.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 
-R0 of the redesign (F2.5a) provides the shell, design tokens, primitives, Storybook
-and PL/EN localisation; the screens below are re-hosted in it and are redesigned in
-R1-R2.
+F2.5a R0 provides the shell, design tokens, primitives, Storybook and PL/EN
+localisation. R1 redesigns Run Inspector (live graph card with Map / YAML / Split,
+node detail with one attempt shown at a time), Approvals (inbox and review panes)
+and New run (graph, inputs, preflight steps). The Dashboard is redesigned in R2.
 
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,

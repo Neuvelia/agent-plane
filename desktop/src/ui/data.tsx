@@ -2,10 +2,11 @@ import type { ReactNode } from 'react'
 import type { Tone } from './primitives'
 
 /** Read-only YAML view with line numbers. The text is rendered as text, never as HTML. */
-export function CodeView({ text, testId }: { text: string; testId?: string }) {
+export function CodeView({ text, testId, label }: { text: string; testId?: string; label?: string }) {
   const lines = text.replace(/\n$/, '').split('\n')
   return (
-    <pre className="code" data-testid={testId}>
+    // Scrollable: focusable (and named) so keyboard users can scroll it.
+    <pre className="code" data-testid={testId} tabIndex={0} role="region" aria-label={label ?? 'code'}>
       {lines.map((line, i) => (
         <span className="code-line" key={i}>
           <span className="code-no">{i + 1}</span>
