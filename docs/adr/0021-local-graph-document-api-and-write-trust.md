@@ -1,0 +1,148 @@
+# ADR-0021 - Local graph document API and write trust
+
+**Status:** proposed
+**Date:** 2026-11-14
+
+## Context
+
+The editor must open, validate, edit and save graph files through the local sidecar. Today the loopback API
+has `POST /graphs/validate {path}` and run start with `graph_path`; neither writes. ADR-0019 states that
+`graph_path` is read with the user's own permissions and that the desktop may send a typed path, because the
+person at the keyboard chooses which graph to execute.
+
+Writing changes the threat model. The renderer is sandboxed but is the component that renders untrusted
+text (graph prompts, log output, diagnostics). If it is compromised, a write endpoint that accepts a
+renderer-supplied path lets it overwrite any `*.yml` the user can write, for example a CI workflow, which
+is code execution elsewhere. AGENTS.md security rules: treat paths as untrusted, do not silently widen
+filesystem permissions.
+
+Also verified: `desktop/electron/main.cjs` forwards any renderer request matching
+`^/(runs|approvals|graphs)(/|$)`, so any route added under `/graphs/` would be reachable from the renderer.
+
+Validation is also incomplete today: `serve` and `agentplane graph validate` call only `graph.Validate`; shell,
+gate and agent config errors surface only when a run starts (executors' `ValidateNodeConfig`).
+
+## Decision
+
+1. **Writes are capabilities, not paths.** The main process owns file choice. New preload methods
+   `openGraph()` and `newGraph()` show native dialogs in main. Main canonicalises the chosen path, registers
+   it with the sidecar as a **grant** (`POST /graphs/grants`) and returns to the renderer only an opaque
+   `grant` id (128 random bits), a display label (the file name) and, for open, the document. The renderer
+   addresses a graph by grant and never learns or supplies its path.
+2. **The forwarding rule becomes an exact allowlist.** Main forwards, from the renderer, only
+   `/runs`, `/runs/{id}`, `/runs/{id}/events`, `/runs/{id}/decisions/{id}`, `/approvals`,
+   `/graphs/validate`, `/graphs/open`, `/graphs/edit`, `/graphs/save` and `/graphs/stat`. `/graphs/grants`
+   and any later administrative route are **never** forwarded. A test asserts the renderer cannot reach
+   `/graphs/grants`.
+3. **Grants are session-scoped and bounded.** They live in sidecar memory, die with the process, are limited
+   in number (256), and are revoked when the document is closed. A recent-graphs list is kept by main in user
+   data (paths and labels); selecting a recent entry makes main issue a fresh grant from its own stored
+   path. The renderer receives labels and recent ids, not paths.
+4. **Endpoints** (loopback, bearer token, Host check and no CORS as before; no new listener):
+
+   | Endpoint | Purpose |
+   | --- | --- |
+   | `POST /graphs/grants` | main only: register a canonical path; returns the grant |
+   | `POST /graphs/open {grant}` | source text, source hash (sha256 of the bytes), typed definition DTO, semantic version, diagnostics (graph and node config), field descriptors for the node types in use |
+   | `POST /graphs/stat {grant}` | current hash and size, cheap, for change detection |
+   | `POST /graphs/edit {grant, base_hash, ops}` | apply ADR-0020 operations to the stored text; returns the new text, definition, version and diagnostics; **does not write** |
+   | `POST /graphs/validate {text}` or `{grant}` | validate unsaved text or a granted file; `{path}` stays for compatibility |
+   | `PUT /graphs/save {grant, base_hash, text}` | atomic write; 409 if the file changed since `base_hash` |
+
+5. **Save semantics.** The sidecar requires the grant to exist, the extension to be `.yaml` or `.yml`, the
+   target to be a regular file or absent in an existing directory, and the final path component not to be a
+   symlink; it re-resolves the directory on every save and refuses if it changed. It writes a temporary file
+   in the same directory, fsyncs it, renames it over the target and fsyncs the directory. File mode is
+   preserved; a new file gets 0644 (graph files are meant to be committed). `base_hash` is required to
+   overwrite; `null` means create-if-absent and fails with 409 if the file exists. On any failure the old
+   file is untouched. One save at a time per grant.
+6. **Limits.** Graph documents up to 1 MiB (the 64 KiB cap stays for every other body), at most 500
+   operations per edit request, text must be valid UTF-8 without NUL. Limits are explicit errors.
+7. **One validation path.** The API's validation runs `graph.Validate` **and** the executors'
+   side-effect-free `ValidateNodeConfig` for shell, gate and agent nodes (human nodes are already checked by
+   `graph.Validate`). `agentplane graph validate` and `serve` share that function, so every CLI diagnostic has an
+   API counterpart and the UI shows what `agentplane run` would report at start. Diagnostics keep their
+   shape: `severity`, `code`, `message`, `location` (node id, edge index, binding index, path),
+   `suggestion`.
+8. **Typed document model, not a UI invention.** The API returns an explicit DTO with JSON tags (separate
+   from runtime types) and **field descriptors** per node type, generated from the same Go definitions the
+   executors validate against (key, type, required, allowed values, nesting for gate kinds and the loop).
+   Forms render descriptors; unknown config keys are preserved and shown in an "Advanced" view. Exact shapes
+   are fixed in the F2.2 spec.
+9. **Run start is unchanged and its exposure is stated, not widened.** `POST /runs` keeps accepting
+   `graph_path` (typed or picked), as ADR-0019 decided. A compromised renderer can therefore already ask the
+   sidecar to run any graph file the user can read. This ADR does not widen that: because writes are
+   grant-only, the renderer cannot create a new graph to run. Moving run start to grants is a recommended
+   follow-up (it would remove the typed-path box on New run) and is deliberately not part of this ADR.
+10. **Run uses saved bytes.** The editor offers "Save and run"; a run never reads unsaved editor state.
+
+## Alternatives considered
+
+### A. Keep renderer-supplied paths and rely on sidecar checks
+
+Pros:
+
+- No preload change; consistent with ADR-0019's reading.
+
+Cons:
+
+- The extension and symlink checks do not stop overwriting an arbitrary `.yml` (CI workflows, other tools'
+  config). A compromised renderer becomes an arbitrary-file-write primitive. Rejected for writes.
+
+### B. The sidecar shows the file dialog
+
+Pros:
+
+- Grants would not need a main-to-sidecar registration step.
+
+Cons:
+
+- The sidecar is a headless Go process with no UI; it would need a GUI dependency. Rejected.
+
+### C. Rely on an OS-level sandbox for the renderer and sidecar
+
+Pros:
+
+- Defence at a lower layer.
+
+Cons:
+
+- Not portable across the supported desktops and not available as a deliverable of this feature. A useful
+  later hardening, not a substitute.
+
+## Consequences
+
+### Positive
+
+- A compromised renderer cannot write to a path it chooses; it can write only to files the user opened or
+  created through a main-process dialog, with conflict detection and atomic replacement.
+- One validation path for CLI, API and UI.
+- The forwarding rule is explicit and testable instead of prefix-based.
+
+### Negative / trade-offs
+
+- The preload surface frozen by F2.5/F2.5a grows by `openGraph`, `newGraph` and the recent-graphs calls;
+  `desktop/README.md` and F2.5 must be updated.
+- Main and sidecar must agree on canonical paths; grants add state to both.
+- The typed-path box on New run keeps working for running graphs, so the weaker read/run exposure remains
+  until the follow-up.
+- Descriptors add a Go-side surface that must stay in step with the executors (mitigated by generating them
+  from the same definitions).
+
+## Compatibility and migration
+
+Existing endpoints and CLI behaviour are unchanged; `POST /graphs/validate {path}` keeps working. The desktop
+forwarding rule changes from a prefix match to an exact allowlist; routes outside it, if any renderer code
+used them, stop working (only `/graphs/validate` was used). Event schema, run store and graph schema are
+untouched. Making `agentplane graph validate` report node-config errors is a user-visible improvement: graphs that
+validated cleanly before may now report config errors they would have hit at run start.
+
+## Validation
+
+- A renderer-originated request to `/graphs/grants` is refused; routes outside the allowlist return 400.
+- Save refuses an unknown grant, a non-YAML name, a directory, a symlink final component, an oversize body,
+  invalid UTF-8, a stale `base_hash` (409) and a create over an existing file (409); after each failure the
+  previous file is byte-identical. A killed save leaves either the old or the new file, never a partial one.
+- API diagnostics equal `agentplane graph validate` for the same text, including node-config errors.
+- `/graphs/edit` does not touch the file system; `/graphs/save` is the only writer.
+- An end-to-end run shows a graph created in the UI runs from the CLI unchanged.
