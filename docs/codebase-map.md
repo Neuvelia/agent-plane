@@ -10,6 +10,7 @@ durable contract.
 | Area | Owns | Start here |
 | --- | --- | --- |
 | `internal/graph` | YAML definitions, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
+| `internal/graph/edit` | In-memory, fidelity-preserving graph YAML operations | `apply.go`, `ops.go`, `doc.go` |
 | `internal/events` | Typed event payloads, schema compatibility, ordering and collection | `event.go`, `emitter.go` |
 | `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation and human decisions | `scheduler.go`, `loop.go`, `unit.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
@@ -18,7 +19,7 @@ durable contract.
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
 | `internal/gitstate` | Git-observed workspace baselines and changes | `snapshot.go` |
 | `internal/store` | Local append-only JSONL run history | `store.go` |
-| `internal/api` | Authenticated loopback HTTP/SSE API over runs and approvals | `server.go`, `hub.go` |
+| `internal/api` | Authenticated loopback API for runs, approvals and granted graph documents | `server.go`, `docs.go`, `hub.go` |
 | `internal/version` | Build and runtime version metadata | `version.go` |
 | `cmd/agentplane` | CLI commands and composition of the engine, adapters, store and API | `main.go`, `cli.go`, `serve.go` |
 | `desktop/electron` | Sidecar lifecycle, local API token, IPC allowlist and narrow preload bridge | `main.cjs`, `preload.cjs` |
@@ -30,20 +31,22 @@ packages only):
 | Importer | In-repository imports |
 | --- | --- |
 | `graph`, `events`, `gitstate`, `version` | none |
+| `graph/edit` | `graph` |
 | `runtime` | `events`, `gitstate`, `graph` |
 | `agent` | `events`, `graph`, `runtime` |
 | `agent/codex` | `agent`, `events`, `gitstate` |
 | `shell` | `graph` |
 | `gate` | `events`, `gitstate`, `graph`, `runtime` |
 | `store` | `events` |
-| `api` | `events`, `graph`, `runtime`, `store` |
+| `api` | `events`, `graph`, `graph/edit`, `runtime`, `store` |
 | `cmd/agentplane` | composition of the Go packages above |
 
 Keep the core direction: `graph`, `events` and `gitstate` do not import the
 runtime; the runtime does not import concrete `agent`, `gate`, `shell`, `api`
 or `store` packages. Executor interfaces belong to the runtime because it
 consumes them; concrete executors implement them. The API uses runtime
-contracts but does not own scheduling. The desktop renderer calls the narrow
+contracts but does not own scheduling. `graph/edit` applies operations in
+memory; the API owns granted file saves. The desktop renderer calls the narrow
 preload bridge; Electron main owns the sidecar and loopback API token. The
 desktop is a client of that API, not a second execution engine.
 
