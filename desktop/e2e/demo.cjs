@@ -77,11 +77,23 @@ async function startDemo(page) {
 
     // 2. Only the failing node was retried; its red check has reason + evidence.
     await page.click('[data-testid="node-flaky"]')
-    const attempts = page.locator('[data-testid="attempt"]')
-    assert.equal(await attempts.count(), 2)
-    assert.match(await attempts.nth(0).textContent(), /rejected/)
-    assert.match(await attempts.nth(0).locator('[data-testid="check-reason"]').textContent(), /predicate mismatch/)
-    assert.match(await attempts.nth(1).textContent(), /accepted/)
+    // One attempt is shown at a time; the segmented control picks it (latest by default).
+    const attempt = page.locator('[data-testid="attempt"]')
+    assert.equal(await attempt.count(), 1)
+    assert.match(await attempt.textContent(), /accepted/)
+    await page.click('[data-testid="attempt-tab-1"]')
+    assert.match(await attempt.textContent(), /rejected/)
+    assert.match(await attempt.locator('[data-testid="check-reason"]').textContent(), /predicate mismatch/)
+    await page.click('[data-testid="attempt-tab-2"]')
+    assert.match(await attempt.textContent(), /accepted/)
+    // View switch: YAML replaces the map, Split shows both.
+    await page.click('[data-testid="view-yaml"]')
+    assert.match(await page.textContent('[data-testid="graph-yaml"]'), /demo-vertical/)
+    assert.equal(await page.locator('[data-testid="graph-map"]').count(), 0)
+    await page.click('[data-testid="view-split"]')
+    await page.waitForSelector('[data-testid="graph-map"]')
+    assert.equal(await page.locator('[data-testid="graph-yaml"]').count(), 1)
+    await page.click('[data-testid="view-map"]')
     await page.click('[data-testid="node-fast"]')
     assert.match(await page.textContent('[data-testid="node-panel"]'), /no correction loop/)
     await page.click('[data-testid="node-flaky"]')
@@ -99,7 +111,7 @@ async function startDemo(page) {
     await waitStatus(page, 'apply', 'succeeded')
     await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded')
     await page.click('[data-testid="node-approve"]')
-    assert.match(await page.textContent('[data-testid="decision"]'), /approved.*ship it/)
+    assert.match(await page.textContent('[data-testid="decision"]'), /approved.*ship it/i)
     await shot(page, '4-succeeded')
     const finishedEvents = await page.textContent('[data-testid="event-count"]')
     await app.close()
@@ -114,7 +126,8 @@ async function startDemo(page) {
     await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded')
     assert.equal(await page.textContent('[data-testid="event-count"]'), finishedEvents)
     await page.click('[data-testid="node-flaky"]')
-    assert.equal(await page.locator('[data-testid="attempt"]').count(), 2)
+    // Both attempts are rebuilt from the stored events (one tab each).
+    assert.equal(await page.locator('[data-testid^="attempt-tab-"]').count(), 2)
     await shot(page, '5-after-restart')
 
     // 5. Reject: the run fails, the dependent node is skipped.

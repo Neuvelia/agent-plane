@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { decide } from './api'
 import { useI18n } from './i18n/context'
-import { Button } from './ui/primitives'
 import { displayStatus, nodeView, type Attempt, type RunView } from './reducer'
-import { NodePill, OutcomePill, VerdictPill } from './status'
+import { ApprovalPill, NodePill, OutcomePill, VerdictPill } from './status'
+import { Button, Card, KeyValue, SegmentedControl, Tag } from './ui/primitives'
 
 function Evidence({ attempt }: { attempt: Attempt }) {
   const check = attempt.check
@@ -13,7 +13,7 @@ function Evidence({ attempt }: { attempt: Attempt }) {
       <div className="row">
         <VerdictPill verdict={check.verdict} />
         <span className="mono">{check.checkId}</span>
-        <span className="tag">{check.kind}</span>
+        <Tag>{check.kind}</Tag>
         <span className="mu mono">{check.durationMs} ms</span>
       </div>
       <div className="reason" data-testid="check-reason">
@@ -51,18 +51,14 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
     <div className="approval" data-testid="approval-box">
       <div className="lb">{t('approval.needed')}</div>
       <p>{prompt || t('approval.defaultPrompt')}</p>
-      {context.map((c) => (
-        <div key={c.name} className="mono ctx">
-          <span className="mu">{c.name}:</span> {c.value}
-        </div>
-      ))}
+      {context.length > 0 && <KeyValue rows={context.map((c) => ({ name: c.name, value: c.value }))} />}
       <textarea aria-label={t('approval.comment')} placeholder={t('approval.commentPlaceholder')} value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
       <div className="row">
-        <Button variant="primary" disabled={busy || disabled} onClick={() => submit(true)}>
-          {t('approval.approve')}
-        </Button>
         <Button variant="danger" disabled={busy || disabled} onClick={() => submit(false)}>
           {t('approval.reject')}
+        </Button>
+        <Button variant="primary" disabled={busy || disabled} onClick={() => submit(true)}>
+          {t('approval.approve')}
         </Button>
       </div>
       {disabled && <div className="mu">{t('approval.disabledLost')}</div>}
@@ -71,18 +67,23 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
   )
 }
 
-export function NodePanel({ run, nodeId, lost = false }: { run: RunView; nodeId: string | null; lost?: boolean }) {
+/** Detail of one node. Keyed by node id by the caller, so the chosen attempt and tab reset per node. */
+export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; nodeId: string | null; lost?: boolean; kind?: string }) {
   const { t } = useI18n()
   const [tab, setTab] = useState<'attempts' | 'log'>('attempts')
-  if (!nodeId) return <aside className="panel empty">{t('node.select')}</aside>
+  const [chosen, setChosen] = useState<string | null>(null)
+  if (!nodeId)
+    return (
+      <Card testId="node-panel-empty">
+        <div className="mu empty-line">{t('node.select')}</div>
+      </Card>
+    )
   const n = nodeView(run, nodeId)
   const status = displayStatus(n)
+  // Unless the person picked one, follow the latest attempt as new ones arrive.
+  const shown = n.attempts.find((a) => a.id === chosen) ?? n.attempts[n.attempts.length - 1]
   return (
-    <aside className="panel" data-testid="node-panel">
-      <div className="row between">
-        <h2>{n.id}</h2>
-        <NodePill status={status} />
-      </div>
+    <Card title={n.id} subtitle={kind ? <Tag>{kind}</Tag> : undefined} action={<NodePill status={status} />} testId="node-panel">
       {n.failureKind && (
         <div className="err">
           {n.failureKind}
@@ -93,35 +94,45 @@ export function NodePanel({ run, nodeId, lost = false }: { run: RunView; nodeId:
         <ApprovalBox runId={run.runId} nodeRunId={n.nodeRunId} prompt={n.approval.prompt} context={n.approval.context} disabled={lost} />
       )}
       {n.approval?.decision && (
-        <div className="decision" data-testid="decision">
-          {t('node.decision')}: <b>{n.approval.decision}</b>
-          {n.approval.comment && <span className="mu"> — {n.approval.comment}</span>}
+        <div className="decision row" data-testid="decision">
+          <span>{t('node.decision')}:</span>
+          <ApprovalPill decision={n.approval.decision} />
+          {n.approval.comment && <span className="mu">{n.approval.comment}</span>}
         </div>
       )}
-      <div className="tabs">
-        <Button className={tab === 'attempts' ? 'on' : ''} onClick={() => setTab('attempts')}>
-          {n.attempts.length ? t('node.attemptsCount', { count: n.attempts.length }) : t('node.attempts')}
-        </Button>
-        <Button className={tab === 'log' ? 'on' : ''} onClick={() => setTab('log')}>
-          {t('node.log')}
-        </Button>
-      </div>
+      <SegmentedControl
+        label={t('node.view')}
+        value={tab}
+        onChange={setTab}
+        segments={[
+          { value: 'attempts', label: n.attempts.length ? t('node.attemptsCount', { count: n.attempts.length }) : t('node.attempts'), testId: 'tab-attempts' },
+          { value: 'log', label: t('node.log'), testId: 'tab-log' },
+        ]}
+      />
       {tab === 'attempts' &&
-        (n.attempts.length === 0 ? (
+        (n.attempts.length === 0 || !shown ? (
           <div className="mu">{t('node.noLoop')}</div>
         ) : (
-          n.attempts.map((a) => (
-            <div className="attempt" key={a.id} data-testid="attempt">
+          <>
+            {n.attempts.length > 1 && (
+              <SegmentedControl
+                label={t('node.attemptsOf')}
+                value={shown.id}
+                onChange={setChosen}
+                segments={n.attempts.map((a) => ({ value: a.id, label: t('node.attemptTab', { n: a.number }), testId: `attempt-tab-${a.number}` }))}
+              />
+            )}
+            <div className="attempt" key={shown.id} data-testid="attempt">
               <div className="row between">
-                <b>{t('node.attempt', { n: a.number, max: a.max })}</b>
-                <OutcomePill outcome={a.outcome} />
+                <b>{t('node.attempt', { n: shown.number, max: shown.max })}</b>
+                <OutcomePill outcome={shown.outcome} />
               </div>
-              <Evidence attempt={a} />
-              {a.log && <pre className="log small">{a.log}</pre>}
+              <Evidence attempt={shown} />
+              {shown.log && <pre className="log small">{shown.log}</pre>}
             </div>
-          ))
+          </>
         ))}
-      {tab === 'log' && <pre className="log" data-testid="node-log">{n.log || t('node.noLog')}</pre>}
-    </aside>
+      {tab === 'log' && <pre className="log" data-testid="node-log" tabIndex={0}>{n.log || t('node.noLog')}</pre>}
+    </Card>
   )
 }

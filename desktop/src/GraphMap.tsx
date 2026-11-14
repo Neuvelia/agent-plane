@@ -1,7 +1,7 @@
 import dagre from '@dagrejs/dagre'
-import { Background, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
+import { Background, Handle, Position, ReactFlow, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useI18n } from './i18n/context'
 import { displayStatus, nodeView, type RunView } from './reducer'
 import { NodePill } from './status'
@@ -41,6 +41,27 @@ function ApNode({ data }: NodeProps<Node<ApNodeData>>) {
 }
 
 const nodeTypes = { ap: ApNode }
+
+// fitView only runs once, when React Flow mounts; the container can still be
+// resizing then (cards, view switch). Refit whenever the container's size changes.
+function FitOnResize() {
+  const { fitView } = useReactFlow()
+  useEffect(() => {
+    const el = document.querySelector('[data-testid="graph-map"]')
+    if (!el) return
+    let frame = 0
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => void fitView({ padding: 0.2 }))
+    })
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      cancelAnimationFrame(frame)
+    }
+  }, [fitView])
+  return null
+}
 
 // Layout comes from the graph definition only (dagre); node status comes from
 // the event reduction only. Neither is stored in this component.
@@ -103,6 +124,7 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
         colorMode="dark"
       >
         <Background gap={22} color="#242424" />
+        <FitOnResize />
       </ReactFlow>
     </div>
   )
