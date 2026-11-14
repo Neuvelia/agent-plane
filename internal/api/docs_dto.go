@@ -4,11 +4,29 @@ import (
 	"fmt"
 
 	"agentplane/internal/graph"
+	"agentplane/internal/graph/edit"
 )
 
 // The document DTO is the editor's view of a graph definition. It has explicit
 // JSON tags and is separate from the runtime types, so a change in the engine's
 // structs can never silently change the wire format (ADR-0021).
+
+// diagnosticDTO is a diagnostic as the editor receives it: the engine's
+// diagnostic unchanged, plus the 1-based source line when it can be resolved.
+// The line is an API field only; graph.Diagnostic and the CLI JSON do not carry it.
+type diagnosticDTO struct {
+	graph.Diagnostic
+	Line int `json:"line,omitempty"`
+}
+
+func withLines(text []byte, diags []graph.Diagnostic) []diagnosticDTO {
+	lines := edit.DiagnosticLines(text, diags)
+	out := make([]diagnosticDTO, len(diags))
+	for i, d := range diags {
+		out[i] = diagnosticDTO{Diagnostic: d, Line: lines[i]}
+	}
+	return out
+}
 
 type portDTO struct {
 	Type     string `json:"type"`

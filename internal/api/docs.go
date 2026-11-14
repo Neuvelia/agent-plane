@@ -223,17 +223,18 @@ func readError(w http.ResponseWriter, err error) {
 }
 
 type docResponse struct {
-	Text            string             `json:"text"`
-	Hash            string             `json:"hash"`
-	Version         string             `json:"version,omitempty"`
-	Definition      *definitionDTO     `json:"definition,omitempty"`
-	Diagnostics     []graph.Diagnostic `json:"diagnostics"`
-	ParseError      string             `json:"parse_error,omitempty"`
-	ReadonlyCanvas  bool               `json:"readonly_canvas"`
-	ReadonlyReasons []string           `json:"readonly_reasons,omitempty"`
-	LineEnding      string             `json:"line_ending"`
-	Label           string             `json:"label"`
-	Results         []edit.OpResult    `json:"results,omitempty"`
+	Text            string          `json:"text"`
+	Hash            string          `json:"hash"`
+	Version         string          `json:"version,omitempty"`
+	Definition      *definitionDTO  `json:"definition,omitempty"`
+	Diagnostics     []diagnosticDTO `json:"diagnostics"`
+	ParseError      string          `json:"parse_error,omitempty"`
+	ParseLine       int             `json:"parse_line,omitempty"`
+	ReadonlyCanvas  bool            `json:"readonly_canvas"`
+	ReadonlyReasons []string        `json:"readonly_reasons,omitempty"`
+	LineEnding      string          `json:"line_ending"`
+	Label           string          `json:"label"`
+	Results         []edit.OpResult `json:"results,omitempty"`
 }
 
 // diagnostics runs the full validation: graph rules and, when the composition
@@ -252,7 +253,7 @@ func (s *Server) diagnostics(def *graph.Definition) []graph.Diagnostic {
 }
 
 func (s *Server) document(g *grant, text []byte) docResponse {
-	res := docResponse{Text: string(text), Hash: hashOf(text), Diagnostics: []graph.Diagnostic{}, Label: g.label, LineEnding: "lf"}
+	res := docResponse{Text: string(text), Hash: hashOf(text), Diagnostics: []diagnosticDTO{}, Label: g.label, LineEnding: "lf"}
 	if strings.Contains(res.Text, "\r\n") {
 		res.LineEnding = "crlf"
 	}
@@ -262,13 +263,14 @@ func (s *Server) document(g *grant, text []byte) docResponse {
 	def, err := graph.Parse(text)
 	if err != nil {
 		res.ParseError = err.Error()
+		res.ParseLine = edit.ParseErrorLine(res.ParseError)
 		return res
 	}
 	res.Definition = toDefinitionDTO(def)
 	if v, err := graph.SemanticVersion(def); err == nil {
 		res.Version = v
 	}
-	res.Diagnostics = s.diagnostics(def)
+	res.Diagnostics = withLines(text, s.diagnostics(def))
 	return res
 }
 
