@@ -543,3 +543,28 @@ func TestOtherEndpointsKeepTheSmallBodyCap(t *testing.T) {
 		t.Errorf("a body above the document cap: %d", resp.StatusCode)
 	}
 }
+
+func TestRevokedGrantsStopWorkingAndFreeASlot(t *testing.T) {
+	_, ts, dir := docServer(t)
+	p := writeGraph(t, dir, "g.yaml", pairGraph)
+	g := grantFor(t, ts, p, "open")
+	if resp, _ := do(t, ts, "DELETE", "/graphs/grants/"+g, "", true); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("revoke: %d", resp.StatusCode)
+	}
+	if status, out := call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g}); status != 404 || errCode(out) != "unknown_grant" {
+		t.Errorf("a revoked grant still opens: %d %v", status, out)
+	}
+	if resp, _ := do(t, ts, "DELETE", "/graphs/grants/"+g, "", true); resp.StatusCode != http.StatusNotFound {
+		t.Errorf("revoking twice: %d", resp.StatusCode)
+	}
+	if resp, _ := do(t, ts, "DELETE", "/graphs/grants/"+g, "", false); resp.StatusCode != http.StatusUnauthorized {
+		t.Errorf("revoke without a token: %d", resp.StatusCode)
+	}
+	for i := 0; i < MaxGrants; i++ {
+		id := grantFor(t, ts, p, "open")
+		if i == 0 {
+			do(t, ts, "DELETE", "/graphs/grants/"+id, "", true) // frees one slot
+		}
+	}
+	grantFor(t, ts, p, "open") // the slot freed by the revoke is usable
+}

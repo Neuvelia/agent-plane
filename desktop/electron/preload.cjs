@@ -24,4 +24,12 @@ contextBridge.exposeInMainWorld('agentplane', {
     }
   },
   pickGraph: () => ipcRenderer.invoke('ap:pickGraph'),
+  // Graph files for the editor: native dialogs run in the main process and the
+  // renderer receives only an opaque grant and a file name, never a path.
+  openGraph: () => ipcRenderer.invoke('ap:openGraph'),
+  newGraph: () => ipcRenderer.invoke('ap:newGraph'),
+  recentGraphs: () => ipcRenderer.invoke('ap:recentGraphs'),
+  openRecentGraph: (id) => ipcRenderer.invoke('ap:openRecentGraph', id),
+  touchRecent: (grant) => ipcRenderer.invoke('ap:touchRecent', grant),
+  closeGraph: (grant) => ipcRenderer.invoke('ap:closeGraph', grant),
 })

@@ -58,6 +58,71 @@ async function startDemo(page) {
     // Disabled entries are not tab stops; enabled navigation entries are real buttons.
     assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
 
+    // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
+    const refused = await page.evaluate(async () => ({
+      grants: await window.agentplane.request('POST', '/graphs/grants', { path: '/tmp/never.yaml', mode: 'create' }),
+      revoke: await window.agentplane.request('DELETE', '/graphs/grants/abc'),
+      wrongMethod: await window.agentplane.request('PUT', '/runs', {}),
+      climb: await window.agentplane.request('GET', '/runs/%2e%2e'),
+    }))
+    for (const [name, r] of Object.entries(refused)) {
+      assert.equal(r.status, 400, `${name} must be refused by the main process`)
+      assert.equal(r.body.error.message, 'path not allowed', name)
+    }
+    const graphDir = path.join(work, 'graphs')
+    fs.mkdirSync(graphDir, { recursive: true })
+    const original = fs.readFileSync(graph, 'utf8')
+    const editable = path.join(graphDir, 'demo.yaml')
+    fs.writeFileSync(editable, original)
+    const stubOpen = (p) => app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, p)
+    const stubSave = (p) => app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: file }) }, p)
+    await stubOpen(editable)
+    const opened = await page.evaluate(() => window.agentplane.openGraph())
+    assert.equal(opened.ok, true)
+    assert.equal(opened.label, 'demo.yaml')
+    assert.equal(JSON.stringify(opened).includes(work), false, 'the renderer must not be told the path')
+    const doc = await page.evaluate((grant) => window.agentplane.request('POST', '/graphs/open', { grant }), opened.grant)
+    assert.equal(doc.status, 200)
+    assert.equal(doc.body.text, original)
+    const ops = [{ op: 'set_layout', nodes: { fast: { x: 120, y: 80 } } }, { op: 'set_name', name: 'Edited in the app' }]
+    const edited = await page.evaluate(([grant, hash, o]) => window.agentplane.request('POST', '/graphs/edit', { grant, base_hash: hash, ops_version: 1, ops: o }), [opened.grant, doc.body.hash, ops])
+    assert.equal(edited.status, 200)
+    assert.equal(fs.readFileSync(editable, 'utf8'), original, 'edit must not write the file')
+    const saved = await page.evaluate(([grant, hash, text]) => window.agentplane.request('PUT', '/graphs/save', { grant, base_hash: hash, text }), [opened.grant, doc.body.hash, edited.body.text])
+    assert.equal(saved.status, 200)
+    const onDisk = fs.readFileSync(editable, 'utf8')
+    assert.equal(onDisk, edited.body.text)
+    assert.ok(onDisk.startsWith('# Phase 2 vertical slice demo'), 'the header comment survives a save from the app')
+    assert.ok(onDisk.includes('fast: {x: 120, y: 80}') && onDisk.includes('name: Edited in the app'))
+    const reopened = await page.evaluate((grant) => window.agentplane.request('POST', '/graphs/open', { grant }), opened.grant)
+    assert.equal(reopened.body.version, doc.body.version, 'layout and name never change the semantic version')
+    assert.equal(await page.evaluate((grant) => window.agentplane.closeGraph(grant), opened.grant), true)
+    const closed = await page.evaluate((grant) => window.agentplane.request('POST', '/graphs/open', { grant }), opened.grant)
+    assert.equal(closed.status, 404)
+
+    // A new graph: create-only, then it joins the recent list once it exists.
+    const fresh = path.join(graphDir, 'fresh')
+    await stubSave(fresh)
+    const made = await page.evaluate(() => window.agentplane.newGraph())
+    assert.equal(made.ok, true)
+    assert.equal(made.label, 'fresh.yaml')
+    assert.equal(made.exists, false)
+    const text = 'schema_version: 0\nid: fresh\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n'
+    const created = await page.evaluate(([grant, t]) => window.agentplane.request('PUT', '/graphs/save', { grant, base_hash: null, text: t }), [made.grant, text])
+    assert.equal(created.status, 200)
+    assert.equal(fs.readFileSync(path.join(graphDir, 'fresh.yaml'), 'utf8'), text)
+    assert.equal(await page.evaluate((grant) => window.agentplane.touchRecent(grant), made.grant), true)
+    assert.equal(await page.evaluate(() => window.agentplane.touchRecent('forged')), false)
+    const again = await page.evaluate(() => window.agentplane.newGraph())
+    assert.equal(again.ok, false)
+    assert.equal(again.code, 'exists')
+    const recent = await page.evaluate(() => window.agentplane.recentGraphs())
+    assert.deepEqual(recent.map((r) => r.label), ['fresh.yaml', 'demo.yaml'])
+    assert.equal(JSON.stringify(recent).includes(work), false)
+    const viaRecent = await page.evaluate((id) => window.agentplane.openRecentGraph(id), recent[0].id)
+    assert.equal(viaRecent.ok, true)
+    assert.equal(viaRecent.label, 'fresh.yaml')
+
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })

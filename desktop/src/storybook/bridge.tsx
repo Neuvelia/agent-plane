@@ -31,7 +31,7 @@ export interface BridgeData {
 export function createBridge(data: BridgeData): Window['agentplane'] {
   const respond = <T,>(status: number, body: T): ApiResponse<T> => ({ status, body })
   return {
-    request: async <T,>(method: 'GET' | 'POST', path: string): Promise<ApiResponse<T>> => {
+    request: async <T,>(method: 'GET' | 'POST' | 'PUT', path: string): Promise<ApiResponse<T>> => {
       if (data.hang) return new Promise<ApiResponse<T>>(() => undefined)
       if (data.unreachable) throw new Error('the agentplane sidecar is not running')
       const run = /^\/runs\/([^/]+)$/.exec(path)
@@ -61,5 +61,11 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
       }
     },
     pickGraph: async () => data.pickedGraph ?? null,
+    openGraph: async () => ({ canceled: true }),
+    newGraph: async () => ({ canceled: true }),
+    recentGraphs: async () => [],
+    openRecentGraph: async () => ({ ok: false, code: 'not_found', message: 'that graph is no longer in the list' }),
+    touchRecent: async () => false,
+    closeGraph: async () => false,
   }
 }

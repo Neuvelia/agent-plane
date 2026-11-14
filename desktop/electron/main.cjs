@@ -2,6 +2,9 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron')
 const { spawn } = require('node:child_process')
 const path = require('node:path')
+const { isAllowed } = require('./allowlist.cjs')
+const { createGraphHandlers } = require('./graphs.cjs')
+const { createRecents } = require('./recents.cjs')
 
 // The sidecar is the Go engine. The renderer is only a client of its API.
 const repoRoot = path.resolve(__dirname, '..', '..')
@@ -103,12 +106,29 @@ async function stream(sender, subId, runId) {
 }
 
 ipcMain.handle('ap:request', (_e, method, requestPath, body) => {
-  // Only the documented API surface is reachable from the renderer.
-  if (!/^\/(runs|approvals|graphs)(\/|$)/.test(requestPath) || !['GET', 'POST'].includes(method)) {
+  // Only the exact documented routes are reachable from the renderer (ADR-0021);
+  // /graphs/grants and every other route stay main-only.
+  if (!isAllowed(method, requestPath)) {
     return { status: 400, body: { error: { code: 'bad_request', message: 'path not allowed' } } }
   }
   return request(method, requestPath, body)
 })
+
+// Graph files are chosen here, in native dialogs, and reach the renderer only as
+// opaque grants (ADR-0021). The dialog functions are looked up at call time so
+// an end-to-end test can stub them.
+const graphs = createGraphHandlers({
+  request: (method, requestPath, body) => request(method, requestPath, body),
+  showOpen: (options) => dialog.showOpenDialog(BrowserWindow.getFocusedWindow() ?? undefined, options),
+  showSave: (options) => dialog.showSaveDialog(BrowserWindow.getFocusedWindow() ?? undefined, options),
+  recents: createRecents(path.join(app.getPath('userData'), 'recent-graphs.json')),
+})
+ipcMain.handle('ap:openGraph', () => graphs.openGraph())
+ipcMain.handle('ap:newGraph', () => graphs.newGraph())
+ipcMain.handle('ap:recentGraphs', () => graphs.recentGraphs())
+ipcMain.handle('ap:openRecentGraph', (_e, id) => graphs.openRecentGraph(id))
+ipcMain.handle('ap:touchRecent', (_e, grant) => graphs.touchRecent(grant))
+ipcMain.handle('ap:closeGraph', (_e, grant) => graphs.closeGraph(grant))
 ipcMain.on('ap:subscribe', (e, subId, runId) => void stream(e.sender, subId, String(runId)))
 ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.controller.abort())
 ipcMain.handle('ap:pickGraph', async (e) => {

@@ -128,6 +128,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /approvals", s.approvals)
 	mux.HandleFunc("POST /graphs/validate", s.validate)
 	mux.HandleFunc("POST /graphs/grants", s.grants)
+	mux.HandleFunc("DELETE /graphs/grants/{id}", s.revokeGrant)
 	mux.HandleFunc("POST /graphs/open", s.openDoc)
 	mux.HandleFunc("POST /graphs/stat", s.statDoc)
 	mux.HandleFunc("POST /graphs/edit", s.editDoc)
