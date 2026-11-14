@@ -461,6 +461,11 @@ func parseGraphInputReference(reference string) (string, bool) {
 	return "", false
 }
 
+// ValidIdentifier reports whether identifier follows the graph identifier
+// grammar (docs/graph-spec.md): a lowercase letter, then lowercase letters,
+// digits, hyphens or underscores. Editors use it to refuse ids the validator would.
+func ValidIdentifier(identifier string) bool { return validIdentifier(identifier) }
+
 func validIdentifier(identifier string) bool {
 	if identifier == "" || identifier[0] < 'a' || identifier[0] > 'z' {
 		return false

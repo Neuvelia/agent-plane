@@ -1,0 +1,42 @@
+---
+# Hostile fixture: constructs a hand-written graph may contain.
+schema_version: 0
+id: hostile   # trailing comment on a scalar
+name: "Quoted # not a comment"
+
+metadata:
+  description: |
+    A block scalar that
+    spans lines.
+
+
+inputs:
+  message: {type: string, required: true}
+
+nodes:
+  # first node
+  a:
+    type: shell
+    config: &shell    # anchor: b reuses this mapping through a merge key
+      command: printf
+      args: ["%s\n", 'single quoted', plain]   # flow sequence with a comment
+    outputs:
+      stdout: {type: string}
+
+  b:
+    type: shell
+    config:
+      <<: *shell
+      command: "true"
+    inputs:
+      text: {type: string}
+
+edges:
+  # the only edge
+  - from: a.outputs.stdout   # source
+    to: b.inputs.text
+
+  # a trailing comment inside the sequence
+graph_input_bindings: []
+outputs: {}
+# trailing file comment

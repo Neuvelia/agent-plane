@@ -1,0 +1,17 @@
+schema_version: 0
+id: long
+name: Long lines
+metadata:
+  description: >
+    A folded block scalar whose lines are
+    joined by the parser into one paragraph.
+inputs: {}
+nodes:
+  a:
+    type: shell
+    config:
+      command: printf
+      args: ["xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx", 'it''s', "tab\there"]
+      env: {LONG_VALUE: "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"}
+edges: []
+outputs: {}
