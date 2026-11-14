@@ -63,6 +63,12 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
         type: 'ap',
         position: { x: (positions[n.id]?.x ?? 0) - W / 2, y: (positions[n.id]?.y ?? 0) - H / 2 },
         data: { id: n.id, kind: n.type, run, selected: selected === n.id },
+        // Fixed, known size. React Flow keeps a node hidden until it has measured
+        // it; we replace the node objects on every event batch, which can drop the
+        // measurement, and ResizeObserver will not fire again for an unchanged
+        // size. Declaring the size makes the node visible without measuring.
+        width: W,
+        height: H,
         draggable: false,
         connectable: false,
       })),
