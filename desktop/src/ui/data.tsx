@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react'
+import { MAX_TIMELINE_COLUMNS } from '../insight'
 import type { Tone } from './primitives'
+
+export { MAX_TIMELINE_COLUMNS }
 
 /** Read-only YAML view with line numbers. The text is rendered as text, never as HTML. */
 export function CodeView({ text, testId, label }: { text: string; testId?: string; label?: string }) {
@@ -45,11 +48,11 @@ export interface EventRow {
 }
 
 /** Append-only event list. Shows at most `limit` newest rows (default 200). */
-export function EventLog({ rows, limit = 200, emptyLabel }: { rows: EventRow[]; limit?: number; emptyLabel: string }) {
+export function EventLog({ rows, limit = 200, emptyLabel, label = 'events' }: { rows: EventRow[]; limit?: number; emptyLabel: string; label?: string }) {
   if (rows.length === 0) return <div className="mu empty-line">{emptyLabel}</div>
   const shown = rows.slice(-limit).reverse()
   return (
-    <ol className="event-log" data-testid="event-log">
+    <ol className="event-log" data-testid="event-log" tabIndex={0} aria-label={label}>
       {shown.map((r) => (
         <li key={r.sequence} className={r.tone ? `ev-${r.tone}` : ''}>
           <span className="mu mono">{String(r.sequence).padStart(3, '0')}</span>
@@ -83,12 +86,10 @@ export function DotChart({ dots, slots = dots.length, label }: { dots: Dot[]; sl
   )
 }
 
-export const MAX_TIMELINE_COLUMNS = 600
-
 /** Rows of dots over time; `active[row][col]` marks a filled slot. Columns are capped. */
-export function DotTimeline({ rows, label }: { rows: { name: string; active: boolean[] }[]; label: string }) {
+export function DotTimeline({ rows, label, caption }: { rows: { name: string; active: boolean[] }[]; label: string; caption?: string }) {
   return (
-    <div className="timeline" role="img" aria-label={label}>
+    <div className="timeline" role="img" aria-label={caption ? `${label}. ${caption}` : label}>
       {rows.map((r) => (
         <div className="tl-row" key={r.name}>
           <span className="mono mu tl-name">{r.name}</span>

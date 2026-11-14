@@ -53,7 +53,7 @@ async function startDemo(page) {
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
-    assert.equal(await page.isVisible('[data-testid="no-runs"]'), true, 'a disabled entry must not navigate')
+    assert.equal(await page.isVisible('[data-testid="dashboard"]'), true, 'a disabled entry must not navigate')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
     assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
     assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
@@ -99,6 +99,24 @@ async function startDemo(page) {
     await page.click('[data-testid="node-flaky"]')
     await shot(page, '2-attempts-reason-evidence')
 
+    // R2: run summary, timeline and event log come from the event stream.
+    await page.click('[data-testid="node-fast"]')
+    assert.match(await page.textContent('[data-testid="run-summary"]'), /Wall clock/)
+    assert.match(await page.textContent('[data-testid="run-summary"]'), /Tokens/)
+    assert.match(await page.textContent('[data-testid="run-summary"]'), /Retries\s*1/)
+    assert.equal(await page.locator('[data-testid="run-timeline"] .tl-row').count(), 3)
+    assert.match(await page.textContent('[data-testid="event-log"]'), /approval_requested/)
+    await page.click('[data-testid="events-human"]')
+    assert.doesNotMatch(await page.textContent('[data-testid="event-log"]'), /node_started/)
+    await page.click('[data-testid="events-all"]')
+
+    // The Dashboard lists the pending approval and the active run.
+    await page.click('[data-testid="nav-dashboard"]')
+    await page.waitForSelector('[data-testid="attention-item"]')
+    assert.match(await page.textContent('[data-testid="needs-attention"]'), /Approval/)
+    assert.equal(await page.locator('[data-testid="active-run"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="outcomes"] .dot.d-b').count() >= 1, true)
+
     // 3. The graph stops at the human gate until Approve is clicked.
     await page.click('[data-testid="nav-approvals"]')
     await page.waitForSelector('[data-testid="approval-card"]')
@@ -118,6 +136,8 @@ async function startDemo(page) {
 
     // 4. History survives an application restart and the map is rebuilt from events.
     ;({ app, page } = await launch())
+    await page.waitForSelector('[data-testid="dashboard"]')
+    await page.click('[data-testid="nav-runs"]')
     await page.waitForSelector('[data-testid="run-row"]')
     assert.equal(await page.locator('[data-testid="run-row"]').count(), 1)
     assert.match(await page.textContent('[data-testid="run-row"]'), /Succeeded/)
@@ -125,6 +145,9 @@ async function startDemo(page) {
     await waitStatus(page, 'apply', 'succeeded')
     await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded')
     assert.equal(await page.textContent('[data-testid="event-count"]'), finishedEvents)
+    // Summary, timeline and event log are rebuilt from the stored events too.
+    assert.match(await page.textContent('[data-testid="run-summary"]'), /Wall clock/)
+    assert.match(await page.textContent('[data-testid="event-log"]'), /run_finished/)
     await page.click('[data-testid="node-flaky"]')
     // Both attempts are rebuilt from the stored events (one tab each).
     assert.equal(await page.locator('[data-testid^="attempt-tab-"]').count(), 2)

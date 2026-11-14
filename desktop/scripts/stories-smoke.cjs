@@ -20,7 +20,7 @@ const REQUIRED = [
   'ui-primitives--pills', 'ui-primitives--buttons', 'ui-primitives--card-with-header', 'ui-primitives--segmented', 'ui-primitives--kpis', 'ui-primitives--fields',
   'ui-data--outcomes', 'ui-data--events', 'ui-data--timeline', 'ui-data--yaml',
   'ui-shell--sidebar-with-deferred-entries', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--breadcrumbs',
-  'screens--dashboard-empty', 'screens--dashboard-busy',
+  'screens--runs-list-empty', 'screens--runs-list-busy', 'screens--dashboard-empty', 'screens--dashboard-busy', 'screens--dashboard-needs-attention',
   'screens--inspector-running', 'screens--inspector-waiting-for-human', 'screens--inspector-failed-after-retries', 'screens--inspector-succeeded', 'screens--inspector-yaml-view', 'screens--inspector-split-view', 'screens--inspector-first-attempt', 'screens--inspector-connection-lost', 'screens--inspector-run-not-found',
   'screens--approvals-empty', 'screens--approvals-one-pending', 'screens--approvals-many-pending', 'screens--approvals-decision-error',
   'screens--settings-language',

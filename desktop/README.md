@@ -78,7 +78,12 @@ a dev dependency and is never part of the packaged app.
 F2.5a R0 provides the shell, design tokens, primitives, Storybook and PL/EN
 localisation. R1 redesigns Run Inspector (live graph card with Map / YAML / Split,
 node detail with one attempt shown at a time), Approvals (inbox and review panes)
-and New run (graph, inputs, preflight steps). The Dashboard is redesigned in R2.
+and New run (graph, inputs, preflight steps). R2 adds the Dashboard (needs attention,
+active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
+(wall clock, node time, saved, retries, tokens always unknown), a per-second
+timeline and a filterable event log. Those numbers are computed in the app from
+the event stream (`src/insight.ts`, `src/dashboard.ts`) and carry no authority
+over run state.
 
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,

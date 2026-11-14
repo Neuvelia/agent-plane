@@ -64,7 +64,25 @@ export interface NodeView {
   durationMs?: number
   startedSeq?: number
   finishedSeq?: number
+  /** Event timestamps (ISO) of node_started / node_finished, for the timeline. */
+  startedAt?: string
+  finishedAt?: string
 }
+
+/** Which EventLog filter an event belongs to. Decided here, once, from the event itself. */
+export type EventKind = 'failed' | 'retried' | 'human'
+
+export interface EventSummary {
+  sequence: number
+  timestamp: string
+  type: string
+  node?: string
+  detail?: string
+  kind?: EventKind
+}
+
+/** The EventLog never needs more than this many rows, so the view keeps no more. */
+export const MAX_EVENT_ROWS = 200
 
 export interface RunView {
   runId?: string
@@ -77,13 +95,17 @@ export interface RunView {
   eventCount: number
   startedAt?: string
   finishedAt?: string
+  /** Timestamp of the newest applied event: "now" for a run that is still going. */
+  lastEventAt?: string
+  /** The newest MAX_EVENT_ROWS events, oldest first. log_chunk is excluded (it has the Log view). */
+  tail: EventSummary[]
   failureKind?: string
 }
 
 export const MAX_LOG_CHARS = 64 * 1024
 
 export function initialRun(): RunView {
-  return { status: 'running', nodeCount: 0, nodes: {}, order: [], lastSequence: 0, eventCount: 0 }
+  return { status: 'running', nodeCount: 0, nodes: {}, order: [], lastSequence: 0, eventCount: 0, tail: [] }
 }
 
 function node(state: RunView, id: string): NodeView {
@@ -128,6 +150,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
   state.eventCount += 1
   state.runId = event.run_id
   state.graphId = event.graph_id
+  state.lastEventAt = event.timestamp
   const p = event.payload
   const id = event.node_id
 
@@ -150,6 +173,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
         n.status = 'running'
         n.nodeRunId = event.node_run_id
         n.startedSeq = event.sequence
+        n.startedAt = event.timestamp
       }
       break
     case 'node_finished':
@@ -159,6 +183,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
         n.status = (str(p.status) as NodeStatus) || 'failed'
         n.nodeRunId = event.node_run_id
         n.finishedSeq = event.sequence
+        n.finishedAt = event.timestamp
         n.failureKind = p.failure_kind ? str(p.failure_kind) : undefined
         n.diagnosticCodes = Array.isArray(p.diagnostic_codes) ? (p.diagnostic_codes as string[]) : []
         if (typeof p.duration_ms === 'number') n.durationMs = p.duration_ms
@@ -231,7 +256,50 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
     default:
       break
   }
+  const row = summarize(event)
+  if (row) {
+    state.tail.push(row)
+    if (state.tail.length > MAX_EVENT_ROWS) state.tail.shift()
+  }
   return state
+}
+
+// summarize is the one place that decides what an event looks like in the EventLog.
+// Unknown event types are kept (by type) and simply have no detail or filter kind.
+function summarize(event: ApEvent): EventSummary | null {
+  if (event.type === 'log_chunk') return null
+  const p = event.payload
+  const row: EventSummary = { sequence: event.sequence, timestamp: event.timestamp, type: event.type, node: event.node_id }
+  switch (event.type) {
+    case 'gate_check':
+      row.detail = str(p.verdict) || undefined
+      if (p.verdict === 'red') row.kind = 'failed'
+      break
+    case 'attempt_started':
+      row.detail = `attempt ${num(p.number)}/${num(p.max_attempts)}`
+      if (num(p.number) > 1) row.kind = 'retried'
+      break
+    case 'attempt_finished':
+      row.detail = str(p.outcome) || undefined
+      if (p.outcome === 'rejected') row.kind = 'retried'
+      break
+    case 'node_finished':
+    case 'node_terminated':
+    case 'run_finished':
+      row.detail = str(p.status) || undefined
+      if (p.status === 'failed') row.kind = 'failed'
+      break
+    case 'approval_requested':
+      row.kind = 'human'
+      break
+    case 'approval_decided':
+      row.detail = str(p.decision) || undefined
+      row.kind = 'human'
+      break
+    default:
+      break
+  }
+  return row
 }
 
 export function reduceAll(events: ApEvent[], from: RunView = initialRun()): RunView {

@@ -103,7 +103,7 @@ textarea{min-height:64px;resize:vertical}
 .tl-row{display:grid;grid-template-columns:96px minmax(0,1fr);gap:var(--space-8);align-items:center}
 .tl-dots{display:flex;gap:2px;flex-wrap:nowrap;overflow:hidden}
 .event-log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;max-height:320px;overflow:auto}
-.event-log li{display:grid;grid-template-columns:36px 76px minmax(0,1fr) minmax(0,1.4fr);gap:var(--space-12);padding:3px var(--space-12);border-radius:var(--radius-10)}
+.event-log li{display:grid;grid-template-columns:36px 92px max-content minmax(0,1fr);gap:var(--space-12);padding:3px var(--space-12);border-radius:var(--radius-10)}
 .event-log li.ev-w{background:var(--warn-wash)}
 .empty-line{padding:var(--space-12)}
 .code{margin:0;background:var(--code-bg);border:1px solid var(--hairline);border-radius:var(--radius-16);padding:var(--space-12) 0;overflow:auto;font:var(--type-code-weight) var(--type-code-size)/var(--type-code-line) var(--font-mono)}
@@ -175,3 +175,18 @@ table.runs{width:100%;border-collapse:collapse}
 .kv dt{margin:0}
 .attempt{margin:0}
 @media (max-width:1100px){.split{grid-template-columns:minmax(0,1fr)}.approvals-grid{grid-template-columns:minmax(0,1fr)}}
+
+/* R2: dashboard, run summary, timeline, events */
+.stack{display:flex;flex-direction:column;gap:var(--space-8);min-width:0}
+.stack>.card{margin-bottom:0}
+.dash-grid{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:var(--space-8);align-items:start}
+.more{display:flex;padding:var(--space-4) var(--space-12) var(--space-8)}
+.legend{display:flex;flex-wrap:wrap;gap:var(--space-12);padding:var(--space-8) var(--space-4) 0;color:var(--muted);font-size:12px}
+.legend-item{display:inline-flex;align-items:center;gap:6px}
+.legend-item .dot{width:8px;height:8px}
+.kpis{display:flex;flex-wrap:wrap;gap:var(--space-12) 40px;padding:var(--space-4) var(--space-12)}
+.kpi-with-tip{display:inline-flex;align-items:flex-start;gap:6px}
+.small-print{font-size:12px;padding:0 var(--space-12)}
+.inspector{height:auto;min-height:100%}
+.inspector .split{align-items:start}
+@media (max-width:1100px){.dash-grid{grid-template-columns:minmax(0,1fr)}}
