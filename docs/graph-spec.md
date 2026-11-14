@@ -424,6 +424,23 @@ A graph output must reference an output that can be produced on every successful
 Metadata may include non-semantic fields such as description, tags, and future canvas layout.
 
 Visual layout is excluded from the F0.6 semantic graph fingerprint.
+
+### Canvas layout (`metadata.layout`, ADR-0022)
+
+The desktop editor stores node positions inline:
+
+```yaml
+metadata:
+  layout:
+    nodes:
+      plan: {x: 120, y: 80}
+      backend: {x: 420, y: 40}
+```
+
+`x` and `y` are integers in canvas pixels, within -100000..100000. The engine does not validate
+`metadata`: a malformed layout, an entry for an unknown node or a non-integer coordinate is ignored by
+the editor for that node and survives a save unchanged. A node without an entry is drawn at a
+deterministic automatic position. Layout never changes the semantic version or any run identity.
 Metadata is therefore an open mapping and is kept separate from execution
 fields in the typed definition.
 

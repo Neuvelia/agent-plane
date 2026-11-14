@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COALESCE_MS, MAX_HISTORY, analyzed, counts, fromNew, fromOpen, isDirty, newGraphText, redo, reloaded, saved, type, undo, validating, withConflict } from '../src/editor/doc'
+import { COALESCE_MS, MAX_HISTORY, analyzed, counts, edited, fromNew, fromOpen, isDirty, newGraphText, redo, reloaded, saved, type, undo, validating, withConflict } from '../src/editor/doc'
 import type { OpenResponse } from '../src/editor/types'
 
 const open = (text = 'a\n'): OpenResponse => ({ text, hash: 'h0', version: 'v0', diagnostics: [], readonly_canvas: false, line_ending: 'lf', label: 'g.yaml' })
@@ -143,5 +143,53 @@ describe('newGraphText', () => {
 
   it('is schema v0 with empty collections', () => {
     expect(newGraphText('x.yaml')).toBe('schema_version: 0\nid: x\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n')
+  })
+})
+
+describe('operations (canvas edits)', () => {
+  const defn = { id: 'g', nodes: {}, edges: [], outputs: {} }
+  const after = (text: string, definition = defn): OpenResponse => ({ ...open(text), definition })
+
+  it('an operation is its own undo step, clears redo, and carries the engine answer', () => {
+    let s = start('a\n')
+    s = type(s, 'b\n', 1000)
+    s = undo(s)
+    expect(s.future).toEqual(['b\n'])
+    s = edited(s, after('c\n'))
+    expect(s.draft).toBe('c\n')
+    expect(s.past).toEqual(['a\n'])
+    expect(s.future).toEqual([])
+    expect(s.analysis.stale).toBe(false)
+    expect(s.analysis.definition).toBe(defn)
+    expect(undo(s).draft).toBe('a\n')
+  })
+
+  it('typing right after an operation is a separate step, never merged into it', () => {
+    let s = edited(start('a\n'), after('b\n'))
+    s = type(s, 'b!\n', 5000)
+    expect(undo(s).draft).toBe('b\n')
+  })
+
+  it('an answer that changes nothing adds no history', () => {
+    const s = start('a\n')
+    expect(edited(s, after('a\n'))).toBe(s)
+  })
+
+  it('keeps the last good definition while the text does not parse, and drops it for a valid one', () => {
+    let s = edited(start('a\n'), after('b\n'))
+    s = type(s, 'b [\n', 5000)
+    s = analyzed(s, 'b [\n', { status: 'invalid', diagnostics: [], parse_error: 'bad' })
+    expect(s.analysis.parseError).toBe('bad')
+    expect(s.analysis.definition).toBe(defn)
+    const next = { ...defn, id: 'h' }
+    s = type(s, 'ok\n', 9000)
+    s = analyzed(s, 'ok\n', { status: 'valid', diagnostics: [], definition: next })
+    expect(s.analysis.definition).toBe(next)
+    expect(s.analysis.parseError).toBeUndefined()
+  })
+
+  it('reports read-only reasons from the engine', () => {
+    const s = analyzed(type(start(), 'x\n', 5000), 'x\n', { status: 'valid', diagnostics: [], readonly_reasons: ['anchors'] })
+    expect(s.analysis.readonlyReasons).toEqual(['anchors'])
   })
 })

@@ -1,0 +1,71 @@
+{
+ "status": 200,
+ "body": {
+  "text": "# Two shell nodes, not yet connected.\nschema_version: 0\nid: pair\nmetadata:\n  layout:\n    nodes:\n      a: {x: 40, y: 40}\ninputs: {}\n\nnodes:\n  # the producer\n  a:\n    type: shell\n    config:\n      command: \"true\"\n    outputs:\n      stdout: {type: string}\n\n  b:\n    type: shell\n    config:\n      command: \"true\"\n    inputs:\n      text: {type: string}\n\nedges: []\noutputs: {}\n",
+  "hash": "9c998805b32427d68fc7627a31197e546f5e9a2de2f11fa50097e54e4a589788",
+  "version": "sha256-v0:2ea1fe134ff33d453a0d9ef2bfae681c3cc6a50f57cead827e29d5ab08d4e027",
+  "definition": {
+   "schema_version": 0,
+   "id": "pair",
+   "metadata": {
+    "layout": {
+     "nodes": {
+      "a": {
+       "x": 40,
+       "y": 40
+      }
+     }
+    }
+   },
+   "inputs": {},
+   "nodes": {
+    "a": {
+     "type": "shell",
+     "config": {
+      "command": "true"
+     },
+     "outputs": {
+      "stdout": {
+       "type": "string"
+      }
+     }
+    },
+    "b": {
+     "type": "shell",
+     "inputs": {
+      "text": {
+       "type": "string"
+      }
+     },
+     "config": {
+      "command": "true"
+     }
+    }
+   },
+   "edges": [],
+   "outputs": {}
+  },
+  "diagnostics": [
+   {
+    "severity": "warning",
+    "code": "W_DECLARED_OUTPUT_UNUSED",
+    "message": "output \"stdout\" on node \"a\" is not consumed",
+    "graph_id": "pair",
+    "location": {
+     "node_id": "a",
+     "path": "nodes.a.outputs.stdout"
+    },
+    "suggestion": "remove the output or bind it to an edge or graph output"
+   }
+  ],
+  "readonly_canvas": false,
+  "line_ending": "lf",
+  "label": "edit.yaml",
+  "results": [
+   {
+    "index": 0,
+    "op": "set_layout"
+   }
+  ]
+ }
+}

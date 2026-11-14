@@ -1,4 +1,28 @@
 {
+ "definition": {
+  "schema_version": 0,
+  "id": "config-error",
+  "inputs": {},
+  "nodes": {
+   "work": {
+    "type": "shell",
+    "config": {
+     "command": ""
+    },
+    "outputs": {
+     "stdout": {
+      "type": "string"
+     }
+    }
+   }
+  },
+  "edges": [],
+  "outputs": {
+   "result": {
+    "from": "work.outputs.stdout"
+   }
+  }
+ },
  "diagnostics": [
   {
    "severity": "error",

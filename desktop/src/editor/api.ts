@@ -1,5 +1,6 @@
 import type { RecentGraph } from '../types'
-import type { OpenResponse, SaveOutcome, StatResponse, ValidateResponse } from './types'
+import { sha256Hex } from './hash'
+import type { Op, OpError, OpenResponse, SaveOutcome, StatResponse, ValidateResponse } from './types'
 
 // Thin wrappers over the preload bridge for the graph document API (ADR-0021).
 const bridge = () => window.agentplane
@@ -7,6 +8,7 @@ const bridge = () => window.agentplane
 interface ErrorBody {
   error?: { code?: string; message?: string }
   current_hash?: string
+  detail?: OpError
 }
 
 const failure = (r: { status: number; body: ErrorBody | null }) => ({
@@ -56,3 +58,20 @@ export async function statDocument(grant: string): Promise<StatResponse | null> 
 }
 
 export const recentGraphs = (): Promise<RecentGraph[]> => bridge().recentGraphs().catch(() => [])
+
+export type EditOutcome = { ok: true; doc: OpenResponse } | { ok: false; code: string; message: string; detail?: OpError }
+
+/**
+ * Applies operations to the text on screen. The text is sent with its hash, so
+ * the answer is always about what the person sees and never writes the file.
+ */
+export async function editDocument(grant: string, text: string, ops: Op[]): Promise<EditOutcome> {
+  try {
+    const base_hash = await sha256Hex(text)
+    const r = await bridge().request<OpenResponse & ErrorBody>('POST', '/graphs/edit', { grant, base_hash, text, ops_version: 1, ops })
+    if (r.status === 200 && r.body) return { ok: true, doc: r.body }
+    return { ...failure(r), detail: r.body?.detail }
+  } catch (e) {
+    return { ok: false, code: 'unavailable', message: e instanceof Error ? e.message : 'the engine could not be reached' }
+  }
+}

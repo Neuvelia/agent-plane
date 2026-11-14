@@ -1,0 +1,103 @@
+{
+ "status": 200,
+ "body": {
+  "text": "# Phase 2 vertical slice demo (F1.6a, F2.10): two independent branches run\n# concurrently, \"flaky\" is rejected by its Gate on attempt 1 and retried alone,\n# then a human node waits for approval before \"apply\" runs. No LLM involved.\n#   agentplane run .agents/graphs/demo-vertical.yaml --approve approve --watch\nschema_version: 0\nid: demo-vertical\ninputs: {}\nnodes:\n  fast:\n    type: shell\n    config:\n      command: /usr/bin/printf\n      args: [\"fast branch done\"]\n    outputs:\n      stdout: {type: string, required: true}\n  approve:\n    type: human\n    config:\n      prompt: Both branches are green. Approve applying the result?\n      context_inputs: [summary]\n    inputs:\n      summary: {type: string, required: true}\n      evidence: {type: json, required: true}\n    outputs:\n      decision: {type: string, required: true}\n  apply:\n    type: shell\n    config:\n      command: /usr/bin/printf\n      args: [\"applied\\n\"]\n    inputs:\n      decision: {type: string, required: true}\nedges:\n  - {from: fast.outputs.stdout, to: approve.inputs.summary}\n  - {from: approve.outputs.decision, to: apply.inputs.decision}\noutputs: {}\n",
+  "hash": "f9853330d62659f60a769f1354f74658974a015a14b352e519334351b8bd699e",
+  "version": "sha256-v0:7fb0f6f579016abc85acba954e2cbb93ae165f36cd1b2fc4c9cc772c4d62e147",
+  "definition": {
+   "schema_version": 0,
+   "id": "demo-vertical",
+   "inputs": {},
+   "nodes": {
+    "apply": {
+     "type": "shell",
+     "inputs": {
+      "decision": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "config": {
+      "args": [
+       "applied\n"
+      ],
+      "command": "/usr/bin/printf"
+     }
+    },
+    "approve": {
+     "type": "human",
+     "inputs": {
+      "evidence": {
+       "type": "json",
+       "required": true
+      },
+      "summary": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "config": {
+      "context_inputs": [
+       "summary"
+      ],
+      "prompt": "Both branches are green. Approve applying the result?"
+     },
+     "outputs": {
+      "decision": {
+       "type": "string",
+       "required": true
+      }
+     }
+    },
+    "fast": {
+     "type": "shell",
+     "config": {
+      "args": [
+       "fast branch done"
+      ],
+      "command": "/usr/bin/printf"
+     },
+     "outputs": {
+      "stdout": {
+       "type": "string",
+       "required": true
+      }
+     }
+    }
+   },
+   "edges": [
+    {
+     "from": "fast.outputs.stdout",
+     "to": "approve.inputs.summary"
+    },
+    {
+     "from": "approve.outputs.decision",
+     "to": "apply.inputs.decision"
+    }
+   ],
+   "outputs": {}
+  },
+  "diagnostics": [
+   {
+    "severity": "error",
+    "code": "E_REQUIRED_INPUT_UNBOUND",
+    "message": "required input \"evidence\" on node \"approve\" has no valid binding",
+    "graph_id": "demo-vertical",
+    "location": {
+     "node_id": "approve",
+     "path": "nodes.approve.inputs.evidence"
+    },
+    "suggestion": "add one compatible edge or graph input binding"
+   }
+  ],
+  "readonly_canvas": false,
+  "line_ending": "lf",
+  "label": "edit.yaml",
+  "results": [
+   {
+    "index": 0,
+    "op": "remove_node"
+   }
+  ]
+ }
+}

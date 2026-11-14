@@ -1,9 +1,18 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import configErrorOpen from '../../test/fixtures/graph-open-config-error.json'
+import anchorsOpen from '../../test/fixtures/graph-open-anchors.json'
+import demoOpen from '../../test/fixtures/graph-open-demo.json'
 import pairOpen from '../../test/fixtures/graph-open-pair.json'
 import parseErrorOpen from '../../test/fixtures/graph-open-parse-error.json'
 import parseErrorValidate from '../../test/fixtures/graph-validate-parse-error.json'
+import emptyValidate from '../../test/fixtures/graph-validate-empty.json'
 import pairValidate from '../../test/fixtures/graph-validate-pair.json'
+import editAddNode from '../../test/fixtures/graph-edit-add-node.json'
+import editCanConnect from '../../test/fixtures/graph-edit-can-connect-demo.json'
+import editDelete from '../../test/fixtures/graph-edit-delete-demo.json'
+import editMove from '../../test/fixtures/graph-edit-move.json'
+import editRefused from '../../test/fixtures/graph-edit-refused.json'
+import editRename from '../../test/fixtures/graph-edit-rename-demo.json'
 import type { GraphStory } from '../storybook/bridge'
 import { EditorScreen } from './EditorScreen'
 import type { OpenResponse, ValidateResponse } from './types'
@@ -67,7 +76,7 @@ export const YamlErrorWhileTyping: S = story(base, async (root) => {
   await typeIn(root, 'id: [\n')
   await wait(700)
 })
-export const NewGraph: S = story(base, async (root) => {
+export const NewGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
   await click(root, 'editor-new')
   await until(root, '.cm-content')
 })
@@ -98,4 +107,73 @@ export const LeavePrompt: S = story(base, async (root) => {
 export const OpenFailed: S = story({ ...base, openError: 'the file does not exist' }, async (root) => {
   await click(root, 'editor-open')
   await until(root, '[data-testid="editor-error"]')
+})
+
+// ---- the canvas (E2.2): recorded answers of the real engine ---------------------
+const demo: GraphStory = {
+  ...base,
+  opened: demoOpen as unknown as OpenResponse,
+  edit: (ops) => {
+    const first = ops[0]?.op
+    const answers: Record<string, { status: number; body: unknown }> = { can_connect: editCanConnect, rename_node: editRename, remove_node: editDelete, add_node: editAddNode, set_layout: editMove }
+    return first ? answers[first] : undefined
+  },
+}
+const shown = async (root: Element) => {
+  await open(root)
+  await until(root, '[data-testid="node-fast"]')
+  await wait(300)
+}
+
+export const CanvasGraph: S = story(demo, shown)
+export const CanvasNodeSelected: S = story(demo, async (root) => {
+  await shown(root)
+  await click(root, 'list-node-approve')
+  await until(root, '[data-testid="selected"]')
+})
+export const CanvasConnectList: S = story(demo, async (root) => {
+  await shown(root)
+  await click(root, 'list-node-fast')
+  await click(root, 'op-connect')
+  await click(root, 'connect-out-stdout')
+  await until(root, '[data-testid^="connect-to-"]')
+})
+export const CanvasRename: S = story(demo, async (root) => {
+  await shown(root)
+  await click(root, 'list-node-fast')
+  await click(root, 'op-rename')
+  await until(root, '[data-testid="rename-form"]')
+})
+export const CanvasDeleteConfirm: S = story(demo, async (root) => {
+  await shown(root)
+  await click(root, 'list-node-flaky')
+  await click(root, 'op-delete')
+  await until(root, '[data-testid="delete-confirm"]')
+})
+export const CanvasAddNode: S = story({ ...base, edit: () => editAddNode }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="node-a"]')
+  await click(root, 'add-shell')
+  await until(root, '[data-testid="node-shell_1"]')
+})
+export const CanvasOperationRefused: S = story({ ...base, edit: () => editRefused }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="node-a"]')
+  await click(root, 'add-shell')
+  await until(root, '[data-testid="editor-error"]')
+})
+export const CanvasReadOnlyAnchors: S = story({ ...base, opened: anchorsOpen as unknown as OpenResponse }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="canvas-readonly"]')
+})
+export const CanvasYamlBroken: S = story(base, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="node-a"]')
+  await typeIn(root, 'id: [\n')
+  await until(root, '[data-testid="canvas-readonly"]')
+})
+export const CanvasEmptyGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
+  await click(root, 'editor-new')
+  await until(root, '[data-testid="editor-canvas"]')
+  await wait(400)
 })

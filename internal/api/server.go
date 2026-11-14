@@ -18,6 +18,7 @@ import (
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
+	"agentplane/internal/graph/edit"
 	"agentplane/internal/runtime"
 	"agentplane/internal/store"
 )
@@ -448,6 +449,9 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := map[string]any{"diagnostics": []graph.Diagnostic{}}
+	if reasons := edit.Inspect(text); len(reasons) > 0 {
+		out["readonly_canvas"], out["readonly_reasons"] = true, reasons
+	}
 	def, err := graph.Parse(text)
 	if err != nil {
 		out["status"], out["parse_error"] = "invalid", err.Error()
@@ -456,6 +460,7 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	}
 	diags := s.diagnostics(def)
 	out["diagnostics"] = diags
+	out["definition"] = toDefinitionDTO(def)
 	out["status"] = "valid"
 	for _, d := range diags {
 		if d.Severity == graph.SeverityError {

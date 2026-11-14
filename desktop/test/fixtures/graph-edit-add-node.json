@@ -1,0 +1,92 @@
+{
+ "status": 200,
+ "body": {
+  "text": "# Two shell nodes, not yet connected.\nschema_version: 0\nid: pair\nmetadata:\n  layout:\n    nodes:\n      shell_1: {x: 80, y: 60}\ninputs: {}\n\nnodes:\n  # the producer\n  a:\n    type: shell\n    config:\n      command: \"true\"\n    outputs:\n      stdout: {type: string}\n\n  b:\n    type: shell\n    config:\n      command: \"true\"\n    inputs:\n      text: {type: string}\n  shell_1:\n    type: shell\n    config:\n      command: \"\"\n\nedges: []\noutputs: {}\n",
+  "hash": "cf72b9c9b7619d302ddaa3e6efd97592cc855075b32603f20dea098ff7ab8b1f",
+  "version": "sha256-v0:103292652c2743f0d2ce9f77245cf86abfd339845302180b5bdf78780e8f54c2",
+  "definition": {
+   "schema_version": 0,
+   "id": "pair",
+   "metadata": {
+    "layout": {
+     "nodes": {
+      "shell_1": {
+       "x": 80,
+       "y": 60
+      }
+     }
+    }
+   },
+   "inputs": {},
+   "nodes": {
+    "a": {
+     "type": "shell",
+     "config": {
+      "command": "true"
+     },
+     "outputs": {
+      "stdout": {
+       "type": "string"
+      }
+     }
+    },
+    "b": {
+     "type": "shell",
+     "inputs": {
+      "text": {
+       "type": "string"
+      }
+     },
+     "config": {
+      "command": "true"
+     }
+    },
+    "shell_1": {
+     "type": "shell",
+     "config": {
+      "command": ""
+     }
+    }
+   },
+   "edges": [],
+   "outputs": {}
+  },
+  "diagnostics": [
+   {
+    "severity": "warning",
+    "code": "W_DECLARED_OUTPUT_UNUSED",
+    "message": "output \"stdout\" on node \"a\" is not consumed",
+    "graph_id": "pair",
+    "location": {
+     "node_id": "a",
+     "path": "nodes.a.outputs.stdout"
+    },
+    "suggestion": "remove the output or bind it to an edge or graph output"
+   },
+   {
+    "severity": "error",
+    "code": "E_NODE_CONFIG_INVALID",
+    "message": "shell node \"shell_1\": command must be a nonempty string",
+    "graph_id": "pair",
+    "location": {
+     "node_id": "shell_1",
+     "path": "nodes.shell_1.config"
+    },
+    "suggestion": "correct the configuration of node \"shell_1\""
+   }
+  ],
+  "readonly_canvas": false,
+  "line_ending": "lf",
+  "label": "edit.yaml",
+  "results": [
+   {
+    "index": 0,
+    "op": "add_node"
+   },
+   {
+    "index": 1,
+    "op": "set_layout"
+   }
+  ]
+ }
+}
