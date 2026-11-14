@@ -1,0 +1,112 @@
+package runtime
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"unicode/utf8"
+
+	"agentplane/internal/graph"
+)
+
+// runPreparation contains only values established before a run starts.
+type runPreparation struct {
+	plan              *graph.BindingPlan
+	graphInputs       map[string]graph.Value
+	redactionTemplate *logRedactor
+	scopes            map[string][]string
+	scopeRedacted     map[string]bool
+	limit             int
+}
+
+func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[string]graph.Value, executor Executor, options Options) (runPreparation, error) {
+	if ctx == nil {
+		return runPreparation{}, errors.New("run context is nil")
+	}
+	if executor == nil {
+		return runPreparation{}, errors.New("node executor is nil")
+	}
+	if options.MaxConcurrency < 0 {
+		return runPreparation{}, fmt.Errorf("max concurrency must not be negative: %d", options.MaxConcurrency)
+	}
+	limit := options.MaxConcurrency
+	if limit == 0 {
+		limit = 1
+	}
+	redactions := append([]string(nil), options.LogRedactions...)
+	redactionTemplate, err := newLogRedactor(redactions)
+	if err != nil {
+		return runPreparation{}, fmt.Errorf("invalid log redactions: %w", err)
+	}
+
+	// Byte logs serialize as base64, but normalized/evidence string observation
+	// must not let JSON manufacture replacement runes after secret redaction.
+	if _, observed := executor.(ObservedExecutor); observed {
+		for _, value := range redactions {
+			if !utf8.ValidString(value) {
+				return runPreparation{}, errors.New("invalid observed redactions: values must be valid UTF-8")
+			}
+		}
+		if !utf8.Valid(redactionTemplate.marker) {
+			return runPreparation{}, errors.New("invalid observed redactions: no UTF-8-safe secret-absent marker is available")
+		}
+	}
+
+	plan, validation := graph.CompileBindings(definition)
+	if !validation.Valid() {
+		return runPreparation{}, &PreflightError{Diagnostics: validation}
+	}
+	inputValidation := plan.ValidateGraphInputs(inputs)
+	if !inputValidation.Valid() {
+		return runPreparation{}, &PreflightError{Diagnostics: inputValidation}
+	}
+	// Run inputs are a stable snapshot even if the caller reuses its map.
+	graphInputs := make(map[string]graph.Value, len(inputs))
+	for name, value := range inputs {
+		graphInputs[name] = value
+	}
+
+	scopes, scopeRedacted, err := unitScopes(definition, redactionTemplate)
+	if err != nil {
+		return runPreparation{}, err
+	}
+	if err := preflightLoops(ctx, definition, executor); err != nil {
+		return runPreparation{}, err
+	}
+	if err := preflightHuman(definition, options.Decisions); err != nil {
+		return runPreparation{}, err
+	}
+	return runPreparation{
+		plan:              plan,
+		graphInputs:       graphInputs,
+		redactionTemplate: redactionTemplate,
+		scopes:            scopes,
+		scopeRedacted:     scopeRedacted,
+		limit:             limit,
+	}, nil
+}
+
+// initializeRun starts the event stream after preflight has accepted all
+// inputs and capabilities. Its setup order matches the former Run body.
+func initializeRun(ctx context.Context, definition *graph.Definition, options Options, prepared runPreparation) (*runMachine, map[string][]string, error) {
+	machine, err := newRunMachine(ctx, definition, options.LiveEvents, options.Persist)
+	if err != nil {
+		return nil, nil, err
+	}
+	machine.definition = definition
+	machine.decisions = options.Decisions
+	for _, id := range definition.Units {
+		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, prepared.scopes[id], prepared.scopeRedacted[id]); err != nil {
+			return nil, nil, err
+		}
+	}
+	if definition.Units != nil {
+		machine.workspaces = inspectWorkspaces(ctx, definition)
+		machine.reportScopeConflicts(definition)
+	}
+	dependencies := make(map[string][]string, len(machine.ids))
+	for _, id := range machine.ids {
+		dependencies[id], _ = prepared.plan.Dependencies(id) // CompileBindings validated every node.
+	}
+	return machine, dependencies, nil
+}

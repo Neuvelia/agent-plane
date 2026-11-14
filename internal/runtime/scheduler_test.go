@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"agentplane/internal/events"
 	"agentplane/internal/graph"
 )
 
@@ -76,6 +77,26 @@ func recordPeak(peak *atomic.Int32, active int32) {
 		if peak.CompareAndSwap(current, active) {
 			return
 		}
+	}
+}
+
+func TestRunRejectsOptionsBeforeGraphValidationWithoutStarting(t *testing.T) {
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def.ID = "INVALID"
+	var executed, persisted atomic.Bool
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		executed.Store(true)
+		return nil, nil
+	})
+	result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: -1, Persist: func(event events.Event) error {
+		persisted.Store(true)
+		return nil
+	}})
+	if err == nil || err.Error() != "max concurrency must not be negative: -1" {
+		t.Fatalf("preflight error = %v", err)
+	}
+	if result.RunID != "" || len(result.Events) != 0 || executed.Load() || persisted.Load() {
+		t.Fatalf("invalid options started a run: result=%#v executed=%t persisted=%t", result, executed.Load(), persisted.Load())
 	}
 }
 
