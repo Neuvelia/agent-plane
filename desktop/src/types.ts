@@ -50,12 +50,29 @@ export interface ApiResponse<T = unknown> {
   body: T | null
 }
 
+/** What the main process returns for a graph the person chose (ADR-0021). */
+export type GraphGrantResult =
+  | { ok: true; grant: string; label: string; exists: boolean }
+  | { ok: false; code: string; message: string }
+  | { canceled: true }
+
+export interface RecentGraph {
+  id: string
+  label: string
+}
+
 declare global {
   interface Window {
     agentplane: {
-      request: <T = unknown>(method: 'GET' | 'POST', path: string, body?: unknown) => Promise<ApiResponse<T>>
+      request: <T = unknown>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) => Promise<ApiResponse<T>>
       subscribe: (runId: string, onEvent: (e: ApEvent) => void, onEnd: (reason: string) => void) => () => void
       pickGraph: () => Promise<string | null>
+      openGraph: () => Promise<GraphGrantResult>
+      newGraph: () => Promise<GraphGrantResult>
+      recentGraphs: () => Promise<RecentGraph[]>
+      openRecentGraph: (id: string) => Promise<GraphGrantResult>
+      touchRecent: (grant: string) => Promise<boolean>
+      closeGraph: (grant: string) => Promise<boolean>
     }
   }
 }

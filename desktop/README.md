@@ -70,8 +70,14 @@ a dev dependency and is never part of the packaged app.
 - **The renderer is sandboxed.** `contextIsolation` is on, `nodeIntegration` is
   off, the CSP allows only the bundle, and the sidecar port/token never leave
   the main process (`electron/main.cjs`). The preload exposes `request`,
-  `subscribe` and `pickGraph` only, and the main process forwards only
-  `/runs`, `/approvals` and `/graphs` paths.
+  `subscribe`, `pickGraph` and the graph-file calls (`openGraph`, `newGraph`,
+  `recentGraphs`, `openRecentGraph`, `touchRecent`, `closeGraph`), and the main
+  process forwards only an exact list of routes (`electron/allowlist.cjs`):
+  never `/graphs/grants`, which only main calls. Graph files for the editor are
+  chosen in native dialogs in main (`electron/graphs.cjs`) and reach the
+  renderer only as opaque grants and file names, never paths (ADR-0021). Recently
+  opened graphs are kept by main in the user data directory
+  (`electron/recents.cjs`).
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 

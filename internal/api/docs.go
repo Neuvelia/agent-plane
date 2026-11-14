@@ -172,6 +172,21 @@ func (s *Server) grants(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"grant": g.id, "label": g.label, "exists": body.Mode == "open"})
 }
 
+// revokeGrant forgets a grant when its document is closed. Like grants, it is a
+// main-process route the renderer cannot reach.
+func (s *Server) revokeGrant(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	s.docs.mu.Lock()
+	_, ok := s.docs.grants[id]
+	delete(s.docs.grants, id)
+	s.docs.mu.Unlock()
+	if !ok {
+		writeError(w, http.StatusNotFound, "unknown_grant", "unknown grant")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // readGranted reads the granted file's current bytes, refusing anything that is
 // no longer a regular file.
 func readGranted(g *grant) ([]byte, os.FileInfo, error) {
