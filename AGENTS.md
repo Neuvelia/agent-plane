@@ -363,6 +363,10 @@ codex/F0.4-dag-scheduler
 
 Prefer small commits that describe one coherent change.
 
+After implementation and required checks, push the feature branch and create
+a Pull Request by default. Do not ask the user to choose between merging,
+creating a PR, and keeping the branch. Never merge without an explicit request.
+
 Examples:
 
 ```text
