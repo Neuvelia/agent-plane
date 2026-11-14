@@ -46,6 +46,7 @@ feature contract.
 | `F2.10-human-node.md` | Implemented; ADR-0017 |
 | `F2.9-run-store.md` | Implemented; ADR-0019 |
 | `F2.5-live-map.md` | Draft; ADR-0019 (accepted) |
+| `F2.5a-desktop-redesign.md` | Approved; R0 in progress; presentation only, no ADR |
 
 ## Later phases
 
