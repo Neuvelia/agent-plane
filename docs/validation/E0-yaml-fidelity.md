@@ -22,8 +22,9 @@ and its references), encodes with indent 2, and reports:
 
 Files: the three example graphs in `.agents/graphs/`, and fixtures in
 `experiments/yaml-fidelity/testdata/`: `hostile.yaml` (anchor, merge key, alias, block scalar, comments in
-odd places, quoted `#`, flow styles, document start), `crlf.yaml`, `bom.yaml`, `long.yaml` (190-character
-arguments, folded block scalar).
+odd places, quoted `#`, flow styles, document start), `comments.yaml` (trailing comments on keys),
+`comments.yaml` (trailing comments on keys), `crlf.yaml`,
+`bom.yaml`, `long.yaml` (190-character arguments, folded block scalar).
 
 The measured tool uses two things beyond a plain `yaml.v3` encode: a pass that restores blank lines (the
 encoder drops all of them) and a pass that restores a byte order mark and CRLF line endings. Both are small
@@ -95,6 +96,22 @@ Unpatchable constructs (editor opens canvas read-only): none
 | move the same node again | 4 | 0 | 7 > 7 | yes | 14 > 15 | yes | yes (unchanged) |
 | rename a node (key and references) | 4 | 0 | 7 > 7 | yes | 14 > 14 | yes | yes (matches typed edit) |
 
+### experiments/yaml-fidelity/testdata/comments.yaml
+
+Unpatchable constructs (editor opens canvas read-only): none
+
+| operation | diff lines | comments lost | blank lines (before > after) | key order kept | quoting/flow nodes (before > after) | re-parses | semantic version as predicted |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| identity (decode, encode) | 12 | 0 | 1 > 1 | yes | 4 > 4 | yes | yes (unchanged) |
+| set `config.command` of the first node | 14 | 0 | 1 > 1 | yes | 4 > 4 | yes | yes (matches typed edit) |
+| replace `args` of the first node | skipped: first node has no config.args | | | | | | |
+| add a node (with a head comment) | 17 | 0 | 1 > 1 | yes | 4 > 5 | yes | yes (matches typed edit) |
+| add an edge | 14 | 1 (# none yet) | 1 > 1 | yes | 4 > 3 | yes | yes (matches typed edit) |
+| remove a leaf node | skipped: no leaf node | | | | | | |
+| move a node (create `metadata.layout`) | 16 | 0 | 1 > 1 | yes | 4 > 5 | yes | yes (unchanged) |
+| move the same node again | 16 | 0 | 1 > 1 | yes | 4 > 5 | yes | yes (unchanged) |
+| rename a node (key and references) | 12 | 0 | 1 > 1 | yes | 4 > 4 | yes | yes (matches typed edit) |
+
 ### experiments/yaml-fidelity/testdata/crlf.yaml
 
 Unpatchable constructs (editor opens canvas read-only): none
@@ -152,13 +169,13 @@ Unpatchable constructs (editor opens canvas read-only): none
    `hello-parallel.yaml` changes 6 lines (7 blank lines become 1) and `phase0-cli.yaml` 7 lines. With the
    pass, a no-op save of all three example graphs is **byte-identical (0 diff lines)**.
 3. **Edits are local.** On the example graphs: setting a scalar or adding an edge changes 2 lines, adding a
-   node 5 lines (blank line, comment, key and two children), a node move 4 lines (the new `metadata.layout`
+   node 5 lines (the head comment, the key, `type`, `config` and `command`), a node move 4 lines (the new `metadata.layout`
    block, inserted before `inputs`), a rename 4 to 9 lines (the key and every reference), removing a leaf
    node the node's own lines plus its edges.
 4. **Quoting and flow style are kept** for untouched nodes (counts equal on identity). Replacing the content
    of a flow list keeps it a flow list.
 5. **CRLF and a BOM need explicit handling.** The plain encode of a CRLF file rewrites every line (110 diff
-   lines on a 40-line file) and drops a BOM. Re-applying the original line ending and the BOM makes a no-op
+   lines on a 55-line file) and drops a BOM. Re-applying the original line ending and the BOM makes a no-op
    save byte-identical again.
 6. **Anchors, aliases and merge keys are the one real hazard.** On `hostile.yaml`, editing the `args` of the
    node that owns the anchor also changes the node that merges it. A typed edit predicts that only the first
@@ -168,7 +185,12 @@ Unpatchable constructs (editor opens canvas read-only): none
 7. **Normalisations that remain** (all semantically neutral, all re-parse to the same version):
    a document start `---` is dropped; a trailing comment's spacing becomes a single space; runs of blank
    lines collapse to one; a folded block scalar (`>`) is re-flowed into one line plus a blank line; a leading
-   merge key is written `!!merge <<`. Indentation is two spaces, which matches the repository's graphs.
+   merge key is written `!!merge <<`. Trailing comments on keys stay on their line (`comments.yaml`), with
+   spacing normalised to one space.
+8. **A comment can move, not only disappear.** The "comments lost" column counts only comments that vanish.
+   In `hostile.yaml`, the trailing comment on `config: &shell   # anchor...` moved onto the next line, to
+   `command: printf # anchor...`, so it now describes a different element. It happens with an anchor on the
+   key line, which is one more reason to refuse canvas edits on such files. Indentation is two spaces, which matches the repository's graphs.
 
 ## What ADR-A can promise
 
@@ -194,4 +216,6 @@ Unpatchable constructs (editor opens canvas read-only): none
   blank line is treated as part of the key's block. The engine's tests must pin this behaviour.
 - Moves of whole sections, multi-document files and tabs are not measured. A multi-document file is already
   rejected by `graph.Parse`.
+- Comment position is not measured automatically, only presence; the one displacement found is described in
+  finding 8 and was seen by reading the diff. The engine's fidelity suite must compare comment positions.
 - Windows `CRLF` was measured on Linux with a converted fixture; mixed line endings are not handled.
