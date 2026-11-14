@@ -141,7 +141,8 @@ export function GraphCanvas(props: { g: GraphDocument; doc: DocState }) {
 function Inner({ g, doc }: { g: GraphDocument; doc: DocState }) {
   const { t } = useI18n()
   const def = doc.analysis.definition
-  const block: CanvasBlock = doc.analysis.readonlyReasons?.length ? 'anchors' : doc.analysis.parseError ? 'parse' : null
+  // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
+  const block: CanvasBlock = doc.analysis.parseError ? 'parse' : doc.analysis.readonlyReasons?.length ? 'anchors' : null
   const readOnly = block !== null || !def
   const flow = useReactFlow()
   const [sel, setSel] = useState<Sel>(null)

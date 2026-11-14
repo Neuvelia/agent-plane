@@ -1,0 +1,44 @@
+{
+ "text": "schema_version: 0\nid: with-inputs\ninputs:\n  topic: {type: string, required: true}\nnodes:\n  echo:\n    type: shell\n    config: {command: /usr/bin/printf, args: [\"%s\\n\"]}\n    inputs:\n      topic: {type: string, required: true}\ngraph_input_bindings:\n  - {from: inputs.topic, to: echo.inputs.topic}\nedges: []\noutputs: {}\n",
+ "hash": "2f0b53f1a9dbc7b60a5599856a0687d8cf6baa2ca84ed2fb616f496c5f411615",
+ "version": "sha256-v0:5a6eedbd4dd5bf6be0a6a81a3757997e849c8c445facc0b28bc1ebeca07117ea",
+ "definition": {
+  "schema_version": 0,
+  "id": "with-inputs",
+  "inputs": {
+   "topic": {
+    "type": "string",
+    "required": true
+   }
+  },
+  "nodes": {
+   "echo": {
+    "type": "shell",
+    "inputs": {
+     "topic": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "args": [
+      "%s\n"
+     ],
+     "command": "/usr/bin/printf"
+    }
+   }
+  },
+  "edges": [],
+  "graph_input_bindings": [
+   {
+    "from": "inputs.topic",
+    "to": "echo.inputs.topic"
+   }
+  ],
+  "outputs": {}
+ },
+ "diagnostics": [],
+ "readonly_canvas": false,
+ "line_ending": "lf",
+ "label": "with-inputs.yaml"
+}

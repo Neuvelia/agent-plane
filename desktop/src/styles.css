@@ -237,3 +237,6 @@ main:focus{outline:none}
 .ed-list-item.sel{box-shadow:var(--ring-selected)}
 .ed-list-item:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .ed-selected{display:grid;gap:6px;padding:var(--space-8) var(--space-12) var(--space-12)}
+
+.ed-inputs{display:grid;gap:6px}
+.ed-inputs textarea{min-height:64px}

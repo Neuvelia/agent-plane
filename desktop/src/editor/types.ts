@@ -21,6 +21,7 @@ export interface Definition {
   id: string
   name?: string
   metadata?: Record<string, unknown>
+  inputs?: Record<string, PortDef>
   nodes: Record<string, NodeDef>
   edges: EdgeDef[]
   graph_input_bindings?: EdgeDef[]

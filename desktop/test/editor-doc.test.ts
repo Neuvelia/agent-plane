@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { COALESCE_MS, MAX_HISTORY, analyzed, counts, edited, fromNew, fromOpen, isDirty, newGraphText, redo, reloaded, saved, type, undo, validating, withConflict } from '../src/editor/doc'
+import { COALESCE_MS, MAX_HISTORY, analyzed, counts, edited, runBlock, fromNew, fromOpen, isDirty, newGraphText, redo, reloaded, saved, type, undo, validating, withConflict } from '../src/editor/doc'
 import type { OpenResponse } from '../src/editor/types'
 
 const open = (text = 'a\n'): OpenResponse => ({ text, hash: 'h0', version: 'v0', diagnostics: [], readonly_canvas: false, line_ending: 'lf', label: 'g.yaml' })
@@ -191,5 +191,21 @@ describe('operations (canvas edits)', () => {
   it('reports read-only reasons from the engine', () => {
     const s = analyzed(type(start(), 'x\n', 5000), 'x\n', { status: 'valid', diagnostics: [], readonly_reasons: ['anchors'] })
     expect(s.analysis.readonlyReasons).toEqual(['anchors'])
+  })
+})
+
+describe('runBlock ("Save and run" gating reads the engine, decides nothing)', () => {
+  const ready = { status: 'ready' as const, diagnostics: [], stale: false, definition: { id: 'g', nodes: { a: { type: 'shell' } }, edges: [], outputs: {} } }
+  it('allows a checked graph with nodes, warnings included', () => {
+    expect(runBlock(ready)).toBeNull()
+    expect(runBlock({ ...ready, diagnostics: [{ severity: 'warning', code: 'W', message: '' }] as never })).toBeNull()
+  })
+  it('blocks on each reason', () => {
+    expect(runBlock({ ...ready, parseError: 'bad' })).toBe('parse')
+    expect(runBlock({ ...ready, stale: true })).toBe('checking')
+    expect(runBlock({ ...ready, status: 'validating' })).toBe('checking')
+    expect(runBlock({ ...ready, diagnostics: [{ severity: 'error', code: 'E', message: '' }] as never })).toBe('errors')
+    expect(runBlock({ ...ready, definition: { id: 'g', nodes: {}, edges: [], outputs: {} } })).toBe('empty')
+    expect(runBlock({ ...ready, definition: undefined })).toBe('empty')
   })
 })

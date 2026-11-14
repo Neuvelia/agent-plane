@@ -23,6 +23,8 @@ export interface GraphStory {
   validate?: (text: string) => ValidateResponse
   /** Answers an operation batch with a recorded response; undefined means "the engine could not be reached". */
   edit?: (ops: { op: string }[], text: string) => { status: number; body: unknown } | undefined
+  /** How starting a run from the grant ends. Default: ok. */
+  run?: 'ok' | 'error'
   /** How a save ends. Default: ok. */
   save?: 'ok' | 'conflict' | 'gone' | 'exists' | 'error'
   /** Makes openGraph() fail with this message. */
@@ -63,6 +65,10 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
         const answer = g.edit?.(b.ops ?? [], b.text ?? '')
         if (!answer) throw new Error('the engine could not be reached')
         return respond(answer.status, answer.body) as ApiResponse<T>
+      }
+      if (method === 'POST' && path === '/runs' && g) {
+        if (g.run === 'error') return respond(422, { error: { code: 'invalid_graph', message: 'the graph file is not valid' }, diagnostics: [{ severity: 'error', code: 'E_NODE_CONFIG_INVALID', message: 'shell node "work": config.command must not be empty' }] }) as ApiResponse<T>
+        return respond(202, { run_id: 'story-run' }) as ApiResponse<T>
       }
       if (method === 'POST' && path === '/graphs/stat' && g?.opened) return respond(200, { exists: true, hash: g.opened.hash, size: g.opened.text.length }) as ApiResponse<T>
       if (method === 'PUT' && path === '/graphs/save' && g) {

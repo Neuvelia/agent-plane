@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GraphGrantResult, RecentGraph } from '../types'
 import type { Op, OpResult } from './types'
 import { analyzed, edited, fromNew, fromOpen, isDirty, newGraphText, redo as redoDoc, reloaded, saved, type as typeDoc, undo as undoDoc, validating, withConflict, type DocState } from './doc'
-import { editDocument, openDocument, recentGraphs, saveDocument, statDocument, validateText } from './api'
+import { editDocument, openDocument, runGrant, recentGraphs, saveDocument, statDocument, validateText } from './api'
 
 /** How long typing pauses before the text is validated (spec F2.1, requirement 12). */
 export const VALIDATE_DELAY_MS = 300
 
-export type EditorError = { kind: 'open' | 'save' | 'edit'; message: string }
+export type EditorError = { kind: 'open' | 'save' | 'edit' | 'run'; message: string }
 
 export type ApplyResult = { ok: true; results: OpResult[] } | { ok: false; message: string }
 
@@ -18,7 +18,7 @@ export interface Leave {
 
 export interface GraphDocument {
   doc: DocState | null
-  busy: 'opening' | 'saving' | null
+  busy: 'opening' | 'saving' | 'starting' | null
   error: EditorError | null
   recent: RecentGraph[]
   leave: Leave | null
@@ -34,6 +34,8 @@ export interface GraphDocument {
   undo: () => void
   redo: () => void
   save: () => Promise<void>
+  /** Saves a changed draft, then starts a run of the saved file. Returns the run id, or null when nothing started. */
+  saveAndRun: (inputs: string[]) => Promise<string | null>
   keepMine: () => Promise<void>
   reload: () => Promise<void>
   dismissError: () => void
@@ -136,9 +138,9 @@ export function useGraphDocument(): GraphDocument {
   // Saving sends the draft with the hash of the file as last seen. A refusal is
   // never silent: it becomes a conflict banner or an error.
   const saveWith = useCallback(
-    async (baseHash: string | null) => {
+    async (baseHash: string | null): Promise<boolean> => {
       const current = docRef.current
-      if (!current) return
+      if (!current) return false
       const text = current.draft
       setBusy('saving')
       const outcome = await saveDocument(current.grant, baseHash, text)
@@ -149,12 +151,13 @@ export function useGraphDocument(): GraphDocument {
         const hash = outcome.hash
         setDoc((d) => (d && d.grant === current.grant ? saved(d, text, hash) : d))
         if (wasNew) void window.agentplane.touchRecent(current.grant).then(refreshRecent)
-        return
+        return true
       }
       if (outcome.kind === 'conflict') setDoc((d) => (d ? withConflict(d, { kind: 'changed', currentHash: outcome.currentHash }) : d))
       else if (outcome.kind === 'exists') setDoc((d) => (d ? withConflict(d, { kind: 'exists' }) : d))
       else if (outcome.kind === 'gone') setDoc((d) => (d ? withConflict(d, { kind: 'gone' }) : d))
       else setError({ kind: 'save', message: outcome.message })
+      return false
     },
     [refreshRecent],
   )
@@ -164,15 +167,37 @@ export function useGraphDocument(): GraphDocument {
     if (current) await saveWith(current.savedHash)
   }, [saveWith])
 
+  const saveAndRun = useCallback(
+    async (inputs: string[]): Promise<string | null> => {
+      const current = docRef.current
+      if (!current) return null
+      // A refused save (conflict, gone, error) stops here: nothing runs from a file the person did not mean.
+      if (current.isNew || isDirty(current)) {
+        if (!(await saveWith(current.savedHash))) return null
+      }
+      setBusy('starting')
+      const r = await runGrant(current.grant, inputs)
+      setBusy(null)
+      if (!r.ok) {
+        setError({ kind: 'run', message: r.message })
+        return null
+      }
+      return r.runId
+    },
+    [saveWith],
+  )
+
   // "Keep mine": overwrite what is on disk now, knowing its hash. If the file is
   // gone (or someone created it), the choice is to create or replace it.
   const keepMine = useCallback(async () => {
     const c = docRef.current?.conflict
     if (!c) return
-    if (c.kind === 'changed') return saveWith(c.currentHash)
-    if (c.kind === 'gone') return saveWith(null)
-    const stat = await statDocument(docRef.current!.grant)
-    return saveWith(stat?.exists ? (stat.hash ?? null) : null)
+    if (c.kind === 'changed') await saveWith(c.currentHash)
+    else if (c.kind === 'gone') await saveWith(null)
+    else {
+      const stat = await statDocument(docRef.current!.grant)
+      await saveWith(stat?.exists ? (stat.hash ?? null) : null)
+    }
   }, [saveWith])
 
   const reload = useCallback(async () => {
@@ -246,6 +271,6 @@ export function useGraphDocument(): GraphDocument {
     return () => window.removeEventListener('focus', onFocus)
   }, [grant])
 
-  return { doc, busy, error, recent, leave, open, create, openRecent, close, type, applyOps, revalidate, undo, redo, save, keepMine, reload, dismissError, saveAndLeave, discardAndLeave, cancelLeave }
+  return { doc, busy, error, recent, leave, open, create, openRecent, close, type, applyOps, revalidate, undo, redo, save, saveAndRun, keepMine, reload, dismissError, saveAndLeave, discardAndLeave, cancelLeave }
 }
 

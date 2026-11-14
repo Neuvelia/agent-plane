@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest'
 // F2.1: no graph rule lives in TypeScript. Whether two ports connect, which
 // nodes are valid or what an edge means is always the engine's answer. This
 // scans the renderer sources for the validator's diagnostic codes and for
-// port-type comparison; stories and fixtures are recordings and are skipped.
+// port-type comparison; stories, fixtures and the Storybook bridge are recordings and are skipped.
 const files = (dir: string): string[] =>
   readdirSync(dir).flatMap((n) => {
     const p = join(dir, n)
     if (statSync(p).isDirectory()) return files(p)
-    return /\.(ts|tsx)$/.test(n) && !/\.stories\.tsx$/.test(n) ? [p] : []
+    return /\.(ts|tsx)$/.test(n) && !/\.stories\.tsx$/.test(n) && !p.includes('/storybook/') ? [p] : []
   })
 
 describe('no graph rules in the renderer', () => {

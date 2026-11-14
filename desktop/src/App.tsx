@@ -100,7 +100,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
-          {route.name === 'editor' && <EditorScreen g={editor} />}
+          {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'new' && <RunConfig key={route.path ?? ''} initialPath={route.path} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

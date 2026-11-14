@@ -279,6 +279,61 @@ async function startDemo(page) {
     await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-dashboard"]')
 
+    // E2.3: window focus finds outside changes; Save and run runs the SAVED file.
+    const focusIt = () => page.evaluate(() => window.dispatchEvent(new Event('focus')))
+    const watched = path.join(graphDir, 'watched.yaml')
+    fs.writeFileSync(watched, original)
+    await stubOpen(watched)
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-open"]')
+    await page.waitForSelector('[data-testid="node-fast"]')
+    // A clean draft follows the file silently.
+    fs.writeFileSync(watched, original + '# changed outside\n')
+    await focusIt()
+    await page.waitForFunction(() => document.querySelector('[data-testid="yaml-content"]')?.textContent?.includes('changed outside'))
+    assert.equal(await page.isVisible('[data-testid="conflict-banner"]'), false)
+    // A dirty draft is told, never overwritten; Keep mine saves over the newer file.
+    await page.click('[data-testid="yaml-content"]')
+    await page.keyboard.press(`${mod}+End`)
+    await page.keyboard.type('# mine\n')
+    fs.writeFileSync(watched, original + '# changed again\n')
+    await focusIt()
+    await page.waitForSelector('[data-testid="conflict-banner"]')
+    assert.equal(fs.readFileSync(watched, 'utf8'), original + '# changed again\n')
+    // Save and run is refused by the same conflict and starts nothing.
+    const runsBefore = (await page.evaluate(() => window.agentplane.request('GET', '/runs'))).body.runs.length
+    await page.click('[data-testid="editor-save-run"]')
+    await page.waitForSelector('[data-testid="conflict-banner"]')
+    assert.equal((await page.evaluate(() => window.agentplane.request('GET', '/runs'))).body.runs.length, runsBefore, 'a refused save starts no run')
+    await page.click('[data-testid="keep-mine"]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="conflict-banner"]'))
+    assert.ok(fs.readFileSync(watched, 'utf8').endsWith('# mine\n'))
+    await page.click('[data-testid="editor-close"]')
+
+    // Round trip: a graph made in the editor is saved, run from the app, and the CLI accepts the same file.
+    const made2 = path.join(graphDir, 'roundtrip')
+    await stubSave(made2)
+    await page.click('[data-testid="editor-new"]')
+    await page.waitForSelector('[data-testid="yaml-content"]')
+    await page.click('[data-testid="add-shell"]')
+    await page.waitForSelector('[data-testid="node-shell_1"]')
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true, 'a starter shell has an empty command, so the engine blocks the run')
+    await page.click('[data-testid="yaml-content"]')
+    await page.keyboard.press(`${mod}+a`)
+    // insertText keeps the text exactly; typing Enter in CodeMirror would auto-indent.
+    await page.evaluate((t) => document.execCommand('insertText', false, t), 'schema_version: 0\nid: roundtrip\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: {command: /usr/bin/printf, args: ["hello\\n"]}\nedges: []\noutputs: {}\n')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
+    await page.click('[data-testid="editor-save-run"]')
+    await page.waitForSelector('[data-testid="run-status"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
+    const exec = require('node:child_process').execFileSync
+    const bin = path.join(__dirname, '..', '..', 'bin', 'agentplane')
+    exec(bin, ['graph', 'validate', path.join(graphDir, 'roundtrip.yaml')])
+    exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-close"]').catch(() => {})
+    await page.click('[data-testid="nav-dashboard"]')
+
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
@@ -378,7 +433,7 @@ async function startDemo(page) {
     await page.waitForSelector('[data-testid="dashboard"]')
     await page.click('[data-testid="nav-runs"]')
     await page.waitForSelector('[data-testid="run-row"]')
-    assert.equal(await page.locator('[data-testid="run-row"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="run-row"]').count(), 2, "the demo run and the run started from the editor")
     assert.match(await page.textContent('[data-testid="run-row"]'), /Succeeded/)
     await page.click('[data-testid="run-row"]')
     await waitStatus(page, 'apply', 'succeeded')

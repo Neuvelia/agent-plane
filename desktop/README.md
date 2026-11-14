@@ -106,6 +106,16 @@ graph read-only; files with anchors, aliases or merge keys open read-only too.
 Everything is reachable from the keyboard: the node list, "Connect…" with its
 engine-checked target list, Rename, Delete and the connections list.
 
+## Save and run (F2.1, slice E2.3)
+
+"Save and run" saves a changed draft first (a refused save, such as a conflict,
+stops there and starts nothing) and then starts a run with `graph_grant`, so the
+run always uses the saved bytes, never unsaved text. It is available when the
+engine reports no error on the checked draft and the graph has nodes; the reason
+it is not available is shown next to the toolbar. Graphs that declare inputs show
+a `name=value` field. On window focus the editor looks at the file: a clean draft
+follows it silently, a dirty draft gets the conflict banner (Keep mine / Reload).
+
 CodeMirror (`@codemirror/state`, `view`, `language`, `lang-yaml`, `commands`,
 `@lezer/highlight`, all MIT, exact-pinned) is a renderer-only, development-time
 bundle dependency: it makes no network requests and is loaded lazily, so the

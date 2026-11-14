@@ -57,6 +57,21 @@ export async function statDocument(grant: string): Promise<StatResponse | null> 
   }
 }
 
+export type RunOutcome = { ok: true; runId: string } | { ok: false; message: string }
+
+/** Starts a run from the SAVED bytes of the granted file; the sidecar never sees unsaved text. */
+export async function runGrant(grant: string, inputs: string[]): Promise<RunOutcome> {
+  try {
+    const r = await bridge().request<{ run_id?: string } & ErrorBody & { diagnostics?: { message: string }[] }>('POST', '/runs', { graph_grant: grant, inputs })
+    if (r.status === 202 && r.body?.run_id) return { ok: true, runId: r.body.run_id }
+    const first = r.body?.diagnostics?.[0]?.message
+    const base = failure(r).message
+    return { ok: false, message: first ? `${base}: ${first}` : base }
+  } catch (e) {
+    return { ok: false, message: e instanceof Error ? e.message : 'the engine could not be reached' }
+  }
+}
+
 export const recentGraphs = (): Promise<RecentGraph[]> => bridge().recentGraphs().catch(() => [])
 
 export type EditOutcome = { ok: true; doc: OpenResponse } | { ok: false; code: string; message: string; detail?: OpError }
