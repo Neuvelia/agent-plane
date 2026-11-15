@@ -99,6 +99,38 @@ The implementer should:
 
 A green check is necessary, not sufficient. Acceptance criteria still need human and reviewer inspection.
 
+## CI matrix
+
+`.github/workflows/ci.yml` runs `scripts/check.sh` (the body of `make check`)
+on every push and pull request, on three runners: `linux-x64`
+(`ubuntu-latest`), `macos-arm64` (`macos-latest`) and `windows-x64`
+(`windows-latest`). Linux and macOS are required and also run `make build`.
+Windows is reported but non-blocking (`continue-on-error`, 20 minute cap)
+because main does not pass there yet; the job checks out with LF line endings
+so `gofmt -l` means the same on every OS. Remove `experimental` for Windows once
+it is green. The desktop shell stays outside this gate (`make desktop-check`).
+
+Known Windows failures, found by reading the code (follow-up work, not fixed):
+
+- `internal/gate/executor_test.go:199` calls `syscall.Mkfifo`, so the
+  `internal/gate` tests do not compile for Windows. `go vet` stops
+  `scripts/check.sh` there, so until this is fixed the Windows job never
+  reaches `go test` and the items below stay unreported in CI.
+- Production code hard-codes Unix tool paths: `/usr/bin/git` in
+  `internal/gitstate/snapshot.go:64` and `internal/runtime/workspace.go:45`;
+  the command Gate requires `/usr/bin/diff` and `/dev/fd/3`
+  (`internal/gate/config.go:62`, `internal/gate/command.go:90`).
+- Tests start Unix binaries by absolute path: `/usr/bin/printenv` and
+  `/usr/bin/true` in `internal/shell/executor_test.go:659,690`; `/usr/bin/git`
+  in the git fixtures of `cmd/agentplane` (`adapter_test.go:16`,
+  `gate_test.go:23`, `loop_test.go:25`, `unit_test.go:26`,
+  `changed_scope_test.go:19`, `progress_test.go:35`), `internal/runtime`,
+  `internal/gitstate`, `internal/gate` and `internal/agent/codex`;
+  `/usr/bin/mkfifo` in `cmd/agentplane/progress_test.go:42`; `/usr/bin/printf`
+  in `cmd/agentplane/unit_test.go:70`.
+- Tests assert Unix permission bits, which Windows does not report:
+  `internal/api/docs_test.go:407,448` and `internal/store/store_test.go:65`.
+
 ## Review session
 
 Start a fresh Codex session where practical.
