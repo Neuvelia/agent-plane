@@ -159,6 +159,22 @@ func (s *session) apply(op Op) (*QueryResult, *Error) {
 		return nil, s.removeEdge(op)
 	case OpCanConnect:
 		return s.canConnect(op.From, op.To), nil
+	case OpSetConfig:
+		return nil, s.setConfig(op)
+	case OpUnsetConfig:
+		return nil, s.unsetConfig(op)
+	case OpAddPort:
+		return nil, s.addPort(op)
+	case OpUpdatePort:
+		return nil, s.updatePort(op)
+	case OpRemovePort:
+		return nil, s.removePort(op)
+	case OpSetLoop:
+		return nil, s.setLoop(op)
+	case OpClearLoop:
+		return nil, s.clearLoop(op)
+	case OpSetUnits:
+		return nil, s.setUnits(op)
 	}
 	return nil, &Error{Code: CodeUnknownOp, Message: fmt.Sprintf("unknown operation %q", op.Op), OpIndex: -1}
 }

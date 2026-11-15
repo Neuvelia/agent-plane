@@ -10,13 +10,19 @@ package edits a graph document in memory; it does not save a file.
 | Versioned operation vocabulary and strict JSON decode | `ops.go` |
 | Atomic batch and typed/tree safety net | `apply.go` |
 | Node, edge and layout operations | `nodes.go`, `edges.go`, `layout.go` |
+| Inspector operations: config, ports and their references, loop, units (F2.2) | `config.go`, `ports.go`, `refs.go`, `loop.go`, `values.go` |
 | YAML tree helpers and read-only constructs | `tree.go` |
 | Blank lines, BOM, line endings and encoding | `envelope.go` |
 | Structured operation failures | `errors.go` |
 
 ## Preserve these contracts
 
-- `ops.go` defines the current version-1 operation vocabulary. `Decode`
+- `ops.go` defines the current version-1 operation vocabulary (F2.1 and F2.2).
+  A JSON value enters through `values.go`, which keeps object key order and
+  writes numbers so YAML reads them as the same type; nested config mappings
+  are `graph.NodeConfig` in the typed prediction, as `graph.Parse` reads them.
+  Port renames and removals go through `refs.go`, the one list of places a
+  port is referenced. `Decode`
   strictly parses the operation array; the API checks `ops_version` before
   calling it. A batch in `Apply` is bounded and atomic: on an operation or
   safety-net error, return no edited text. Add operations only in their own
