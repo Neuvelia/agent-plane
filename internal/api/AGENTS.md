@@ -36,6 +36,12 @@ document or event contract.
   memory; other finished runs replay from the store. Preserve the distinction
   between a persistence failure and an ordinary run failure. Shutdown cancels
   active runs and admits no new runs.
+- Opt-in recorded values (`value_recorded`, ADR-0023) are ordinary events:
+  clients read them through `GET /runs/{id}/events`, live or from the store.
+  Do not add a second values route or side store. Recording and redaction
+  are fixed per server by `serve --record-values` and `--redact-env`; the
+  `serve` starter refuses a graph that holds a configured secret before a run
+  exists. Run summaries carry `graph_version` from the store.
 - Human decisions are scoped to both run ID and node-run ID. The first
   accepted decision wins; a repeat for that run returns 409 with the original
   decision, while a different run gets 404. Cancellation must not discard a

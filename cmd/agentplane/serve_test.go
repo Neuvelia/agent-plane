@@ -26,9 +26,16 @@ type servedAPI struct {
 	dir         string
 }
 
-func startServe(t *testing.T) *servedAPI {
+// startServe runs `serve --store-dir DIR` plus extra flags. An extra
+// --store-dir overrides DIR (the flag package keeps the last value).
+func startServe(t *testing.T, extra ...string) *servedAPI {
 	t.Helper()
 	dir := t.TempDir()
+	for i := 0; i+1 < len(extra); i++ {
+		if extra[i] == "--store-dir" {
+			dir = extra[i+1]
+		}
+	}
 	stdinR, stdinW := io.Pipe()
 	stdoutR, stdoutW := io.Pipe()
 	old := serveStdin
@@ -40,7 +47,7 @@ func startServe(t *testing.T) *servedAPI {
 	onServe = func(srv *api.Server) { hubc <- srv.Hub }
 	t.Cleanup(func() { onServe = oldHook })
 	go func() {
-		exit <- runCommand(context.Background(), []string{"serve", "--store-dir", dir}, stdoutW, io.Discard)
+		exit <- runCommand(context.Background(), append([]string{"serve", "--store-dir", dir}, extra...), stdoutW, io.Discard)
 		stdoutW.Close()
 	}()
 	line, err := bufio.NewReader(stdoutR).ReadString('\n')
@@ -227,7 +234,7 @@ func TestServeWithAnUnwritableStoreRunsNothingAndReportsFailure(t *testing.T) {
 	defer func() { serveStdin = old }()
 	file := filepath.Join(dir, "afile")
 	os.WriteFile(file, []byte("x"), 0o600)
-	srv := &api.Server{Token: "t", Store: store.Store{Dir: filepath.Join(file, "runs")}, Hub: api.NewHub(), Start: starter(store.Store{Dir: filepath.Join(file, "runs")}, 2)}
+	srv := &api.Server{Token: "t", Store: store.Store{Dir: filepath.Join(file, "runs")}, Hub: api.NewHub(), Start: starter(store.Store{Dir: filepath.Join(file, "runs")}, serveRunOptions{concurrency: 2})}
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 	marker := filepath.Join(dir, "executed")
