@@ -10,6 +10,7 @@ operations in the child package.
 | Definition and port types | `definition.go` |
 | One-document YAML parse and normalized marshal | `yaml.go` |
 | Semantic diagnostics, references, cycles | `validation.go`, `loop.go`, `human.go` |
+| Human-node and loop field descriptors (F2.2) | `fields.go` |
 | Compiled data dependencies and value resolution | `bindings.go`, `value.go` |
 | Execution-relevant graph fingerprint | `version.go` |
 | Fidelity-preserving editor operations | `edit/AGENTS.md`, `edit/doc.go` |

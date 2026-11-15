@@ -11,6 +11,7 @@ durable contract.
 | --- | --- | --- |
 | `internal/graph` | YAML definitions, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
 | `internal/graph/edit` | In-memory, fidelity-preserving graph YAML operations | `apply.go`, `ops.go`, `doc.go` |
+| `internal/fields` | Field descriptor types for node configuration; each validator owns and exports its descriptors (`ConfigFields`, `OutputPorts`) | `fields.go`, `fieldstest/` |
 | `internal/events` | Typed event payloads, schema compatibility, ordering and collection | `event.go`, `emitter.go` |
 | `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation and human decisions | `scheduler.go`, `loop.go`, `unit.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
@@ -30,13 +31,14 @@ packages only):
 
 | Importer | In-repository imports |
 | --- | --- |
-| `graph`, `events`, `gitstate`, `version` | none |
+| `fields`, `events`, `gitstate`, `version` | none |
+| `graph` | `fields` |
 | `graph/edit` | `graph` |
 | `runtime` | `events`, `gitstate`, `graph` |
-| `agent` | `events`, `graph`, `runtime` |
+| `agent` | `events`, `fields`, `graph`, `runtime` |
 | `agent/codex` | `agent`, `events`, `gitstate` |
-| `shell` | `graph` |
-| `gate` | `events`, `gitstate`, `graph`, `runtime` |
+| `shell` | `fields`, `graph` |
+| `gate` | `events`, `fields`, `gitstate`, `graph`, `runtime` |
 | `store` | `events` |
 | `api` | `events`, `graph`, `graph/edit`, `runtime`, `store` |
 | `cmd/agentplane` | composition of the Go packages above |

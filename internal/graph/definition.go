@@ -101,7 +101,7 @@ type LoopBinding struct {
 
 func (l *LoopDefinition) Attempts() int {
 	if l.MaxAttempts == 0 {
-		return 3
+		return loopDefaultAttempts
 	}
 	return l.MaxAttempts
 }

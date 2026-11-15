@@ -1,6 +1,10 @@
 package graph
 
-import "fmt"
+import (
+	"fmt"
+
+	"agentplane/internal/fields"
+)
 
 // HumanPromptLimit mirrors events.MaxApprovalPrompt; the graph package does
 // not import events.
@@ -29,7 +33,12 @@ func (v *definitionValidator) validateHumanNodes() {
 		if !ok || out.Type != ValueTypeString || len(n.Outputs) != 1 {
 			fail("human node must declare exactly one output \"decision\" of type string", "declare outputs: {decision: {type: string, required: true}}")
 		}
+		allowed := fields.AllowedKeys(HumanConfigFields(), n.Config)
 		for key, value := range n.Config {
+			if !allowed[key] {
+				fail(fmt.Sprintf("unsupported human config key %q", key), "use only prompt and context_inputs")
+				continue
+			}
 			switch key {
 			case "prompt":
 				s, isString := value.(string)
@@ -47,8 +56,6 @@ func (v *definitionValidator) validateHumanNodes() {
 						fail(fmt.Sprintf("context_inputs entry %q is not a declared string input", name), "declare the input with type string")
 					}
 				}
-			default:
-				fail(fmt.Sprintf("unsupported human config key %q", key), "use only prompt and context_inputs")
 			}
 		}
 	}

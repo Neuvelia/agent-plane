@@ -136,6 +136,7 @@ Expected high-level layout:
 ```text
 cmd/agentplane/          CLI entrypoint
 internal/graph/          graph schema, parsing, validation, bindings
+internal/fields/         node configuration field descriptors for editors
 internal/runtime/        scheduler and execution state transitions
 internal/events/         event contracts and event emission
 internal/agent/          provider-neutral Agent contract and adapters
