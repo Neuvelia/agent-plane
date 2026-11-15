@@ -138,6 +138,11 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 		if work.evidence != nil {
 			machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
 		}
+		acceptedAttempt := work.attemptID
+		if nodeResult.AcceptedAttemptID != "" {
+			acceptedAttempt = nodeResult.AcceptedAttemptID // matches AcceptedProvenance
+		}
+		machine.recordAcceptedOutputs(work.id, acceptedAttempt)
 		machine.transitionNode(work.id, NodeSucceeded)
 	}
 	return retry
