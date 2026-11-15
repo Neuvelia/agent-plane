@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-const SchemaVersion = 9
+const SchemaVersion = 10
 
 type RunID string
 type NodeRunID string
@@ -146,6 +146,11 @@ func (e Event) Validate() error {
 	}
 	var payloadType Type
 	switch p := e.Payload.(type) {
+	case ValueRecordedPayload:
+		payloadType = ValueRecorded
+		if err := validateValueRecorded(e, p); err != nil {
+			return err
+		}
 	case ReturnEnvelopePayload:
 		payloadType = ReturnEnvelope
 		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
@@ -305,6 +310,8 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return errors.New("node_evidence requires event schema 2")
 	}
 	switch wire.Type {
+	case ValueRecorded:
+		payload = ValueRecordedPayload{}
 	case ReturnEnvelope:
 		payload = ReturnEnvelopePayload{}
 	case DeclaredScopeConflicts:
@@ -357,6 +364,11 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("unknown event type %q", wire.Type)
 	}
 	switch p := payload.(type) {
+	case ValueRecordedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
 	case ReturnEnvelopePayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err

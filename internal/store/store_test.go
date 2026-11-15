@@ -88,7 +88,7 @@ func TestTruncatedTailIsReportedNotFatal(t *testing.T) {
 	write(t, s, runA, started(runA, now), ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	f.WriteString(`{"event_schema_version":9,"type":"node_start`) // killed mid-write
+	f.WriteString(`{"event_schema_version":10,"type":"node_start`) // killed mid-write
 	f.Close()
 	rec, err := s.Read(runA)
 	if err != nil {
@@ -254,14 +254,14 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	write(t, s, runA, started(runA, time.Now().UTC()))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	data, _ := os.ReadFile(path)
-	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":9`, `"event_schema_version":99`, 1)), 0o600)
+	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":10`, `"event_schema_version":109`, 1)), 0o600)
 	if _, err := s.Read(runA); err == nil {
 		t.Fatal("an event from a future schema was accepted")
 	}
 }
 
 func TestEmptyOrHeaderOnlyLogIsCorruptNotAnInterruptedRun(t *testing.T) {
-	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":9,"type":"run_st`} {
+	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":10,"type":"run_st`} {
 		t.Run(name, func(t *testing.T) {
 			s := Store{Dir: t.TempDir()}
 			dir := filepath.Join(s.Dir, runA)
