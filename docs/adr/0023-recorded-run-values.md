@@ -2,6 +2,12 @@
 
 **Status:** proposed (one product decision open: the default, see "Open decision")
 **Date:** 2026-11-14
+**Implementation:** engine slice E6 implemented with the proposed opt-in default
+(`docs/features/F2.3-E6-recorded-run-values.md`). Interpretations recorded in
+that spec's open questions: `size_bytes` and `sha256` describe the full value
+after redaction, `value` is always a string in a per-type text form, and text
+that is not valid UTF-8 is recorded without `value`. Desktop parts (Settings,
+reducer, inspector) are slice E5b.
 
 ## Context
 

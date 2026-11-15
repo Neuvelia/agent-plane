@@ -12,7 +12,7 @@ durable contract.
 | `internal/graph` | YAML definitions, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
 | `internal/graph/edit` | In-memory, fidelity-preserving graph YAML operations | `apply.go`, `ops.go`, `doc.go` |
 | `internal/events` | Typed event payloads, schema compatibility, ordering and collection | `event.go`, `emitter.go` |
-| `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation and human decisions | `scheduler.go`, `loop.go`, `unit.go` |
+| `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording | `scheduler.go`, `loop.go`, `unit.go`, `values.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
 | `internal/agent/codex` | Installed Codex CLI process and result/progress translation | `adapter.go` |
 | `internal/shell` | Shell node process execution and configuration | `executor.go` |
@@ -62,8 +62,9 @@ desktop is a client of that API, not a second execution engine.
    ADR-0015, ADR-0017 and ADR-0018.
 3. **Events:** keep emitted facts, sequence order, correlation IDs, bounded
    progress, redaction and decoding of older schemas stable. No transition
-   may become visible only in a log. See `docs/domain-model.md` and the
-   event-related ADRs.
+   may become visible only in a log. Recorded run values stay opt-in,
+   redacted before truncation and bounded (ADR-0023). See
+   `docs/domain-model.md` and the event-related ADRs.
 4. **Process boundaries:** retain explicit argv/environment handling,
    termination on cancellation, bounded observations and secret redaction.
    Git-observed scope checks detect changes after execution; they are not
