@@ -58,6 +58,11 @@ type Server struct {
 	// ValidateDefinition is the full validation of a parsed graph: graph rules
 	// plus each node's static configuration. Nil means graph rules only.
 	ValidateDefinition func(*graph.Definition) []graph.Diagnostic
+	// NodeTypes is the node-type catalogue for the inspector (F2.2), built by
+	// the composition root from the validators' descriptors. Nil offers no
+	// descriptors; every config key is then shown as Advanced. Read-only once
+	// serving starts.
+	NodeTypes []NodeType
 
 	docs     docState // graph document grants (ADR-0021)
 	baseCtx  context.Context

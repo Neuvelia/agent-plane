@@ -62,6 +62,17 @@ func TestKeysListsEveryKeyOnceInOrder(t *testing.T) {
 	}
 }
 
+func TestActiveReturnsTheSelectedFieldsInOrder(t *testing.T) {
+	var ids []string
+	for _, f := range Active(sample(), map[string]any{"kind": "a", "flag": true}) {
+		ids = append(ids, f.ID)
+	}
+	want := []string{"t.kind", "t.flag", "t.a.x", "t.a.shared", "t.on.y", "t.nested"}
+	if !reflect.DeepEqual(ids, want) {
+		t.Errorf("Active = %v, want %v", ids, want)
+	}
+}
+
 func TestPresenceRuleNeedsOnlyTheKey(t *testing.T) {
 	fs := []Field{{ID: "g", Kind: Group, Requires: []Rule{{Key: "mode"}}, Fields: []Field{{ID: "g.k", Key: "k", Kind: String}}}}
 	if AllowedKeys(fs, map[string]any{})["k"] {

@@ -97,6 +97,17 @@ type Port struct {
 // alone.
 func AllowedKeys(fs []Field, config map[string]any) map[string]bool {
 	allowed := map[string]bool{}
+	for _, f := range Active(fs, config) {
+		allowed[f.Key] = true
+	}
+	return allowed
+}
+
+// Active returns the keyed fields that apply to config, in descriptor order:
+// every top-level keyed field, plus the fields of each keyless group whose
+// Requires hold for config (the same selection as AllowedKeys).
+func Active(fs []Field, config map[string]any) []Field {
+	var out []Field
 	var walk func([]Field)
 	walk = func(fs []Field) {
 		for _, f := range fs {
@@ -106,11 +117,11 @@ func AllowedKeys(fs []Field, config map[string]any) map[string]bool {
 				}
 				continue
 			}
-			allowed[f.Key] = true
+			out = append(out, f)
 		}
 	}
 	walk(fs)
-	return allowed
+	return out
 }
 
 // Keys returns every key fs can accept for some config, in descriptor order.

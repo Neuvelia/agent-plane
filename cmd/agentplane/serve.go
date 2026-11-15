@@ -61,6 +61,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Token: token, Store: runStore, Hub: api.NewHub(),
 		Validate:           validateForAPI,
 		ValidateDefinition: diagnosticsFor,
+		NodeTypes:          nodeCatalogue(),
 		Start:              starter(runStore, *concurrency),
 	}
 	if onServe != nil {

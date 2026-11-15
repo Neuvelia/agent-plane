@@ -12,6 +12,7 @@ package edits a graph document in memory; it does not save a file.
 | Node, edge and layout operations | `nodes.go`, `edges.go`, `layout.go` |
 | Inspector operations: config, ports and their references, loop, units (F2.2) | `config.go`, `ports.go`, `refs.go`, `loop.go`, `values.go` |
 | YAML tree helpers and read-only constructs | `tree.go` |
+| Config value text for the inspector's Advanced section (read-only) | `snippets.go` |
 | Blank lines, BOM, line endings and encoding | `envelope.go` |
 | Structured operation failures | `errors.go` |
 

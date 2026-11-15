@@ -235,6 +235,11 @@ type docResponse struct {
 	LineEnding      string          `json:"line_ending"`
 	Label           string          `json:"label"`
 	Results         []edit.OpResult `json:"results,omitempty"`
+	// NodeTypes holds the field descriptors of the node types in the graph, or
+	// of every known type on request (F2.2).
+	NodeTypes map[string]nodeTypeDTO `json:"node_types"`
+	// Nodes holds per-node inspector data; absent when the text does not parse.
+	Nodes map[string]nodeInfoDTO `json:"node_info,omitempty"`
 }
 
 // diagnostics runs the full validation: graph rules and, when the composition
@@ -252,8 +257,9 @@ func (s *Server) diagnostics(def *graph.Definition) []graph.Diagnostic {
 	return diags
 }
 
-func (s *Server) document(g *grant, text []byte) docResponse {
+func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	res := docResponse{Text: string(text), Hash: hashOf(text), Diagnostics: []diagnosticDTO{}, Label: g.label, LineEnding: "lf"}
+	res.NodeTypes = s.nodeTypesFor(nil, allTypes)
 	if strings.Contains(res.Text, "\r\n") {
 		res.LineEnding = "crlf"
 	}
@@ -267,6 +273,8 @@ func (s *Server) document(g *grant, text []byte) docResponse {
 		return res
 	}
 	res.Definition = toDefinitionDTO(def)
+	res.NodeTypes = s.nodeTypesFor(def, allTypes)
+	res.Nodes = s.nodeInfo(text, def)
 	if v, err := graph.SemanticVersion(def); err == nil {
 		res.Version = v
 	}
@@ -286,8 +294,14 @@ func (s *Server) lookup(w http.ResponseWriter, id string) *grant {
 	return g
 }
 
+// openBody is grantRef plus the request for every node type's descriptors.
+type openBody struct {
+	Grant        string `json:"grant"`
+	AllNodeTypes bool   `json:"all_node_types"`
+}
+
 func (s *Server) openDoc(w http.ResponseWriter, r *http.Request) {
-	var body grantRef
+	var body openBody
 	if !readJSON(w, r, &body) {
 		return
 	}
@@ -306,7 +320,7 @@ func (s *Server) openDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.text, g.hash = data, hashOf(data)
-	writeJSON(w, http.StatusOK, s.document(g, data))
+	writeJSON(w, http.StatusOK, s.document(g, data, body.AllNodeTypes))
 }
 
 func (s *Server) statDoc(w http.ResponseWriter, r *http.Request) {
@@ -335,6 +349,8 @@ type editBody struct {
 	Text       *string         `json:"text"`
 	OpsVersion int             `json:"ops_version"`
 	Ops        json.RawMessage `json:"ops"`
+	// AllNodeTypes asks for every node type's descriptors, as on open.
+	AllNodeTypes bool `json:"all_node_types"`
 }
 
 func editFailure(w http.ResponseWriter, err error) {
@@ -403,7 +419,7 @@ func (s *Server) editDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.text, g.hash = res.Text, hashOf(res.Text)
-	doc := s.document(g, res.Text)
+	doc := s.document(g, res.Text, body.AllNodeTypes)
 	doc.Results = res.Results
 	writeJSON(w, http.StatusOK, doc)
 }

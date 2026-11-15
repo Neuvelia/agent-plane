@@ -12,7 +12,9 @@ document or event contract.
 | Live event replay and pending human decisions | `hub.go` |
 | Graph grants, open/edit/stat/save and file checks | `docs.go` |
 | Graph document response types | `docs_dto.go` |
+| Inspector data: node-type descriptors, Advanced entries, independence (F2.2) | `inspector.go`, `inspector_dto.go` |
 | CLI composition of store, validators and executors | `cmd/agentplane/serve.go` |
+| Node-type catalogue from the validators' descriptors | `cmd/agentplane/catalogue.go` |
 | Renderer forwarding and sidecar token ownership | `desktop/electron/main.cjs`, `desktop/electron/allowlist.cjs` |
 | Native graph choice and recent-file grant registration | `desktop/electron/graphs.cjs` |
 
@@ -56,6 +58,11 @@ document or event contract.
   in-memory edit hash as the file's save precondition. Document validation
   composes graph rules with executor configuration checks when supplied;
   `graph.Validate` alone does not cover those configurations.
+- `Server.NodeTypes` is a composition seam like `ValidateDefinition`: this
+  package never imports executors or decides which Gate kinds a type offers.
+  The inspector DTOs copy descriptors field by field; keep them separate from
+  `internal/fields`. Advanced entries are read from the YAML tree and never
+  rewrite the document (F2.2 requirement 4).
 
 Read `docs/features/F2.5-live-map.md`, `docs/features/F2.9-run-store.md`,
 `docs/features/F2.10-human-node.md`, `docs/features/F2.1-graph-canvas.md`,
@@ -69,6 +76,8 @@ authentication mechanism.
 
 - Auth, routes, lifecycle, store/SSE and decisions: `server_test.go`.
 - Grants, edit/save conflicts, path safety, limits and DTOs: `docs_test.go`.
+- Inspector descriptors, Advanced entries and independence: `docs_inspector_test.go`;
+  the real catalogue: `cmd/agentplane/catalogue_test.go`.
 - CLI composition: `cmd/agentplane/serve_test.go`; CLI/API diagnostic parity:
   `cmd/agentplane/validation_test.go`.
 - Renderer route exposure: `desktop/test/allowlist.test.ts`.
