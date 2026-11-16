@@ -43,6 +43,14 @@ const (
 	OpSetLoop     = "set_loop"
 	OpClearLoop   = "clear_loop"
 	OpSetUnits    = "set_units"
+
+	// Targeted loop edits: each changes one part of an existing loop in place.
+	OpSetLoopAttempts     = "set_loop_attempts"
+	OpSetLoopConfig       = "set_loop_config"
+	OpUnsetLoopConfig     = "unset_loop_config"
+	OpSetLoopGateInput    = "set_loop_gate_input"
+	OpRemoveLoopGateInput = "remove_loop_gate_input"
+	OpSetLoopBindings     = "set_loop_bindings"
 )
 
 // Port directions of the port operations.
@@ -73,9 +81,9 @@ type Op struct {
 	Port        string          `json:"port,omitempty"`         // the port a port operation edits
 	NewPort     string          `json:"new_port,omitempty"`     // update_port: rename the port
 	Required    *bool           `json:"required,omitempty"`     // add_port, update_port
-	MaxAttempts *int            `json:"max_attempts,omitempty"` // set_loop; absent means the default
+	MaxAttempts *int            `json:"max_attempts,omitempty"` // set_loop, set_loop_attempts; absent or null means the default
 	Gate        *LoopGate       `json:"gate,omitempty"`         // set_loop
-	Bindings    []LoopBinding   `json:"bindings,omitempty"`     // set_loop
+	Bindings    []LoopBinding   `json:"bindings,omitempty"`     // set_loop, set_loop_bindings
 	Units       []string        `json:"units,omitempty"`        // set_units; an empty list clears them
 }
 
@@ -163,6 +171,18 @@ func (o Op) check() *Error {
 		return need(o.Node != "", "node")
 	case OpSetUnits:
 		return need(o.Units != nil, "units (use an empty list to clear them)")
+	case OpSetLoopAttempts:
+		return need(o.Node != "", "node")
+	case OpSetLoopConfig:
+		return firstErr(need(o.Node != "", "node"), need(validPath(o.Path), "a path of non-empty keys"), need(len(o.Value) > 0, "value"))
+	case OpUnsetLoopConfig:
+		return firstErr(need(o.Node != "", "node"), need(validPath(o.Path), "a path of non-empty keys"))
+	case OpSetLoopGateInput:
+		return firstErr(need(o.Node != "", "node"), need(o.Port != "", "port"), need(o.Type != "", "type"))
+	case OpRemoveLoopGateInput:
+		return firstErr(need(o.Node != "", "node"), need(o.Port != "", "port"))
+	case OpSetLoopBindings:
+		return firstErr(need(o.Node != "", "node"), need(o.Bindings != nil, "bindings"))
 	default:
 		return &Error{Code: CodeUnknownOp, Message: fmt.Sprintf("unknown operation %q", o.Op), OpIndex: -1, Suggestion: "operations of ops_version 1: " + strings.Join(opNames, ", ")}
 	}
@@ -170,7 +190,8 @@ func (o Op) check() *Error {
 
 // opNames lists the operations of ops_version 1, for the unknown-operation hint.
 var opNames = []string{OpAddNode, OpRemoveNode, OpRenameNode, OpSetName, OpSetLayout, OpAddEdge, OpRemoveEdge, OpCanConnect,
-	OpSetConfig, OpUnsetConfig, OpAddPort, OpUpdatePort, OpRemovePort, OpSetLoop, OpClearLoop, OpSetUnits}
+	OpSetConfig, OpUnsetConfig, OpAddPort, OpUpdatePort, OpRemovePort, OpSetLoop, OpClearLoop, OpSetUnits,
+	OpSetLoopAttempts, OpSetLoopConfig, OpUnsetLoopConfig, OpSetLoopGateInput, OpRemoveLoopGateInput, OpSetLoopBindings}
 
 func (o Op) portCheck(need func(bool, string) *Error) *Error {
 	return firstErr(need(o.Node != "", "node"), need(o.Direction == DirectionInput || o.Direction == DirectionOutput, "direction input or output"), need(o.Port != "", "port"))

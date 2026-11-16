@@ -22,7 +22,9 @@ func randomInspectorOp(rng *rand.Rand, step int) Op {
 	port := fmt.Sprintf("p%d", rng.Intn(4))
 	values := []json.RawMessage{raw("x"), raw(rng.Intn(100)), raw(true), raw([]string{"a", "b"}), json.RawMessage(`{"k": {"n": [1, 2]}}`), json.RawMessage(`null`)}
 	keys := [][]string{{"command"}, {"args"}, {"cwd"}, {"env", "MODE"}, {"prompt"}, {"zz_new"}, {"zz_new", "inner"}}
-	switch rng.Intn(9) {
+	switch rng.Intn(11) {
+	case 9, 10:
+		return randomLoopOp(rng, []string{"write", "write", node}[rng.Intn(3)])
 	case 0, 1:
 		return Op{Op: OpSetConfig, Node: node, Path: keys[rng.Intn(len(keys))], Value: values[rng.Intn(len(values))]}
 	case 2:

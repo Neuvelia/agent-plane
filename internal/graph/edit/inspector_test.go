@@ -226,6 +226,47 @@ func TestConfigRefusals(t *testing.T) {
 	}
 }
 
+// A null intermediate key is replaced by a mapping in the typed prediction as
+// in the tree, so set_config below it applies.
+func TestSetConfigBelowANullKey(t *testing.T) {
+	src := strings.Replace(inspectorGraph, "      zz_extra: {deep: [1, {x: y}]}\n", "      zz_extra: {deep: [1, {x: y}]}\n      zz_null:\n", 1)
+	out := mustApply(t, src, Op{Op: OpSetConfig, Node: "write", Path: []string{"zz_null", "k"}, Value: raw(1)})
+	if m, ok := asMapping(nodeOf(t, out, "write").Config["zz_null"]); !ok || m["k"] == nil {
+		t.Errorf("zz_null.k not set:\n%s", out)
+	}
+}
+
+// Removing or renaming an input that an empty input_env or context_inputs
+// does not name leaves that key as written.
+func TestUnrelatedPortEditKeepsEmptyReferenceLists(t *testing.T) {
+	src := strings.Replace(inspectorGraph, "      input_env: {topic: TOPIC}\n", "      input_env: {}\n", 1)
+	src = strings.Replace(src, "      context_inputs: [summary]\n", "      context_inputs: []\n", 1)
+	src = strings.Replace(src, "      summary: {type: string, required: true}\n", "      summary: {type: string, required: true}\n      other: {type: string}\n", 1)
+	for _, op := range []Op{
+		{Op: OpRemovePort, Node: "write", Direction: DirectionInput, Port: "topic"},
+		{Op: OpUpdatePort, Node: "write", Direction: DirectionInput, Port: "topic", NewPort: "subject"},
+		{Op: OpRemovePort, Node: "approve", Direction: DirectionInput, Port: "other"},
+		{Op: OpUpdatePort, Node: "approve", Direction: DirectionInput, Port: "other", NewPort: "more"},
+	} {
+		out := mustApply(t, src, op)
+		for _, keep := range []string{"input_env: {}", "context_inputs: []"} {
+			if !strings.Contains(out, keep) {
+				t.Errorf("%+v dropped %q:\n%s", op, keep, out)
+			}
+		}
+	}
+}
+
+// Renaming a Shell input onto a name input_env already has is refused with a
+// structured error, not by the safety net.
+func TestRenameInputOntoAnInputEnvKeyIsRefused(t *testing.T) {
+	src := strings.Replace(inspectorGraph, "      input_env: {topic: TOPIC}\n", "      input_env: {topic: TOPIC, subject: SUBJECT}\n", 1)
+	e := applyErr(t, src, Op{Op: OpUpdatePort, Node: "write", Direction: DirectionInput, Port: "topic", NewPort: "subject"})
+	if e.Code != CodePortExists || e.Path != "nodes.write.inputs.topic" {
+		t.Errorf("got %s at %s (%v)", e.Code, e.Path, e)
+	}
+}
+
 func TestAddPortMatchesExistingStyle(t *testing.T) {
 	out := mustApply(t, inspectorGraph, Op{Op: OpAddPort, Node: "write", Direction: DirectionOutput, Port: "stderr", Type: "string"},
 		Op{Op: OpAddPort, Node: "check", Direction: DirectionInput, Port: "extra", Type: "json", Required: boolPtr(true)})

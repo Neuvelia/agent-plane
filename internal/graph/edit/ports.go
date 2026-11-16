@@ -108,6 +108,9 @@ func (s *session) updatePort(op Op) *Error {
 		if _, taken := (*set)[op.NewPort]; taken {
 			return portError(CodePortExists, op, fmt.Sprintf("%s %q already exists", op.Direction, op.NewPort), "choose another name")
 		}
+		if e := inputEnvConflict(op, n); e != nil {
+			return e
+		}
 		name = op.NewPort
 	}
 	// typed prediction
@@ -129,6 +132,23 @@ func (s *session) updatePort(op Op) *Error {
 		base := "nodes." + op.Node + "." + portSection(op.Direction) + "."
 		s.renames = append(s.renames, [2]string{base + op.Port, base + name})
 		s.rewritePortRefs(op.Node, op.Direction, op.Port, name)
+	}
+	return nil
+}
+
+// inputEnvConflict refuses renaming a Shell input whose input_env entry would
+// be renamed onto a key input_env already has: the file would hold the key twice.
+func inputEnvConflict(op Op, n graph.NodeDefinition) *Error {
+	if op.Direction != DirectionInput || n.Type != "shell" {
+		return nil
+	}
+	env, ok := asMapping(n.Config["input_env"])
+	if !ok {
+		return nil
+	}
+	_, renamed := env[op.Port]
+	if _, taken := env[op.NewPort]; renamed && taken {
+		return portError(CodePortExists, op, fmt.Sprintf("config input_env already has %q", op.NewPort), "remove or rename that input_env entry first, or choose another name")
 	}
 	return nil
 }
