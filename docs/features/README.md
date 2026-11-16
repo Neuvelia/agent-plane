@@ -51,8 +51,8 @@ feature contract.
 | `F2.2-node-inspector.md` | Draft; ADR-0020, ADR-0021 (accepted) |
 | `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (proposed, one open decision) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
-| `F2.11-onboarding-capability-detection.md` | Draft; needs a new ADR for the capability route |
-| `F2.12-graph-templates.md` | Draft; no ADR for the proposed design |
+| `F2.11-onboarding-capability-detection.md` | Go side implemented; ADR-0025 (proposed); desktop pending |
+| `F2.12-graph-templates.md` | Templates and Go tests implemented; no ADR; desktop picker pending |
 
 ## Later phases
 
