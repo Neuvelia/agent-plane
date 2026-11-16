@@ -2,6 +2,7 @@ package main
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"bytes"
 	"context"
 	"errors"
@@ -258,17 +259,17 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 	}
 	if err != nil {
-		var preflight *runtime.PreflightError
+		var preflight *run.PreflightError
 		if errors.As(err, &preflight) {
 			return commandError("run", "invalid", "input", nil, preflight.Diagnostics.Diagnostics, *jsonMode, stdout, stderr, exitGraph)
 		}
 		return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 	}
 	code := exitRun
-	if result.State == runtime.RunSucceeded {
+	if result.State == run.RunSucceeded {
 		code = exitOK
 	}
-	if result.State == runtime.RunCancelled {
+	if result.State == run.RunCancelled {
 		code = exitInterrupted
 	}
 	if persistFailure != nil {

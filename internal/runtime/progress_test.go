@@ -4,6 +4,7 @@ import (
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"strings"
@@ -104,7 +105,7 @@ func TestRun100MiBAbsentReaderAndFullQueueCancellation(t *testing.T) {
 				<-release
 			}}
 			live := make(chan events.Event)
-			done := make(chan RunResult, 1)
+			done := make(chan run.Result, 1)
 			go func() {
 				r, e := Run(ctx, definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, LiveEvents: live})
 				if e != nil {
@@ -119,7 +120,7 @@ func TestRun100MiBAbsentReaderAndFullQueueCancellation(t *testing.T) {
 			close(release)
 			r := <-done
 			close(live)
-			if cancelRun && r.State != RunCancelled {
+			if cancelRun && r.State != run.RunCancelled {
 				t.Fatalf("state %s", r.State)
 			}
 			s := r.ProgressStats

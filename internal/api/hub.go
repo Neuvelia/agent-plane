@@ -3,13 +3,13 @@
 package api
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"errors"
 	"sync"
 	"unicode/utf8"
 
 	"agentplane/internal/domain/events"
-	"agentplane/internal/runtime"
 )
 
 // Errors returned by Submit; the HTTP layer maps them to status codes.
@@ -36,7 +36,7 @@ type Recorded struct {
 
 type pending struct {
 	info PendingApproval
-	ch   chan runtime.Decision
+	ch   chan run.Decision
 }
 
 // LiveRun holds the retained events of a run started by this process so
@@ -207,8 +207,8 @@ func (h *Hub) Pending() []PendingApproval {
 }
 
 // Decide implements runtime.DecisionProvider.
-func (h *Hub) Decide(ctx context.Context, req runtime.ApprovalRequest) (runtime.Decision, error) {
-	p := &pending{ch: make(chan runtime.Decision, 1), info: PendingApproval{RunID: string(req.RunID), NodeID: req.NodeID, NodeRunID: req.NodeRunID, Prompt: req.Prompt, Context: append([]events.ApprovalContext{}, req.Context...)}}
+func (h *Hub) Decide(ctx context.Context, req run.ApprovalRequest) (run.Decision, error) {
+	p := &pending{ch: make(chan run.Decision, 1), info: PendingApproval{RunID: string(req.RunID), NodeID: req.NodeID, NodeRunID: req.NodeRunID, Prompt: req.Prompt, Context: append([]events.ApprovalContext{}, req.Context...)}}
 	h.mu.Lock()
 	h.pending[req.NodeRunID] = p
 	old := h.registered
@@ -233,7 +233,7 @@ func (h *Hub) Decide(ctx context.Context, req runtime.ApprovalRequest) (runtime.
 		default:
 		}
 		delete(h.pending, req.NodeRunID)
-		return runtime.Decision{}, ctx.Err()
+		return run.Decision{}, ctx.Err()
 	}
 }
 
@@ -263,6 +263,6 @@ func (h *Hub) Submit(runID string, nodeRunID events.NodeRunID, approve bool, com
 	rec = Recorded{Decision: verdict, Comment: comment}
 	h.decided[nodeRunID] = decidedRecord{runID: runID, rec: rec}
 	delete(h.pending, nodeRunID)
-	p.ch <- runtime.Decision{Approve: approve, Comment: comment}
+	p.ch <- run.Decision{Approve: approve, Comment: comment}
 	return rec, false, nil
 }

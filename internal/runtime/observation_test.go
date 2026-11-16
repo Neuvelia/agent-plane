@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,7 +15,7 @@ import (
 
 type observedProbe struct {
 	*combinedProbe
-	ids  ExecutionCorrelation
+	ids  run.ExecutionCorrelation
 	fail bool
 }
 
@@ -28,7 +29,7 @@ func (p *observedProbe) ExecuteNodeObserved(_ context.Context, _ string, _ graph
 	return nil, e, nil
 }
 func TestObservedPrecedenceCorrelationEvidenceAndRedaction(t *testing.T) {
-	p := &observedProbe{combinedProbe: &combinedProbe{correlationProbe: &correlationProbe{received: map[string]ExecutionCorrelation{}}}}
+	p := &observedProbe{combinedProbe: &combinedProbe{correlationProbe: &correlationProbe{received: map[string]run.ExecutionCorrelation{}}}}
 	for _, failed := range []bool{false, true} {
 		p.fail = failed
 		r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})

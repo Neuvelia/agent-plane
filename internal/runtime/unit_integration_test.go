@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -130,7 +131,7 @@ func TestUnitsBarrierScopedRetryAndExhaustion(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 			type outcome struct {
-				r runtime.RunResult
+				r run.Result
 				e error
 			}
 			done := make(chan outcome, 1)
@@ -159,11 +160,11 @@ func TestUnitsBarrierScopedRetryAndExhaustion(t *testing.T) {
 				t.Fatal(counts)
 			}
 			if budget == 0 {
-				if r.State != runtime.RunSucceeded || down["down_a"] != 1 || down["down_b"] != 1 || down["down_d"] != 1 || down["down_c"] != 1 || down["join"] != 1 {
+				if r.State != run.RunSucceeded || down["down_a"] != 1 || down["down_b"] != 1 || down["down_d"] != 1 || down["down_c"] != 1 || down["join"] != 1 {
 					t.Fatal(r.State, down)
 				}
 			} else {
-				if r.State != runtime.RunFailed || r.Failure.Kind != runtime.FailureNeedsIntervention || down["down_c"] != 0 || down["join"] != 0 {
+				if r.State != run.RunFailed || r.Failure.Kind != run.FailureNeedsIntervention || down["down_c"] != 0 || down["join"] != 0 {
 					t.Fatal(r.State, r.Failure, down)
 				}
 			}
@@ -261,7 +262,7 @@ func TestUnitsSharedFilesCanChangeAcceptedValuesCannot(t *testing.T) {
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(fmt.Sprintf(`{"ok":%t,"unit":%q,"attempt":%d}`, in.Task != "c" || n == 2, in.Task, n))}, nil
 	}
 	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 4})
-	if err != nil || r.State != runtime.RunSucceeded {
+	if err != nil || r.State != run.RunSucceeded {
 		t.Fatal(r, err)
 	}
 	content, _ := os.ReadFile(filepath.Join(root, "a.txt"))
@@ -397,7 +398,7 @@ func TestEnrolledUnitIdentityBoundBeforeDetectionPreservesLegacyIDs(t *testing.T
 			if e == nil || a.detect != 0 || len(a.calls) != 0 {
 				t.Fatal("oversized unit ID reached provider", e, a.detect)
 			}
-		} else if e != nil || a.detect == 0 || len(a.calls) != 1 || r.Failure.Kind != runtime.FailureNeedsIntervention {
+		} else if e != nil || a.detect == 0 || len(a.calls) != 1 || r.Failure.Kind != run.FailureNeedsIntervention {
 			t.Fatal("legacy ID narrowed", r, e, a.detect)
 		}
 	}

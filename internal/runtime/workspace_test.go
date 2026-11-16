@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"os"
 	"os/exec"
@@ -84,16 +85,16 @@ func TestUnitModeSchedulingIncludesUnenrolledAgentsAndKeepsShells(t *testing.T) 
 			"b": {Type: "agent", Config: graph.NodeConfig{"workspace": root, "allowed_paths": scope}},
 			"c": {Type: "shell"}, "d": {Type: "agent", Config: graph.NodeConfig{"workspace": other}},
 		}}
-		m := &runMachine{ids: []string{"a", "b", "c", "d"}, definition: d, nodes: map[string]*NodeResult{}}
+		m := &runMachine{ids: []string{"a", "b", "c", "d"}, definition: d, nodes: map[string]*run.NodeResult{}}
 		for _, id := range m.ids {
-			m.nodes[id] = &NodeResult{State: NodeReady}
+			m.nodes[id] = &run.NodeResult{State: run.NodeReady}
 		}
 		m.workspaces = inspectWorkspaces(context.Background(), d)
 		batch := m.nextBatch(4)
 		if len(batch) != 3 || batch[0] != "a" || batch[1] != "c" || batch[2] != "d" {
 			t.Fatal("scope disjointness authorized unsafe concurrency", batch)
 		}
-		m.nodes["a"].State = NodeSucceeded
+		m.nodes["a"].State = run.NodeSucceeded
 		batch = m.nextBatch(4)
 		if batch[0] != "b" {
 			t.Fatal("unstable order", batch)

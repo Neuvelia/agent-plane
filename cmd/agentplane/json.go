@@ -1,13 +1,13 @@
 package main
 
 import (
+	"agentplane/internal/domain/run"
 	"encoding/json"
 	"fmt"
 	"io"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
-	"agentplane/internal/runtime"
 	"agentplane/internal/store"
 )
 
@@ -17,11 +17,11 @@ type cliError struct {
 }
 
 type cliNode struct {
-	AcceptedAttemptID events.AttemptID    `json:"accepted_attempt_id,omitempty"`
-	NodeID            string              `json:"node_id"`
-	NodeRunID         events.NodeRunID    `json:"node_run_id"`
-	Status            runtime.NodeState   `json:"status"`
-	FailureKind       runtime.FailureKind `json:"failure_kind,omitempty"`
+	AcceptedAttemptID events.AttemptID `json:"accepted_attempt_id,omitempty"`
+	NodeID            string           `json:"node_id"`
+	NodeRunID         events.NodeRunID `json:"node_run_id"`
+	Status            run.NodeState    `json:"status"`
+	FailureKind       run.FailureKind  `json:"failure_kind,omitempty"`
 }
 
 type cliOutput struct {
@@ -31,10 +31,10 @@ type cliOutput struct {
 }
 
 type cliFailure struct {
-	NodeID      string              `json:"node_id,omitempty"`
-	Kind        runtime.FailureKind `json:"kind"`
-	Message     string              `json:"message,omitempty"`
-	Diagnostics []graph.Diagnostic  `json:"diagnostics"`
+	NodeID      string             `json:"node_id,omitempty"`
+	Kind        run.FailureKind    `json:"kind"`
+	Message     string             `json:"message,omitempty"`
+	Diagnostics []graph.Diagnostic `json:"diagnostics"`
 }
 
 type cliDocument struct {
@@ -70,7 +70,7 @@ func writeJSON(w, stderr io.Writer, document cliDocument, code int) int {
 	return code
 }
 
-func documentForRun(result runtime.RunResult, diagnostics []graph.Diagnostic) cliDocument {
+func documentForRun(result run.Result, diagnostics []graph.Diagnostic) cliDocument {
 	nodes := make([]cliNode, 0, len(result.Nodes))
 	outputs := make([]cliOutput, 0, len(result.Outputs))
 	events := result.Events

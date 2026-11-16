@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -20,13 +21,13 @@ import (
 
 type compositeExecutor struct {
 	agents        agent.Executor
-	deterministic func(context.Context, string, graph.NodeDefinition, map[string]graph.Value, runtime.ExecutionCorrelation) (map[string]graph.Value, error)
+	deterministic func(context.Context, string, graph.NodeDefinition, map[string]graph.Value, run.ExecutionCorrelation) (map[string]graph.Value, error)
 }
 
 func (e compositeExecutor) ExecuteNode(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value) (map[string]graph.Value, error) {
-	return e.ExecuteNodeWithCorrelation(ctx, id, n, in, runtime.ExecutionCorrelation{})
+	return e.ExecuteNodeWithCorrelation(ctx, id, n, in, run.ExecutionCorrelation{})
 }
-func (e compositeExecutor) ExecuteNodeWithCorrelation(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, ids runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
+func (e compositeExecutor) ExecuteNodeWithCorrelation(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, ids run.ExecutionCorrelation) (map[string]graph.Value, error) {
 	if n.Type == "agent" {
 		return e.agents.ExecuteNodeWithCorrelation(ctx, id, n, in, ids)
 	}
@@ -41,8 +42,8 @@ func TestAgentSummaryEdgeToDeterministicNode(t *testing.T) {
 	d := agentGraph(t.TempDir())
 	withDownstream(d)
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "exact accepted agent value"}}
-	var consumed runtime.ExecutionCorrelation
-	e := compositeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, deterministic: func(_ context.Context, _ string, _ graph.NodeDefinition, in map[string]graph.Value, ids runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
+	var consumed run.ExecutionCorrelation
+	e := compositeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, deterministic: func(_ context.Context, _ string, _ graph.NodeDefinition, in map[string]graph.Value, ids run.ExecutionCorrelation) (map[string]graph.Value, error) {
 		text, ok := in["text"].AsString()
 		if !ok || text != m.Output.Summary {
 			return nil, errors.New("incorrect bound summary")
@@ -51,7 +52,7 @@ func TestAgentSummaryEdgeToDeterministicNode(t *testing.T) {
 		return map[string]graph.Value{"result": graph.NewStringValue(text)}, nil
 	}}
 	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("task")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("Run=%+v %v", result, err)
 	}
 	text, _ := result.Outputs[0].Value.AsString()
@@ -94,7 +95,7 @@ func TestAgentFailureRetainsIndependentSiblingAndSafeEvents(t *testing.T) {
 	cause := errors.New(sentinel)
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, ExecuteErr: cause, Started: make(chan struct{}), Output: agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{"private":"METADATA_SENTINEL"}`), Artifacts: []agent.ArtifactReference{{Ref: "ARTIFACT_SENTINEL"}}}}
 	siblingStarted := make(chan struct{})
-	e := compositeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": barrierAdapter{AgentAdapter: m, peerStarted: siblingStarted}}}, deterministic: func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value, _ runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
+	e := compositeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": barrierAdapter{AgentAdapter: m, peerStarted: siblingStarted}}}, deterministic: func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value, _ run.ExecutionCorrelation) (map[string]graph.Value, error) {
 		if id != "sibling" {
 			return nil, errors.New("dependent must not execute")
 		}
@@ -104,21 +105,21 @@ func TestAgentFailureRetainsIndependentSiblingAndSafeEvents(t *testing.T) {
 	}}
 	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("TASK_SENTINEL")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 	<-siblingStarted
-	if err != nil || result.State != runtime.RunFailed || !errors.Is(result.Failure.Err, cause) {
+	if err != nil || result.State != run.RunFailed || !errors.Is(result.Failure.Err, cause) {
 		t.Fatalf("Run=%+v %v", result, err)
 	}
 	for _, n := range result.Nodes {
 		switch n.NodeID {
 		case "consume":
-			if n.State != runtime.NodeSkipped {
+			if n.State != run.NodeSkipped {
 				t.Fatalf("dependent=%+v", n)
 			}
 		case "work":
-			if n.State != runtime.NodeFailed || len(n.Outputs) != 0 {
+			if n.State != run.NodeFailed || len(n.Outputs) != 0 {
 				t.Fatalf("failed=%+v", n)
 			}
 		case "sibling":
-			if n.State != runtime.NodeSucceeded || len(n.Outputs) != 1 {
+			if n.State != run.NodeSucceeded || len(n.Outputs) != 1 {
 				t.Fatalf("sibling=%+v", n)
 			}
 			value, _ := n.Outputs[0].Value.AsString()
@@ -196,7 +197,7 @@ outputs:
 	}
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "parsed fixture done"}}
 	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("parsed Run=%+v %v", result, err)
 	}
 	input, _ := m.LastInput()

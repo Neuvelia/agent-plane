@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"os"
@@ -74,7 +75,7 @@ func TestChangedScopeDenyRetriesAgainstFirstBaseline(t *testing.T) {
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{}`)}, nil
 	}
 	r, err := runtime.Run(context.Background(), scopeDefinition(dir, "deny"), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunSucceeded || len(a.calls) != 2 {
+	if err != nil || r.State != run.RunSucceeded || len(a.calls) != 2 {
 		t.Fatalf("run=%+v err=%v calls=%d", r, err, len(a.calls))
 	}
 	var red, green int
@@ -107,7 +108,7 @@ func TestChangedScopeWarnDoesNotBlock(t *testing.T) {
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{}`), ChangedFiles: []agent.ChangedFile{}}, nil
 	}
 	r, err := runtime.Run(context.Background(), scopeDefinition(dir, "warn"), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunSucceeded || len(a.calls) != 1 {
+	if err != nil || r.State != run.RunSucceeded || len(a.calls) != 1 {
 		t.Fatalf("run=%+v err=%v", r, err)
 	}
 	var found bool
@@ -133,7 +134,7 @@ func TestChangedScopeDuplicateRulesDoNotChangePolicy(t *testing.T) {
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{}`)}, nil
 	}
 	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunSucceeded {
+	if err != nil || r.State != run.RunSucceeded {
 		t.Fatalf("duplicate scope rejected: %v %+v", err, r)
 	}
 }
@@ -188,7 +189,7 @@ func TestChangedScopeWarnStaysNonblockingWhenRedactionExpandsEvidence(t *testing
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{}`)}, nil
 	}
 	r, err := runtime.Run(context.Background(), scopeDefinition(dir, "warn"), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"z"}})
-	if err != nil || r.State != runtime.RunSucceeded {
+	if err != nil || r.State != run.RunSucceeded {
 		t.Fatalf("warn run blocked: %v failure=%+v", err, r.Failure)
 	}
 	for _, e := range r.Events {
@@ -219,11 +220,11 @@ func TestChangedScopeGitFailureWarnAndDeny(t *testing.T) {
 				t.Fatal(err)
 			}
 			if mode == "deny" {
-				if r.State != runtime.RunFailed || len(a.calls) != 0 {
+				if r.State != run.RunFailed || len(a.calls) != 0 {
 					t.Fatalf("deny passed Git failure: %+v", r)
 				}
 			} else {
-				if r.State != runtime.RunSucceeded || len(a.calls) != 1 {
+				if r.State != run.RunSucceeded || len(a.calls) != 1 {
 					t.Fatalf("warn blocked Git failure: %+v", r)
 				}
 				var seen bool
@@ -262,7 +263,7 @@ func TestChangedScopeGateMustMatchAgentDeclaration(t *testing.T) {
 				return agent.AgentExecutionOutput{}, nil
 			}
 			r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
-			if err == nil && r.State == runtime.RunSucceeded {
+			if err == nil && r.State == run.RunSucceeded {
 				t.Fatalf("mismatched Gate accepted: %+v", r)
 			}
 		})

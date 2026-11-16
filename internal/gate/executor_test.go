@@ -2,6 +2,7 @@ package gate
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -464,7 +465,7 @@ func TestEveryGateKindTypedTraceAndDownstream(t *testing.T) {
 				}
 				exec := &gatedSink{}
 				r, err := runtime.Run(context.Background(), d, in, exec, runtime.Options{GraphVersion: yamlgraph.Marshal})
-				if err != nil || (r.State == runtime.RunSucceeded) != green || exec.started != green {
+				if err != nil || (r.State == run.RunSucceeded) != green || exec.started != green {
 					t.Fatalf("state/downstream: %+v %v", r, err)
 				}
 				var gateRun events.NodeRunID
