@@ -1,0 +1,387 @@
+{
+ "definition": {
+  "edges": [],
+  "id": "inspector-diagnostics",
+  "inputs": {},
+  "nodes": {
+   "status": {
+    "config": {
+     "args": [
+      "{\"status\":\"ok\"}"
+     ],
+     "command": "/usr/bin/printf",
+     "env": {
+      "MODE": "fast"
+     },
+     "stdout_json": true
+    },
+    "inputs": {
+     "extra": {
+      "type": "blob"
+     }
+    },
+    "loop": {
+     "bindings": [
+      {
+       "from": "candidate.outputs.json",
+       "to": "gate.inputs.doc"
+      }
+     ],
+     "gate": {
+      "config": {
+       "check_id": "status-ok",
+       "expected_json": "\"ok\"",
+       "field": [
+        "status"
+       ],
+       "input": "doc",
+       "kind": "json_predicate",
+       "operator": "eq"
+      },
+      "inputs": {
+       "doc": {
+        "required": true,
+        "type": "json"
+       },
+       "spare": {
+        "type": "blob"
+       }
+      }
+     }
+    },
+    "outputs": {
+     "json": {
+      "required": true,
+      "type": "json"
+     }
+    },
+    "type": "shell"
+   }
+  },
+  "outputs": {},
+  "schema_version": 0
+ },
+ "diagnostics": [
+  {
+   "code": "E_VALUE_TYPE_INVALID",
+   "graph_id": "inspector-diagnostics",
+   "line": 8,
+   "location": {
+    "node_id": "status",
+    "path": "nodes.status.inputs.extra.type"
+   },
+   "message": "value type \"blob\" is not supported",
+   "severity": "error",
+   "suggestion": "use string, number, boolean, json, or artifact_ref"
+  },
+  {
+   "code": "E_VALUE_TYPE_INVALID",
+   "graph_id": "inspector-diagnostics",
+   "line": 20,
+   "location": {
+    "node_id": "status",
+    "path": "nodes.status.loop.gate.inputs.spare"
+   },
+   "message": "value type \"blob\" is not supported",
+   "severity": "error",
+   "suggestion": "use string, number, boolean, json, or artifact_ref"
+  },
+  {
+   "code": "W_DECLARED_OUTPUT_UNUSED",
+   "graph_id": "inspector-diagnostics",
+   "line": 15,
+   "location": {
+    "node_id": "status",
+    "path": "nodes.status.outputs.json"
+   },
+   "message": "output \"json\" on node \"status\" is not consumed",
+   "severity": "warning",
+   "suggestion": "remove the output or bind it to an edge or graph output"
+  }
+ ],
+ "hash": "e826a9dffe2edeee96f1260d828be0108541af207d1db079dd1b74ecfd45cec9",
+ "label": "diagnostics.yaml",
+ "line_ending": "lf",
+ "node_info": {
+  "status": {
+   "advanced": [],
+   "independent_of": [],
+   "known_type": true
+  }
+ },
+ "node_types": {
+  "shell": {
+   "config": [
+    {
+     "format": "nonempty",
+     "id": "shell.config.command",
+     "key": "command",
+     "kind": "string",
+     "required": true
+    },
+    {
+     "id": "shell.config.args",
+     "item": {
+      "id": "shell.config.args.item",
+      "kind": "string"
+     },
+     "key": "args",
+     "kind": "list"
+    },
+    {
+     "id": "shell.config.cwd",
+     "key": "cwd",
+     "kind": "string"
+    },
+    {
+     "id": "shell.config.env_allowlist",
+     "item": {
+      "format": "env_name",
+      "id": "shell.config.env_name",
+      "kind": "string"
+     },
+     "key": "env_allowlist",
+     "kind": "list"
+    },
+    {
+     "id": "shell.config.env",
+     "key": "env",
+     "kind": "map"
+    },
+    {
+     "id": "shell.config.input_env",
+     "input_types": [
+      "string"
+     ],
+     "item": {
+      "format": "env_name",
+      "id": "shell.config.env_name",
+      "kind": "string"
+     },
+     "key": "input_env",
+     "kind": "map"
+    },
+    {
+     "default": false,
+     "id": "shell.config.stdout_json",
+     "key": "stdout_json",
+     "kind": "bool"
+    }
+   ],
+   "loop": {
+    "fields": [
+     {
+      "default": 3,
+      "id": "loop.max_attempts",
+      "key": "max_attempts",
+      "kind": "int",
+      "max": 10,
+      "min": 1
+     }
+    ],
+    "gate": [
+     {
+      "format": "not_blank",
+      "id": "gate.config.check_id",
+      "key": "check_id",
+      "kind": "string",
+      "max_bytes": 256,
+      "required": true
+     },
+     {
+      "enum": [
+       "command",
+       "json_predicate",
+       "reported_file_scope"
+      ],
+      "id": "gate.config.kind",
+      "key": "kind",
+      "kind": "enum",
+      "required": true
+     },
+     {
+      "fields": [
+       {
+        "id": "gate.config.command.command",
+        "key": "command",
+        "kind": "string",
+        "locked": {
+         "reason": "a command Gate compares two inputs with /usr/bin/diff only",
+         "value": "/usr/bin/diff"
+        },
+        "required": true
+       },
+       {
+        "format": "clean_absolute_path",
+        "id": "gate.config.command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true
+       },
+       {
+        "id": "gate.config.command.left_input",
+        "input_required": true,
+        "input_types": [
+         "string"
+        ],
+        "key": "left_input",
+        "kind": "input_name",
+        "required": true
+       },
+       {
+        "id": "gate.config.command.right_input",
+        "input_required": true,
+        "input_types": [
+         "string"
+        ],
+        "key": "right_input",
+        "kind": "input_name",
+        "required": true
+       }
+      ],
+      "id": "gate.config.command",
+      "kind": "group",
+      "requires": [
+       {
+        "equals": "command",
+        "key": "kind"
+       }
+      ]
+     },
+     {
+      "fields": [
+       {
+        "id": "gate.config.json_predicate.input",
+        "input_required": true,
+        "input_types": [
+         "json"
+        ],
+        "key": "input",
+        "kind": "input_name",
+        "required": true
+       },
+       {
+        "id": "gate.config.json_predicate.field",
+        "item": {
+         "format": "nonempty",
+         "id": "gate.config.json_predicate.field.item",
+         "kind": "string"
+        },
+        "key": "field",
+        "kind": "list",
+        "required": true
+       },
+       {
+        "enum": [
+         "eq",
+         "ne"
+        ],
+        "id": "gate.config.json_predicate.operator",
+        "key": "operator",
+        "kind": "enum",
+        "required": true
+       },
+       {
+        "excludes": [
+         {
+          "key": "expected_json"
+         }
+        ],
+        "id": "gate.config.json_predicate.expected",
+        "key": "expected",
+        "kind": "scalar",
+        "required": true
+       },
+       {
+        "excludes": [
+         {
+          "key": "expected"
+         }
+        ],
+        "format": "json_scalar",
+        "id": "gate.config.json_predicate.expected_json",
+        "key": "expected_json",
+        "kind": "string",
+        "required": true
+       }
+      ],
+      "id": "gate.config.json_predicate",
+      "kind": "group",
+      "requires": [
+       {
+        "equals": "json_predicate",
+        "key": "kind"
+       }
+      ]
+     },
+     {
+      "fields": [
+       {
+        "id": "gate.config.reported_file_scope.input",
+        "input_required": true,
+        "input_types": [
+         "json"
+        ],
+        "key": "input",
+        "kind": "input_name",
+        "required": true
+       },
+       {
+        "id": "gate.config.reported_file_scope.allowed_paths",
+        "item": {
+         "format": "relative_path",
+         "id": "gate.config.reported_file_scope.allowed_paths.item",
+         "kind": "string"
+        },
+        "key": "allowed_paths",
+        "kind": "path_list",
+        "required": true
+       }
+      ],
+      "id": "gate.config.reported_file_scope",
+      "kind": "group",
+      "requires": [
+       {
+        "equals": "reported_file_scope",
+        "key": "kind"
+       }
+      ]
+     }
+    ],
+    "gate_kinds": [
+     "command",
+     "json_predicate",
+     "reported_file_scope"
+    ]
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "type": "string"
+    },
+    {
+     "name": "stderr",
+     "type": "string"
+    },
+    {
+     "name": "exit_code",
+     "type": "number"
+    },
+    {
+     "name": "json",
+     "requires": [
+      {
+       "equals": "true",
+       "key": "stdout_json"
+      }
+     ],
+     "type": "json"
+    }
+   ],
+   "outputs_locked": false
+  }
+ },
+ "readonly_canvas": false,
+ "text": "schema_version: 0\nid: inspector-diagnostics\ninputs: {}\nnodes:\n  status:\n    type: shell\n    inputs:\n      extra: {type: blob}\n    config:\n      command: /usr/bin/printf\n      args: ['{\"status\":\"ok\"}']\n      stdout_json: true\n      env: {MODE: fast}\n    outputs:\n      json: {type: json, required: true}\n    loop:\n      gate:\n        inputs:\n          doc: {type: json, required: true}\n          spare: {type: blob}\n        config: {check_id: status-ok, kind: json_predicate, input: doc, field: [status], operator: eq, expected_json: '\"ok\"'}\n      bindings:\n        - {from: candidate.outputs.json, to: gate.inputs.doc}\nedges: []\noutputs: {}\n",
+ "version": "sha256-v0:bc1baf9f7168b10d6e37e7e40a0c21359a79f5ffd99e945db8e9bcc72f6b4ed5"
+}

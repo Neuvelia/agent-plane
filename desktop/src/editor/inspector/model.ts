@@ -81,34 +81,32 @@ export function configOp(node: string, key: string, value: JsonValue | undefined
   return value === undefined ? { op: 'unset_config', node, path: [key] } : { op: 'set_config', node, path: [key], value }
 }
 
-/** The whole loop block with one change applied, for set_loop (the operation replaces the block). */
-export function loopOp(node: string, n: NodeDef, change: { maxAttempts?: number | null; config?: Record<string, JsonValue>; inputs?: Record<string, { type: string; required?: boolean }>; bindings?: EdgeDef[] }): Op {
-  const loop = n.loop!
-  const max = change.maxAttempts === undefined ? loop.max_attempts : change.maxAttempts ?? undefined
-  const op: Op = {
-    op: 'set_loop',
-    node,
-    gate: { config: change.config ?? ((loop.gate.config ?? {}) as Record<string, JsonValue>) },
-    bindings: change.bindings ?? loop.bindings,
-  }
-  const inputs = change.inputs ?? loop.gate.inputs
-  if (inputs && Object.keys(inputs).length > 0) op.gate.inputs = inputs
-  if (max !== undefined && max !== 0) op.max_attempts = max
-  return op
+/** A committed loop Gate config value, as configOp: one targeted operation, so the rest of the loop stays as written. */
+export function loopConfigOp(node: string, key: string, value: JsonValue | undefined): Op {
+  return value === undefined ? { op: 'unset_loop_config', node, path: [key] } : { op: 'set_loop_config', node, path: [key], value }
 }
 
-/** A config object with one key set (or removed, for undefined), keeping every other key and the order. */
-export function withKey(config: Record<string, unknown> | undefined, key: string, value: JsonValue | undefined): Record<string, JsonValue> {
-  const out: Record<string, JsonValue> = {}
-  let seen = false
-  for (const [k, v] of Object.entries(config ?? {})) {
-    if (k === key) {
-      seen = true
-      if (value !== undefined) out[k] = value
-    } else out[k] = v as JsonValue
-  }
-  if (!seen && value !== undefined) out[key] = value
-  return out
+/** The loop's attempt budget; undefined returns it to the type's default. */
+export function loopAttemptsOp(node: string, value: number | undefined): Op {
+  return value === undefined ? { op: 'set_loop_attempts', node } : { op: 'set_loop_attempts', node, max_attempts: value }
+}
+
+/** An integer typed as text: the number, '' for empty, or null when the text is not a plain decimal integer (`abc`, `1.5`, `0x10`, `Infinity`). */
+export function parseInteger(text: string): number | '' | null {
+  const s = text.trim()
+  if (s === '') return ''
+  if (!/^-?\d+$/.test(s)) return null
+  const n = Number(s)
+  return Number.isSafeInteger(n) ? n : null
+}
+
+/** Whether a map row other than except already has key (a commit would silently replace that entry). */
+export const keyTaken = (rows: [string, unknown][], key: string, except: number): boolean => rows.some(([k], j) => j !== except && k === key)
+
+/** Diagnostics under prefix that none of the shown lists holds, for a section to show at its own level. */
+export function unshown(diags: Diagnostic[], prefix: string, shown: Diagnostic[][]): Diagnostic[] {
+  const seen = new Set(shown.flat())
+  return diagnosticsAt(diags, prefix).filter((d) => !seen.has(d))
 }
 
 // ---- loop starter ------------------------------------------------------------------
@@ -150,7 +148,7 @@ export function loopStarter(node: string, n: NodeDef, desc: NodeTypeDescriptor, 
  * The spellings a loop binding can use: sources are the producer's candidate
  * outputs and its own inputs, targets the Gate's declared inputs. Which pairs
  * are allowed (equal types, unique targets) is the engine's answer to a
- * previewed set_loop, as can_connect is for edges; nothing here decides it.
+ * previewed set_loop_bindings, as can_connect is for edges; nothing here decides it.
  */
 export function bindingEnds(n: NodeDef): { sources: string[]; targets: string[] } {
   return {

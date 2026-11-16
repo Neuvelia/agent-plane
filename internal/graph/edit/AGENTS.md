@@ -10,7 +10,7 @@ package edits a graph document in memory; it does not save a file.
 | Versioned operation vocabulary and strict JSON decode | `ops.go` |
 | Atomic batch and typed/tree safety net | `apply.go` |
 | Node, edge and layout operations | `nodes.go`, `edges.go`, `layout.go` |
-| Inspector operations: config, ports and their references, loop, units (F2.2) | `config.go`, `ports.go`, `refs.go`, `loop.go`, `values.go` |
+| Inspector operations: config, ports and their references, loop (whole and targeted), units (F2.2) | `config.go`, `ports.go`, `refs.go`, `loop.go`, `values.go` |
 | YAML tree helpers and read-only constructs | `tree.go` |
 | Config value text for the inspector's Advanced section (read-only) | `snippets.go` |
 | Blank lines, BOM, line endings and encoding | `envelope.go` |

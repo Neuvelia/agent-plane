@@ -189,6 +189,34 @@ edges: []
 outputs:
   result: {from: work.outputs.stdout}
 `,
+	// diagnostics no config field shows: a port of an unknown type and a loop
+	// Gate input of an unknown type; an env map for the key-collision state
+	"diagnostics": `schema_version: 0
+id: inspector-diagnostics
+inputs: {}
+nodes:
+  status:
+    type: shell
+    inputs:
+      extra: {type: blob}
+    config:
+      command: /usr/bin/printf
+      args: ['{"status":"ok"}']
+      stdout_json: true
+      env: {MODE: fast}
+    outputs:
+      json: {type: json, required: true}
+    loop:
+      gate:
+        inputs:
+          doc: {type: json, required: true}
+          spare: {type: blob}
+        config: {check_id: status-ok, kind: json_predicate, input: doc, field: [status], operator: eq, expected_json: '"ok"'}
+      bindings:
+        - {from: candidate.outputs.json, to: gate.inputs.doc}
+edges: []
+outputs: {}
+`,
 }
 
 // inspectorEdits are recorded operation answers the stories replay.
@@ -197,6 +225,7 @@ var inspectorEdits = []struct {
 	ops         string
 }{
 	{"loop-starter", "loops", `[{"op":"clear_loop","node":"status"},{"op":"set_loop","node":"status","max_attempts":3,"gate":{"inputs":{"candidate":{"type":"json","required":true}},"config":{"check_id":"status-check","kind":"json_predicate","input":"candidate","field":["ok"],"operator":"eq","expected":true}},"bindings":[{"from":"candidate.outputs.json","to":"gate.inputs.candidate"}]}]`},
+	{"rename-input", "shell", `[{"op":"update_port","node":"report","direction":"input","port":"text","new_port":"renamed"}]`},
 	{"remove-port", "shell", `[{"op":"remove_port","node":"build","direction":"output","port":"stdout"}]`},
 	{"set-command", "shell", `[{"op":"set_config","node":"build","path":["command"],"value":"/usr/bin/gmake"}]`},
 }

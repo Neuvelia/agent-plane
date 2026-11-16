@@ -76,38 +76,111 @@ func (s *session) knownNode(id string) (graph.NodeDefinition, *Error) {
 	return n, nil
 }
 
-func pathError(id string, path []string, message string) *Error {
+func pathError(id, root string, path []string, message string) *Error {
 	e := nodeError(CodeConfigPath, id, message, "edit this part of the configuration in the YAML text")
-	e.Path = "nodes." + id + ".config." + strings.Join(path, ".")
+	e.Path = strings.Join(append([]string{"nodes", id, root}, path...), ".")
 	return e
 }
 
-func (s *session) setConfig(op Op) *Error {
+// configRoot names the mapping a config operation edits: the node's config, or
+// with loop the config of the node's loop Gate (set_loop_config,
+// unset_loop_config). Both use the same code path, so a loop edit patches the
+// file in place exactly as a node config edit does.
+func configRoot(loop bool) string {
+	if loop {
+		return "loop.gate.config"
+	}
+	return "config"
+}
+
+// typedConfig returns the typed mapping a config operation edits, creating an
+// empty one with create. n's loop is copied before it can change, so the
+// definition the session started from is not shared.
+func typedConfig(n *graph.NodeDefinition, id string, loop, create bool) (map[string]any, *Error) {
+	if !loop {
+		if n.Config == nil && create {
+			n.Config = graph.NodeConfig{}
+		}
+		return n.Config, nil
+	}
+	if n.Loop == nil {
+		return nil, loopError(id, fmt.Sprintf("node %q has no loop", id), "add the loop with set_loop first")
+	}
+	l := *n.Loop
+	if l.Gate.Config == nil && create {
+		l.Gate.Config = graph.NodeConfig{}
+	}
+	n.Loop = &l
+	return l.Gate.Config, nil
+}
+
+// treeConfig returns the mapping a config operation edits in the tree; with
+// create, absent mappings on the way are inserted. Without create a missing
+// mapping is nil.
+func (s *session) treeConfig(id string, loop, create bool) (*yaml.Node, *Error) {
+	node, err := s.nodeTree(id)
+	if err != nil {
+		return nil, err
+	}
+	notMapping := func(what string) *Error { return pathError(id, configRoot(loop), nil, what+" is not a mapping") }
+	if !loop {
+		m, ok := childMapping(node, "config", create, func(v *yaml.Node) { insertNodeKey(node, "config", v) })
+		if !ok {
+			return nil, notMapping("config")
+		}
+		return m, nil
+	}
+	l, _ := get(node, "loop")
+	if l == nil || l.Kind != yaml.MappingNode {
+		return nil, notMapping("loop")
+	}
+	gate, ok := childMapping(l, "gate", create, func(v *yaml.Node) { l.Content = append(l.Content, str("gate"), v) })
+	if !ok {
+		return nil, notMapping("loop.gate")
+	}
+	if gate == nil {
+		return nil, nil
+	}
+	m, ok := childMapping(gate, "config", create, func(v *yaml.Node) { gate.Content = append(gate.Content, str("config"), v) })
+	if !ok {
+		return nil, notMapping("loop.gate.config")
+	}
+	return m, nil
+}
+
+func (s *session) setConfig(op Op) *Error { return s.setConfigAt(op, false) }
+
+func (s *session) unsetConfig(op Op) *Error { return s.unsetConfigAt(op, false) }
+
+func (s *session) setConfigAt(op Op, loop bool) *Error {
 	n, err := s.knownNode(op.Node)
 	if err != nil {
 		return err
 	}
+	root := configRoot(loop)
 	value, typed, verr := decodeValue(op.Value)
 	if verr != nil {
 		e := nodeError(CodeValue, op.Node, verr.Error(), "send a JSON string, number, boolean, null, list or object")
-		e.Path = "nodes." + op.Node + ".config." + strings.Join(op.Path, ".")
+		e.Path = strings.Join(append([]string{"nodes", op.Node, root}, op.Path...), ".")
 		return e
 	}
 	// typed prediction
-	if n.Config == nil {
-		n.Config = graph.NodeConfig{}
+	parent, err := typedConfig(&n, op.Node, loop, true)
+	if err != nil {
+		return err
 	}
-	parent := map[string]any(n.Config)
 	for i, k := range op.Path[:len(op.Path)-1] {
 		next, present := parent[k]
-		if !present {
+		if !present || next == nil {
+			// an absent key and a null one are both replaced by a new mapping,
+			// as childMapping does in the tree
 			created := graph.NodeConfig{}
 			parent[k], parent = created, created
 			continue
 		}
 		m, ok := asMapping(next)
 		if !ok {
-			return pathError(op.Node, op.Path[:i+1], fmt.Sprintf("config %s is not a mapping, so nothing can be set below it", strings.Join(op.Path[:i+1], ".")))
+			return pathError(op.Node, root, op.Path[:i+1], fmt.Sprintf("%s %s is not a mapping, so nothing can be set below it", root, strings.Join(op.Path[:i+1], ".")))
 		}
 		parent = m
 	}
@@ -118,25 +191,17 @@ func (s *session) setConfig(op Op) *Error {
 	parent[last] = typed
 	s.want.Nodes[op.Node] = n
 	// tree
-	return s.treeSetConfig(op, value)
-}
-
-func (s *session) treeSetConfig(op Op, value *yaml.Node) *Error {
-	node, err := s.nodeTree(op.Node)
+	m, err := s.treeConfig(op.Node, loop, true)
 	if err != nil {
 		return err
 	}
-	m, ok := childMapping(node, "config", true, func(v *yaml.Node) { insertNodeKey(node, "config", v) })
-	if !ok {
-		return pathError(op.Node, nil, "config is not a mapping")
-	}
 	for i, k := range op.Path[:len(op.Path)-1] {
 		parent := m
+		var ok bool
 		if m, ok = childMapping(parent, k, true, func(v *yaml.Node) { parent.Content = append(parent.Content, str(k), v) }); !ok {
-			return pathError(op.Node, op.Path[:i+1], fmt.Sprintf("config %s is not a mapping", strings.Join(op.Path[:i+1], ".")))
+			return pathError(op.Node, root, op.Path[:i+1], fmt.Sprintf("%s %s is not a mapping", root, strings.Join(op.Path[:i+1], ".")))
 		}
 	}
-	last := op.Path[len(op.Path)-1]
 	if old, i := get(m, last); i >= 0 {
 		adoptValue(old, value)
 		m.Content[i+1] = value
@@ -146,14 +211,18 @@ func (s *session) treeSetConfig(op Op, value *yaml.Node) *Error {
 	return nil
 }
 
-func (s *session) unsetConfig(op Op) *Error {
+func (s *session) unsetConfigAt(op Op, loop bool) *Error {
 	n, err := s.knownNode(op.Node)
 	if err != nil {
 		return err
 	}
 	// typed prediction: walk down, remove, then drop parents left empty
 	// (never the config mapping itself).
-	chain := []map[string]any{map[string]any(n.Config)}
+	top, err := typedConfig(&n, op.Node, loop, false)
+	if err != nil {
+		return err
+	}
+	chain := []map[string]any{top}
 	for _, k := range op.Path[:len(op.Path)-1] {
 		m, ok := asMapping(chain[len(chain)-1][k])
 		if !ok {
@@ -169,13 +238,13 @@ func (s *session) unsetConfig(op Op) *Error {
 	for i := len(chain) - 1; i > 0 && len(chain[i]) == 0; i-- {
 		delete(chain[i-1], op.Path[i-1])
 	}
+	s.want.Nodes[op.Node] = n
 	// tree
-	node, err := s.nodeTree(op.Node)
+	m, err := s.treeConfig(op.Node, loop, false)
 	if err != nil {
 		return err
 	}
 	trees := []*yaml.Node{}
-	m, _ := get(node, "config")
 	for _, k := range op.Path[:len(op.Path)-1] {
 		trees = append(trees, m)
 		m, _ = get(m, k)

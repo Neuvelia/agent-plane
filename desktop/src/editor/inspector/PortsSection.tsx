@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import { useI18n } from '../../i18n/context'
 import type { Diagnostic } from '../../types'
 import { Button } from '../../ui/primitives'
@@ -32,6 +32,7 @@ export function PortsSection(p: Props) {
   const free = allowed?.filter((o) => !ports.some(([n]) => n === o.name)) ?? []
   const where = (port: string) => `${side}.${port}`
   const ro = p.readOnly || !!locked
+  const uid = useId()
   return (
     <div className="ins-ports" data-testid={`ports-${side}`}>
       {ports.length === 0 && <p className="mu">{t('inspector.ports.none')}</p>}
@@ -41,11 +42,24 @@ export function PortsSection(p: Props) {
           const diags = diagnosticsAt(p.diags, `nodes.${p.nodeId}.${side}.${name}`)
           const op = (extra: Partial<Extract<Op, { op: 'update_port' }>>): Op => ({ op: 'update_port', node: p.nodeId, direction: p.direction, port: name, ...extra })
           const refusal = p.edits.refusal(where(name))
+          // The port's diagnostics describe each of its controls.
+          const diagId = diags.length > 0 || refusal ? `${uid}-${side}-${name}-diag` : undefined
           return (
             <li key={name} className="ins-port" data-testid={`port-${side}-${name}`}>
               <div className="row">
                 {allowed ? (
-                  <select className="input mono" aria-label={t('inspector.ports.name', { port: name })} disabled={ro} value={name} onChange={(e) => void p.edits.intend([op({ new_port: e.target.value })], where(name))}>
+                  <select
+                    className="input mono"
+                    aria-label={t('inspector.ports.name', { port: name })}
+                    aria-describedby={diagId}
+                    disabled={ro}
+                    value={name}
+                    onChange={(e) => {
+                      // An allowed output has its own type; a rename to it carries that type.
+                      const type = allowed.find((o) => o.name === e.target.value)?.type
+                      void p.edits.intend([op(type && type !== port.type ? { new_port: e.target.value, type } : { new_port: e.target.value })], where(name))
+                    }}
+                  >
                     {[name, ...free.map((o) => o.name)].map((n) => (
                       <option key={n} value={n}>
                         {n}
@@ -53,9 +67,9 @@ export function PortsSection(p: Props) {
                     ))}
                   </select>
                 ) : (
-                  <TextCommit value={name} className="mono" label={t('inspector.ports.name', { port: name })} disabled={ro} onCommit={(s) => void p.edits.intend([op({ new_port: s })], where(name))} testId={`port-name-${side}-${name}`} />
+                  <TextCommit value={name} className="mono" label={t('inspector.ports.name', { port: name })} describedBy={diagId} disabled={ro} onCommit={(s) => p.edits.intend([op({ new_port: s })], where(name))} testId={`port-name-${side}-${name}`} />
                 )}
-                <select className="input" aria-label={t('inspector.ports.type', { port: name })} disabled={ro || !!allowed} value={port.type} onChange={(e) => void p.edits.intend([op({ type: e.target.value })], where(name))}>
+                <select className="input" aria-label={t('inspector.ports.type', { port: name })} aria-describedby={diagId} disabled={ro || !!allowed} value={port.type} onChange={(e) => void p.edits.intend([op({ type: e.target.value })], where(name))}>
                   {[...new Set([port.type, ...PORT_TYPES])].map((ty) => (
                     <option key={ty} value={ty}>
                       {ty}
@@ -63,8 +77,8 @@ export function PortsSection(p: Props) {
                   ))}
                 </select>
                 <label className="row ins-inline">
-                  <input type="checkbox" className="ins-check" disabled={ro} checked={port.required === true} onChange={(e) => void p.edits.apply([op({ required: e.target.checked })], where(name))} />
-                  {t('inspector.ports.required')}
+                  <input type="checkbox" className="ins-check" disabled={ro} checked={port.required === true} aria-label={t('inspector.ports.requiredLabel', { port: name })} aria-describedby={diagId} onChange={(e) => void p.edits.apply([op({ required: e.target.checked })], where(name))} data-testid={`port-required-${side}-${name}`} />
+                  <span aria-hidden="true">{t('inspector.ports.required')}</span>
                 </label>
                 <Button size="sm" variant="danger" disabled={ro} onClick={() => void p.edits.intend([{ op: 'remove_port', node: p.nodeId, direction: p.direction, port: name }], where(name))} aria-label={t('inspector.ports.removeLabel', { port: name })} data-testid={`remove-port-${side}-${name}`}>
                   {t('inspector.remove')}
@@ -72,7 +86,7 @@ export function PortsSection(p: Props) {
               </div>
               {p.sources?.[name] && <SourceLine sources={p.sources[name]!} required={port.required === true} />}
               {(diags.length > 0 || refusal) && (
-                <ul className="ins-diags">
+                <ul className="ins-diags" id={diagId}>
                   {refusal && <li className="err">{t('inspector.refused', { message: refusal })}</li>}
                   {diags.map((d, i) => (
                     <li key={i} className={d.severity === 'error' ? 'err' : 'warn'}>

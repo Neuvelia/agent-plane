@@ -12,13 +12,15 @@ export interface Pending {
   ops: Op[]
   changes: Change[]
   where: string
+  /** Settles the intend() call that asked: the apply result, or false when cancelled. */
+  settle: (ok: boolean) => void
 }
 
 export interface Edits {
   /** Sends the batch; true when the engine applied it. */
   apply: (ops: Op[], where: string) => Promise<boolean>
-  /** Previews the batch first; applies it at once when it touches nothing but the edited port, else asks. */
-  intend: (ops: Op[], where: string) => Promise<void>
+  /** Previews the batch first; applies it at once when it touches nothing but the edited port, else asks. True once applied; false when refused or cancelled. */
+  intend: (ops: Op[], where: string) => Promise<boolean>
   refusal: (where: string) => string | undefined
   pending: Pending | null
   confirm: () => Promise<void>
@@ -33,7 +35,10 @@ export function useEdits(g: GraphDocument, def: Definition | undefined, nodeId: 
   // A different node starts clean.
   useEffect(() => {
     setRefusals({})
-    setPending(null)
+    setPending((p) => {
+      p?.settle(false)
+      return null
+    })
   }, [nodeId])
 
   const note = (where: string, message?: string) =>
@@ -57,19 +62,26 @@ export function useEdits(g: GraphDocument, def: Definition | undefined, nodeId: 
 
   const intend = useCallback(
     async (ops: Op[], where: string) => {
-      if (!def) return
+      if (!def) return false
       setBusy(true)
       const r = await g.previewOps(ops)
       setBusy(false)
-      if (!r.ok) return note(where, r.message)
+      if (!r.ok) {
+        note(where, r.message)
+        return false
+      }
       const after = r.doc.definition
       const changes = after ? describeChange(def, after) : []
       if (changes.some((c) => c.what !== 'port')) {
         note(where)
-        setPending({ ops, changes, where })
-        return
+        return new Promise<boolean>((settle) =>
+          setPending((old) => {
+            old?.settle(false)
+            return { ops, changes, where, settle }
+          }),
+        )
       }
-      await apply(ops, where)
+      return apply(ops, where)
     },
     [apply, def, g],
   )
@@ -77,8 +89,13 @@ export function useEdits(g: GraphDocument, def: Definition | undefined, nodeId: 
   const confirm = useCallback(async () => {
     const p = pending
     setPending(null)
-    if (p) await apply(p.ops, p.where)
+    if (p) p.settle(await apply(p.ops, p.where))
   }, [apply, pending])
 
-  return { apply, intend, refusal: (where) => refusals[where], pending, confirm, cancel: () => setPending(null), busy }
+  const cancel = () => {
+    pending?.settle(false)
+    setPending(null)
+  }
+
+  return { apply, intend, refusal: (where) => refusals[where], pending, confirm, cancel, busy }
 }

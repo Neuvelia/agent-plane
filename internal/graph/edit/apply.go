@@ -175,6 +175,18 @@ func (s *session) apply(op Op) (*QueryResult, *Error) {
 		return nil, s.clearLoop(op)
 	case OpSetUnits:
 		return nil, s.setUnits(op)
+	case OpSetLoopAttempts:
+		return nil, s.setLoopAttempts(op)
+	case OpSetLoopConfig:
+		return nil, s.setConfigAt(op, true)
+	case OpUnsetLoopConfig:
+		return nil, s.unsetConfigAt(op, true)
+	case OpSetLoopGateInput:
+		return nil, s.setLoopGateInput(op)
+	case OpRemoveLoopGateInput:
+		return nil, s.removeLoopGateInput(op)
+	case OpSetLoopBindings:
+		return nil, s.setLoopBindings(op)
 	}
 	return nil, &Error{Code: CodeUnknownOp, Message: fmt.Sprintf("unknown operation %q", op.Op), OpIndex: -1}
 }

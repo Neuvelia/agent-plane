@@ -97,13 +97,14 @@ func typedConfigRefs(nodeType string, cfg graph.NodeConfig, from, to string) {
 		if !ok {
 			return
 		}
-		if v, present := m[from]; present {
-			delete(m, from)
-			if to != "" {
-				m[to] = v
-			}
+		v, present := m[from]
+		if !present {
+			return
 		}
-		if len(m) == 0 {
+		delete(m, from)
+		if to != "" {
+			m[to] = v
+		} else if len(m) == 0 {
 			delete(cfg, "input_env")
 		}
 	case "human":
@@ -112,9 +113,11 @@ func typedConfigRefs(nodeType string, cfg graph.NodeConfig, from, to string) {
 			return
 		}
 		kept := []any{}
+		removed := false
 		for _, it := range items {
 			if it == from {
 				if to == "" {
+					removed = true
 					continue
 				}
 				it = to
@@ -122,7 +125,7 @@ func typedConfigRefs(nodeType string, cfg graph.NodeConfig, from, to string) {
 			kept = append(kept, it)
 		}
 		cfg["context_inputs"] = kept
-		if len(kept) == 0 {
+		if removed && len(kept) == 0 {
 			delete(cfg, "context_inputs")
 		}
 	case "gate":
@@ -209,16 +212,16 @@ func treeConfigRefs(nodeType string, cfg *yaml.Node, from, to string) {
 		}
 		for i := 0; i+1 < len(m.Content); i += 2 {
 			if m.Content[i].Value == from {
-				if to == "" {
-					m.Content = append(m.Content[:i], m.Content[i+2:]...)
-				} else {
+				if to != "" {
 					m.Content[i].Value = to
+					return
 				}
-				break
+				m.Content = append(m.Content[:i], m.Content[i+2:]...)
+				if len(m.Content) == 0 {
+					remove(cfg, "input_env")
+				}
+				return
 			}
-		}
-		if len(m.Content) == 0 {
-			remove(cfg, "input_env")
 		}
 	case "human":
 		seq, _ := get(cfg, "context_inputs")
@@ -226,9 +229,11 @@ func treeConfigRefs(nodeType string, cfg *yaml.Node, from, to string) {
 			return
 		}
 		kept := seq.Content[:0]
+		removed := false
 		for _, it := range seq.Content {
 			if it.Kind == yaml.ScalarNode && it.Value == from {
 				if to == "" {
+					removed = true
 					continue
 				}
 				it.Value = to
@@ -236,7 +241,7 @@ func treeConfigRefs(nodeType string, cfg *yaml.Node, from, to string) {
 			kept = append(kept, it)
 		}
 		seq.Content = kept
-		if len(seq.Content) == 0 {
+		if removed && len(seq.Content) == 0 {
 			remove(cfg, "context_inputs")
 		}
 	case "gate":
