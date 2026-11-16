@@ -67,7 +67,7 @@ T1 and T2 are independent and can be built in parallel by different people.
 
 ### Task 1: Shared Git runner and `internal/worktree`
 
-**Branch:** `claude/f3-1-worktree-package`
+**Branch:** `claude/f3-1-worktree-package` (implemented; PR open)
 
 **Files:** Create `internal/worktree/{doc,worktree,integrate,refs,preflight}.go`
 and `*_test.go`, `internal/worktree/AGENTS.md`. Edit
@@ -126,10 +126,10 @@ Rules fixed by the ADR that the package enforces:
 - `Remove`: removes only handles created by this manager instance (tracked by
   ID, not by a path argument); never the source.
 
-- [ ] Write failing tests first (below), then extract the runner with `git()`
+- [x] Write failing tests first (below), then extract the runner with `git()`
   behavior unchanged (existing `internal/gitstate` and Codex tests pass untouched).
-- [ ] Implement the package to the interface above.
-- [ ] Add `AGENTS.md` for the package and update the codebase map.
+- [x] Implement the package to the interface above.
+- [x] Add `AGENTS.md` for the package and update the codebase map.
 
 **Tests (temporary Git repos, no Codex):**
 `TestPreflightRejectsDirtyTrackedAndAcceptsUntracked`,

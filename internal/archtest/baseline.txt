@@ -9,3 +9,4 @@ internal/capability -> agentplane/internal/agent : R2 adapters must not import o
 internal/gate -> agentplane/internal/gitstate : R2 adapters must not import other adapters
 internal/runtime -> agentplane/internal/gitstate : R1 app imports only domain and app
 internal/runtime -> os/exec : R4 domain/app must not use os/exec directly
+internal/worktree -> agentplane/internal/gitstate : R2 adapters must not import other adapters
