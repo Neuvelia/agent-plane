@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"errors"
 	"fmt"
@@ -58,11 +59,11 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 
 	plan, validation := graph.CompileBindings(definition)
 	if !validation.Valid() {
-		return runPreparation{}, &PreflightError{Diagnostics: validation}
+		return runPreparation{}, &run.PreflightError{Diagnostics: validation}
 	}
 	inputValidation := plan.ValidateGraphInputs(inputs)
 	if !inputValidation.Valid() {
-		return runPreparation{}, &PreflightError{Diagnostics: inputValidation}
+		return runPreparation{}, &run.PreflightError{Diagnostics: inputValidation}
 	}
 	// Run inputs are a stable snapshot even if the caller reuses its map.
 	graphInputs := make(map[string]graph.Value, len(inputs))

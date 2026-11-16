@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,10 +20,11 @@ var _ runtime.Executor = Executor{}
 var _ runtime.CorrelatedExecutor = Executor{}
 
 func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (map[string]graph.Value, error) {
-	return e.ExecuteNodeWithCorrelation(ctx, nodeID, node, inputs, runtime.ExecutionCorrelation{})
+	return e.ExecuteNodeWithCorrelation(ctx, nodeID, node, inputs, run.ExecutionCorrelation{})
 }
 
-func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation) (map[string]graph.Value, error) {
+// ExecuteNodeWithCorrelation runs the node with the scheduler-provided ids.
+func (e Executor) ExecuteNodeWithCorrelation(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids run.ExecutionCorrelation) (map[string]graph.Value, error) {
 	return e.execute(ctx, nodeID, node, inputs, ids, nil, nil, nil, nil)
 }
 
@@ -32,7 +34,8 @@ func (e Executor) ExecuteNodeObserved(ctx context.Context, nodeID string, node g
 	return values, evidence, err
 }
 
-func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids runtime.ExecutionCorrelation, log func(string, []byte), normalized func(events.Type, events.Payload), evidence **events.NodeEvidencePayload, feedback *runtime.CorrectionFeedback) (map[string]graph.Value, error) {
+//nolint:gocognit,gocyclo,funlen // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
+func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, ids run.ExecutionCorrelation, log func(string, []byte), normalized func(events.Type, events.Payload), evidence **events.NodeEvidencePayload, feedback *run.CorrectionFeedback) (map[string]graph.Value, error) {
 	if ctx == nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: ErrorInvalidInput, Cause: errors.New("execution context is nil")}
 	}
@@ -65,7 +68,7 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 	if node.Loop != nil && (report.CorrectionFeedback == nil || !*report.CorrectionFeedback) {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: ErrorUnsupported, Cause: errors.New("adapter does not affirm correction feedback transport")}
 	}
-	request := AgentExecutionInput{Feedback: runtime.CloneFeedback(feedback), Task: cfg.task, Workspace: cfg.workspace, AllowedPaths: cfg.allowedPaths, ContextRefs: cfg.contextRefs, EnvironmentRefs: cfg.environmentRefs, RunID: ids.RunID, NodeRunID: ids.NodeRunID, AttemptID: ids.AttemptID}
+	request := AgentExecutionInput{Feedback: run.CloneFeedback(feedback), Task: cfg.task, Workspace: cfg.workspace, AllowedPaths: cfg.allowedPaths, ContextRefs: cfg.contextRefs, EnvironmentRefs: cfg.environmentRefs, RunID: ids.RunID, NodeRunID: ids.NodeRunID, AttemptID: ids.AttemptID}
 	var output AgentExecutionOutput
 	if progress, ok := adapter.(NormalizedProgressAdapter); ok && normalized != nil {
 		output, err = progress.ExecuteWithNormalizedProgress(ctx, request, normalized)

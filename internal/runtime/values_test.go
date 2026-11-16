@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -65,7 +66,7 @@ func valueExecutor(text string) executorFunc {
 
 func TestValueRecordingIsOffByDefault(t *testing.T) {
 	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("do it")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
 	if got := recordedValues(result.Events); len(got) != 0 {
@@ -75,7 +76,7 @@ func TestValueRecordingIsOffByDefault(t *testing.T) {
 
 func TestValueRecordingOrderAndShape(t *testing.T) {
 	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
 	evs := result.Events
@@ -134,7 +135,7 @@ func TestValueRecordingTruncatesAndRedactsAcrossTheCut(t *testing.T) {
 	// The secret straddles the 16 KiB cut: bytes 16380..16388.
 	text := strings.Repeat("é", 8190) + secret + strings.Repeat("z", 100)
 	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("uses " + secret)}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{secret}})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
 	encoded, _ := json.Marshal(result.Events)
@@ -190,7 +191,7 @@ func TestValueRecordingRunBudgetOmitsLaterValues(t *testing.T) {
 		return map[string]graph.Value{"out": graph.NewStringValue(big)}, nil
 	})
 	result, err := Run(context.Background(), definition(defs), nil, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, MaxConcurrency: 4})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %v %v", result.State, err)
 	}
 	total, omitted := 0, 0
@@ -230,7 +231,7 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 		return nil, errors.New("boom")
 	})
 	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
-	if result.State != RunFailed {
+	if result.State != run.RunFailed {
 		t.Fatal(result.State)
 	}
 	for _, e := range recordedValues(result.Events) {
@@ -255,7 +256,7 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 		return map[string]graph.Value{"text": graph.NewStringValue("late")}, ctx.Err()
 	}
 	result, _ = Run(ctx, valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
-	if result.State != RunCancelled {
+	if result.State != run.RunCancelled {
 		t.Fatal(result.State)
 	}
 	for _, e := range recordedValues(result.Events) {
@@ -278,7 +279,7 @@ func TestValueRecordingAcceptsLongPortNames(t *testing.T) {
 		return map[string]graph.Value{out: graph.NewStringValue("done")}, nil
 	})
 	result, err := Run(context.Background(), def, map[string]graph.Value{in: graph.NewStringValue("go")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %v %v", result.State, err)
 	}
 	got := map[string]string{}
@@ -317,7 +318,7 @@ func TestValueRecordingOmitsJSONWhoseStringsHoldASecret(t *testing.T) {
 			return map[string]graph.Value{"n": n, "ok": graph.NewBooleanValue(true)}, nil
 		})
 		result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{secret}})
-		if err != nil || result.State != RunSucceeded {
+		if err != nil || result.State != run.RunSucceeded {
 			t.Fatalf("%s: run = %v %v", doc, result.State, err)
 		}
 		var found bool

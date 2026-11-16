@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -174,7 +175,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			result.PersistError = closeErr
 		}
 		if err != nil {
-			var preflight *runtime.PreflightError
+			var preflight *run.PreflightError
 			if errors.As(err, &preflight) {
 				return &api.StartError{Status: http.StatusUnprocessableEntity, Message: "preflight failed", Diagnostics: preflight.Diagnostics.Diagnostics}
 			}

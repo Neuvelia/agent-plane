@@ -2,6 +2,7 @@ package agent_test
 
 import (
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,7 +28,7 @@ func TestAgentRuntimeDispatchAndCorrelation(t *testing.T) {
 	zero := int64(0)
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "done", ChangedFiles: []agent.ChangedFile{{Path: "src/a.go", Provenance: agent.ProvenanceReported}}, Artifacts: []agent.ArtifactReference{{Ref: "artifact:report", Name: "report"}}, RawMetadata: json.RawMessage(`{"provider":"opaque"}`), Usage: &agent.UsageMetadata{InputTokens: &zero}}}
 	result, err := runtime.Run(context.Background(), agentGraph(workspace), map[string]graph.Value{"job": graph.NewStringValue("implement")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 	in, ok := m.LastInput()
@@ -72,7 +73,7 @@ func TestAgentRuntimeDispatchAndCorrelation(t *testing.T) {
 func TestAgentUnknownUsageOmitted(t *testing.T) {
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "ok"}}
 	result, err := runtime.Run(context.Background(), agentGraph(t.TempDir()), map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 	if len(result.Nodes[0].Outputs) != 1 || result.Nodes[0].Outputs[0].Name != "summary" {
@@ -112,7 +113,7 @@ func TestAgentConfigRejectsBeforeExecution(t *testing.T) {
 				graphInputs = nil
 			}
 			result, err := runtime.Run(context.Background(), def, graphInputs, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-			if err != nil || result.State != runtime.RunFailed {
+			if err != nil || result.State != run.RunFailed {
 				t.Fatalf("Run = %+v, %v", result, err)
 			}
 			if _, called := m.LastInput(); called {
@@ -137,7 +138,7 @@ func TestAgentDetectionAndExecutionErrors(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: tc.report, DetectErr: tc.detectErr, ExecuteErr: tc.errorErr}
 			result, err := runtime.Run(context.Background(), agentGraph(t.TempDir()), map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-			if err != nil || result.State != runtime.RunFailed || result.Failure == nil {
+			if err != nil || result.State != run.RunFailed || result.Failure == nil {
 				t.Fatalf("Run = %+v, %v", result, err)
 			}
 			var agentErr *agent.ExecutionError
@@ -157,7 +158,7 @@ func TestAgentCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	workspace := t.TempDir()
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, WaitForCancel: true, Started: make(chan struct{})}
-	done := make(chan runtime.RunResult, 1)
+	done := make(chan run.Result, 1)
 	go func() {
 		result, _ := runtime.Run(ctx, agentGraph(workspace), map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
 		done <- result
@@ -165,7 +166,7 @@ func TestAgentCancellation(t *testing.T) {
 	<-m.Started
 	cancel()
 	result := <-done
-	if result.State != runtime.RunCancelled || result.Nodes[0].State != runtime.NodeCancelled {
+	if result.State != run.RunCancelled || result.Nodes[0].State != run.NodeCancelled {
 		t.Fatalf("cancel = %+v", result)
 	}
 }
@@ -173,7 +174,7 @@ func TestAgentCancellation(t *testing.T) {
 func TestAgentInvalidRawMetadataFails(t *testing.T) {
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "ok", RawMetadata: json.RawMessage(`{bad`)}}
 	result, err := runtime.Run(context.Background(), agentGraph(filepath.Join(t.TempDir(), "work")), map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunFailed {
+	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 }
@@ -182,7 +183,7 @@ func TestAgentUnsupportedWorkspaceCapability(t *testing.T) {
 	no := false
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true, Workspace: &no}}
 	result, err := runtime.Run(context.Background(), agentGraph(t.TempDir()), map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunFailed {
+	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 	var executionErr *agent.ExecutionError
@@ -204,7 +205,7 @@ func TestAgentLiteralTaskWithoutBinding(t *testing.T) {
 	def.Nodes["work"] = n
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "done"}}
 	result, err := runtime.Run(context.Background(), def, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 	in, _ := m.LastInput()
@@ -220,7 +221,7 @@ func TestAgentRequiredOptionalOutputFailsWhenUnknown(t *testing.T) {
 	def.Nodes["work"] = n
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "done"}}
 	result, err := runtime.Run(context.Background(), def, map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunFailed || result.Failure.Kind != runtime.FailureOutputContract {
+	if err != nil || result.State != run.RunFailed || result.Failure.Kind != run.FailureOutputContract {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 }
@@ -234,7 +235,7 @@ func TestAgentConfigDiagnosticsAreDeterministic(t *testing.T) {
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}}
 	for range 20 {
 		result, err := runtime.Run(context.Background(), def, map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-		if err != nil || result.State != runtime.RunFailed || !strings.Contains(result.Failure.Err.Error(), `"a_extra"`) {
+		if err != nil || result.State != run.RunFailed || !strings.Contains(result.Failure.Err.Error(), `"a_extra"`) {
 			t.Fatalf("Run = %+v, %v", result, err)
 		}
 	}
@@ -244,7 +245,7 @@ func TestAgentErrorUsesSchedulerOwnedIdentity(t *testing.T) {
 	providerCause := errors.New("start failed")
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, ExecuteErr: &agent.ExecutionError{NodeID: "wrong", AdapterID: "other", Kind: agent.ErrorStart, Cause: providerCause}}
 	result, err := runtime.Run(context.Background(), agentGraph(t.TempDir()), map[string]graph.Value{"job": graph.NewStringValue("task")}, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || result.State != runtime.RunFailed {
+	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("Run = %+v, %v", result, err)
 	}
 	var executionErr *agent.ExecutionError

@@ -2,7 +2,7 @@ package main
 
 import (
 	"agentplane/internal/domain/events"
-	"agentplane/internal/runtime"
+	"agentplane/internal/domain/run"
 	"agentplane/internal/testenv"
 	"bytes"
 	"context"
@@ -97,7 +97,7 @@ func TestNormalizedHumanAndJSONOmissionRendering(t *testing.T) {
 		c.Append(events.Event{Type: events.Status, Payload: events.StatusPayload{Code: "working"}})
 	}
 	c.Append(events.Event{Type: events.RunFinished, Payload: events.RunFinishedPayload{Status: "succeeded"}})
-	result := runtime.RunResult{RunID: "r", State: runtime.RunSucceeded, Events: c.Snapshot()}
+	result := run.Result{RunID: "r", State: run.RunSucceeded, Events: c.Snapshot()}
 	var out, errout bytes.Buffer
 	if code := writeJSON(&out, &errout, documentForRun(result, nil), 0); code != 0 {
 		t.Fatal(code)
