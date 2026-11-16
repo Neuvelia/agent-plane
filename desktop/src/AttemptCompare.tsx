@@ -49,6 +49,7 @@ function Scope({ side }: { side: CompareSide }) {
   const { t } = useI18n()
   const s = side.scope
   if (s.kind === 'not_checked') return <span className="mu" data-testid="scope-not-checked">{t('compare.scopeNotChecked')}</span>
+  if (s.kind === 'indeterminate') return <span className="err" data-testid="scope-indeterminate">{t('compare.scopeIndeterminate')}</span>
   if (s.paths.length === 0 && s.omitted === 0) return <span>{t('compare.scopeClean')}</span>
   return (
     <div className="cmp-files" data-testid="scope-outside">
@@ -87,7 +88,7 @@ export function AttemptCompare({ run, node, kind, from, to, onChange }: { run: R
   // Outcomes are machine values from the engine and are shown literally, as OutcomePill does.
   const option = (id: string) => {
     const x = node.attempts.find((y) => y.id === id)!
-    return t('compare.option', { n: x.number, outcome: x.outcome ?? (run.status === 'running' ? t('compare.running') : 'interrupted') })
+    return t('compare.option', { n: x.number, outcome: x.outcome ?? t(run.status === 'running' ? 'compare.running' : 'compare.interrupted') })
   }
   const unknown = t('compare.unknown')
   const notChecked = <span className="mu">{t('compare.notChecked')}</span>
@@ -95,7 +96,7 @@ export function AttemptCompare({ run, node, kind, from, to, onChange }: { run: R
   const reason = (s: CompareSide) => (s.check ? <span data-testid="cmp-reason">{s.check.reason}</span> : notChecked)
   const evidence = (s: CompareSide) => (s.check ? s.check.evidence.length ? <EvidenceList check={s.check} /> : <span className="mu">{t('compare.noEvidence')}</span> : notChecked)
   const feedbackCell = (s: CompareSide) => (s.feedbackFrom === undefined ? t('compare.feedbackNone') : s.feedbackFrom === 0 ? t('compare.feedbackMissingShort') : t('compare.feedbackFrom', { n: s.feedbackFrom }))
-  const duration = (v?: number) => (v === undefined ? <span className="mu">{unknown}</span> : <span className="mono">{v} ms</span>)
+  const duration = (v?: number) => (v === undefined ? <span className="mu">{unknown}</span> : <span className="mono">{t('compare.ms', { v })}</span>)
   return (
     <div className="cmp" data-testid="attempt-compare">
       <div className="cmp-controls">

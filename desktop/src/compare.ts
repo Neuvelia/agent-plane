@@ -19,6 +19,8 @@ export interface FileRow {
 
 export type ScopeView =
   | { kind: 'not_checked' }
+  /** The check ran but could not inspect the workspace (its scope evidence is unavailable); it says nothing about scope. */
+  | { kind: 'indeterminate' }
   /** `paths` are the out-of-scope paths the check listed; `omitted` counts paths beyond its evidence limit. */
   | { kind: 'checked'; paths: string[]; omitted: number }
 
@@ -70,6 +72,11 @@ const ms = (iso: string | undefined): number | undefined => {
 function scopeOf(check: CheckView | undefined): ScopeView {
   if (!check || check.kind !== 'changed_files_scope') return { kind: 'not_checked' }
   const items = check.evidence.filter((e) => e.kind === 'changed_files_scope')
+  // An unavailable reference with neither a path nor an omitted count is the
+  // engine's "Git inspection failed" item (a warn-mode green that checked
+  // nothing). The evidence-limit item also has an unavailable reference, but it
+  // carries the omitted count, so that scope was checked.
+  if (items.some((e) => e.reference?.state === 'unavailable' && !e.path && !e.omitted)) return { kind: 'indeterminate' }
   const paths = items.flatMap((e) => (e.path ? [e.path] : []))
   const omitted = items.reduce((sum, e) => sum + (e.omitted ?? 0), 0)
   return { kind: 'checked', paths, omitted }

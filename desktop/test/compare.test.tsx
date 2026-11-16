@@ -12,7 +12,8 @@ import type { ApEvent } from '../src/types'
 // demo-approve.json: recorded `agentplane run .agents/graphs/demo-vertical.yaml --approve approve --json`;
 // its "flaky" node is a Shell loop, red on attempt 1 and green on attempt 2.
 // agent-scope-retry.json: recorded from the engine runtime with the test fake Agent
-// adapter and a changed_files_scope deny Gate (see agent-scope-retry.yaml).
+// adapter and a changed_files_scope deny Gate by internal/runtime/desktop_fixture_test.go
+// (see agent-scope-retry.yaml).
 const shell = approveEvents as unknown as ApEvent[]
 const agent = agentEvents as unknown as ApEvent[]
 
@@ -157,6 +158,43 @@ describe('agent loop with a changed_files_scope Gate', () => {
     const out = html(reduceAll(agent), 'work', 'agent')
     expect((out.match(/data-testid="badge-outside"/g) ?? []).length).toBe(1)
     expect(out).toContain('All changes within allowed scope')
+  })
+})
+
+// The exact gate_check payload internal/gate/changed_files.go indeterminateChangedFiles
+// emits in warn mode when Git inspection fails: green, but nothing was checked.
+const indeterminatePayload = {
+  check_result_version: 1,
+  scope: { checked_inputs: ['candidate'] },
+  duration_ns: 0,
+  check_id: 'scope',
+  kind: 'changed_files_scope',
+  verdict: 'green',
+  reason: 'changed_files_scope_indeterminate',
+  evidence: [{ kind: 'changed_files_scope', reference: { kind: 'diff', state: 'unavailable', reason: 'git_inspection_failed' }, source: 'git' }],
+  changed_files_scope: { mode: 'warn', allowed_paths: ['src/'], scope_redacted: false, baseline_head: 'unavailable', observed_count: 0 },
+}
+
+describe('indeterminate scope check', () => {
+  const last = agent.filter((e) => e.type === 'gate_check')[1]!
+  const edited = agent.map((e) => (e === last ? { ...e, payload: indeterminatePayload } : e))
+  const { m } = model(edited, 'work', 'agent')
+
+  it('keeps the evidence reference and reports the scope as undetermined, not clean', () => {
+    expect(m.to.check?.evidence[0]?.reference).toEqual({ kind: 'diff', state: 'unavailable', reason: 'git_inspection_failed' })
+    expect(m.to.scope).toEqual({ kind: 'indeterminate' })
+    expect(m.to.files?.some((f) => f.outsideScope)).toBe(false)
+    const out = html(reduceAll(edited), 'work', 'agent')
+    expect(out).toContain('Scope could not be determined')
+    expect(out).toContain('data-testid="scope-indeterminate"')
+    expect(out.match(/All changes within allowed scope/g)).toBeNull()
+    expect(html(reduceAll(edited), 'work', 'agent', undefined, undefined, 'pl')).toContain('Nie udało się ustalić zakresu')
+  })
+
+  it('an evidence limit reference is still a checked scope with omitted paths', () => {
+    const limited = { ...indeterminatePayload, verdict: 'red', reason: 'changed_files_outside_scope', evidence: [{ kind: 'changed_files_scope', source: 'git', path: 'outside.go' }, { kind: 'changed_files_scope', source: 'git', omitted: 4, reference: { kind: 'diff', state: 'unavailable', reason: 'paths_exceed_evidence_limit' } }] }
+    const ev = agent.map((e) => (e === last ? { ...e, payload: limited } : e))
+    expect(model(ev, 'work', 'agent').m.to.scope).toEqual({ kind: 'checked', paths: ['outside.go'], omitted: 4 })
   })
 })
 

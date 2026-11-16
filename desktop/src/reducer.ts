@@ -25,6 +25,14 @@ export interface Evidence {
   stdout?: string
   stderr?: string
   omitted?: number
+  /** Typed reference to evidence held elsewhere, e.g. a diff that is `unavailable`. */
+  reference?: EvidenceReference
+}
+
+export interface EvidenceReference {
+  kind: string
+  state: string
+  reason?: string
 }
 
 export interface CheckView {
@@ -143,6 +151,12 @@ function bounded(text: string): string {
 const num = (v: unknown, fallback = 0): number => (typeof v === 'number' ? v : fallback)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
+function reference(v: unknown): EvidenceReference | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const r = v as Record<string, unknown>
+  return { kind: str(r.kind), state: str(r.state), reason: r.reason ? str(r.reason) : undefined }
+}
+
 function attemptFor(n: NodeView, attemptId: string | undefined): Attempt | undefined {
   if (attemptId) {
     const found = n.attempts.find((a) => a.id === attemptId)
@@ -252,6 +266,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
             stdout: e.stdout ? decode(e.stdout) : undefined,
             stderr: e.stderr ? decode(e.stderr) : undefined,
             omitted: typeof e.omitted === 'number' ? e.omitted : undefined,
+            reference: reference(e.reference),
           })),
         }
         if (a) a.check = view
