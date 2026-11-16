@@ -50,6 +50,10 @@ var legacyLayers = map[string]layer{
 	"internal/store":             layerAdapter,
 	"internal/api":               layerDelivery,
 	"internal/version":           layerNeutral,
+	"internal/fields":            layerNeutral, // config field descriptors shared by domain, adapters and delivery
+	"internal/fields/fieldstest": layerNeutral,
+	"internal/testenv":           layerNeutral, // test-only helpers
+	"internal/capability":        layerAdapter, // probes Git and agent adapters (F2.11)
 	"cmd/agentplane":             layerRoot,
 	"internal/agent/adaptertest": layerAdapter,
 }
