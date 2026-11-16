@@ -97,7 +97,7 @@ export interface RunView {
   finishedAt?: string
   /** Timestamp of the newest applied event: "now" for a run that is still going. */
   lastEventAt?: string
-  /** The newest MAX_EVENT_ROWS events, oldest first. log_chunk is excluded (it has the Log view). */
+  /** The newest MAX_EVENT_ROWS events, oldest first. log_chunk (Log view) and value_recorded (edge values) are excluded. */
   tail: EventSummary[]
   failureKind?: string
 }
@@ -266,8 +266,10 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
 
 // summarize is the one place that decides what an event looks like in the EventLog.
 // Unknown event types are kept (by type) and simply have no detail or filter kind.
+// value_recorded (schema 10, ADR-0023) carries user data for the edge inspector
+// (F2.3 E5b); like log_chunk it has its own view and never becomes an EventLog row.
 function summarize(event: ApEvent): EventSummary | null {
-  if (event.type === 'log_chunk') return null
+  if (event.type === 'log_chunk' || event.type === 'value_recorded') return null
   const p = event.payload
   const row: EventSummary = { sequence: event.sequence, timestamp: event.timestamp, type: event.type, node: event.node_id }
   switch (event.type) {
