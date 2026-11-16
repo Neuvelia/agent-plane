@@ -31,6 +31,13 @@ export function EvidenceList({ check }: { check: CheckView }) {
           {e.stdout && <pre>{e.stdout}</pre>}
           {e.stderr && <pre>{e.stderr}</pre>}
           {e.omitted ? <span className="mu"> +{e.omitted} omitted</span> : null}
+          {e.reference && (
+            <span className="mu">
+              {' '}
+              {e.reference.kind}={e.reference.state}
+              {e.reference.reason ? ` (${e.reference.reason})` : ''}
+            </span>
+          )}
         </div>
       ))}
     </>

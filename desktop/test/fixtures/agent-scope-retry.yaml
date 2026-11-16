@@ -7,6 +7,9 @@
 # scope), attempt 2 restored outside.go and changed src/a.go and src/b.go (green).
 # The events are the engine's own output; this YAML documents the graph shape and
 # is not runnable with the real CLI (no "fake" adapter there).
+# The recorder is internal/runtime/desktop_fixture_test.go; `go test ./...` fails
+# when this recording no longer matches the engine. Regenerate it with:
+#   AGENTPLANE_UPDATE_FIXTURES=1 go test ./internal/runtime -run TestDesktopAgentScopeRetryFixture
 schema_version: 0
 id: agent-scope-retry
 units: [work]

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
-import { agentScopeGraph, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
 import { Dashboard } from './dashboardView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
@@ -52,6 +52,12 @@ export const InspectorCompareShellAttempts: S = { ...inspector(demoApprove, 'suc
 export const InspectorCompareAgentScope: S = {
   parameters: { bridge: { runs: [{ summary: summaryOf(agentScopeRetry, 'succeeded'), graph: agentScopeGraph, yaml: agentScopeYaml, events: agentScopeRetry, ending: 'end' }] } satisfies BridgeData },
   render: () => <RunInspector runId={rid(agentScopeRetry)} onBack={noop} />,
+  play: openCompare('work'),
+}
+// Attempt 2's scope check could not inspect Git (warn mode): shown as undetermined, not clean.
+export const InspectorCompareScopeIndeterminate: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(agentScopeIndeterminate, 'succeeded'), graph: agentScopeGraph, yaml: agentScopeYaml, events: agentScopeIndeterminate, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(agentScopeIndeterminate)} onBack={noop} />,
   play: openCompare('work'),
 }
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
