@@ -97,6 +97,11 @@ The implementer should:
 
 `make check` is the minimum repository gate.
 
+For changes under `desktop/`, also run `npm run check` there. CI reports the
+Go `make check`/build and desktop `npm run check` as separate jobs on pushes
+and pull requests. Browser story smoke and real Electron e2e are separate
+checks; use `desktop/AGENTS.md` to choose them for the affected behavior.
+
 A green check is necessary, not sufficient. Acceptance criteria still need human and reviewer inspection.
 
 ## Review session
