@@ -162,11 +162,10 @@ unit: `gate_check` -> `return_envelope` -> `attempt_finished` ->
 `workspace_integrated`. Operational failures emit no verdict and no envelope.
 Payload contents are fixed by the feature spec's Observability section.
 
-Event schema **10** carries these facts. This was decided by merge order, as
-planned: `origin/main` is at schema 9 and no other schema bump had landed when
-the events task was implemented. ADR-0023 (proposed) also names schema 10 for
-`value_recorded`; whichever work lands second takes the next free number, and
-that ADR's owner amends its text then. Both changes are additive; schemas 1-9
+Event schema **11** carries these facts. This was decided by merge order, as
+planned: the events task was first implemented against schema 9 and named
+schema 10, but ADR-0023 (`value_recorded`) landed first and holds schema 10, so
+these facts take the next free number. Both changes are additive; schemas 1-10
 stay readable and consumers that ignore unknown types keep working.
 
 Payloads (all bounded, validated, deeply copied, retained outside progress

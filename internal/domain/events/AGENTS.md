@@ -26,7 +26,7 @@ the CLI, local run store, loopback API and desktop client.
   the distinction between `node_finished` after a start and
   `node_terminated` before one. The runtime owns state transitions and
   decides when to emit facts; this package owns their shape and collection.
-- New events use `SchemaVersion` 10. JSON readers accept schemas 1 through 10
+- New events use `SchemaVersion` 11. JSON readers accept schemas 1 through 11
   with their actual historical payload shapes; in-memory zero is a builder
   convention, not a serialized schema. Keep strict type/payload matching,
   unknown payload-field rejection and the schema-4 legacy Gate payload distinct

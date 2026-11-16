@@ -150,7 +150,7 @@ limit and stderr never returned.
 
 ### Task 2: Events
 
-**Branch:** `claude/f3-1-events` (implemented; PR open). Schema number: **10**
+**Branch:** `claude/f3-1-events` (implemented; PR open). Schema number: **11** (10 is taken by `value_recorded`, ADR-0023)
 
 **Files:** Create `internal/events/workspace.go`, `workspace_test.go`. Edit
 `internal/events/event.go` (schema constant, `Validate` switch, clone),

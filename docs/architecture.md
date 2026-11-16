@@ -314,7 +314,7 @@ External writers can still alter the shared workspace. See ADR-0016.
 
 ## Workspace isolation facts (F3.1)
 
-Event schema 10 adds five typed, bounded facts for isolated Agent units:
+Event schema 11 adds five typed, bounded facts for isolated Agent units:
 `workspace_prepared`, `workspace_integrated`, `workspace_conflict`,
 `workspace_released` and the run-level `source_workspace_changed`. They are
 retained outside progress limits, deeply copied and fsynced by the run store.

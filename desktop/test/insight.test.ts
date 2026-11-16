@@ -141,8 +141,8 @@ describe('event tail', () => {
     const run = reduce(initialRun(), { event_schema_version: 9, type: 'from_the_future', timestamp: '2026-01-01T00:00:00Z', sequence: 1, run_id: 'r', graph_id: 'g', graph_version: 'v', payload: { x: 1 } })
     expect(run.tail).toEqual([{ sequence: 1, timestamp: '2026-01-01T00:00:00Z', type: 'from_the_future', node: undefined, detail: undefined, kind: undefined }])
   })
-  it('tolerates the schema 10 workspace isolation events without interpreting them', () => {
-    const base = { event_schema_version: 10, timestamp: '2026-01-01T00:00:00Z', run_id: 'r', graph_id: 'g', graph_version: 'v' }
+  it('tolerates the schema 11 workspace isolation events without interpreting them', () => {
+    const base = { event_schema_version: 11, timestamp: '2026-01-01T00:00:00Z', run_id: 'r', graph_id: 'g', graph_version: 'v' }
     const sha = '0123456789abcdef0123456789abcdef01234567'
     const stream: ApEvent[] = [
       { ...base, type: 'workspace_prepared', sequence: 1, node_id: 'n', node_run_id: 'nr', payload: { base_sha: sha, mode: 'worktree', path: '/w', source_root: '/s' } },
