@@ -1,0 +1,39 @@
+# Fixture graph for Storybook/tests (F2.8a Attempt Compare): one Agent unit with
+# a changed_files_scope deny Gate. agent-scope-retry.json was recorded from the
+# engine's runtime.Run in a temporary Git repository, using the runtime test
+# harness's fake Agent adapter ("fake"), because a real Codex run is not
+# reproducible in tests. The fake adapter wrote the files and reported them as
+# observed changed files: attempt 1 changed outside.go and src/a.go (red: outside
+# scope), attempt 2 restored outside.go and changed src/a.go and src/b.go (green).
+# The events are the engine's own output; this YAML documents the graph shape and
+# is not runnable with the real CLI (no "fake" adapter there).
+schema_version: 0
+id: agent-scope-retry
+units: [work]
+inputs: {}
+nodes:
+  work:
+    type: agent
+    config:
+      adapter: fake
+      task: edit
+      workspace: "__WORKSPACE__"
+      allowed_paths: ["src/**"]
+    outputs:
+      raw_metadata: {type: json, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: scope
+          kind: changed_files_scope
+          input: candidate
+          mode: deny
+          workspace: "__WORKSPACE__"
+          allowed_paths: ["src/**"]
+      bindings:
+        - {from: candidate.outputs.raw_metadata, to: gate.inputs.candidate}
+edges: []
+outputs: {}

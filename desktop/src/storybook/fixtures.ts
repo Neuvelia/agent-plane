@@ -7,12 +7,18 @@ import reject from '../../test/fixtures/demo-reject.json'
 import exhausted from '../../test/fixtures/exhausted.json'
 import demoYaml from '../../../.agents/graphs/demo-vertical.yaml?raw'
 import exhaustedYaml from '../../test/fixtures/exhausted.yaml?raw'
+// Recorded from the engine runtime with the test fake Agent adapter (see the YAML header).
+import agentScope from '../../test/fixtures/agent-scope-retry.json'
+import agentScopeYaml from '../../test/fixtures/agent-scope-retry.yaml?raw'
 import { pendingApprovals, reduceAll } from '../reducer'
 import type { ApEvent, GraphSummary, PendingApproval, RunSummary } from '../types'
 
 export const demoApprove = approve as unknown as ApEvent[]
 export const demoReject = reject as unknown as ApEvent[]
 export const exhaustedRetries = exhausted as unknown as ApEvent[]
+export const agentScopeRetry = agentScope as unknown as ApEvent[]
+export const agentScopeGraph: GraphSummary = { nodes: [{ id: 'work', type: 'agent', max_attempts: 3 }], edges: [] }
+export { agentScopeYaml }
 
 export const demoGraph: GraphSummary = {
   nodes: [
