@@ -79,6 +79,7 @@ func (s *servedAPI) call(t *testing.T, method, path, body string) (int, string) 
 }
 
 func TestServeRunsTheDemoThroughTheAPIAndPersistsIt(t *testing.T) {
+	requireDemoTools(t)
 	s := startServe(t)
 	if code, _ := (func() (int, string) {
 		resp, err := http.Get(s.base + "/runs")
@@ -186,6 +187,7 @@ func quote(s string) string { b, _ := json.Marshal(s); return string(b) }
 // Stopping the server while a run waits for a human must cancel it and leave a
 // complete log (run_finished cancelled), not a half-written run.
 func TestServeStopWhileWaitingForApprovalCancelsAndFinishesTheRun(t *testing.T) {
+	requireDemoTools(t)
 	s := startServe(t)
 	graphPath, _ := filepath.Abs(filepath.Join("..", "..", ".agents", "graphs", "demo-vertical.yaml"))
 	_, body := s.call(t, "POST", "/runs", `{"graph_path":`+quote(graphPath)+`}`)

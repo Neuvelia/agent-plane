@@ -14,6 +14,7 @@ import (
 	"agentplane/internal/gate"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 type loopAdapter struct {
@@ -79,6 +80,14 @@ func loopDefinition(budget int) *graph.Definition {
 		"down": {Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}},
 	}}
 }
+
+// requireAgentWorkspaceTools skips where the scheduler cannot resolve an agent
+// workspace: it starts /usr/bin/git before any agent attempt runs.
+func requireAgentWorkspaceTools(t *testing.T) {
+	t.Helper()
+	testenv.RequireExecutable(t, "/usr/bin/git")
+}
+
 func newLoopAdapter() *loopAdapter {
 	yes := true
 	return &loopAdapter{capable: &yes, produce: func(context.Context, agent.AgentExecutionInput, int) (agent.AgentExecutionOutput, error) {
@@ -89,6 +98,7 @@ func compose(a *loopAdapter) composition {
 	return composition{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"fake": a}}}
 }
 func TestLoopBudgetsAndTrace(t *testing.T) {
+	requireAgentWorkspaceTools(t)
 	for _, b := range []int{0, 1, 2, 10} {
 		t.Run(string(rune('a'+b)), func(t *testing.T) {
 			a := newLoopAdapter()
@@ -138,6 +148,7 @@ func TestLoopBudgetsAndTrace(t *testing.T) {
 	}
 }
 func TestLoopRedGreenPublicationAndFeedback(t *testing.T) {
+	requireAgentWorkspaceTools(t)
 	a := newLoopAdapter()
 	a.produce = func(_ context.Context, in agent.AgentExecutionInput, n int) (agent.AgentExecutionOutput, error) {
 		if n == 1 && in.Feedback != nil {
@@ -208,6 +219,7 @@ func TestLoopPreflightBeforeDetection(t *testing.T) {
 	}
 }
 func TestLoopFatalNeverRetries(t *testing.T) {
+	requireAgentWorkspaceTools(t)
 	for _, mode := range []string{"provider", "output", "gate-error", "missing", "duplicate", "inconsistent", "producer-check"} {
 		t.Run(mode, func(t *testing.T) {
 			a := newLoopAdapter()
@@ -255,6 +267,7 @@ func TestLoopFatalNeverRetries(t *testing.T) {
 }
 
 func TestLoopCancellationBoundaries(t *testing.T) {
+	requireAgentWorkspaceTools(t)
 	for _, stage := range []string{"before", "produce", "before-check", "check", "between"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())

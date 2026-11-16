@@ -12,6 +12,7 @@ import (
 	"agentplane/internal/agent/adaptertest"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 type compositeExecutor struct {
@@ -188,6 +189,8 @@ outputs:
 	if err != nil || hash != base {
 		t.Fatalf("metadata hash=%s %v", hash, err)
 	}
+	// runtime.Run resolves the agent workspace with /usr/bin/git.
+	testenv.RequireExecutable(t, "/usr/bin/git")
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "parsed fixture done"}}
 	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{})
 	if err != nil || result.State != runtime.RunSucceeded {

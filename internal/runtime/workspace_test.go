@@ -9,10 +9,12 @@ import (
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
+	"agentplane/internal/testenv"
 )
 
 func workspaceGit(t *testing.T, root string, args ...string) {
 	t.Helper()
+	testenv.RequireExecutable(t, "/usr/bin/git")
 	c := exec.Command("/usr/bin/git", args...)
 	c.Dir = root
 	c.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
