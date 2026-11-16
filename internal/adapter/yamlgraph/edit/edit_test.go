@@ -721,6 +721,7 @@ func TestLargeGraphIsFast(t *testing.T) {
 	if raceDetector {
 		limit *= 10 // the race detector slows this down by an order of magnitude
 	}
+	t.Logf("best of %d samples: %v (limit %v)", samples, best, limit)
 	if best > limit {
 		t.Errorf("applying one operation to a 200-node graph took %v at best of %d samples (limit %v)", best, samples, limit)
 	}
