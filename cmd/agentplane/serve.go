@@ -70,6 +70,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Token: token, Store: runStore, Hub: api.NewHub(),
 		Validate:           validateForAPI,
 		ValidateDefinition: diagnosticsFor,
+		NodeTypes:          nodeCatalogue(),
 		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues}),
 	}
 	if onServe != nil {

@@ -2,6 +2,7 @@
 // references any remote origin. Run after `npm run build`.
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 function* walk(dir) {
   for (const name of readdirSync(dir)) {
@@ -12,7 +13,7 @@ function* walk(dir) {
 }
 
 const bad = []
-for (const file of walk(new URL('../dist', import.meta.url).pathname)) {
+for (const file of walk(fileURLToPath(new URL('../dist', import.meta.url)))) {
   if (!/\.(js|css|html)$/.test(file)) continue
   const text = readFileSync(file, 'utf8')
   if (/storybook/i.test(text)) bad.push(`${file}: mentions storybook`)

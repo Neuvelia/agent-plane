@@ -1,0 +1,119 @@
+import type { Locale } from '../../i18n'
+
+// Labels and help texts of the sidecar's field descriptors, keyed by the
+// descriptor id (F2.2 requirement 7). A missing entry falls back to English,
+// then to the YAML key; desktop/test/inspector-text.test.ts makes gaps visible
+// against the recorded catalogue (test/fixtures/node-types.json).
+
+export interface FieldText {
+  label: string
+  help: string
+}
+
+const ENV_WARNING = 'Never type secrets here: environment values belong outside the graph (env_allowlist, environment_refs).'
+const ENV_WARNING_PL = 'Nie wpisuj tu sekretów: wartości środowiska należą poza graf (env_allowlist, environment_refs).'
+
+const en: Record<string, FieldText> = {
+  'shell.config.command': { label: 'Command', help: 'The program to run, as a path or a name on PATH. It runs without a shell: no pipes, globbing or variable expansion.' },
+  'shell.config.args': { label: 'Arguments', help: 'Passed to the command one by one, exactly as written.' },
+  'shell.config.args.item': { label: 'Argument', help: 'One argument, passed literally.' },
+  'shell.config.cwd': { label: 'Working directory', help: 'Where the command runs. Empty means the directory agentplane was started in.' },
+  'shell.config.env_allowlist': { label: 'Inherited environment', help: `Names of environment variables the command may inherit. ${ENV_WARNING}` },
+  'shell.config.env_name': { label: 'Variable name', help: 'An environment variable name: no "=" and not AGENTPLANE_ATTEMPT.' },
+  'shell.config.env': { label: 'Fixed environment', help: `Variables set to these literal values. ${ENV_WARNING}` },
+  'shell.config.input_env': { label: 'Inputs as environment', help: `Passes a declared string input to the command as an environment variable. ${ENV_WARNING}` },
+  'shell.config.stdout_json': { label: 'Parse stdout as JSON', help: 'When on, standard output must be JSON and the json output can be declared.' },
+  'agent.config.adapter': { label: 'Adapter', help: 'Which coding agent runs this node, for example codex. Whether it is installed is checked when the run starts.' },
+  'agent.config.workspace': { label: 'Workspace', help: 'The absolute path of the repository the agent works in. The editor does not open or read it.' },
+  'agent.config.task': { label: 'Task', help: 'What the agent is asked to do. Either this text or a declared string input named task, not both.' },
+  'agent.config.allowed_paths': { label: 'Allowed paths', help: 'Workspace paths the agent may change. A loop on an agent needs this list.' },
+  'agent.config.allowed_paths.item': { label: 'Path', help: 'A path inside the workspace.' },
+  'agent.config.context_refs': { label: 'Context references', help: 'References the agent receives as context.' },
+  'agent.config.context_refs.item': { label: 'Reference', help: 'One context reference.' },
+  'agent.config.environment_refs': { label: 'Environment references', help: `Names of environment entries the agent may use. ${ENV_WARNING}` },
+  'agent.config.environment_refs.item': { label: 'Reference', help: 'One environment reference, by name.' },
+  'gate.config.check_id': { label: 'Check id', help: 'A stable name for this check in results and traces (at most 256 bytes).' },
+  'gate.config.kind': { label: 'Check kind', help: 'What the Gate compares. Each kind has its own settings below.' },
+  'gate.config.command': { label: 'Command check', help: 'Compares two string inputs with diff.' },
+  'gate.config.command.command': { label: 'Command', help: 'Fixed by the engine.' },
+  'gate.config.command.cwd': { label: 'Working directory', help: 'An absolute, clean path where diff runs.' },
+  'gate.config.command.left_input': { label: 'Left input', help: 'A required string input compared on the left.' },
+  'gate.config.command.right_input': { label: 'Right input', help: 'A required string input compared on the right.' },
+  'gate.config.json_predicate': { label: 'JSON predicate', help: 'Checks one field of a JSON input.' },
+  'gate.config.json_predicate.input': { label: 'Input', help: 'A required JSON input to check.' },
+  'gate.config.json_predicate.field': { label: 'Field path', help: 'The keys leading to the value, outermost first.' },
+  'gate.config.json_predicate.field.item': { label: 'Key', help: 'One key of the path.' },
+  'gate.config.json_predicate.operator': { label: 'Operator', help: 'eq passes when the value equals the expected one; ne when it differs.' },
+  'gate.config.json_predicate.expected': { label: 'Expected value', help: 'A string, number, true, false or null. Use either this or the expected JSON.' },
+  'gate.config.json_predicate.expected_json': { label: 'Expected JSON', help: 'The text of one JSON scalar. Use either this or the expected value.' },
+  'gate.config.reported_file_scope': { label: 'Reported file scope', help: 'Checks that the files a JSON input reports stay inside the allowed paths.' },
+  'gate.config.reported_file_scope.input': { label: 'Input', help: 'A required JSON input listing files.' },
+  'gate.config.reported_file_scope.allowed_paths': { label: 'Allowed paths', help: 'Workspace-relative paths the reported files must stay under.' },
+  'gate.config.reported_file_scope.allowed_paths.item': { label: 'Path', help: 'A relative path inside the workspace, without "..".' },
+  'gate.config.changed_files_scope': { label: 'Changed file scope', help: 'Checks the files the agent actually changed in the workspace.' },
+  'gate.config.changed_files_scope.input': { label: 'Input', help: 'A required string or JSON input of the check.' },
+  'gate.config.changed_files_scope.allowed_paths': { label: 'Allowed paths', help: 'Workspace-relative paths changes must stay under.' },
+  'gate.config.changed_files_scope.allowed_paths.item': { label: 'Path', help: 'A relative path inside the workspace, without "..".' },
+  'gate.config.changed_files_scope.mode': { label: 'Mode', help: 'warn records changes outside the paths; deny fails the check.' },
+  'gate.config.changed_files_scope.workspace': { label: 'Workspace', help: 'The absolute, clean path of the workspace to inspect.' },
+  'human.config.prompt': { label: 'Prompt', help: 'What the person is asked (at most 1024 bytes).' },
+  'human.config.context_inputs': { label: 'Context inputs', help: 'Declared string inputs shown to the person with the prompt (at most 8).' },
+  'human.config.context_inputs.item': { label: 'Input', help: 'A declared string input.' },
+  'loop.max_attempts': { label: 'Max attempts', help: 'How many times the node may produce a candidate before the loop gives up (1 to 10).' },
+}
+
+const pl: Record<string, FieldText> = {
+  'shell.config.command': { label: 'Polecenie', help: 'Program do uruchomienia: ścieżka albo nazwa z PATH. Działa bez powłoki: bez potoków, wzorców i rozwijania zmiennych.' },
+  'shell.config.args': { label: 'Argumenty', help: 'Przekazywane poleceniu po kolei, dokładnie tak, jak są zapisane.' },
+  'shell.config.args.item': { label: 'Argument', help: 'Jeden argument, przekazany dosłownie.' },
+  'shell.config.cwd': { label: 'Katalog roboczy', help: 'Gdzie działa polecenie. Puste oznacza katalog, w którym uruchomiono agentplane.' },
+  'shell.config.env_allowlist': { label: 'Dziedziczone środowisko', help: `Nazwy zmiennych środowiska, które polecenie może odziedziczyć. ${ENV_WARNING_PL}` },
+  'shell.config.env_name': { label: 'Nazwa zmiennej', help: 'Nazwa zmiennej środowiska: bez "=" i inna niż AGENTPLANE_ATTEMPT.' },
+  'shell.config.env': { label: 'Stałe środowisko', help: `Zmienne ustawione na te dosłowne wartości. ${ENV_WARNING_PL}` },
+  'shell.config.input_env': { label: 'Wejścia jako środowisko', help: `Przekazuje zadeklarowane wejście tekstowe jako zmienną środowiska. ${ENV_WARNING_PL}` },
+  'shell.config.stdout_json': { label: 'Czytaj stdout jako JSON', help: 'Gdy włączone, standardowe wyjście musi być JSON-em i można zadeklarować wyjście json.' },
+  'agent.config.adapter': { label: 'Adapter', help: 'Który agent kodujący wykonuje węzeł, na przykład codex. Czy jest zainstalowany, sprawdza się przy starcie przebiegu.' },
+  'agent.config.workspace': { label: 'Przestrzeń robocza', help: 'Bezwzględna ścieżka repozytorium, w którym pracuje agent. Edytor jej nie otwiera ani nie czyta.' },
+  'agent.config.task': { label: 'Zadanie', help: 'O co prosimy agenta. Albo ten tekst, albo zadeklarowane wejście tekstowe o nazwie task, nie oba.' },
+  'agent.config.allowed_paths': { label: 'Dozwolone ścieżki', help: 'Ścieżki przestrzeni roboczej, które agent może zmieniać. Pętla agenta wymaga tej listy.' },
+  'agent.config.allowed_paths.item': { label: 'Ścieżka', help: 'Ścieżka wewnątrz przestrzeni roboczej.' },
+  'agent.config.context_refs': { label: 'Odwołania do kontekstu', help: 'Odwołania przekazywane agentowi jako kontekst.' },
+  'agent.config.context_refs.item': { label: 'Odwołanie', help: 'Jedno odwołanie do kontekstu.' },
+  'agent.config.environment_refs': { label: 'Odwołania do środowiska', help: `Nazwy wpisów środowiska, z których agent może korzystać. ${ENV_WARNING_PL}` },
+  'agent.config.environment_refs.item': { label: 'Odwołanie', help: 'Jedno odwołanie do środowiska, po nazwie.' },
+  'gate.config.check_id': { label: 'Identyfikator sprawdzenia', help: 'Stała nazwa sprawdzenia w wynikach i śladach (najwyżej 256 bajtów).' },
+  'gate.config.kind': { label: 'Rodzaj sprawdzenia', help: 'Co porównuje bramka. Każdy rodzaj ma własne ustawienia poniżej.' },
+  'gate.config.command': { label: 'Sprawdzenie poleceniem', help: 'Porównuje dwa wejścia tekstowe programem diff.' },
+  'gate.config.command.command': { label: 'Polecenie', help: 'Ustalone przez silnik.' },
+  'gate.config.command.cwd': { label: 'Katalog roboczy', help: 'Bezwzględna, uporządkowana ścieżka, w której działa diff.' },
+  'gate.config.command.left_input': { label: 'Lewe wejście', help: 'Wymagane wejście tekstowe porównywane po lewej.' },
+  'gate.config.command.right_input': { label: 'Prawe wejście', help: 'Wymagane wejście tekstowe porównywane po prawej.' },
+  'gate.config.json_predicate': { label: 'Predykat JSON', help: 'Sprawdza jedno pole wejścia JSON.' },
+  'gate.config.json_predicate.input': { label: 'Wejście', help: 'Wymagane wejście JSON do sprawdzenia.' },
+  'gate.config.json_predicate.field': { label: 'Ścieżka pola', help: 'Klucze prowadzące do wartości, od zewnętrznego.' },
+  'gate.config.json_predicate.field.item': { label: 'Klucz', help: 'Jeden klucz ścieżki.' },
+  'gate.config.json_predicate.operator': { label: 'Operator', help: 'eq przechodzi, gdy wartość jest równa oczekiwanej; ne, gdy się różni.' },
+  'gate.config.json_predicate.expected': { label: 'Oczekiwana wartość', help: 'Tekst, liczba, true, false albo null. Użyj tego albo oczekiwanego JSON-a.' },
+  'gate.config.json_predicate.expected_json': { label: 'Oczekiwany JSON', help: 'Tekst jednej wartości skalarnej JSON. Użyj tego albo oczekiwanej wartości.' },
+  'gate.config.reported_file_scope': { label: 'Zakres zgłoszonych plików', help: 'Sprawdza, czy pliki zgłoszone w wejściu JSON mieszczą się w dozwolonych ścieżkach.' },
+  'gate.config.reported_file_scope.input': { label: 'Wejście', help: 'Wymagane wejście JSON z listą plików.' },
+  'gate.config.reported_file_scope.allowed_paths': { label: 'Dozwolone ścieżki', help: 'Ścieżki względne, pod którymi muszą być zgłoszone pliki.' },
+  'gate.config.reported_file_scope.allowed_paths.item': { label: 'Ścieżka', help: 'Ścieżka względna w przestrzeni roboczej, bez "..".' },
+  'gate.config.changed_files_scope': { label: 'Zakres zmienionych plików', help: 'Sprawdza pliki, które agent faktycznie zmienił w przestrzeni roboczej.' },
+  'gate.config.changed_files_scope.input': { label: 'Wejście', help: 'Wymagane wejście tekstowe albo JSON sprawdzenia.' },
+  'gate.config.changed_files_scope.allowed_paths': { label: 'Dozwolone ścieżki', help: 'Ścieżki względne, pod którymi muszą zostać zmiany.' },
+  'gate.config.changed_files_scope.allowed_paths.item': { label: 'Ścieżka', help: 'Ścieżka względna w przestrzeni roboczej, bez "..".' },
+  'gate.config.changed_files_scope.mode': { label: 'Tryb', help: 'warn zapisuje zmiany poza ścieżkami; deny oblewa sprawdzenie.' },
+  'gate.config.changed_files_scope.workspace': { label: 'Przestrzeń robocza', help: 'Bezwzględna, uporządkowana ścieżka sprawdzanej przestrzeni roboczej.' },
+  'human.config.prompt': { label: 'Pytanie', help: 'O co pytamy człowieka (najwyżej 1024 bajty).' },
+  'human.config.context_inputs': { label: 'Wejścia kontekstu', help: 'Zadeklarowane wejścia tekstowe pokazywane razem z pytaniem (najwyżej 8).' },
+  'human.config.context_inputs.item': { label: 'Wejście', help: 'Zadeklarowane wejście tekstowe.' },
+  'loop.max_attempts': { label: 'Maks. liczba prób', help: 'Ile razy węzeł może wytworzyć kandydata, zanim pętla się podda (od 1 do 10).' },
+}
+
+export const fieldCatalogues: Record<Locale, Record<string, FieldText>> = { en, pl }
+
+/** The label and help of a descriptor: the locale's, else English, else the key with no help. */
+export function fieldText(locale: Locale, id: string, key?: string): FieldText {
+  return fieldCatalogues[locale][id] ?? en[id] ?? { label: key ?? id, help: '' }
+}

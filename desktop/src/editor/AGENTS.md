@@ -15,6 +15,8 @@ before changing a document, operation or save flow.
 | Port handles, operation gestures and keyboard paths | `GraphCanvas.tsx` |
 | Display positions and canvas-only helpers | `layout.ts` |
 | CodeMirror text editing and key bindings | `YamlEditor.tsx` |
+| Node inspector (F2.2): descriptor-driven fields, ports, loop, Advanced | `inspector/Inspector.tsx`, `inspector/model.ts`, `inspector/useEdits.ts` |
+| Field labels and help keyed by descriptor id (PL/EN) | `inspector/fieldText.ts` |
 | File grants and write safety | `desktop/electron/AGENTS.md`, `internal/api/AGENTS.md` |
 | Graph operation semantics and YAML fidelity | `internal/graph/edit/AGENTS.md` |
 
@@ -60,18 +62,31 @@ before changing a document, operation or save flow.
   read-only reasons and actionable conflict errors. Stories use recorded Go
   API responses alongside controlled failure cases through the in-memory
   bridge.
+- The inspector (F2.2) renders the sidecar's descriptors (`node_types`) and
+  per-node data (`node_info`); it never branches on a node type or decides a
+  value's validity. A committed change (blur, Enter, toggle) is one batch
+  through `applyOps`; an invalid value is saved as typed and the engine's
+  diagnostic is shown by path. Port renames, retypes and removals are
+  previewed with `previewOps` (an edit whose answer is not adopted) and
+  confirmed when they touch anything besides the port. Loop binding choices
+  are the engine's answers to previewed `set_loop` batches. Inspector
+  fixtures are recorded and pinned by `cmd/agentplane/inspector_fixtures_test.go`;
+  `test/fixtures/node-types.json` by `cmd/agentplane/catalogue_test.go`.
 
 The contracts are `docs/features/F2.1-graph-canvas.md`,
 `docs/adr/0020-graph-edit-operations.md`,
 `docs/adr/0021-local-graph-document-api-and-write-trust.md`,
 `docs/adr/0022-graph-layout-metadata.md`, and `docs/graph-spec.md`. F2.1
-slices E1 and E2.1-E2.3 are present; F2.2-F2.4 remain separate scopes.
+slices E1 and E2.1-E2.3 are present; F2.2 (`docs/features/F2.2-node-inspector.md`)
+and the F2.4 Issues panel are present; F2.3 remains a separate scope.
 
 ## Choose regression tests
 
 - Draft/history, stale validation and run gating: `desktop/test/editor-doc.test.ts`.
 - Layout, ID suggestion and deletion counts: `desktop/test/editor-layout.test.ts`.
 - Guard against renderer graph rules: `desktop/test/no-graph-rules.test.ts`.
+- Inspector model, help catalogue and stories: `desktop/test/inspector-model.test.ts`,
+  `desktop/test/inspector-text.test.ts`, `inspector/inspector.stories.tsx`.
 - Story states and recorded responses: `editor.stories.tsx`,
   `desktop/test/stories.test.ts`.
 - Real grant, edit, keyboard, conflict and Save and run path:

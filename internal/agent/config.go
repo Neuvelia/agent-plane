@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"agentplane/internal/fields"
 	"agentplane/internal/graph"
 )
 
@@ -29,10 +30,9 @@ func parseNode(node graph.NodeDefinition, inputs map[string]graph.Value) (nodeCo
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	allowed := fields.AllowedKeys(ConfigFields(), node.Config)
 	for _, key := range keys {
-		switch key {
-		case "adapter", "task", "workspace", "allowed_paths", "context_refs", "environment_refs":
-		default:
+		if !allowed[key] {
 			return cfg, fmt.Errorf("unknown agent config field %q", key)
 		}
 	}

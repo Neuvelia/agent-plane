@@ -22,6 +22,7 @@ import { NODE_TYPES, freeSpot, makeRef, nodeSize, parseRef, placements, removalI
 import { badgesOf, type Badge, type Badges, type FocusReq } from './issues'
 import type { Definition, Op, QueryResult } from './types'
 import type { GraphDocument } from './useGraphDocument'
+import { Inspector } from './inspector/Inspector'
 
 // The canvas draws the definition the engine returned and turns gestures into
 // ADR-0020 operations. Whether a connection is allowed is the engine's answer
@@ -540,6 +541,8 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
           <Selected headRef={selectedHead} def={def} sel={sel} onRemoveEdge={(from, to) => void run([{ op: 'remove_edge', from, to }]).then((r) => r.ok && sel.kind === 'edge' && setSel(null))} readOnly={readOnly} />
         )}
       </Card>
+
+      <Inspector g={g} doc={doc} nodeId={selectedId} readOnly={readOnly} onRenamed={(id) => setSel({ kind: 'node', id })} />
     </div>
   )
 }

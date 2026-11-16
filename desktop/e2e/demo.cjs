@@ -417,6 +417,73 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-close"]')
     await page.click('[data-testid="nav-dashboard"]')
 
+    // F2.2: the node inspector, keyboard only. Every change is an operation on the file.
+    const inspected = path.join(graphDir, 'inspect.yaml')
+    fs.writeFileSync(inspected, 'schema_version: 0\nid: inspect\ninputs: {}\nnodes:\n  # the producer\n  build:\n    type: shell\n    config:\n      command: /usr/bin/true\n      retries: {max: 2, on: [timeout]}\n    outputs:\n      stdout: {type: string}\nedges: []\noutputs: {}\n')
+    await stubOpen(inspected)
+    await page.click('[data-testid="nav-editor"]')
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="node-build"]')
+    await key('list-node-build')
+    await page.waitForSelector('[data-testid="inspector-node"]')
+    const yamlText = () => page.locator('[data-testid="yaml-content"]').textContent()
+    const waitYaml = (s) => page.waitForFunction((x) => document.querySelector('[data-testid="yaml-content"]')?.textContent?.includes(x), s)
+    const commandInput = '[data-testid="field-shell.config.command"] input'
+    // Change the command: typing alone sends nothing, Enter commits one operation.
+    await page.focus(commandInput)
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.type('/usr/bin/printf')
+    assert.ok(!(await yamlText()).includes('/usr/bin/printf'), 'typing alone does not edit the file')
+    await page.keyboard.press('Enter')
+    await waitYaml('command: /usr/bin/printf')
+    // Add an argument through the list editor.
+    await page.focus('[data-testid="list-args-add"]')
+    await page.keyboard.type('{"ok":true}')
+    await page.keyboard.press('Enter')
+    await waitYaml('args:')
+    // Toggle stdout_json with Space, then declare the outputs it allows.
+    await page.focus('[data-testid="field-shell.config.stdout_json"] input[type="checkbox"]')
+    await page.keyboard.press('Space')
+    await waitYaml('stdout_json: true')
+    await page.focus('[data-testid="add-port-outputs"]')
+    await page.selectOption('[data-testid="add-port-outputs"]', 'json')
+    await page.waitForSelector('[data-testid="port-outputs-json"]')
+    await page.selectOption('[data-testid="add-port-outputs"]', 'stderr')
+    await page.waitForSelector('[data-testid="port-outputs-stderr"]')
+    // Enable a loop: the starter binds the json output to a json_predicate Gate.
+    await key('loop-enable')
+    await page.waitForSelector('[data-testid="loop-on"]')
+    await page.keyboard.press(`${mod}+s`)
+    await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    const inspectedText = fs.readFileSync(inspected, 'utf8')
+    for (const want of ['command: /usr/bin/printf', 'stdout_json: true', 'stderr:', 'json:', 'kind: json_predicate', 'candidate.outputs.json', 'retries: {max: 2, on: [timeout]}', '# the producer']) {
+      assert.ok(inspectedText.includes(want), `${want} in\n${inspectedText}`)
+    }
+    // The saved file is accepted by the CLI, apart from the Advanced key the Shell executor rejects.
+    const validated = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', inspected, '--json'], { encoding: 'utf8' }).stdout)
+    assert.deepEqual(validated.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message.includes('retries')), [true], JSON.stringify(validated.diagnostics))
+    // The Advanced section shows the unknown key as it is in the file; removing it makes the graph valid.
+    assert.match(await page.textContent('[data-testid="advanced-entry-retries"]'), /\{max: 2, on: \[timeout\]\}/)
+    await key('advanced-remove-retries')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="advanced-entry-retries"]'))
+    await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
+    // An invalid value is saved as typed, its diagnostic is shown in the inspector, and Run is disabled.
+    await page.focus(commandInput)
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Enter')
+    await waitYaml('command: ""')
+    await page.waitForSelector('[data-testid="section-execution"] [data-testid="inspector-diagnostics"]')
+    assert.match(await page.textContent('[data-testid="inspector-status"]'), /1 error/)
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    await page.keyboard.press(`${mod}+s`)
+    await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    assert.ok(fs.readFileSync(inspected, 'utf8').includes('command: ""'), 'the invalid value is in the file, not dropped')
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    await shot(page, '10-inspector')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="nav-dashboard"]')
+
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })

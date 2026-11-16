@@ -17,6 +17,16 @@ const (
 	CodeCannotConnect = "E_EDIT_CANNOT_CONNECT"
 	CodeLayout        = "E_EDIT_LAYOUT_INVALID"
 	CodeSafetyNet     = "E_EDIT_SAFETY_NET"
+
+	// Codes added by F2.2 (Node Inspector).
+	CodeConfigPath   = "E_EDIT_CONFIG_PATH"        // a config path crosses a value that is not a mapping
+	CodeValue        = "E_EDIT_VALUE_INVALID"      // a value cannot be written as YAML the engine reads
+	CodePortInvalid  = "E_EDIT_PORT_INVALID"       // a port name or type is not valid
+	CodePortExists   = "E_EDIT_PORT_EXISTS"        // add_port or a rename to an existing port
+	CodePortNotFound = "E_EDIT_PORT_NOT_FOUND"     // the port does not exist
+	CodePortConflict = "E_EDIT_PORT_TYPE_CONFLICT" // a type change would break a connected binding
+	CodeLoopInvalid  = "E_EDIT_LOOP_INVALID"       // set_loop that cannot be made valid
+	CodeUnitsInvalid = "E_EDIT_UNITS_INVALID"      // set_units naming a missing or repeated node
 )
 
 // Error is a structured, actionable editing failure: what failed, which
