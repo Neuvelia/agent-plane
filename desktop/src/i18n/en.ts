@@ -316,7 +316,7 @@ export const en = {
   'settings.values.explain': 'When on, every graph input and every accepted node output of a run is saved in the run history on this computer, so you can see the value that passed through an edge. Values stay on this computer and are not sent anywhere. Each value is cut to 16 KiB and each run to 1 MiB. Off by default.',
   'settings.values.redactionWarning': 'Only the environment variables listed below are hidden. Any other password, token or private data inside a value is saved as it is.',
   'settings.values.redactEnv': 'Environment variables to hide',
-  'settings.values.redactEnvHelp': 'Names only, separated by spaces or commas, for example GITHUB_TOKEN. The app reads their values when it starts and never shows them. If a listed variable is not set, recording stays off.',
+  'settings.values.redactEnvHelp': 'Names only, separated by spaces or commas, for example GITHUB_TOKEN. The app reads their values when it starts and never shows them. If a listed variable is not set, recording stays off. The engine also refuses to run any graph file that contains the value of a listed variable.',
   'settings.values.save': 'Save',
   'settings.values.restart': 'Saved. The change applies the next time Tarmind starts. Runs already saved are not changed.',
   'settings.values.sessionOn': 'Recording is on for this session.',

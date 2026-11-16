@@ -33,6 +33,9 @@ func TestValueRecordedRoundTripsOutputsAndGraphInputs(t *testing.T) {
 		valueEvent(SchemaVersion, "", "", "", ValueRecordedPayload{Port: "inputs.job", Type: "json", SizeBytes: 2, SHA256: digest("{}"), Value: textPtr("{}")}),
 		valueEvent(SchemaVersion, "work", "nr", "", ValueRecordedPayload{NodeRunID: "nr", Port: "big", Type: "string", SizeBytes: 40, SHA256: digest(full), Truncated: true, Redacted: true, Value: textPtr(full[:10])}),
 		valueEvent(SchemaVersion, "work", "nr", "", ValueRecordedPayload{NodeRunID: "nr", Port: "capped", Type: "number", SizeBytes: 3, SHA256: digest("1.5"), Truncated: true}),
+		// The graph contract has no identifier length cap, so neither does the port.
+		valueEvent(SchemaVersion, "work", "nr", "a", func() ValueRecordedPayload { p := outputValue("x"); p.Port = "o" + strings.Repeat("u", 300); return p }()),
+		valueEvent(SchemaVersion, "", "", "", ValueRecordedPayload{Port: "inputs.i" + strings.Repeat("n", 300), Type: "string", SizeBytes: 1, SHA256: digest("x"), Value: textPtr("x")}),
 	}
 	for _, original := range cases {
 		data, err := json.Marshal(original)
@@ -76,6 +79,9 @@ func TestValueRecordedRejectsInvalidPayloads(t *testing.T) {
 		valueEvent(SchemaVersion, "work", "nr", "a", func() ValueRecordedPayload { p := outputValue("hello"); p.Truncated = true; return p }()), // truncated but complete
 		valueEvent(SchemaVersion, "work", "nr", "a", func() ValueRecordedPayload { p := outputValue("hello"); p.SizeBytes = -1; return p }()),
 		valueEvent(SchemaVersion, "work", "nr", "a", func() ValueRecordedPayload { p := outputValue("a\xffb"); return p }()),
+		valueEvent(SchemaVersion, "work", "nr", "a", func() ValueRecordedPayload { p := outputValue("hello"); p.Port = ""; return p }()),
+		valueEvent(SchemaVersion, "work", "nr", "a", func() ValueRecordedPayload { p := outputValue("hello"); p.Port = "Out"; return p }()),
+		valueEvent(SchemaVersion, "", "", "", ValueRecordedPayload{Port: "inputs.1x", Type: "string", SHA256: digest(""), Value: textPtr("")}),
 	}
 	for i, e := range bad {
 		if _, err := json.Marshal(e); err == nil {

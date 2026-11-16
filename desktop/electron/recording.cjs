@@ -72,7 +72,9 @@ function serveFlags(settings, env) {
   }
   const recording = settings.enabled && missing.length === 0
   if (recording) args.push('--record-values')
-  return { args, recording, missing }
+  // `missing` explains why enabled recording is off; with recording disabled
+  // there is nothing to explain, so it is reported only when enabled.
+  return { args, recording, missing: settings.enabled ? missing : [] }
 }
 
 module.exports = { createRecordingSettings, serveFlags, validate, MAX_NAMES }

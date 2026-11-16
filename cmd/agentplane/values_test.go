@@ -139,6 +139,89 @@ func TestRunRecordedValuesNeverContainASecret(t *testing.T) {
 	}
 }
 
+// A JSON output spells the secret only through escapes, so byte redaction
+// cannot see it; the recorded value must still never decode to the secret.
+func TestRunRecordedJSONValueNeverDecodesToASecret(t *testing.T) {
+	const secret = `q"b\s&é-secret`
+	t.Setenv("AP_JSON_SECRET", secret)
+	path := filepath.Join(t.TempDir(), "escaped.yaml")
+	os.WriteFile(path, []byte(`schema_version: 0
+id: escaped-json
+inputs: {}
+nodes:
+  emit:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ['%s', '{"v":"q\"b\\s&é-secret"}']
+      stdout_json: true
+    outputs:
+      json: {type: json, required: true}
+edges: []
+outputs: {}
+`), 0o600)
+	dir := t.TempDir()
+	code, out, errout := cli(t, "run", path, "--redact-env", "AP_JSON_SECRET", "--record-values", "--store-dir", dir, "--json")
+	if code != 0 {
+		t.Fatalf("code=%d %s", code, errout)
+	}
+	if strings.Contains(out, secret) {
+		t.Fatal("secret reached CLI JSON events")
+	}
+	filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && !info.IsDir() {
+			if data, _ := os.ReadFile(p); strings.Contains(string(data), secret) {
+				t.Fatalf("secret reached %s", p)
+			}
+		}
+		return nil
+	})
+	var doc struct {
+		Events []events.Event `json:"events"`
+	}
+	json.Unmarshal([]byte(out), &doc)
+	p, ok := valueEvents(doc.Events)["emit/json"]
+	if !ok || !p.Redacted || !p.Truncated {
+		t.Fatalf("json = %+v", p)
+	}
+	if p.Value != nil {
+		var decoded struct{ V string }
+		if json.Unmarshal([]byte(*p.Value), &decoded) == nil && strings.Contains(decoded.V, secret) {
+			t.Fatal("recorded JSON value decodes to the secret")
+		}
+	}
+}
+
+func TestServeWithoutRecordingEmitsNoValues(t *testing.T) {
+	t.Setenv("AP_VALUE_SECRET", "not-recorded")
+	s := startServe(t)
+	code, body := s.call(t, "POST", "/runs", `{"graph_path":`+quote(leakyGraph(t))+`,"inputs":["note=hello"]}`)
+	if code != http.StatusAccepted {
+		t.Fatalf("%d %s", code, body)
+	}
+	var started struct {
+		RunID string `json:"run_id"`
+	}
+	json.Unmarshal([]byte(body), &started)
+	_, stream := s.call(t, "GET", "/runs/"+started.RunID+"/events", "")
+	if live := sseEvents(t, stream); len(live) == 0 || strings.Contains(stream, "value_recorded") {
+		t.Fatalf("recording off: %s", stream)
+	}
+	var logs int
+	filepath.Walk(s.dir, func(p string, info os.FileInfo, err error) error {
+		if err == nil && info.Name() == "events.jsonl" {
+			logs++
+			if data, _ := os.ReadFile(p); len(data) == 0 || strings.Contains(string(data), "value_recorded") {
+				t.Fatalf("%s: %s", p, data)
+			}
+		}
+		return nil
+	})
+	if logs != 1 {
+		t.Fatalf("found %d events.jsonl files, want 1", logs)
+	}
+}
+
 func TestServeRefusesAnUnsetRedactionVariable(t *testing.T) {
 	code, out, _ := cli(t, "serve", "--store-dir", t.TempDir(), "--record-values", "--redact-env", "AP_E6_SURELY_UNSET")
 	if code == 0 || strings.Contains(out, "token") {
