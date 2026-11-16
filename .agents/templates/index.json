@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "id": "parallel-shell",
+      "file": "parallel-shell.yaml",
+      "requires": [],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [],
+      "expected_diagnostics": []
+    },
+    {
+      "id": "shell-check-loop",
+      "file": "shell-check-loop.yaml",
+      "requires": [],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [],
+      "expected_diagnostics": []
+    },
+    {
+      "id": "human-approval",
+      "file": "human-approval.yaml",
+      "requires": [],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [],
+      "expected_diagnostics": []
+    },
+    {
+      "id": "agent-scoped-approval",
+      "file": "agent-scoped-approval.yaml",
+      "requires": ["git", "codex"],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [{"path": "nodes.implement.config.workspace", "marker": "FILL"}],
+      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.implement.config"}]
+    }
+  ]
+}
