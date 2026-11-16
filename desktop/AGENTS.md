@@ -59,9 +59,11 @@ changing behavior; verify older roadmap statements against current code.
 ## Run the right checks
 
 - For a desktop change, run focused `npm test` cases, then `npm run check`
-  from `desktop/`, plus root `make check`. The root check and current CI job
-  cover Go only; `npm run check` separately checks token sync, typecheck, unit
-  tests, renderer build, Storybook build and the bundle scan.
+  from `desktop/`, plus root `make check`. The root check covers Go only;
+  CI reports independent Go and desktop jobs. `npm run check` checks token
+  sync, typecheck, unit tests, renderer build, Storybook build and the bundle
+  scan. The desktop CI job installs from the lockfile without dependency
+  lifecycle scripts before running that command.
 - `npm run check` builds Storybook but does not run browser story smoke.
   For changes to stories, shared UI, localisation or accessibility, run
   `make desktop-stories` when Chromium is available. It renders every story
