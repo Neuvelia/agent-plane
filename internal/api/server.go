@@ -453,7 +453,9 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	if !checkText(w, text) {
 		return
 	}
-	out := map[string]any{"diagnostics": []graph.Diagnostic{}}
+	// The editor validates typed text through this route, so it carries the same
+	// inspector data as open and edit (F2.2): descriptors of the types in use.
+	out := map[string]any{"diagnostics": []graph.Diagnostic{}, "node_types": s.nodeTypesFor(nil, false)}
 	if reasons := edit.Inspect(text); len(reasons) > 0 {
 		out["readonly_canvas"], out["readonly_reasons"] = true, reasons
 	}
@@ -469,6 +471,8 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	diags := s.diagnostics(def)
 	out["diagnostics"] = withLines(text, diags)
 	out["definition"] = toDefinitionDTO(def)
+	out["node_types"] = s.nodeTypesFor(def, false)
+	out["node_info"] = s.nodeInfo(text, def)
 	out["status"] = "valid"
 	for _, d := range diags {
 		if d.Severity == graph.SeverityError {

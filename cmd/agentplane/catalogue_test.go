@@ -146,7 +146,47 @@ func TestServeAnswersWithTheCatalogue(t *testing.T) {
 		if len(adv) != 1 || adv[0].Key != "mystery" || adv[0].YAML != "{x: 1}" || adv[0].Reason != "unknown" {
 			t.Errorf("advanced: %+v", adv)
 		}
+		if all {
+			checkRendererFixture(t, doc.NodeTypes)
+		}
 	}
+}
+
+// rendererFixture is the catalogue as the renderer receives it. The desktop's
+// help-text catalogue test reads it, so a descriptor added here without help
+// text fails there. AGENTPLANE_UPDATE_FIXTURES=1 rewrites it.
+const rendererFixture = "../../desktop/test/fixtures/node-types.json"
+
+func checkRendererFixture(t *testing.T, types map[string]json.RawMessage) {
+	t.Helper()
+	got, err := json.MarshalIndent(types, "", " ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, '\n')
+	if os.Getenv("AGENTPLANE_UPDATE_FIXTURES") == "1" {
+		if err := os.WriteFile(rendererFixture, got, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	want, err := os.ReadFile(rendererFixture)
+	if err != nil {
+		t.Fatalf("%v (create it with AGENTPLANE_UPDATE_FIXTURES=1)", err)
+	}
+	if string(normalizeJSON(t, want)) != string(normalizeJSON(t, got)) {
+		t.Errorf("%s is out of date: run the cmd/agentplane tests with AGENTPLANE_UPDATE_FIXTURES=1", rendererFixture)
+	}
+}
+
+func normalizeJSON(t *testing.T, b []byte) []byte {
+	t.Helper()
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := json.Marshal(v)
+	return out
 }
 
 func jsonString(s string) string {

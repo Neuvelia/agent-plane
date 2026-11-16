@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { GraphGrantResult, RecentGraph } from '../types'
-import type { Op, OpResult } from './types'
+import type { Op, OpenResponse, OpResult } from './types'
 import { analyzed, edited, fromNew, fromOpen, isDirty, newGraphText, redo as redoDoc, reloaded, saved, type as typeDoc, undo as undoDoc, validating, validationFailed, withConflict, type DocState } from './doc'
 import { editDocument, openDocument, runGrant, recentGraphs, saveDocument, statDocument, validateText } from './api'
 
@@ -29,6 +29,11 @@ export interface GraphDocument {
   type: (text: string) => void
   /** Sends operations for the text on screen; a success replaces the draft as one undo step. */
   applyOps: (ops: Op[], opts?: { quiet?: boolean }) => Promise<ApplyResult>
+  /**
+   * Asks the engine what operations would produce, without adopting the answer:
+   * the draft, history and file are unchanged (port-edit previews, binding checks).
+   */
+  previewOps: (ops: Op[]) => Promise<{ ok: true; doc: OpenResponse } | { ok: false; message: string }>
   /** Validate the draft now instead of after the typing pause. */
   revalidate: () => void
   undo: () => void
@@ -131,6 +136,13 @@ export function useGraphDocument(): GraphDocument {
     setError(null)
     setDoc((d) => (d ? edited(d, r.doc) : d))
     return { ok: true, results: r.doc.results ?? [] }
+  }, [])
+  const previewOps = useCallback(async (ops: Op[]): Promise<{ ok: true; doc: OpenResponse } | { ok: false; message: string }> => {
+    const current = docRef.current
+    if (!current) return { ok: false, message: 'no graph is open' }
+    const r = await editDocument(current.grant, current.draft, ops)
+    if (!r.ok) return { ok: false, message: r.detail?.suggestion ? `${r.detail.message} (${r.detail.suggestion})` : r.message }
+    return { ok: true, doc: r.doc }
   }, [])
   const revalidate = useCallback(() => {
     setDoc((d) => (d ? { ...d, analysis: { ...d.analysis, stale: true } } : d))
@@ -275,6 +287,6 @@ export function useGraphDocument(): GraphDocument {
     return () => window.removeEventListener('focus', onFocus)
   }, [grant])
 
-  return { doc, busy, error, recent, leave, open, create, openRecent, close, type, applyOps, revalidate, undo, redo, save, saveAndRun, keepMine, reload, dismissError, saveAndLeave, discardAndLeave, cancelLeave }
+  return { doc, busy, error, recent, leave, open, create, openRecent, close, type, applyOps, previewOps, revalidate, undo, redo, save, saveAndRun, keepMine, reload, dismissError, saveAndLeave, discardAndLeave, cancelLeave }
 }
 

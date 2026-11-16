@@ -203,6 +203,21 @@ func TestAdvancedEntriesSurviveAnEdit(t *testing.T) {
 	}
 }
 
+// Typed text is validated, not edited: the answer must keep the inspector in step.
+func TestValidateTextCarriesInspectorData(t *testing.T) {
+	s, ts, _ := docServer(t)
+	s.NodeTypes = testCatalogue()
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": inspectGraph})
+	d := decodeDoc(t, out)
+	if len(d.NodeTypes) != 1 || len(d.NodeInfo["a"].Advanced) != 2 || !reflect.DeepEqual(d.NodeInfo["c"].IndependentOf, []string{"a", "b"}) {
+		t.Errorf("validate(text): %v", out)
+	}
+	_, out = call(t, ts, "POST", "/graphs/validate", map[string]any{"text": "schema_version: 0\nid: [\n"})
+	if _, present := out["node_info"]; present || out["node_types"] == nil {
+		t.Errorf("validate(unparseable): %v", out)
+	}
+}
+
 func TestInspectorDataWithoutACatalogueOrAParse(t *testing.T) {
 	_, ts, dir := docServer(t)
 	g := grantFor(t, ts, writeGraph(t, dir, "pair.yaml", pairGraph), "open")
