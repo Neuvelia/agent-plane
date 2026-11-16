@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"errors"
 	"fmt"
@@ -88,7 +89,7 @@ func TestRunRejectsOptionsBeforeGraphValidationWithoutStarting(t *testing.T) {
 		executed.Store(true)
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: -1, Persist: func(event events.Event) error {
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: -1, Persist: func(events.Event) error {
 		persisted.Store(true)
 		return nil
 	}})
@@ -121,7 +122,7 @@ func TestRunLinearDAGResolvesBoundInputs(t *testing.T) {
 		}
 		return map[string]graph.Value{"value": graph.NewStringValue(map[string]string{"a": "a", "b": "ab", "c": "abc"}[id])}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 3})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 3})
 	if err != nil || result.State != RunSucceeded {
 		t.Fatalf("Run() = (%#v, %v)", result, err)
 	}
@@ -168,7 +169,7 @@ func TestRunDiamondWaitsForBothBranchesAndAllowsOverlap(t *testing.T) {
 	})
 	done := make(chan RunResult, 1)
 	go func() {
-		result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2})
+		result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 		if err != nil {
 			t.Errorf("Run() error = %v", err)
 		}
@@ -207,7 +208,7 @@ func TestRunConcurrencyLimitOneSerializesDisconnectedNodes(t *testing.T) {
 	})
 	done := make(chan RunResult, 1)
 	go func() {
-		result, _ := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 1})
+		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 1})
 		done <- result
 	}()
 	if id := <-started; id != "a" {
@@ -238,7 +239,7 @@ func TestRunConcurrencyLimitTwoDoesNotStartThirdNode(t *testing.T) {
 	})
 	done := make(chan RunResult, 1)
 	go func() {
-		result, _ := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2})
+		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 		done <- result
 	}()
 	first, second := <-started, <-started
@@ -285,7 +286,7 @@ func TestRunFailFastSkipsDownstreamAndQueuedIndependentWork(t *testing.T) {
 	}
 	done := make(chan runOutcome, 1)
 	go func() {
-		result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2})
+		result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 		done <- runOutcome{result: result, err: err}
 	}()
 	first, second := <-started, <-started
@@ -318,7 +319,10 @@ func TestRunCancellationDoesNotMaskIndependentFailure(t *testing.T) {
 		return nil, failure
 	})
 	done := make(chan RunResult, 1)
-	go func() { result, _ := Run(ctx, def, nil, exec, Options{MaxConcurrency: 1}); done <- result }()
+	go func() {
+		result, _ := Run(ctx, def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 1})
+		done <- result
+	}()
 	<-started
 	cancel()
 	result := <-done
@@ -343,7 +347,7 @@ func TestRunChoosesLowestNodeIDWhenConcurrentNodesFail(t *testing.T) {
 	})
 	done := make(chan RunResult, 1)
 	go func() {
-		result, _ := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2})
+		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 		done <- result
 	}()
 	<-started
@@ -368,7 +372,7 @@ func TestRunMissingBoundOutputFailsConsumerBeforeExecution(t *testing.T) {
 		}
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != RunFailed || calledTarget || nodeResult(t, result, "source").State != NodeSucceeded {
 		t.Fatalf("Run() = (%#v, %v), target called=%v", result, err, calledTarget)
 	}
@@ -394,7 +398,7 @@ func TestRunRejectsInvalidExecutorOutputs(t *testing.T) {
 			exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 				return test.outputs, nil
 			})
-			result, err := Run(context.Background(), def, nil, exec, Options{})
+			result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
 			if err != nil || result.State != RunFailed || nodeResult(t, result, "worker").State != NodeFailed {
 				t.Fatalf("Run() = (%#v, %v)", result, err)
 			}
@@ -418,10 +422,10 @@ func TestRunValidatesGraphInputsAndResolvesBeforeExecution(t *testing.T) {
 		}
 		return nil, nil
 	})
-	if _, err := Run(context.Background(), def, nil, exec, Options{}); err == nil || called {
+	if _, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal}); err == nil || called {
 		t.Fatalf("missing required graph input: err=%v called=%v", err, called)
 	}
-	result, err := Run(context.Background(), def, map[string]graph.Value{"message": graph.NewStringValue("hello")}, exec, Options{})
+	result, err := Run(context.Background(), def, map[string]graph.Value{"message": graph.NewStringValue("hello")}, exec, Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != RunSucceeded || !called {
 		t.Fatalf("Run() = (%#v, %v), called=%v", result, err, called)
 	}
@@ -437,7 +441,10 @@ func TestRunCancellationStopsDispatchAndTerminates(t *testing.T) {
 		return nil, ctx.Err()
 	})
 	done := make(chan RunResult, 1)
-	go func() { result, _ := Run(ctx, def, nil, exec, Options{MaxConcurrency: 1}); done <- result }()
+	go func() {
+		result, _ := Run(ctx, def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 1})
+		done <- result
+	}()
 	<-started
 	cancel()
 	result := <-done
@@ -456,7 +463,10 @@ func TestRunCancellationAcceptsChildContextError(t *testing.T) {
 		return nil, fmt.Errorf("child stopped: %w", context.DeadlineExceeded)
 	})
 	done := make(chan RunResult, 1)
-	go func() { result, _ := Run(ctx, def, nil, exec, Options{MaxConcurrency: 1}); done <- result }()
+	go func() {
+		result, _ := Run(ctx, def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 1})
+		done <- result
+	}()
 	<-started
 	cancel()
 	result := <-done
@@ -474,7 +484,7 @@ func TestRunDoesNotDispatchAfterCancellationDuringReadiness(t *testing.T) {
 		called = true
 		return nil, nil
 	})
-	result, err := Run(ctx, def, nil, exec, Options{MaxConcurrency: 2})
+	result, err := Run(ctx, def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 	if err != nil || called || result.State != RunCancelled || nodeResult(t, result, "a").State != NodeCancelled || nodeResult(t, result, "b").State != NodeCancelled {
 		t.Fatalf("Run() = (%#v, %v), executor called=%v", result, err, called)
 	}
@@ -485,7 +495,7 @@ func TestRunTransitionsAreOrderedAndTerminalExactlyOnce(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != RunSucceeded {
 		t.Fatalf("Run() = (%#v, %v)", result, err)
 	}
@@ -508,14 +518,14 @@ func TestRunEmptyGraphAndGraphOutputFailure(t *testing.T) {
 		called = true
 		return nil, nil
 	})
-	result, err := Run(context.Background(), empty, nil, exec, Options{})
+	result, err := Run(context.Background(), empty, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != RunSucceeded || called || len(result.Nodes) != 0 {
 		t.Fatalf("empty run = (%#v, %v), called=%v", result, err, called)
 	}
 
 	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}}})
 	def.Outputs["answer"] = graph.OutputDefinition{From: "worker.outputs.value"}
-	result, err = Run(context.Background(), def, nil, exec, Options{})
+	result, err = Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != RunFailed || result.Failure == nil || result.Failure.Kind != FailureGraphOutput || nodeResult(t, result, "worker").State != NodeSucceeded {
 		t.Fatalf("missing exposed output = (%#v, %v)", result, err)
 	}
@@ -542,7 +552,7 @@ func TestRunResultsAndTransitionsAreStable(t *testing.T) {
 	})
 	var first RunResult
 	for i := range 20 {
-		result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2})
+		result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 		if err != nil || result.State != RunSucceeded {
 			t.Fatalf("run %d = (%#v, %v)", i, result, err)
 		}

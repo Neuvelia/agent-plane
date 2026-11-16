@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,7 +50,7 @@ func TestAgentSummaryEdgeToDeterministicNode(t *testing.T) {
 		consumed = ids
 		return map[string]graph.Value{"result": graph.NewStringValue(text)}, nil
 	}}
-	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("task")}, e, runtime.Options{})
+	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("task")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != runtime.RunSucceeded {
 		t.Fatalf("Run=%+v %v", result, err)
 	}
@@ -101,7 +102,7 @@ func TestAgentFailureRetainsIndependentSiblingAndSafeEvents(t *testing.T) {
 		<-m.Started
 		return map[string]graph.Value{"kept": graph.NewStringValue("immutable accepted sibling")}, nil
 	}}
-	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("TASK_SENTINEL")}, e, runtime.Options{MaxConcurrency: 2})
+	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("TASK_SENTINEL")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
 	<-siblingStarted
 	if err != nil || result.State != runtime.RunFailed || !errors.Is(result.Failure.Err, cause) {
 		t.Fatalf("Run=%+v %v", result, err)
@@ -159,42 +160,42 @@ edges: []
 outputs:
   result: {from: work.outputs.summary}
 `
-	d, err := graph.Parse([]byte(source))
+	d, err := yamlgraph.Parse([]byte(source))
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := graph.Marshal(d)
+	encoded, err := yamlgraph.Marshal(d)
 	if err != nil {
 		t.Fatal(err)
 	}
-	decoded, err := graph.Parse(encoded)
+	decoded, err := yamlgraph.Parse(encoded)
 	if err != nil || !reflect.DeepEqual(d, decoded) {
 		t.Fatalf("round trip=%+v %v", decoded, err)
 	}
-	base, err := graph.SemanticVersion(d)
+	base, err := yamlgraph.SemanticVersion(d)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, field := range []string{"adapter", "task", "workspace", "allowed_paths", "context_refs", "environment_refs"} {
-		clone, _ := graph.Parse(encoded)
+		clone, _ := yamlgraph.Parse(encoded)
 		if strings.HasSuffix(field, "refs") || field == "allowed_paths" {
 			clone.Nodes["work"].Config[field] = []any{"changed"}
 		} else {
 			clone.Nodes["work"].Config[field] = "changed"
 		}
-		hash, err := graph.SemanticVersion(clone)
+		hash, err := yamlgraph.SemanticVersion(clone)
 		if err != nil || hash == base {
 			t.Fatalf("%s hash=%q %v", field, hash, err)
 		}
 	}
-	clone, _ := graph.Parse(encoded)
+	clone, _ := yamlgraph.Parse(encoded)
 	clone.Metadata = map[string]any{"layout": "changed"}
-	hash, err := graph.SemanticVersion(clone)
+	hash, err := yamlgraph.SemanticVersion(clone)
 	if err != nil || hash != base {
 		t.Fatalf("metadata hash=%s %v", hash, err)
 	}
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "parsed fixture done"}}
-	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{})
+	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || result.State != runtime.RunSucceeded {
 		t.Fatalf("parsed Run=%+v %v", result, err)
 	}

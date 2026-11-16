@@ -1,6 +1,8 @@
-package graph
+package yamlgraph_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/graph"
 	"os"
 	"reflect"
 	"strings"
@@ -13,7 +15,7 @@ func TestValidateParallelExample(t *testing.T) {
 		t.Fatalf("read example graph: %v", err)
 	}
 
-	result := Validate(parseDefinition(t, string(data)))
+	result := graph.Validate(parseDefinition(t, string(data)))
 	if !result.Valid() {
 		t.Fatalf("Validate() errors = %#v, want no errors", result.Diagnostics)
 	}
@@ -23,7 +25,7 @@ func TestValidateParallelExample(t *testing.T) {
 }
 
 func TestValidateReportsMissingSourceAndTargetNodes(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: missing-nodes
 inputs: {}
@@ -45,7 +47,7 @@ outputs: {}
 }
 
 func TestValidateReportsMissingInputAndOutput(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: missing-ports
 inputs: {}
@@ -67,7 +69,7 @@ outputs: {}
 }
 
 func TestValidateRejectsIncompatibleBindingTypes(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: incompatible-types
 inputs: {}
@@ -88,7 +90,7 @@ outputs: {}
 }
 
 func TestValidateDetectsTwoNodeCycle(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: two-node-cycle
 inputs: {}
@@ -116,7 +118,7 @@ outputs: {}
 }
 
 func TestValidateDetectsLongerCycle(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: longer-cycle
 inputs: {}
@@ -150,7 +152,7 @@ outputs: {}
 }
 
 func TestValidateDetectsSelfCycle(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: self-cycle
 inputs: {}
@@ -205,8 +207,8 @@ edges:
 outputs: {}
 `)
 
-	first := Validate(definition)
-	var cycles []Diagnostic
+	first := graph.Validate(definition)
+	var cycles []graph.Diagnostic
 	for _, diagnostic := range first.Diagnostics {
 		if diagnostic.Code == "E_GRAPH_CYCLE" {
 			cycles = append(cycles, diagnostic)
@@ -220,14 +222,14 @@ outputs: {}
 		t.Fatalf("cycle diagnostics = %#v, want stable paths for both components", cycles)
 	}
 	for range 20 {
-		if next := Validate(definition); !reflect.DeepEqual(first, next) {
+		if next := graph.Validate(definition); !reflect.DeepEqual(first, next) {
 			t.Fatalf("cycle diagnostics changed between runs: first = %#v, next = %#v", first, next)
 		}
 	}
 }
 
 func TestValidateReportsCycleDespiteIncompatibleEdge(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: incompatible-cycle
 inputs: {}
@@ -253,7 +255,7 @@ outputs: {}
 }
 
 func TestValidateReportsMultipleIndependentErrors(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: multiple-errors
 inputs: {}
@@ -279,7 +281,7 @@ outputs:
 }
 
 func TestValidateRequiredInputAndConflictingProviders(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: conflicting-providers
 inputs:
@@ -308,7 +310,7 @@ outputs: {}
 }
 
 func TestValidateGraphInputBindingSatisfiesRequiredInput(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: bound-required-input
 inputs:
@@ -330,7 +332,7 @@ outputs: {}
 }
 
 func TestValidateConflictingEdgesIdentifyLaterEdge(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: conflicting-edges
 inputs: {}
@@ -359,7 +361,7 @@ outputs: {}
 }
 
 func TestValidateInvalidPortTypeDoesNotSatisfyRequiredInput(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: invalid-port-type
 inputs: {}
@@ -381,7 +383,7 @@ outputs: {}
 }
 
 func TestValidateGraphInputBindingAndOutputReferences(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: graph-references
 inputs: {}
@@ -403,7 +405,7 @@ outputs:
 }
 
 func TestValidateRejectsIncompatibleGraphInputBindingTypes(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: incompatible-graph-input-binding
 inputs:
@@ -424,7 +426,7 @@ outputs: {}
 }
 
 func TestValidateUnusedOutputIsWarningOnly(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: unused-output
 inputs: {}
@@ -446,7 +448,7 @@ outputs:
 }
 
 func TestValidateInvalidEdgeLeavesOutputUnused(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: invalid-edge-unused-output
 inputs: {}
@@ -462,13 +464,13 @@ outputs: {}
 
 	assertDiagnostic(t, result, "E_EDGE_TARGET_NODE_NOT_FOUND", "edges[0].to")
 	warning := assertDiagnostic(t, result, "W_DECLARED_OUTPUT_UNUSED", "nodes.producer.outputs.value")
-	if warning.Severity != SeverityWarning || result.Valid() {
+	if warning.Severity != graph.SeverityWarning || result.Valid() {
 		t.Fatalf("mixed diagnostics = %#v, want blocking error plus warning", result.Diagnostics)
 	}
 }
 
 func TestValidateIncompatibleEdgeLeavesOutputUnused(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: incompatible-edge-unused-output
 inputs: {}
@@ -507,16 +509,16 @@ edges:
 outputs: {}
 `)
 
-	first := Validate(definition)
-	second := Validate(definition)
+	first := graph.Validate(definition)
+	second := graph.Validate(definition)
 	if !reflect.DeepEqual(first, second) {
 		t.Fatalf("Validate() first = %#v, second = %#v, want stable diagnostics", first, second)
 	}
 }
 
 func TestValidateReportsRequiredFieldsAndInvalidIdentifiers(t *testing.T) {
-	result := Validate(&Definition{
-		SchemaVersion: SchemaVersionV0,
+	result := graph.Validate(&graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "Invalid ID",
 	})
 
@@ -528,12 +530,12 @@ func TestValidateReportsRequiredFieldsAndInvalidIdentifiers(t *testing.T) {
 		assertDiagnostic(t, result, "E_GRAPH_FIELD_REQUIRED", path)
 	}
 
-	emptyID := Validate(&Definition{
-		SchemaVersion: SchemaVersionV0,
-		Inputs:        map[string]InputDefinition{},
-		Nodes:         map[string]NodeDefinition{},
-		Edges:         []EdgeDefinition{},
-		Outputs:       map[string]OutputDefinition{},
+	emptyID := graph.Validate(&graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes:         map[string]graph.NodeDefinition{},
+		Edges:         []graph.EdgeDefinition{},
+		Outputs:       map[string]graph.OutputDefinition{},
 	})
 	if diagnostic := assertDiagnostic(t, emptyID, "E_GRAPH_ID_REQUIRED", "id"); diagnostic.Message == "" {
 		t.Fatal("required graph-id diagnostic message is empty")
@@ -541,15 +543,15 @@ func TestValidateReportsRequiredFieldsAndInvalidIdentifiers(t *testing.T) {
 }
 
 func TestValidateRetainsInvalidDottedNodeIDInLocation(t *testing.T) {
-	result := Validate(&Definition{
-		SchemaVersion: SchemaVersionV0,
+	result := graph.Validate(&graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "invalid-node-id",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
 			"bad.id": {Type: "shell"},
 		},
-		Edges:   []EdgeDefinition{},
-		Outputs: map[string]OutputDefinition{},
+		Edges:   []graph.EdgeDefinition{},
+		Outputs: map[string]graph.OutputDefinition{},
 	})
 
 	diagnostic := assertDiagnostic(t, result, "E_IDENTIFIER_INVALID", `nodes["bad.id"]`)
@@ -559,7 +561,7 @@ func TestValidateRetainsInvalidDottedNodeIDInLocation(t *testing.T) {
 }
 
 func TestValidateRejectsMalformedReferences(t *testing.T) {
-	result := Validate(parseDefinition(t, `
+	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
 id: malformed-references
 inputs: {}
@@ -574,16 +576,16 @@ outputs: {}
 	assertDiagnostic(t, result, "E_EDGE_TARGET_REFERENCE_INVALID", "edges[0].to")
 }
 
-func parseDefinition(t *testing.T, data string) *Definition {
+func parseDefinition(t *testing.T, data string) *graph.Definition {
 	t.Helper()
-	definition, err := Parse([]byte(data))
+	definition, err := yamlgraph.Parse([]byte(data))
 	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
+		t.Fatalf("yamlgraph.Parse() error = %v", err)
 	}
 	return definition
 }
 
-func assertDiagnostic(t *testing.T, result ValidationResult, code, path string) Diagnostic {
+func assertDiagnostic(t *testing.T, result graph.ValidationResult, code, path string) graph.Diagnostic {
 	t.Helper()
 	for _, diagnostic := range result.Diagnostics {
 		if diagnostic.Code == code && (path == "" || diagnostic.Location.Path == path) {
@@ -591,10 +593,10 @@ func assertDiagnostic(t *testing.T, result ValidationResult, code, path string) 
 		}
 	}
 	t.Fatalf("diagnostics = %#v, want code %q at path %q", result.Diagnostics, code, path)
-	return Diagnostic{}
+	return graph.Diagnostic{}
 }
 
-func hasDiagnosticCode(result ValidationResult, code string) bool {
+func hasDiagnosticCode(result graph.ValidationResult, code string) bool {
 	for _, diagnostic := range result.Diagnostics {
 		if diagnostic.Code == code {
 			return true

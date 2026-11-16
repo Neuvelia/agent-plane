@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -75,7 +76,7 @@ printf '{"summary":"%s.candidate","artifacts":[]}' "$unit" >"$result"
 				d.Edges = append(d.Edges, graph.EdgeDefinition{From: graph.NodeOutputReference(id + ".outputs.summary"), To: graph.NodeInputReference("join.inputs." + id)})
 			}
 			d.Outputs["joined"] = graph.OutputDefinition{From: "join.outputs.stdout"}
-			encoded, e := graph.Marshal(d)
+			encoded, e := yamlgraph.Marshal(d)
 			if e != nil {
 				t.Fatal(e)
 			}

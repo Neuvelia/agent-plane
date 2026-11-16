@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"context"
 	"errors"
@@ -81,7 +82,7 @@ func readDefinitionBytes(path string) (*graph.Definition, []byte, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("read graph file %q: %w", path, err)
 	}
-	def, err := graph.Parse(data)
+	def, err := yamlgraph.Parse(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse graph file %q: %w", path, err)
 	}
@@ -187,7 +188,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
 	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}

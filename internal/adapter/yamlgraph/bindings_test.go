@@ -1,6 +1,8 @@
-package graph
+package yamlgraph_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/graph"
 	"encoding/json"
 	"os"
 	"reflect"
@@ -8,25 +10,25 @@ import (
 )
 
 func TestGraphInputResolvesToIndependentConsumers(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "independent-consumers",
-		Inputs: map[string]InputDefinition{
-			"message": {Type: ValueTypeString, Required: true},
+		Inputs: map[string]graph.InputDefinition{
+			"message": {Type: graph.ValueTypeString, Required: true},
 		},
-		Nodes: map[string]NodeDefinition{
-			"left":  {Type: "shell", Inputs: map[string]PortDefinition{"text": {Type: ValueTypeString, Required: true}}},
-			"right": {Type: "shell", Inputs: map[string]PortDefinition{"text": {Type: ValueTypeString, Required: true}}},
+		Nodes: map[string]graph.NodeDefinition{
+			"left":  {Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}},
+			"right": {Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}},
 		},
-		Edges: []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{
+		Edges: []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{
 			{From: "inputs.message", To: "left.inputs.text"},
 			{From: "inputs.message", To: "right.inputs.text"},
 		},
-		Outputs: map[string]OutputDefinition{},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
 
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() || plan == nil {
 		t.Fatalf("CompileBindings() = (%#v, %#v), want valid plan", plan, diagnostics)
 	}
@@ -35,7 +37,7 @@ func TestGraphInputResolvesToIndependentConsumers(t *testing.T) {
 		if err != nil || len(dependencies) != 0 {
 			t.Fatalf("Dependencies(%q) = (%v, %v), want no dependencies", nodeID, dependencies, err)
 		}
-		inputs, result := plan.ResolveNodeInputs(nodeID, map[string]Value{"message": NewStringValue("hello")}, nil)
+		inputs, result := plan.ResolveNodeInputs(nodeID, map[string]graph.Value{"message": graph.NewStringValue("hello")}, nil)
 		if !result.Valid() {
 			t.Fatalf("ResolveNodeInputs(%q) diagnostics = %#v", nodeID, result.Diagnostics)
 		}
@@ -50,18 +52,18 @@ func TestGraphInputResolvesToIndependentConsumers(t *testing.T) {
 }
 
 func TestMissingRequiredGraphInputBlocksResolution(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "missing-value",
-		Inputs:        map[string]InputDefinition{"message": {Type: ValueTypeString, Required: true}},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{"text": {Type: ValueTypeString, Required: true}}},
+		Inputs:        map[string]graph.InputDefinition{"message": {Type: graph.ValueTypeString, Required: true}},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}},
 		},
-		Edges:              []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{{From: "inputs.message", To: "worker.inputs.text"}},
-		Outputs:            map[string]OutputDefinition{},
+		Edges:              []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.message", To: "worker.inputs.text"}},
+		Outputs:            map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
@@ -78,22 +80,22 @@ func TestMissingRequiredGraphInputBlocksResolution(t *testing.T) {
 }
 
 func TestSuppliedValueTypeMismatchBlocksResolution(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "runtime-type",
-		Inputs:        map[string]InputDefinition{"count": {Type: ValueTypeNumber}},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{"count": {Type: ValueTypeNumber}}},
+		Inputs:        map[string]graph.InputDefinition{"count": {Type: graph.ValueTypeNumber}},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"count": {Type: graph.ValueTypeNumber}}},
 		},
-		Edges:              []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{{From: "inputs.count", To: "worker.inputs.count"}},
-		Outputs:            map[string]OutputDefinition{},
+		Edges:              []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.count", To: "worker.inputs.count"}},
+		Outputs:            map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
-	values := map[string]Value{"count": NewStringValue("12")}
+	values := map[string]graph.Value{"count": graph.NewStringValue("12")}
 	assertDiagnostic(t, plan.ValidateGraphInputs(values), "E_GRAPH_INPUT_VALUE_TYPE_MISMATCH", "inputs.count")
 	inputs, result := plan.ResolveNodeInputs("worker", values, nil)
 	if inputs != nil || result.Valid() {
@@ -103,27 +105,27 @@ func TestSuppliedValueTypeMismatchBlocksResolution(t *testing.T) {
 }
 
 func TestNodeOutputsResolveToDistinctInputs(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "node-bindings",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
-			"producer": {Type: "shell", Outputs: map[string]PortDefinition{
-				"text":  {Type: ValueTypeString},
-				"count": {Type: ValueTypeNumber},
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
+			"producer": {Type: "shell", Outputs: map[string]graph.PortDefinition{
+				"text":  {Type: graph.ValueTypeString},
+				"count": {Type: graph.ValueTypeNumber},
 			}},
-			"consumer": {Type: "shell", Inputs: map[string]PortDefinition{
-				"text":  {Type: ValueTypeString, Required: true},
-				"count": {Type: ValueTypeNumber, Required: true},
+			"consumer": {Type: "shell", Inputs: map[string]graph.PortDefinition{
+				"text":  {Type: graph.ValueTypeString, Required: true},
+				"count": {Type: graph.ValueTypeNumber, Required: true},
 			}},
 		},
-		Edges: []EdgeDefinition{
+		Edges: []graph.EdgeDefinition{
 			{From: "producer.outputs.text", To: "consumer.inputs.text"},
 			{From: "producer.outputs.count", To: "consumer.inputs.count"},
 		},
-		Outputs: map[string]OutputDefinition{},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
@@ -131,12 +133,12 @@ func TestNodeOutputsResolveToDistinctInputs(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(dependencies, []string{"producer"}) {
 		t.Fatalf("Dependencies(consumer) = (%v, %v), want producer once", dependencies, err)
 	}
-	number, err := NewNumberValue(json.Number("9007199254740993"))
+	number, err := graph.NewNumberValue(json.Number("9007199254740993"))
 	if err != nil {
 		t.Fatalf("NewNumberValue() error = %v", err)
 	}
-	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]Value{
-		"producer": {"text": NewStringValue("done"), "count": number},
+	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]graph.Value{
+		"producer": {"text": graph.NewStringValue("done"), "count": number},
 	})
 	if !result.Valid() {
 		t.Fatalf("ResolveNodeInputs() diagnostics = %#v", result.Diagnostics)
@@ -150,22 +152,22 @@ func TestNodeOutputsResolveToDistinctInputs(t *testing.T) {
 }
 
 func TestMissingBoundNodeOutputBlocksResolution(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "missing-output",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
-			"producer": {Type: "shell", Outputs: map[string]PortDefinition{"value": {Type: ValueTypeString}}},
-			"consumer": {Type: "shell", Inputs: map[string]PortDefinition{"value": {Type: ValueTypeString}}},
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
+			"producer": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+			"consumer": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 		},
-		Edges:   []EdgeDefinition{{From: "producer.outputs.value", To: "consumer.inputs.value"}},
-		Outputs: map[string]OutputDefinition{},
+		Edges:   []graph.EdgeDefinition{{From: "producer.outputs.value", To: "consumer.inputs.value"}},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
-	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]Value{"producer": {}})
+	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]graph.Value{"producer": {}})
 	if inputs != nil || result.Valid() {
 		t.Fatalf("ResolveNodeInputs() = (%#v, %#v), want blocking error", inputs, result)
 	}
@@ -178,34 +180,34 @@ func TestMissingBoundNodeOutputBlocksResolution(t *testing.T) {
 func TestCompileBindingsRejectsInvalidReferencesAndProviders(t *testing.T) {
 	cases := []struct {
 		name  string
-		edges []EdgeDefinition
+		edges []graph.EdgeDefinition
 		code  string
 	}{
-		{"source node", []EdgeDefinition{{From: "missing.outputs.value", To: "consumer.inputs.value"}}, "E_EDGE_SOURCE_NODE_NOT_FOUND"},
-		{"target node", []EdgeDefinition{{From: "producer.outputs.value", To: "missing.inputs.value"}}, "E_EDGE_TARGET_NODE_NOT_FOUND"},
-		{"source output", []EdgeDefinition{{From: "producer.outputs.missing", To: "consumer.inputs.value"}}, "E_EDGE_SOURCE_OUTPUT_NOT_FOUND"},
-		{"target input", []EdgeDefinition{{From: "producer.outputs.value", To: "consumer.inputs.missing"}}, "E_EDGE_TARGET_INPUT_NOT_FOUND"},
-		{"duplicate provider", []EdgeDefinition{
+		{"source node", []graph.EdgeDefinition{{From: "missing.outputs.value", To: "consumer.inputs.value"}}, "E_EDGE_SOURCE_NODE_NOT_FOUND"},
+		{"target node", []graph.EdgeDefinition{{From: "producer.outputs.value", To: "missing.inputs.value"}}, "E_EDGE_TARGET_NODE_NOT_FOUND"},
+		{"source output", []graph.EdgeDefinition{{From: "producer.outputs.missing", To: "consumer.inputs.value"}}, "E_EDGE_SOURCE_OUTPUT_NOT_FOUND"},
+		{"target input", []graph.EdgeDefinition{{From: "producer.outputs.value", To: "consumer.inputs.missing"}}, "E_EDGE_TARGET_INPUT_NOT_FOUND"},
+		{"duplicate provider", []graph.EdgeDefinition{
 			{From: "producer.outputs.value", To: "consumer.inputs.value"},
 			{From: "producer.outputs.value", To: "consumer.inputs.value"},
 		}, "E_INPUT_MULTIPLE_PROVIDERS"},
-		{"wrong direction", []EdgeDefinition{{From: "producer.inputs.value", To: "consumer.inputs.value"}}, "E_EDGE_SOURCE_REFERENCE_INVALID"},
-		{"no binding", []EdgeDefinition{}, "E_REQUIRED_INPUT_UNBOUND"},
+		{"wrong direction", []graph.EdgeDefinition{{From: "producer.inputs.value", To: "consumer.inputs.value"}}, "E_EDGE_SOURCE_REFERENCE_INVALID"},
+		{"no binding", []graph.EdgeDefinition{}, "E_REQUIRED_INPUT_UNBOUND"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			definition := &Definition{
-				SchemaVersion: SchemaVersionV0,
+			definition := &graph.Definition{
+				SchemaVersion: graph.SchemaVersionV0,
 				ID:            "invalid-binding",
-				Inputs:        map[string]InputDefinition{},
-				Nodes: map[string]NodeDefinition{
-					"producer": {Type: "shell", Outputs: map[string]PortDefinition{"value": {Type: ValueTypeString}}},
-					"consumer": {Type: "shell", Inputs: map[string]PortDefinition{"value": {Type: ValueTypeString, Required: true}}},
+				Inputs:        map[string]graph.InputDefinition{},
+				Nodes: map[string]graph.NodeDefinition{
+					"producer": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+					"consumer": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}},
 				},
 				Edges:   test.edges,
-				Outputs: map[string]OutputDefinition{},
+				Outputs: map[string]graph.OutputDefinition{},
 			}
-			plan, result := CompileBindings(definition)
+			plan, result := graph.CompileBindings(definition)
 			if plan != nil || result.Valid() {
 				t.Fatalf("CompileBindings() = (%#v, %#v), want no plan", plan, result)
 			}
@@ -215,28 +217,28 @@ func TestCompileBindingsRejectsInvalidReferencesAndProviders(t *testing.T) {
 }
 
 func TestStructuredJSONBindingPreservesValueWithoutSharingBytes(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "json-binding",
-		Inputs:        map[string]InputDefinition{"payload": {Type: ValueTypeJSON}},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{"payload": {Type: ValueTypeJSON}}},
+		Inputs:        map[string]graph.InputDefinition{"payload": {Type: graph.ValueTypeJSON}},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"payload": {Type: graph.ValueTypeJSON}}},
 		},
-		Edges:              []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{{From: "inputs.payload", To: "worker.inputs.payload"}},
-		Outputs:            map[string]OutputDefinition{},
+		Edges:              []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.payload", To: "worker.inputs.payload"}},
+		Outputs:            map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
 	raw := json.RawMessage(`{"items":[1,true,{"name":"ready"}]}`)
-	value, err := NewJSONValue(raw)
+	value, err := graph.NewJSONValue(raw)
 	if err != nil {
 		t.Fatalf("NewJSONValue() error = %v", err)
 	}
 	raw[0] = '['
-	inputs, result := plan.ResolveNodeInputs("worker", map[string]Value{"payload": value}, nil)
+	inputs, result := plan.ResolveNodeInputs("worker", map[string]graph.Value{"payload": value}, nil)
 	if !result.Valid() {
 		t.Fatalf("ResolveNodeInputs() diagnostics = %#v", result.Diagnostics)
 	}
@@ -252,26 +254,26 @@ func TestStructuredJSONBindingPreservesValueWithoutSharingBytes(t *testing.T) {
 }
 
 func TestArtifactReferencePassesThroughWithoutLoading(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "artifact-binding",
-		Inputs:        map[string]InputDefinition{"report": {Type: ValueTypeArtifactRef}},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{"report": {Type: ValueTypeArtifactRef, Required: true}}},
+		Inputs:        map[string]graph.InputDefinition{"report": {Type: graph.ValueTypeArtifactRef}},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"report": {Type: graph.ValueTypeArtifactRef, Required: true}}},
 		},
-		Edges:              []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{{From: "inputs.report", To: "worker.inputs.report"}},
-		Outputs:            map[string]OutputDefinition{},
+		Edges:              []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.report", To: "worker.inputs.report"}},
+		Outputs:            map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
-	value, err := NewArtifactRefValue("artifact:does-not-exist")
+	value, err := graph.NewArtifactRefValue("artifact:does-not-exist")
 	if err != nil {
 		t.Fatalf("NewArtifactRefValue() error = %v", err)
 	}
-	inputs, result := plan.ResolveNodeInputs("worker", map[string]Value{"report": value}, nil)
+	inputs, result := plan.ResolveNodeInputs("worker", map[string]graph.Value{"report": value}, nil)
 	if !result.Valid() {
 		t.Fatalf("ResolveNodeInputs() diagnostics = %#v", result.Diagnostics)
 	}
@@ -281,18 +283,18 @@ func TestArtifactReferencePassesThroughWithoutLoading(t *testing.T) {
 }
 
 func TestOptionalGraphInputCanRemainUnset(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "optional-input",
-		Inputs:        map[string]InputDefinition{"note": {Type: ValueTypeString}},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{"note": {Type: ValueTypeString}}},
+		Inputs:        map[string]graph.InputDefinition{"note": {Type: graph.ValueTypeString}},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"note": {Type: graph.ValueTypeString}}},
 		},
-		Edges:              []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{{From: "inputs.note", To: "worker.inputs.note"}},
-		Outputs:            map[string]OutputDefinition{},
+		Edges:              []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.note", To: "worker.inputs.note"}},
+		Outputs:            map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
@@ -303,18 +305,18 @@ func TestOptionalGraphInputCanRemainUnset(t *testing.T) {
 }
 
 func TestMissingRequiredGraphInputBlocksOptionalTargetResolution(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "required-source-optional-target",
-		Inputs:        map[string]InputDefinition{"note": {Type: ValueTypeString, Required: true}},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{"note": {Type: ValueTypeString}}},
+		Inputs:        map[string]graph.InputDefinition{"note": {Type: graph.ValueTypeString, Required: true}},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"note": {Type: graph.ValueTypeString}}},
 		},
-		Edges:              []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{{From: "inputs.note", To: "worker.inputs.note"}},
-		Outputs:            map[string]OutputDefinition{},
+		Edges:              []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.note", To: "worker.inputs.note"}},
+		Outputs:            map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
@@ -326,25 +328,25 @@ func TestMissingRequiredGraphInputBlocksOptionalTargetResolution(t *testing.T) {
 }
 
 func TestCompiledPlanAllowsWarningsButRejectsDeclaredTypeMismatch(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "warning-only",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
-			"producer": {Type: "shell", Outputs: map[string]PortDefinition{"unused": {Type: ValueTypeString}}},
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
+			"producer": {Type: "shell", Outputs: map[string]graph.PortDefinition{"unused": {Type: graph.ValueTypeString}}},
 		},
-		Edges:   []EdgeDefinition{},
-		Outputs: map[string]OutputDefinition{},
+		Edges:   []graph.EdgeDefinition{},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
-	plan, result := CompileBindings(definition)
+	plan, result := graph.CompileBindings(definition)
 	if plan == nil || !result.Valid() {
 		t.Fatalf("warning-only CompileBindings() = (%#v, %#v), want plan", plan, result)
 	}
 	assertDiagnostic(t, result, "W_DECLARED_OUTPUT_UNUSED", "nodes.producer.outputs.unused")
 
-	definition.Nodes["consumer"] = NodeDefinition{Type: "shell", Inputs: map[string]PortDefinition{"count": {Type: ValueTypeNumber}}}
-	definition.Edges = []EdgeDefinition{{From: "producer.outputs.unused", To: "consumer.inputs.count"}}
-	plan, result = CompileBindings(definition)
+	definition.Nodes["consumer"] = graph.NodeDefinition{Type: "shell", Inputs: map[string]graph.PortDefinition{"count": {Type: graph.ValueTypeNumber}}}
+	definition.Edges = []graph.EdgeDefinition{{From: "producer.outputs.unused", To: "consumer.inputs.count"}}
+	plan, result = graph.CompileBindings(definition)
 	if plan != nil || result.Valid() {
 		t.Fatalf("mismatched CompileBindings() = (%#v, %#v), want blocking error", plan, result)
 	}
@@ -352,34 +354,34 @@ func TestCompiledPlanAllowsWarningsButRejectsDeclaredTypeMismatch(t *testing.T) 
 }
 
 func TestBindingResolutionAndDiagnosticsAreDeterministic(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "deterministic-bindings",
-		Inputs: map[string]InputDefinition{
-			"first":  {Type: ValueTypeString},
-			"second": {Type: ValueTypeString},
+		Inputs: map[string]graph.InputDefinition{
+			"first":  {Type: graph.ValueTypeString},
+			"second": {Type: graph.ValueTypeString},
 		},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Inputs: map[string]PortDefinition{
-				"first":  {Type: ValueTypeString, Required: true},
-				"second": {Type: ValueTypeString, Required: true},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{
+				"first":  {Type: graph.ValueTypeString, Required: true},
+				"second": {Type: graph.ValueTypeString, Required: true},
 			}},
 		},
-		Edges: []EdgeDefinition{},
-		GraphInputBindings: []GraphInputBindingDefinition{
+		Edges: []graph.EdgeDefinition{},
+		GraphInputBindings: []graph.GraphInputBindingDefinition{
 			{From: "inputs.second", To: "worker.inputs.second"},
 			{From: "inputs.first", To: "worker.inputs.first"},
 		},
-		Outputs: map[string]OutputDefinition{},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
-	firstValues := map[string]Value{"first": NewStringValue("A"), "second": NewStringValue("B")}
-	secondValues := make(map[string]Value)
-	secondValues["second"] = NewStringValue("B")
-	secondValues["first"] = NewStringValue("A")
+	firstValues := map[string]graph.Value{"first": graph.NewStringValue("A"), "second": graph.NewStringValue("B")}
+	secondValues := make(map[string]graph.Value)
+	secondValues["second"] = graph.NewStringValue("B")
+	secondValues["first"] = graph.NewStringValue("A")
 	firstInputs, firstResult := plan.ResolveNodeInputs("worker", firstValues, nil)
 	secondInputs, secondResult := plan.ResolveNodeInputs("worker", secondValues, nil)
 	if !reflect.DeepEqual(firstInputs, secondInputs) || !reflect.DeepEqual(firstResult, secondResult) {
@@ -396,7 +398,7 @@ func TestBindingResolutionAndDiagnosticsAreDeterministic(t *testing.T) {
 }
 
 func TestNilBindingPlanReturnsStructuredErrors(t *testing.T) {
-	var plan *BindingPlan
+	var plan *graph.BindingPlan
 	if _, err := plan.Dependencies("worker"); err == nil {
 		t.Fatal("nil Dependencies() error = nil")
 	}
@@ -409,18 +411,18 @@ func TestNilBindingPlanReturnsStructuredErrors(t *testing.T) {
 }
 
 func TestUnboundNodesHaveNoDependencies(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "unbound-nodes",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
 			"left":  {Type: "shell"},
 			"right": {Type: "shell"},
 		},
-		Edges:   []EdgeDefinition{},
-		Outputs: map[string]OutputDefinition{},
+		Edges:   []graph.EdgeDefinition{},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
-	plan, result := CompileBindings(definition)
+	plan, result := graph.CompileBindings(definition)
 	if plan == nil || !result.Valid() {
 		t.Fatalf("CompileBindings() = (%#v, %#v), want valid plan", plan, result)
 	}
@@ -437,16 +439,16 @@ func TestCompiledDependenciesAreSortedAndIndependentOfDefinitionMutation(t *test
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	definition, err := Parse(data)
+	definition, err := yamlgraph.Parse(data)
 	if err != nil {
-		t.Fatalf("Parse() error = %v", err)
+		t.Fatalf("yamlgraph.Parse() error = %v", err)
 	}
-	plan, result := CompileBindings(definition)
+	plan, result := graph.CompileBindings(definition)
 	if !result.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", result.Diagnostics)
 	}
 	definition.Edges = nil
-	definition.Nodes["merge"] = NodeDefinition{Type: "shell"}
+	definition.Nodes["merge"] = graph.NodeDefinition{Type: "shell"}
 	dependencies, err := plan.Dependencies("merge")
 	if err != nil || !reflect.DeepEqual(dependencies, []string{"left", "right"}) {
 		t.Fatalf("Dependencies(merge) = (%v, %v), want left/right", dependencies, err)
@@ -456,9 +458,9 @@ func TestCompiledDependenciesAreSortedAndIndependentOfDefinitionMutation(t *test
 	if !reflect.DeepEqual(again, []string{"left", "right"}) {
 		t.Fatalf("Dependencies() leaked mutable slice: %v", again)
 	}
-	inputs, resolution := plan.ResolveNodeInputs("merge", nil, map[string]map[string]Value{
-		"left":  {"stdout": NewStringValue("L")},
-		"right": {"stdout": NewStringValue("R")},
+	inputs, resolution := plan.ResolveNodeInputs("merge", nil, map[string]map[string]graph.Value{
+		"left":  {"stdout": graph.NewStringValue("L")},
+		"right": {"stdout": graph.NewStringValue("R")},
 	})
 	if !resolution.Valid() {
 		t.Fatalf("ResolveNodeInputs() diagnostics = %#v", resolution.Diagnostics)
@@ -472,24 +474,24 @@ func TestCompiledDependenciesAreSortedAndIndependentOfDefinitionMutation(t *test
 }
 
 func TestUnknownGraphInputAndWrongNodeOutputTypeHaveStructuredErrors(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "runtime-errors",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
-			"producer": {Type: "shell", Outputs: map[string]PortDefinition{"value": {Type: ValueTypeString}}},
-			"consumer": {Type: "shell", Inputs: map[string]PortDefinition{"value": {Type: ValueTypeString}}},
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
+			"producer": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+			"consumer": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 		},
-		Edges:   []EdgeDefinition{{From: "producer.outputs.value", To: "consumer.inputs.value"}},
-		Outputs: map[string]OutputDefinition{},
+		Edges:   []graph.EdgeDefinition{{From: "producer.outputs.value", To: "consumer.inputs.value"}},
+		Outputs: map[string]graph.OutputDefinition{},
 	}
-	plan, diagnostics := CompileBindings(definition)
+	plan, diagnostics := graph.CompileBindings(definition)
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
-	assertDiagnostic(t, plan.ValidateGraphInputs(map[string]Value{"typo": NewStringValue("unexpected")}), "E_GRAPH_INPUT_VALUE_UNKNOWN", "inputs.typo")
-	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]Value{
-		"producer": {"value": NewBooleanValue(true)},
+	assertDiagnostic(t, plan.ValidateGraphInputs(map[string]graph.Value{"typo": graph.NewStringValue("unexpected")}), "E_GRAPH_INPUT_VALUE_UNKNOWN", "inputs.typo")
+	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]graph.Value{
+		"producer": {"value": graph.NewBooleanValue(true)},
 	})
 	if inputs != nil || result.Valid() {
 		t.Fatalf("ResolveNodeInputs() = (%#v, %#v), want blocking type error", inputs, result)
@@ -501,29 +503,29 @@ func TestUnknownGraphInputAndWrongNodeOutputTypeHaveStructuredErrors(t *testing.
 }
 
 func TestResolveGraphOutputsUsesDeclaredReferencesAndSortedDiagnostics(t *testing.T) {
-	definition := &Definition{
-		SchemaVersion: SchemaVersionV0,
+	definition := &graph.Definition{
+		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "published-outputs",
-		Inputs:        map[string]InputDefinition{},
-		Nodes: map[string]NodeDefinition{
-			"worker": {Type: "shell", Outputs: map[string]PortDefinition{
-				"first": {Type: ValueTypeString},
-				"last":  {Type: ValueTypeBoolean},
+		Inputs:        map[string]graph.InputDefinition{},
+		Nodes: map[string]graph.NodeDefinition{
+			"worker": {Type: "shell", Outputs: map[string]graph.PortDefinition{
+				"first": {Type: graph.ValueTypeString},
+				"last":  {Type: graph.ValueTypeBoolean},
 			}},
 		},
-		Edges: []EdgeDefinition{},
-		Outputs: map[string]OutputDefinition{
+		Edges: []graph.EdgeDefinition{},
+		Outputs: map[string]graph.OutputDefinition{
 			"zeta":  {From: "worker.outputs.last"},
 			"alpha": {From: "worker.outputs.first"},
 		},
 	}
-	plan, validation := CompileBindings(definition)
+	plan, validation := graph.CompileBindings(definition)
 	if !validation.Valid() {
 		t.Fatalf("CompileBindings() = %#v", validation.Diagnostics)
 	}
-	definition.Outputs["alpha"] = OutputDefinition{From: "worker.outputs.last"}
-	outputs, result := plan.ResolveGraphOutputs(map[string]map[string]Value{
-		"worker": {"first": NewStringValue("ready"), "last": NewBooleanValue(false)},
+	definition.Outputs["alpha"] = graph.OutputDefinition{From: "worker.outputs.last"}
+	outputs, result := plan.ResolveGraphOutputs(map[string]map[string]graph.Value{
+		"worker": {"first": graph.NewStringValue("ready"), "last": graph.NewBooleanValue(false)},
 	})
 	if !result.Valid() || len(outputs) != 2 {
 		t.Fatalf("ResolveGraphOutputs() = (%#v, %#v)", outputs, result)
@@ -535,8 +537,8 @@ func TestResolveGraphOutputsUsesDeclaredReferencesAndSortedDiagnostics(t *testin
 		t.Fatalf("zeta = (%v, %v), want false", got, ok)
 	}
 
-	outputs, result = plan.ResolveGraphOutputs(map[string]map[string]Value{
-		"worker": {"first": NewBooleanValue(true)},
+	outputs, result = plan.ResolveGraphOutputs(map[string]map[string]graph.Value{
+		"worker": {"first": graph.NewBooleanValue(true)},
 	})
 	if outputs != nil || len(result.Diagnostics) != 2 {
 		t.Fatalf("invalid outputs = (%#v, %#v)", outputs, result)

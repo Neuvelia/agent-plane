@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -83,7 +84,7 @@ outputs: {}
 		if err != nil {
 			t.Fatalf("%s: operations refused: %v", kind, err)
 		}
-		def, err := graph.Parse(res.Text)
+		def, err := yamlgraph.Parse(res.Text)
 		if err != nil {
 			t.Fatalf("%s: result does not parse: %v", kind, err)
 		}

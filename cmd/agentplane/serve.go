@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/agent/codex"
 	"agentplane/internal/api"
 	"agentplane/internal/capability"
@@ -167,7 +168,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			}
 			return persist(e)
 		}
-		opts := runtime.Options{MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
+		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr

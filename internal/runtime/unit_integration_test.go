@@ -1,6 +1,7 @@
 package runtime_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -134,7 +135,7 @@ func TestUnitsBarrierScopedRetryAndExhaustion(t *testing.T) {
 			}
 			done := make(chan outcome, 1)
 			go func() {
-				r, err := runtime.Run(ctx, d, nil, e, runtime.Options{MaxConcurrency: 4})
+				r, err := runtime.Run(ctx, d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 4})
 				done <- outcome{r, err}
 			}()
 			for range 4 {
@@ -259,7 +260,7 @@ func TestUnitsSharedFilesCanChangeAcceptedValuesCannot(t *testing.T) {
 		}
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(fmt.Sprintf(`{"ok":%t,"unit":%q,"attempt":%d}`, in.Task != "c" || n == 2, in.Task, n))}, nil
 	}
-	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{MaxConcurrency: 4})
+	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 4})
 	if err != nil || r.State != runtime.RunSucceeded {
 		t.Fatal(r, err)
 	}
@@ -286,13 +287,13 @@ func TestUnitsScopeValidationBeforeAdapterDetectionAndLegacyAbsence(t *testing.T
 		d.Units = []string{"work"}
 		d.Nodes["work"].Config["allowed_paths"] = scope
 		a := newLoopAdapter()
-		if _, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{}); err == nil || a.detect != 0 || len(a.calls) != 0 {
+		if _, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal}); err == nil || a.detect != 0 || len(a.calls) != 0 {
 			t.Fatal("invalid scope reached detection", err, a.detect)
 		}
 	}
 	a := newLoopAdapter()
 	d := loopDefinition(1)
-	r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{})
+	r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -307,7 +308,7 @@ func TestUnitEnvelopeUsesCompleteNormalizedRedactedAuthoredScope(t *testing.T) {
 	d.Units = []string{"work"}
 	d.Nodes["work"].Config["allowed_paths"] = []string{"./SECRET//a/", "."}
 	a := newLoopAdapter()
-	r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{LogRedactions: []string{"SECRET"}})
+	r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -331,7 +332,7 @@ func TestUnitEnvelopeUsesCompleteNormalizedRedactedAuthoredScope(t *testing.T) {
 	// bound; fail before any adapter detection instead of truncating it.
 	d.Nodes["work"].Config["allowed_paths"] = []string{strings.Repeat("S", 512)}
 	a = newLoopAdapter()
-	if _, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{LogRedactions: []string{"S"}}); e == nil || a.detect != 0 {
+	if _, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"S"}}); e == nil || a.detect != 0 {
 		t.Fatal("redaction bound not preflighted", e, a.detect)
 	}
 }
@@ -362,7 +363,7 @@ func TestUnitCancellationAndOperationalFailuresHaveNoInventedEnvelope(t *testing
 					return base.ExecuteNodeObserved(ctx, id, n, in, o)
 				}
 			}
-			r, err := runtime.Run(ctx, d, nil, e, runtime.Options{})
+			r, err := runtime.Run(ctx, d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
 			if err != nil || len(a.calls) != 1 {
 				t.Fatal(r, err)
 			}
@@ -391,7 +392,7 @@ func TestEnrolledUnitIdentityBoundBeforeDetectionPreservesLegacyIDs(t *testing.T
 		if enrolled {
 			d.Units = []string{id}
 		}
-		r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{})
+		r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
 		if enrolled {
 			if e == nil || a.detect != 0 || len(a.calls) != 0 {
 				t.Fatal("oversized unit ID reached provider", e, a.detect)
@@ -411,7 +412,7 @@ func TestUnitEnvelopeRetainsScopeBeyondLegacyAttemptSummary(t *testing.T) {
 	}
 	d.Nodes["work"].Config["allowed_paths"] = scope
 	a := newLoopAdapter()
-	r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{})
+	r, e := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
 	if e != nil {
 		t.Fatal(e)
 	}

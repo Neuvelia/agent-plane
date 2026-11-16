@@ -1,6 +1,7 @@
 package runtime_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -61,7 +62,7 @@ func TestDesktopAgentScopeRetryFixture(t *testing.T) {
 		}
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{}`), ChangedFiles: observed("outside.go", "src/a.go", "src/b.go")}, nil
 	}
-	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{})
+	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil || r.State != runtime.RunSucceeded {
 		t.Fatalf("run=%+v err=%v", r, err)
 	}

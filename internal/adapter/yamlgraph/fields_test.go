@@ -1,4 +1,4 @@
-package graph_test
+package yamlgraph_test
 
 import (
 	"errors"
@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
 	"agentplane/internal/fields/fieldstest"
@@ -80,7 +81,7 @@ nodes:
 edges: []
 outputs: {}
 `, n)
-		_, err := graph.Parse([]byte(src))
+		_, err := yamlgraph.Parse([]byte(src))
 		return err
 	}
 	for _, n := range []int{*f.Min, *f.Max} {

@@ -6,9 +6,15 @@ import (
 	"sort"
 )
 
+// Encoder renders a definition as the canonical bytes that are hashed into the
+// semantic version. The schema-v0 contract defines these bytes as the YAML
+// encoding, which lives in the yamlgraph adapter; the domain stays free of any
+// serialization format and receives the encoder as a dependency.
+type Encoder func(*Definition) ([]byte, error)
+
 // SemanticVersion identifies the execution-relevant schema-v0 definition.
 // Name and Metadata are presentation fields and do not affect the version.
-func SemanticVersion(definition *Definition) (string, error) {
+func SemanticVersion(definition *Definition, encode Encoder) (string, error) {
 	if definition == nil {
 		return "", fmt.Errorf("semantic graph version: definition is nil")
 	}
@@ -31,7 +37,7 @@ func SemanticVersion(definition *Definition) (string, error) {
 		}
 		return semantic.GraphInputBindings[i].To < semantic.GraphInputBindings[j].To
 	})
-	data, err := Marshal(&semantic)
+	data, err := encode(&semantic)
 	if err != nil {
 		return "", fmt.Errorf("semantic graph version: %w", err)
 	}

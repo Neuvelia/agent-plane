@@ -1,6 +1,7 @@
 package api
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -257,7 +258,7 @@ type GraphEdge struct {
 
 func summarizeGraph(source []byte) GraphSummary {
 	summary := GraphSummary{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
-	def, err := graph.Parse(source)
+	def, err := yamlgraph.Parse(source)
 	if err != nil {
 		return summary
 	}
@@ -465,7 +466,7 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	if reasons := edit.Inspect(text); len(reasons) > 0 {
 		out["readonly_canvas"], out["readonly_reasons"] = true, reasons
 	}
-	def, err := graph.Parse(text)
+	def, err := yamlgraph.Parse(text)
 	if err != nil {
 		out["status"], out["parse_error"] = "invalid", err.Error()
 		if line := edit.ParseErrorLine(err.Error()); line > 0 {
@@ -486,7 +487,7 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if v, err := graph.SemanticVersion(def); err == nil {
+	if v, err := yamlgraph.SemanticVersion(def); err == nil {
 		out["version"] = v
 	}
 	writeJSON(w, http.StatusOK, out)

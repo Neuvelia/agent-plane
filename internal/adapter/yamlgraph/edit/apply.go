@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"fmt"
 	"strings"
@@ -53,7 +54,7 @@ func Inspect(src []byte) []string {
 		return []string{"parse_error"}
 	}
 	reasons := ReadOnlyReasons(&doc)
-	if _, err := graph.Parse(src); err != nil {
+	if _, err := yamlgraph.Parse(src); err != nil {
 		reasons = append(reasons, "parse_error")
 	}
 	return reasons
@@ -65,7 +66,7 @@ func Apply(src []byte, ops []Op) (*Result, error) {
 	if len(ops) > MaxOps {
 		return nil, fail(CodeTooManyOps, fmt.Sprintf("a batch may hold at most %d operations, got %d", MaxOps, len(ops)), "split the batch")
 	}
-	before, err := graph.Parse(src)
+	before, err := yamlgraph.Parse(src)
 	if err != nil {
 		e := fail(CodeParse, "the graph does not parse: "+err.Error(), "fix the YAML in the text view, then edit again")
 		e.Reasons = []string{"parse_error"}
@@ -80,7 +81,7 @@ func Apply(src []byte, ops []Op) (*Result, error) {
 		e.Reasons = reasons
 		return nil, e
 	}
-	want, err := graph.Parse(src) // a second, independent copy for the typed prediction
+	want, err := yamlgraph.Parse(src) // a second, independent copy for the typed prediction
 	if err != nil {
 		return nil, fail(CodeParse, err.Error(), "")
 	}
@@ -122,18 +123,18 @@ func Apply(src []byte, ops []Op) (*Result, error) {
 // parses, the whole normalised definition equals the prediction, and a batch of
 // presentation operations leaves the semantic version untouched.
 func safetyNet(text []byte, before, want *graph.Definition, presentation bool) *Error {
-	got, err := graph.Parse(text)
+	got, err := yamlgraph.Parse(text)
 	if err != nil {
 		return fail(CodeSafetyNet, "the edited file does not parse, nothing was changed: "+err.Error(), "report this as a bug; edit the YAML text instead")
 	}
-	gotYAML, err1 := graph.Marshal(got)
-	wantYAML, err2 := graph.Marshal(want)
+	gotYAML, err1 := yamlgraph.Marshal(got)
+	wantYAML, err2 := yamlgraph.Marshal(want)
 	if err1 != nil || err2 != nil || !bytes.Equal(gotYAML, wantYAML) {
 		return fail(CodeSafetyNet, "the edited file does not mean what the operations asked for, nothing was changed", "an edit reached more than it targeted; edit the YAML text instead")
 	}
 	if presentation {
-		v1, e1 := graph.SemanticVersion(before)
-		v2, e2 := graph.SemanticVersion(got)
+		v1, e1 := yamlgraph.SemanticVersion(before)
+		v2, e2 := yamlgraph.SemanticVersion(got)
 		if e1 != nil || e2 != nil || v1 != v2 {
 			return fail(CodeSafetyNet, "a presentation edit changed the semantic version, nothing was changed", "report this as a bug")
 		}

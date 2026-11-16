@@ -10,6 +10,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"fmt"
 	"os"
@@ -57,7 +58,7 @@ func report(path string) {
 		return
 	}
 	fmt.Printf("## %s\n\n", path)
-	def, parseErr := graph.Parse(orig)
+	def, parseErr := yamlgraph.Parse(orig)
 	if parseErr != nil {
 		fmt.Printf("`graph.Parse` refuses this file: %v\n\n", parseErr)
 		fmt.Println("Tree patching is measured anyway (identity and edits) to show the behaviour, but the editor must not offer canvas edits for a file the engine cannot read.")
@@ -176,7 +177,7 @@ func measure(path string, orig []byte, def *graph.Definition, o op) {
 	}
 	lost := lostComments(orig, patched)
 	var re, sem string
-	if got, perr := graph.Parse(patched); perr != nil {
+	if got, perr := yamlgraph.Parse(patched); perr != nil {
 		re, sem = "no: "+short(perr.Error()), "n/a"
 	} else {
 		re = "yes"
@@ -195,8 +196,8 @@ func semantic(orig []byte, def, got *graph.Definition, o op) string {
 	if def == nil {
 		return "n/a (original not parseable)"
 	}
-	base, _ := graph.SemanticVersion(def)
-	have, err := graph.SemanticVersion(got)
+	base, _ := yamlgraph.SemanticVersion(def)
+	have, err := yamlgraph.SemanticVersion(got)
 	if err != nil {
 		return "error"
 	}
@@ -210,7 +211,7 @@ func semantic(orig []byte, def, got *graph.Definition, o op) string {
 	if want == nil || o.def(want) != nil {
 		return "n/a"
 	}
-	wantV, _ := graph.SemanticVersion(want)
+	wantV, _ := yamlgraph.SemanticVersion(want)
 	if have == wantV {
 		return "yes (matches typed edit)"
 	}
@@ -218,7 +219,7 @@ func semantic(orig []byte, def, got *graph.Definition, o op) string {
 }
 
 func cloneDef(src []byte) *graph.Definition {
-	d, err := graph.Parse(src)
+	d, err := yamlgraph.Parse(src)
 	if err != nil {
 		return nil
 	}

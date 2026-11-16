@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"fmt"
 
 	"agentplane/internal/domain/graph"
@@ -81,11 +82,11 @@ func (s *session) addNode(op Op) *Error {
 	if err != nil {
 		return err
 	}
-	var value yaml.Node
-	if e := value.Encode(def); e != nil {
+	value, e := yamlgraph.EncodeNode(def)
+	if e != nil {
 		return nodeError(CodeParse, id, "cannot build the node: "+e.Error(), "")
 	}
-	nodes.Content = append(nodes.Content, str(id), &value)
+	nodes.Content = append(nodes.Content, str(id), value)
 
 	if op.Layout != nil {
 		return s.putLayout(id, x, y)

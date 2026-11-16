@@ -1,6 +1,7 @@
 package api
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -266,7 +267,7 @@ func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	if reasons := edit.Inspect(text); len(reasons) > 0 {
 		res.ReadonlyCanvas, res.ReadonlyReasons = true, reasons
 	}
-	def, err := graph.Parse(text)
+	def, err := yamlgraph.Parse(text)
 	if err != nil {
 		res.ParseError = err.Error()
 		res.ParseLine = edit.ParseErrorLine(res.ParseError)
@@ -275,7 +276,7 @@ func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	res.Definition = toDefinitionDTO(def)
 	res.NodeTypes = s.nodeTypesFor(def, allTypes)
 	res.Nodes = s.nodeInfo(text, def)
-	if v, err := graph.SemanticVersion(def); err == nil {
+	if v, err := yamlgraph.SemanticVersion(def); err == nil {
 		res.Version = v
 	}
 	res.Diagnostics = withLines(text, s.diagnostics(def))

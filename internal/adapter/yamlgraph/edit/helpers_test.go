@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,7 +99,7 @@ func lineDiff(a, b string) (removed, added []string) {
 
 func parse(t *testing.T, src string) *graph.Definition {
 	t.Helper()
-	def, err := graph.Parse([]byte(src))
+	def, err := yamlgraph.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse: %v\n%s", err, src)
 	}
@@ -107,7 +108,7 @@ func parse(t *testing.T, src string) *graph.Definition {
 
 func version(t *testing.T, src string) string {
 	t.Helper()
-	v, err := graph.SemanticVersion(parse(t, src))
+	v, err := yamlgraph.SemanticVersion(parse(t, src))
 	if err != nil {
 		t.Fatal(err)
 	}

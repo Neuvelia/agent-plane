@@ -6,7 +6,7 @@ internal/api -> agentplane/internal/capability : R1 delivery must not import ada
 internal/api -> agentplane/internal/store : R1 delivery must not import adapters
 internal/capability -> agentplane/internal/agent : R2 adapters must not import other adapters
 internal/domain/events -> crypto/rand : R4 domain/app must not use crypto/rand directly
-internal/domain/graph -> go.yaml.in/yaml/v3 : R1 domain/app must be standard-library only
 internal/gate -> agentplane/internal/gitstate : R2 adapters must not import other adapters
 internal/runtime -> agentplane/internal/gitstate : R1 app imports only domain and app
 internal/runtime -> os/exec : R4 domain/app must not use os/exec directly
+internal/api -> agentplane/internal/adapter/yamlgraph : R1 delivery must not import adapters
