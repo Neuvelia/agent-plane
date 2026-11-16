@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentplane/internal/events"
+	"agentplane/internal/testenv"
 )
 
 const valueSecret = "hunter2-value-secret"
@@ -63,6 +64,7 @@ func assertNoSecretUnder(t *testing.T, dir string) {
 }
 
 func TestRunRecordsDemoValuesOnlyWhenAsked(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/printf", "/usr/bin/printenv")
 	code, out, errout := cli(t, "run", demoGraphPath(t), "--approve", "approve", "--json")
 	if code != 0 || strings.Contains(out, "value_recorded") {
 		t.Fatalf("recording off: code=%d %s", code, errout)
@@ -116,6 +118,7 @@ func TestRunRecordsDemoValuesOnlyWhenAsked(t *testing.T) {
 }
 
 func TestRunRecordedValuesNeverContainASecret(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/printf", "/usr/bin/printenv")
 	t.Setenv("AP_VALUE_SECRET", valueSecret)
 	dir := t.TempDir()
 	code, out, errout := cli(t, "run", leakyGraph(t), "--input", "note=uses "+valueSecret, "--redact-env", "AP_VALUE_SECRET", "--record-values", "--store-dir", dir, "--json")
@@ -142,6 +145,7 @@ func TestRunRecordedValuesNeverContainASecret(t *testing.T) {
 // A JSON output spells the secret only through escapes, so byte redaction
 // cannot see it; the recorded value must still never decode to the secret.
 func TestRunRecordedJSONValueNeverDecodesToASecret(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/printf", "/usr/bin/printenv")
 	const secret = `q"b\s&é-secret`
 	t.Setenv("AP_JSON_SECRET", secret)
 	path := filepath.Join(t.TempDir(), "escaped.yaml")
@@ -244,6 +248,7 @@ func sseEvents(t *testing.T, stream string) []string {
 }
 
 func TestServeRecordsRedactedValuesAndReplaysThemAfterRestart(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/printf", "/usr/bin/printenv")
 	t.Setenv("AP_VALUE_SECRET", valueSecret)
 	s := startServe(t, "--record-values", "--redact-env", "AP_VALUE_SECRET")
 	graph := leakyGraph(t)
