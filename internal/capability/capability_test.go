@@ -421,3 +421,108 @@ func TestPackageHasNoNetworkDependency(t *testing.T) {
 		}
 	}
 }
+
+// fakeLook resolves exactly the names in found, without touching the disk.
+func fakeLook(found ...string) (func(string) (string, error), *[]string) {
+	var asked []string
+	var mu sync.Mutex
+	return func(name string) (string, error) {
+		mu.Lock()
+		asked = append(asked, name)
+		mu.Unlock()
+		if slices.Contains(found, name) {
+			return "/opt/LEAKMARKER/bin/" + name, nil
+		}
+		return "", exec.ErrNotFound
+	}, &asked
+}
+
+func TestAgentCLIRowsComeFromTheLookupOnly(t *testing.T) {
+	look, _ := fakeLook("claude", "gemini")
+	r := Detector{GOOS: "linux", GitPath: absent, Agents: []Agent{{ID: "codex", Command: "codex"}}, CLIs: AgentCLIs, LookPath: look}.Detect(context.Background())
+	want := []Tool{
+		{ID: "git", Kind: "tool", Status: StatusMissing},
+		{ID: "codex", Kind: "agent_adapter", Status: StatusNotConfigured, Reason: ReasonNoBinaryConfigured},
+		{ID: "claude", Kind: "agent_cli", Status: StatusDetectedNoAdapter},
+		{ID: "cursor-agent", Kind: "agent_cli", Status: StatusMissing},
+		{ID: "gemini", Kind: "agent_cli", Status: StatusDetectedNoAdapter},
+	}
+	if !slices.Equal(r.Tools, want) {
+		t.Fatalf("tools\n got %+v\nwant %+v", r.Tools, want)
+	}
+	data, _ := json.Marshal(r)
+	if strings.Contains(string(data), "LEAKMARKER") {
+		t.Fatalf("report leaks a looked-up path: %s", data)
+	}
+}
+
+func TestUnconfiguredCodexFoundOnPathSaysSo(t *testing.T) {
+	look, asked := fakeLook("codex")
+	counting := &countingAdapter{}
+	r := Detector{GOOS: "linux", GitPath: absent, Agents: []Agent{{ID: "codex", Command: "codex"}}, LookPath: look}.Detect(context.Background())
+	if got := r.Tools[1]; got.Status != StatusNotConfigured || got.Reason != ReasonFoundOnPath || got.Version != "" {
+		t.Fatalf("codex %+v", got)
+	}
+	// A configured adapter is detected through Detect alone; PATH is not consulted.
+	*asked = nil
+	r = Detector{GOOS: "linux", GitPath: absent, Agents: []Agent{{ID: "codex", Command: "codex", Adapter: counting}}, LookPath: look}.Detect(context.Background())
+	if counting.calls.Load() != 1 || len(*asked) != 0 || r.Tools[1].Reason == ReasonFoundOnPath {
+		t.Fatalf("configured codex: calls %d, lookups %v, row %+v", counting.calls.Load(), *asked, r.Tools[1])
+	}
+}
+
+func TestAgentCLIsAreLookedUpOnWindowsWhileGitAndCodexAreUnsupported(t *testing.T) {
+	look, asked := fakeLook("codex", "cursor-agent")
+	r := Detector{GOOS: "windows", Agents: []Agent{{ID: "codex", Command: "codex"}}, CLIs: AgentCLIs, LookPath: look}.Detect(context.Background())
+	if r.Tools[0].Status != StatusUnsupportedPlatform || r.Tools[1].Status != StatusUnsupportedPlatform || r.Tools[1].Reason != ReasonPlatformNotSupported {
+		t.Fatalf("git/codex %+v", r.Tools[:2])
+	}
+	if r.Tools[2].Status != StatusMissing || r.Tools[3].Status != StatusDetectedNoAdapter || r.Tools[4].Status != StatusMissing {
+		t.Fatalf("agent CLIs %+v", r.Tools[2:])
+	}
+	if slices.Contains(*asked, "codex") {
+		t.Fatal("codex was looked up on an unsupported platform")
+	}
+}
+
+func TestAPanickingLookupIsMissing(t *testing.T) {
+	r := Detector{GOOS: "linux", GitPath: absent, CLIs: AgentCLIs[:1], LookPath: func(string) (string, error) { panic("boom") }}.Detect(context.Background())
+	if r.Tools[1].Status != StatusMissing {
+		t.Fatalf("row %+v", r.Tools[1])
+	}
+}
+
+// The real exec.LookPath must find these scripts without running them: each
+// writes a marker file if it is ever executed.
+func TestRealLookupFindsAgentCLIsWithoutStartingThem(t *testing.T) {
+	requirePOSIX(t)
+	const marker = "LEAKMARKER"
+	dir := filepath.Join(t.TempDir(), marker)
+	ran := filepath.Join(t.TempDir(), "ran")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"codex", "claude", "cursor-agent", "gemini"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n: > "+ran+"-"+name+"\nprintf '"+marker+"'\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	r := Detector{GitPath: absent, Agents: []Agent{{ID: "codex", Command: "codex"}}, CLIs: AgentCLIs}.Detect(context.Background())
+	if r.Tools[1].Reason != ReasonFoundOnPath {
+		t.Fatalf("codex %+v", r.Tools[1])
+	}
+	for _, tool := range r.Tools[2:] {
+		if tool.Status != StatusDetectedNoAdapter || tool.Version != "" || tool.Reason != ReasonNone {
+			t.Fatalf("agent CLI %+v", tool)
+		}
+	}
+	matches, _ := filepath.Glob(ran + "-*")
+	if len(matches) != 0 {
+		t.Fatalf("lookup executed %v", matches)
+	}
+	data, _ := json.Marshal(r)
+	if strings.Contains(string(data), marker) || strings.Contains(string(data), dir) {
+		t.Fatalf("report leaks the lookup: %s", data)
+	}
+}
