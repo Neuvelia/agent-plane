@@ -257,7 +257,6 @@ var (
 	shDeniedWords = regexp.MustCompile(`\b(rm|mv|cp|dd|ln|chmod|chown|sudo|su|curl|wget|nc|ncat|ssh|scp|rsync|git|eval|exec|source|kill|mkfs|npm|pip|go|docker)\b`)
 	shVariable    = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)`)
 	shVarRef      = regexp.MustCompile(`^\$(\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)`)
-	secretKey     = regexp.MustCompile(`(?im)^\s*-?\s*"?(token|secret|password|api_key)"?\s*:`)
 	secretValue   = regexp.MustCompile(`sk-|ghp_|github_pat_|AKIA[0-9A-Z]{16}|xox[abp]-|-----BEGIN`)
 )
 
@@ -297,6 +296,10 @@ func safetyViolations(text []byte, def *graph.Definition) []string {
 			if k := n.Config["kind"]; k == "command" || k == "changed_files_scope" {
 				bad["S4"] = true
 			}
+		case "human":
+		default:
+			// A node type these rules do not know cannot be shown safe.
+			bad["unknown_type"] = true
 		}
 		if n.Loop != nil {
 			if k := n.Loop.Gate.Config["kind"]; k == "command" || k == "changed_files_scope" {
@@ -310,8 +313,13 @@ func safetyViolations(text []byte, def *graph.Definition) []string {
 	if bytes.Contains(text, []byte("://")) || bytes.Contains(text, []byte("git@")) || bytes.Contains(text, []byte("www.")) {
 		bad["S5"] = true
 	}
-	if secretKey.Match(text) || secretValue.Match(text) {
+	if secretValue.Match(text) || hasSecretKey(def.Metadata) {
 		bad["S6"] = true
+	}
+	for _, n := range def.Nodes {
+		if hasSecretKey(n.Config) || (n.Loop != nil && hasSecretKey(n.Loop.Gate.Config)) {
+			bad["S6"] = true
+		}
 	}
 	out := []string{}
 	for k := range bad {
@@ -319,6 +327,31 @@ func safetyViolations(text []byte, def *graph.Definition) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// hasSecretKey walks a parsed YAML value, so block and flow mappings are
+// treated alike, and reports a key named like a secret (S6).
+func hasSecretKey(v any) bool {
+	if m := asMap(v); m != nil {
+		for k, child := range m {
+			switch strings.ToLower(k) {
+			case "token", "secret", "password", "api_key":
+				return true
+			}
+			if hasSecretKey(child) {
+				return true
+			}
+		}
+		return false
+	}
+	if list, ok := v.([]any); ok {
+		for _, child := range list {
+			if hasSecretKey(child) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // asMap reads a nested YAML mapping, which graph.Parse may return as one of
@@ -500,6 +533,9 @@ func TestSafetyRulesRejectUnsafeFixtures(t *testing.T) {
 		{"S6", shell("      command: /usr/bin/printf\n      args: [\"ghp_abcdef\"]\n")},
 		{"S6", shell("      command: /usr/bin/printf\n      args: [\"AKIAABCDEFGHIJKLMNOP\"]\n")},
 		{"S6", shell("      command: /usr/bin/printf\n      args: [\"x\"]\n      password: hunter2\n")},
+		{"S6", shell("      command: /usr/bin/printf\n      args: [\"x\"]\n      extra: {nested: [{Api_Key: x}]}\n")},
+		{"S6", head + "  a:\n    type: gate\n    config: {check_id: c, kind: json_predicate, token: x}\n"},
+		{"unknown_type", head + "  a:\n    type: code\n    config: {}\n"},
 		{"S7", agent("      allowed_paths: []\n    loop:\n      max_attempts: 5\n      gate:\n        config: {check_id: c, kind: json_predicate}\n      bindings: []\n")},
 		{"S7", strings.Replace(agent(""), "adapter: codex", "adapter: other", 1)},
 		{"S7", agent("  b:\n    type: agent\n    config:\n      adapter: codex\n      workspace: /tmp\n      task: t\n")},
@@ -532,7 +568,9 @@ func TestRunnableTemplatesRunUnedited(t *testing.T) {
 			Value json.RawMessage `json:"value"`
 		} `json:"outputs"`
 		Events []struct {
-			Type string `json:"type"`
+			Type    string `json:"type"`
+			GraphID string `json:"graph_id"`
+			NodeID  string `json:"node_id"`
 		} `json:"events"`
 	}
 	cases := []struct {
@@ -554,6 +592,22 @@ func TestRunnableTemplatesRunUnedited(t *testing.T) {
 		var out runOut
 		if err := json.Unmarshal([]byte(stdout), &out); err != nil || out.Status != "succeeded" {
 			t.Fatalf("%s: status %q (%v)", c.id, out.Status, err)
+		}
+		src, err := os.ReadFile(filepath.Join(templateDir, c.id+".yaml"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		def, err := graph.Parse(src)
+		if err != nil {
+			t.Fatalf("%s: %v", c.id, err)
+		}
+		if len(out.Events) == 0 {
+			t.Errorf("%s: run reported no events", c.id)
+		}
+		for _, e := range out.Events {
+			if _, ok := def.Nodes[e.NodeID]; e.GraphID != def.ID || (e.NodeID != "" && !ok) {
+				t.Errorf("%s: event %s references graph %q node %q outside the template", c.id, e.Type, e.GraphID, e.NodeID)
+			}
 		}
 		if c.output != "" {
 			if len(out.Outputs) != 1 || out.Outputs[0].Name != "result" || string(out.Outputs[0].Value) != c.output {
