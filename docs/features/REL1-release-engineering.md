@@ -91,9 +91,11 @@ installer is published, and public copy must not claim Windows support.
 
 ## Functional requirements
 
-1. **License.** The repository has a `LICENSE` chosen by the owner (open question
-   1) and the release archives and installers include it. No release is published
-   without it.
+1. **License.** The repository is licensed under Apache-2.0 (`LICENSE`, plus a
+   `NOTICE` naming NEUVELIA sp. z o.o.; owner decision, 2026-11-16). Release archives
+   and installers include both files. Dependency licenses are checked for
+   compatibility before the first tag, and the product name and logo are reserved
+   (not licensed by Apache-2.0).
 2. **Version stamping.** `tarmind version` prints the semantic version from the
    release tag, the commit and the build date. Builds without stamping print
    `0.0.0-dev` as today. The value is injected at build time (`-ldflags -X`), not
@@ -149,7 +151,7 @@ installer is published, and public copy must not claim Windows support.
 
 ## Acceptance criteria
 
-- [ ] `LICENSE` exists and is present in every CLI archive and desktop package.
+- [ ] `LICENSE` (Apache-2.0, unmodified text) and `NOTICE` exist and are present in every CLI archive and desktop package.
 - [ ] Building the same tag twice produces byte-identical CLI binaries (compare
       SHA-256 in CI).
 - [ ] `tarmind version` from a release archive prints the tag's version; the
@@ -201,16 +203,15 @@ SHA-256, and the attestation reference, as its audit trail.
 
 ## Open questions
 
-1. Which license? (Owner decision; blocks any publication. It must be consistent
-   with the landing page's statements about open specs and licensing.)
-2. Is the repository that hosts releases public? The landing page links to
-   `github.com/Neuvelia/tarmind`; this repository is `Neuvelia/agent-plane`.
-   Releases, attestations and the roadmap feed (REL2) depend on which one is
-   public and what it is called.
-3. Resolved: the product name for all public artifacts is Tarmind (see the
-   rename prerequisite). Still open: the exact bundle identifier (for example a
-   reverse-DNS id under the owner's domain) and whether the public repository is
-   renamed to match.
+1. Resolved: Apache-2.0. Still open: DCO or CLA for outside contributions; whether
+   the landing terms of use (which cover the software) are consistent with an
+   open-source license.
+2. Resolved: the public repository is this one, renamed from `agent-plane` to
+   `tarmind`. The landing repository stays private. Before the visibility change:
+   review the history and docs (audits, plans, prompts, thesis experiment data) and
+   run a secret scan.
+3. Resolved: bundle identifier `run.tarmind.desktop` (domain `tarmind.run`); app
+   name Tarmind; binary `tarmind`.
 4. Resolved: Electron (ADR-0026).
 5. Should arm64 Linux be in the first release, or only macOS arm64 and Linux amd64?
 

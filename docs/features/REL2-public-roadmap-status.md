@@ -122,12 +122,12 @@ body lists changed items (ID, old status, new status).
 
 ## Open questions
 
-1. Is `Neuvelia/agent-plane` public, or is `Neuvelia/tarmind` the public home (the
-   landing links there)? If the source repository is private, specs linked from the
-   landing return 404 and "Every spec is public" is false. Decide which repository
-   is public, and what it is called, before REL2 ships.
-2. Pull (landing fetches a public raw URL on a schedule) or push (this repository
-   dispatches an event)? ADR-0027 recommends pull plus an optional dispatch.
+1. Resolved: the public source repository is `Neuvelia/tarmind` (this repository,
+   renamed); the landing repository is private. The landing pulls the public file
+   without a read credential and opens its sync PR with its own workflow token, so
+   the cross-repository secret is not needed for the pull model.
+2. Resolved: pull on a schedule and on manual dispatch (ADR-0027); an optional
+   push-style nudge needs a token and is deferred.
 3. Which spec status shows as "Known limit" on the landing: only `Public note` lines,
    or also a fixed platform statement (Windows)?
 

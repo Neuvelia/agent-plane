@@ -1,6 +1,6 @@
 # ADR-0026 - Distribution channels, desktop shell and release tooling
 
-**Status:** proposed (shell decision accepted by the owner)
+**Status:** proposed (shell, license, repository and bundle id decisions accepted by the owner)
 **Date:** 2026-11-16
 
 Numbering note: ADR-0024 and ADR-0025 are used by branches that are not yet
