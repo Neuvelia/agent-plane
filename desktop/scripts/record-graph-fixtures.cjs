@@ -126,7 +126,7 @@ outputs: {}
     // The canvas (E2.2): the demo graph, a file with anchors, and real answers to
     // the operations the canvas sends.
     const demoText = fs.readFileSync(path.join(root, '.agents', 'graphs', 'demo-vertical.yaml'), 'utf8')
-    const hostile = fs.readFileSync(path.join(root, 'internal', 'graph', 'edit', 'testdata', 'hostile.yaml'), 'utf8')
+    const hostile = fs.readFileSync(path.join(root, 'internal', 'adapter', 'yamlgraph', 'edit', 'testdata', 'hostile.yaml'), 'utf8')
     for (const [name, text] of [['demo', demoText], ['anchors', hostile]]) {
       const file = path.join(dir, `${name}.yaml`)
       fs.writeFileSync(file, text)
