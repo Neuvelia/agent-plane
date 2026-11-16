@@ -1,6 +1,7 @@
 # ADR-0024 - Attempt diff capture for Attempt Compare
 
-**Status:** proposed (team decisions D2-D6 open; see "Decisions for the team")
+**Status:** proposed for F2.8b (owner decisions recorded 2026-11-15; see "Owner decisions"); the Option C
+part (F2.8a) is implemented
 **Date:** 2026-11-15
 
 ## Context
@@ -65,7 +66,7 @@ object directory is configured.
   discovery (D5). Line endings: patches compare bytes as stored on disk; `\r\n` changes appear as changes.
 - **Cost:** one extra read of dirty/untracked files at each snapshot (already read for hashing), small
   copies, Go diff over changed files only. Clean tracked files cost one `cat-file` read when they change.
-- **Event schema:** one new event type `attempt_diff`, additive schema bump.
+- **Event schema:** one new event type `attempt_diff`, additive schema 11.
 - **What the UI can show:** per-attempt per-file patches, line counts, hashes, change kinds, omissions.
   For consecutive attempts the later patch is the change from the earlier result; for non-consecutive
   attempts the UI lists intermediate patches rather than composing them.
@@ -101,10 +102,10 @@ observed paths (Agent producers) and `changed_files_scope` evidence.
 - **Windows / macOS / Linux:** unchanged (paths are already Git-observed where `gitstate` works).
 - **Cost:** desktop-only work.
 - **Event schema:** unchanged; works for every stored run from schema 6.
-- **What the UI can show:** side-by-side facts, "new in attempt N" path badges, scope badges, feedback. No
+- **What the UI can show:** side-by-side facts, "not in attempt M" path badges, scope badges, feedback. No
   content diff; Shell producers show "not observed" for files.
 
-## Decision (recommended, pending team acceptance)
+## Decision (recommended; confirmed by the owner, see "Owner decisions")
 
 1. **Ship Option C now as F2.8a** (no contract change), independent of the rest of this ADR.
 2. **Adopt Option A for F2.8b**, with the snapshot mechanism described under A: Go-rendered patches,
@@ -129,18 +130,22 @@ observed paths (Agent producers) and `changed_files_scope` evidence.
 7. **Git safety:** reuse `gitstate`'s controlled environment; never run hooks, clean/smudge filters,
    textconv, external diff drivers or fsmonitor; read objects with `cat-file --batch` only.
 
-## Decisions for the team
+## Owner decisions
 
-- **D2 - Option:** A (recommended), B, or C only.
-- **D3 - Default and switch:** opt-in (recommended) or default-on; separate switch (recommended) or shared
-  with ADR-0023's value recording.
-- **D4 - Storage:** inline events (recommended) or side files plus a new authenticated route
-  (`GET /runs/{id}/attempts/{attempt}/diff`). Side files keep events small and allow deletion, at the cost
-  of a second read path and replay consistency.
-- **D5 - Native Windows:** accept "not available" (recommended) or add Git discovery to `gitstate` first
-  (separate ADR; also changes ADR-0010/0016 behaviour on Windows).
-- **D6 - Shell producers:** Agent only (recommended) or also Shell producers whose `cwd` is a Git root.
-- **Budgets:** confirm 16 KiB / 256 KiB / 4 MiB and the 1 MiB per-file limit.
+Decided by the owner on 2026-11-15. They match the recommendation above. This ADR stays **proposed** for the
+F2.8b part until that part is implemented and validated.
+
+- **D1 - Phasing:** ship Option C as F2.8a first (desktop only). Implemented on
+  `claude/f2-8a-attempt-compare`.
+- **D2 - Option:** A, for F2.8b.
+- **D3 - Default and switch:** opt-in, off by default, with a switch separate from ADR-0023's value
+  recording.
+- **D4 - Storage:** inline events; no side files and no new route (the rejected alternative was
+  `GET /runs/{id}/attempts/{attempt}/diff`).
+- **D5 - Native Windows:** accept "not available"; Git discovery for `gitstate` is tracked separately.
+- **D6 - Shell producers:** Agent producers only.
+- **Budgets:** 16 KiB per event, 256 KiB per attempt, 4 MiB per run, 1 MiB per file, accepted.
+- **Schema number:** ADR-0023's `value_recorded` is schema 10, so `attempt_diff` is schema 11.
 
 ## Consequences
 
@@ -167,8 +172,8 @@ observed paths (Agent producers) and `changed_files_scope` evidence.
 ## Compatibility and migration
 
 - Option C: no change to events, store, API, graph schema or CLI envelope.
-- Option A: one additive event type and an event schema bump (10 if it lands before ADR-0023's
-  `value_recorded`, otherwise 11). Readers of schema 1-9 streams are unchanged; older readers reject the new
+- Option A: one additive event type and event schema 11 (schema 10 is ADR-0023's `value_recorded`).
+  Readers of schema 1-10 streams are unchanged; older readers reject the new
   schema as they do for any new contract. Default CLI and serve streams are unchanged without
   `--record-diffs`. Stored runs are never rewritten. A later SQLite or F3.2 store ingests the events as-is.
 - Option B would additionally introduce a blob store layout and API route that F3.2 must migrate.
