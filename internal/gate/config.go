@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"agentplane/internal/fields"
 	"agentplane/internal/graph"
 )
 
@@ -46,7 +47,6 @@ func parse(n graph.NodeDefinition) (config, error) {
 	if strings.TrimSpace(c.CheckID) == "" || len(c.CheckID) > 256 {
 		return c, fmt.Errorf("check_id must be nonempty and at most 256 bytes")
 	}
-	allowed := map[string]bool{"check_id": true, "kind": true}
 	port := func(name string, t graph.ValueType) error {
 		p, ok := n.Inputs[name]
 		if name == "" || !ok || p.Type != t || !p.Required {
@@ -56,19 +56,13 @@ func parse(n graph.NodeDefinition) (config, error) {
 	}
 	switch c.Kind {
 	case "command":
-		for _, k := range []string{"cwd", "command", "left_input", "right_input"} {
-			allowed[k] = true
-		}
-		if c.Command != "/usr/bin/diff" || !filepath.IsAbs(c.Cwd) || filepath.Clean(c.Cwd) != c.Cwd {
+		if c.Command != diffCommand || !filepath.IsAbs(c.Cwd) || filepath.Clean(c.Cwd) != c.Cwd {
 			return c, fmt.Errorf("command requires /usr/bin/diff and canonical absolute cwd")
 		}
 		if err = port(c.Left, graph.ValueTypeString); err == nil {
 			err = port(c.Right, graph.ValueTypeString)
 		}
 	case "json_predicate":
-		for _, k := range []string{"input", "field", "operator", "expected", "expected_json"} {
-			allowed[k] = true
-		}
 		_, hasExpected := n.Config["expected"]
 		_, hasLiteral := n.Config["expected_json"]
 		if hasExpected == hasLiteral {
@@ -109,8 +103,6 @@ func parse(n graph.NodeDefinition) (config, error) {
 		}
 		err = port(c.Input, graph.ValueTypeJSON)
 	case "reported_file_scope":
-		allowed["input"] = true
-		allowed["allowed_paths"] = true
 		if _, ok := n.Config["allowed_paths"]; !ok || c.Allowed == nil {
 			return c, fmt.Errorf("allowed_paths must be a list")
 		}
@@ -126,9 +118,6 @@ func parse(n graph.NodeDefinition) (config, error) {
 		}
 		err = port(c.Input, graph.ValueTypeJSON)
 	case "changed_files_scope":
-		for _, k := range []string{"input", "allowed_paths", "mode", "workspace"} {
-			allowed[k] = true
-		}
 		if c.Mode != "warn" && c.Mode != "deny" {
 			return c, fmt.Errorf("changed_files_scope mode must be warn or deny")
 		}
@@ -154,6 +143,7 @@ func parse(n graph.NodeDefinition) (config, error) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	allowed := fields.AllowedKeys(ConfigFields(), n.Config)
 	for _, k := range keys {
 		if !allowed[k] {
 			return c, fmt.Errorf("config field %q is unsupported for %s", k, c.Kind)

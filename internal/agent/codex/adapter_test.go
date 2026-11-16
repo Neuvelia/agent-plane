@@ -15,10 +15,12 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/graph"
+	"agentplane/internal/testenv"
 )
 
 func gitTest(t *testing.T, dir string, args ...string) {
 	t.Helper()
+	testenv.RequireExecutable(t, "/usr/bin/git")
 	c := exec.Command("/usr/bin/git", args...)
 	c.Dir = dir
 	c.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1")
@@ -40,6 +42,7 @@ const helpFlags = "--no-daemon --ask-for-approval --sandbox --ignore-user-config
 
 func fake(t *testing.T, body string) string {
 	t.Helper()
+	testenv.RequireDarwinOrLinux(t, "the Codex adapter")
 	p := filepath.Join(t.TempDir(), "codex")
 	s := "#!/bin/sh\ncase \"$*\" in\n *--version*) echo 'codex-cli 0.163.0-alpha.10.2'; exit;;\n *--help*) echo '" + helpFlags + "'; exit;;\nesac\nwhile [ $# -gt 0 ]; do\n case \"$1\" in --output-last-message) shift; result=$1;; --cd) shift; workspace=$1;; esac\n shift\ndone\ncd \"$workspace\" || exit 9\ncat >/dev/null\n" + body
 	if e := os.WriteFile(p, []byte(s), 0700); e != nil {
@@ -122,6 +125,7 @@ func TestFailureResultsNeverAccepted(t *testing.T) {
 	}
 }
 func TestDetectionBoundaries(t *testing.T) {
+	testenv.RequireDarwinOrLinux(t, "the Codex adapter")
 	a := Adapter{Binary: filepath.Join(t.TempDir(), "absent")}
 	r, e := a.Detect(context.Background())
 	if e != nil || r.Available {
@@ -233,6 +237,7 @@ func TestSnapshotStagedDeletionModesAndSymlinks(t *testing.T) {
 func TestSnapshotRejectsSubmoduleAndConflictedIndex(t *testing.T) {
 	for _, entry := range []string{"160000 0123456789012345678901234567890123456789 0\tsubmodule\x00", "100644 0123456789012345678901234567890123456789 1\tconflict\x00"} {
 		d := repo(t)
+		testenv.RequireExecutable(t, "/usr/bin/git")
 		c := exec.Command("/usr/bin/git", "update-index", "-z", "--index-info")
 		c.Dir = d
 		c.Stdin = strings.NewReader(entry)

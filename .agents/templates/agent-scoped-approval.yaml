@@ -1,0 +1,80 @@
+# Template: a coding agent with a scope check and two human approvals.
+# "confirm_start" asks before any agent call; "implement" runs Codex in a
+# bounded loop whose reported_file_scope gate rejects changes outside
+# allowed_paths; "approve" asks before the result is accepted.
+# Fill the workspace before running. Agent nodes run through
+#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex --input task=...
+# Codex authentication needs a named environment reference (for example
+# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.
+schema_version: 0
+id: agent-scoped-approval
+name: Agent with scope check and approval
+inputs:
+  task: {type: string, required: true}
+nodes:
+  confirm_start:
+    type: human
+    config:
+      prompt: Start the coding agent on this task? This may use a paid model.
+      context_inputs: [task]
+    inputs:
+      task: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  implement:
+    type: agent
+    inputs:
+      task: {type: string, required: true}
+      start: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: "" # FILL: absolute path of the Git repository the agent may edit
+      allowed_paths: ["src/"] # REVIEW: the paths the agent is meant to change
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: reported-scope
+          kind: reported_file_scope
+          input: candidate
+          allowed_paths: ["src/"] # REVIEW: keep equal to config.allowed_paths
+      bindings:
+        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}
+  approve:
+    type: human
+    config:
+      prompt: Review the agent's summary and changed files. Accept the result?
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  record:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["accepted\n"]
+    inputs:
+      decision: {type: string, required: true}
+graph_input_bindings:
+  - {from: inputs.task, to: confirm_start.inputs.task}
+  - {from: inputs.task, to: implement.inputs.task}
+edges:
+  - {from: confirm_start.outputs.decision, to: implement.inputs.start}
+  - {from: implement.outputs.summary, to: approve.inputs.summary}
+  - {from: implement.outputs.changed_files, to: approve.inputs.changed_files}
+  - {from: approve.outputs.decision, to: record.inputs.decision}
+outputs: {}
+metadata:
+  layout:
+    nodes:
+      confirm_start: {x: 0, y: 0}
+      implement: {x: 320, y: 0}
+      approve: {x: 640, y: 0}
+      record: {x: 960, y: 0}

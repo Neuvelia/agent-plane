@@ -9,13 +9,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 func node(kind string) graph.NodeDefinition {
@@ -146,6 +146,7 @@ func paths() map[string]graph.Value {
 	return map[string]graph.Value{"left": graph.NewStringValue("left"), "right": graph.NewStringValue("right")}
 }
 func TestRealReadOnlyDiffDescriptorGreenRedAndBounded(t *testing.T) {
+	testenv.RequireDarwinOrLinux(t, "the command Gate")
 	for _, same := range []bool{true, false} {
 		n := diffNode(t)
 		cwd := n.Config["cwd"].(string)
@@ -196,9 +197,7 @@ func TestUnsafeCommandsConfigAndFilesRejected(t *testing.T) {
 				os.Symlink(".", filepath.Join(cwd, "alias"))
 				in["left"] = graph.NewStringValue("alias/right")
 			case "fifo":
-				if e := syscall.Mkfifo(filepath.Join(cwd, "left"), 0600); e != nil {
-					t.Fatal(e)
-				}
+				makeFIFO(t, filepath.Join(cwd, "left"))
 			case "directory":
 				os.Mkdir(filepath.Join(cwd, "left"), 0700)
 			case "traversal":
@@ -278,6 +277,7 @@ func (w *cancellationWriter) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 func TestDiffLifecycleStartOperationalAndDuringExecutionCancellation(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/diff")
 	if _, e := runDiff(context.Background(), exec.CommandContext(context.Background(), filepath.Join(t.TempDir(), "missing"))); e == nil {
 		t.Fatal("start failure hidden")
 	}
@@ -325,6 +325,7 @@ type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("capture failed") }
 func TestDiffDrainErrorDoesNotBecomeRed(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/diff")
 	for _, lines := range []int{1, 100000} {
 		n := diffNode(t)
 		cwd := n.Config["cwd"].(string)
@@ -434,6 +435,7 @@ func TestEveryGateKindTypedTraceAndDownstream(t *testing.T) {
 				in := map[string]graph.Value{"data": jsonValue(t, fmt.Sprintf(`{"result":%t}`, green))}
 				switch kind {
 				case "command":
+					testenv.RequireDarwinOrLinux(t, "the command Gate")
 					n = diffNode(t)
 					in = paths()
 					cwd := n.Config["cwd"].(string)

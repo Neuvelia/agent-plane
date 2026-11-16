@@ -14,10 +14,12 @@ import (
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 func scopeGit(t *testing.T, dir string, args ...string) {
 	t.Helper()
+	testenv.RequireExecutable(t, "/usr/bin/git")
 	c := exec.Command("/usr/bin/git", args...)
 	c.Dir = dir
 	c.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}

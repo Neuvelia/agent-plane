@@ -1,5 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 function* walk(dir: string): Generator<string> {
@@ -9,7 +10,7 @@ function* walk(dir: string): Generator<string> {
     else yield p
   }
 }
-const src = new URL('../src', import.meta.url).pathname
+const src = fileURLToPath(new URL('../src', import.meta.url))
 const files = [...walk(src)].filter((f) => /\.tsx$/.test(f) && !f.endsWith('.stories.tsx'))
 const styles = readFileSync(join(src, 'styles.css'), 'utf8')
 

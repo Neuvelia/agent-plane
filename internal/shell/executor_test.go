@@ -18,6 +18,7 @@ import (
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 func TestHelperProcess(t *testing.T) {
@@ -665,6 +666,7 @@ func attemptNode(extra map[string]any) graph.NodeDefinition {
 
 // The child must see exactly the attempt number the runtime assigned.
 func TestExecuteNodeAttemptInjectsTheAttemptNumberOnlyForLoopAttempts(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/printenv")
 	for _, attempt := range []int{1, 2, 7} {
 		out, err := Executor{}.ExecuteNodeAttempt(context.Background(), "n", attemptNode(nil), nil, nil, attempt)
 		if err != nil {

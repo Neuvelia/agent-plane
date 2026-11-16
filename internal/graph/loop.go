@@ -1,6 +1,9 @@
 package graph
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func (v *definitionValidator) validateLoops() {
 	for _, id := range sortedNodeIDs(v.definition.Nodes) {
@@ -12,11 +15,11 @@ func (v *definitionValidator) validateLoops() {
 		fail := func(message string) {
 			v.error("E_LOOP_INVALID", message, DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, "declare an Agent or Shell loop with a bounded budget and explicit typed Gate bindings")
 		}
-		if n.Type != "agent" && n.Type != "shell" {
+		if !LoopProducer(n.Type) {
 			fail("loop producer must be an Agent or Shell node")
 		}
-		if l.Attempts() < 1 || l.Attempts() > 10 {
-			fail("max_attempts must be from 1 to 10")
+		if l.Attempts() < loopMinAttempts || l.Attempts() > loopMaxAttempts {
+			fail(fmt.Sprintf("max_attempts must be from %d to %d", loopMinAttempts, loopMaxAttempts))
 		}
 		if _, ok := n.Config["allowed_paths"]; !ok && n.Type == "agent" {
 			fail("loop Agent requires explicit allowed_paths")

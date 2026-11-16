@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
-import { approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
 import { Dashboard } from './dashboardView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
@@ -40,6 +40,25 @@ export const InspectorFirstAttempt: S = {
     await new Promise((r) => setTimeout(r, 100))
     await clickTestId('attempt-tab-1')!(ctx)
   },
+}
+// F2.8a: compare two attempts of a loop node, from recorded events only.
+const openCompare = (node: string): S['play'] => async (ctx) => {
+  await new Promise((r) => setTimeout(r, 300))
+  ctx.canvasElement.querySelector<HTMLButtonElement>(`[data-testid="node-${node}"]`)?.click()
+  await new Promise((r) => setTimeout(r, 100))
+  await clickTestId('tab-compare')!(ctx)
+}
+export const InspectorCompareShellAttempts: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: openCompare('flaky') }
+export const InspectorCompareAgentScope: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(agentScopeRetry, 'succeeded'), graph: agentScopeGraph, yaml: agentScopeYaml, events: agentScopeRetry, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(agentScopeRetry)} onBack={noop} />,
+  play: openCompare('work'),
+}
+// Attempt 2's scope check could not inspect Git (warn mode): shown as undetermined, not clean.
+export const InspectorCompareScopeIndeterminate: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(agentScopeIndeterminate, 'succeeded'), graph: agentScopeGraph, yaml: agentScopeYaml, events: agentScopeIndeterminate, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(agentScopeIndeterminate)} onBack={noop} />,
+  play: openCompare('work'),
 }
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
@@ -115,6 +134,11 @@ export const FullAppShell: S = {
 }
 
 export const SettingsLanguage: S = { parameters: { bridge: { runs: [] } }, render: () => <Settings /> }
+// "Record run values" (ADR-0023): off by default, on for this session, and off
+// because a configured variable is not set; saving can fail.
+export const SettingsRecordingOn: S = { parameters: { bridge: { runs: [], recording: { enabled: true, redactEnv: ['GITHUB_TOKEN'], active: true, missing: [] } } satisfies BridgeData }, render: () => <Settings /> }
+export const SettingsRecordingMissingVariable: S = { parameters: { bridge: { runs: [], recording: { enabled: true, redactEnv: ['GITHUB_TOKEN', 'NPM_TOKEN'], active: false, missing: ['NPM_TOKEN'] } } satisfies BridgeData }, render: () => <Settings /> }
+export const SettingsRecordingSaveFails: S = { parameters: { bridge: { runs: [], recordingSaveFails: true } satisfies BridgeData }, render: () => <Settings /> }
 
 // Dashboard: "now" is pinned just after the recordings so the 7-day window is stable.
 const afterFixtures = new Date(Math.max(...[demoApprove, demoReject, exhaustedRetries].map((e) => Date.parse(e[0]!.timestamp))) + 3600 * 1000)

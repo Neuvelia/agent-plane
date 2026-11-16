@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"agentplane/internal/events"
+	"agentplane/internal/testenv"
 )
 
 // shellLoopGraph builds fast + flaky(loop) -> merge. script is the flaky
@@ -83,6 +84,7 @@ func attemptsByNode(evs []events.Event) map[string][]string {
 }
 
 func TestShellLoopRedThenGreenRerunsOnlyTheLoopedNode(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/printf", "/bin/sh")
 	code, doc := runShellLoop(t, shellLoopGraph(`if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then echo '{"ready":false}'; else echo '{"ready":true}'; fi`, 3))
 	if code != 0 {
 		t.Fatalf("code=%d", code)
@@ -110,6 +112,7 @@ func TestShellLoopRedThenGreenRerunsOnlyTheLoopedNode(t *testing.T) {
 }
 
 func TestShellLoopExhaustionNeedsIntervention(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/printf", "/bin/sh")
 	code, doc := runShellLoop(t, shellLoopGraph(`echo '{"ready":false}'`, 2))
 	if code != 4 || doc.Failure.Kind != "needs_intervention" {
 		t.Fatalf("code=%d kind=%q", code, doc.Failure.Kind)
@@ -158,6 +161,7 @@ func TestShellEnvRejectsReservedAttemptVariableWithAClearMessage(t *testing.T) {
 
 // Downstream must see the green candidate's value and never a red one.
 func TestShellLoopDownstreamReceivesTheGreenValueOnly(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/printenv", "/bin/sh")
 	graph := shellLoopGraph(`if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then echo '{"ready":false,"v":"RED"}'; else echo '{"ready":true,"v":"GREEN"}'; fi`, 3)
 	graph = strings.Replace(graph, "outputs: {json: {type: json, required: true}}", "outputs: {json: {type: json, required: true}, stdout: {type: string, required: true}}", 1)
 	graph = strings.Replace(graph, `config: {command: /usr/bin/printf, args: [merged]}

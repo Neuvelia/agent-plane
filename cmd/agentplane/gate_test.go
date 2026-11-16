@@ -13,6 +13,7 @@ import (
 
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
+	"agentplane/internal/testenv"
 )
 
 func TestCLIFakeAgentGateShellBindings(t *testing.T) {
@@ -20,6 +21,7 @@ func TestCLIFakeAgentGateShellBindings(t *testing.T) {
 		t.Run(fmt.Sprint(green), func(t *testing.T) {
 			dir := t.TempDir()
 			for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
+				testenv.RequireExecutable(t, "/usr/bin/git")
 				c := exec.Command("/usr/bin/git", args...)
 				c.Dir = dir
 				if b, e := c.CombinedOutput(); e != nil {
@@ -118,6 +120,8 @@ outputs: {}
 func TestCLILocalGateWorksWithoutAdapter(t *testing.T) {
 	for _, green := range []bool{true, false} {
 		t.Run(fmt.Sprint(green), func(t *testing.T) {
+			testenv.RequireDarwinOrLinux(t, "the command Gate")
+			testenv.RequireExecutable(t, "/usr/bin/printf")
 			cwd, e := filepath.EvalSymlinks(t.TempDir())
 			if e != nil {
 				t.Fatal(e)

@@ -131,8 +131,8 @@ func Parse(data []byte) (*Definition, error) {
 				}
 				if budget := field(loop, "max_attempts"); budget != nil {
 					var n int
-					if budget.Kind != yaml.ScalarNode || budget.ShortTag() != "!!int" || budget.Decode(&n) != nil || n < 1 || n > 10 {
-						return nil, errors.New("parse graph definition: max_attempts must be an integer from 1 to 10")
+					if budget.Kind != yaml.ScalarNode || budget.ShortTag() != "!!int" || budget.Decode(&n) != nil || n < loopMinAttempts || n > loopMaxAttempts {
+						return nil, fmt.Errorf("parse graph definition: max_attempts must be an integer from %d to %d", loopMinAttempts, loopMaxAttempts)
 					}
 				}
 			}

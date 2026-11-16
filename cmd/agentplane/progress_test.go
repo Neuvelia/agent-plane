@@ -3,6 +3,7 @@ package main
 import (
 	"agentplane/internal/events"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 	"bytes"
 	"context"
 	"os"
@@ -32,6 +33,7 @@ func (w *progressBarrierWriter) Write(b []byte) (int, error) {
 func TestCLIWatchAgentProgressBeforeCompletion(t *testing.T) {
 	workspace := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
+		testenv.RequireExecutable(t, "/usr/bin/git")
 		c := exec.Command("/usr/bin/git", args...)
 		c.Dir = workspace
 		if b, e := c.CombinedOutput(); e != nil {
@@ -100,7 +102,7 @@ func TestNormalizedHumanAndJSONOmissionRendering(t *testing.T) {
 	if code := writeJSON(&out, &errout, documentForRun(result, nil), 0); code != 0 {
 		t.Fatal(code)
 	}
-	if !strings.Contains(out.String(), `"type":"progress_omitted"`) || !strings.Contains(out.String(), `"retained_events":904`) || !strings.Contains(out.String(), `"event_schema_version":9`) {
+	if !strings.Contains(out.String(), `"type":"progress_omitted"`) || !strings.Contains(out.String(), `"retained_events":904`) || !strings.Contains(out.String(), `"event_schema_version":10`) {
 		t.Fatal("JSON omission missing")
 	}
 	out.Reset()

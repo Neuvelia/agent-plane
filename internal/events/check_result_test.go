@@ -110,7 +110,7 @@ func TestFrozenLegacyGateAndVersionShapes(t *testing.T) {
 		t.Fatal("legacy lookup upgraded")
 	}
 	full, _ := json.Marshal(Event{SchemaVersion: 5, Type: GateCheck, Payload: gateFact()})
-	for _, raw := range []string{strings.Replace(frozen, `"event_schema_version":4`, `"event_schema_version":5`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":4`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":10`, 1)} {
+	for _, raw := range []string{strings.Replace(frozen, `"event_schema_version":4`, `"event_schema_version":5`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":4`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":11`, 1)} {
 		if json.Unmarshal([]byte(raw), &e) == nil {
 			t.Fatal("incompatible shape accepted")
 		}

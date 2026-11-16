@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agentplane/internal/events"
+	"agentplane/internal/testenv"
 )
 
 const runA = "11111111-1111-4111-8111-111111111111"
@@ -49,7 +50,7 @@ func TestRoundTripPreservesEventsAndGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Summary.Status != "succeeded" || rec.Summary.EventCount != 3 || rec.Summary.GraphID != "g" || string(rec.Graph) != "schema_version: 0\n" {
+	if rec.Summary.Status != "succeeded" || rec.Summary.EventCount != 3 || rec.Summary.GraphID != "g" || rec.Summary.GraphVersion != "sha256-v0:x" || string(rec.Graph) != "schema_version: 0\n" {
 		t.Fatalf("%+v", rec.Summary)
 	}
 	for i := range in {
@@ -61,7 +62,43 @@ func TestRoundTripPreservesEventsAndGraph(t *testing.T) {
 	}
 }
 
+func TestRecordedValuesRoundTripAndOlderSchemaRunsStayReadable(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+	text := "hi"
+	input := ev(runA, 2, events.ValueRecorded, events.ValueRecordedPayload{Port: "inputs.job", Type: "string", SizeBytes: 2, SHA256: "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", Value: &text}, now)
+	capped := ev(runA, 3, events.ValueRecorded, events.ValueRecordedPayload{NodeRunID: "nr", Port: "out", Type: "json", SizeBytes: 99, SHA256: strings.Repeat("a", 64), Truncated: true}, now)
+	capped.NodeID, capped.NodeRunID = "n", "nr"
+	in := []events.Event{started(runA, now), input, capped, finished(runA, 4, "succeeded", now)}
+	write(t, s, runA, in...)
+	rec, err := s.Read(runA)
+	if err != nil || len(rec.Events) != len(in) {
+		t.Fatalf("%v %d", err, len(rec.Events))
+	}
+	for i := range in {
+		a, _ := json.Marshal(in[i])
+		b, _ := json.Marshal(rec.Events[i])
+		if string(a) != string(b) {
+			t.Fatalf("event %d changed:\n%s\n%s", i, a, b)
+		}
+	}
+	// A run written by an older engine (schema 9) is read without values.
+	path := filepath.Join(s.Dir, runB)
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"event_schema_version":9,"type":"run_started","timestamp":"2026-11-14T09:00:00Z","sequence":1,"run_id":"` + runB + `","graph_id":"g","graph_version":"v9","payload":{"node_count":0}}` + "\n" +
+		`{"event_schema_version":9,"type":"run_finished","timestamp":"2026-11-14T09:00:01Z","sequence":2,"run_id":"` + runB + `","graph_id":"g","graph_version":"v9","payload":{"status":"succeeded","duration_ms":1,"node_counts":{"succeeded":0,"failed":0,"skipped":0,"cancelled":0}}}` + "\n"
+	os.WriteFile(filepath.Join(path, "events.jsonl"), []byte(old), 0o600)
+	os.WriteFile(filepath.Join(path, "graph.yaml"), []byte("schema_version: 0\n"), 0o600)
+	rec, err = s.Read(runB)
+	if err != nil || rec.Summary.Status != "succeeded" || rec.Summary.GraphVersion != "v9" {
+		t.Fatalf("schema 9 run: %+v %v", rec.Summary, err)
+	}
+}
+
 func TestPermissionsAreOwnerOnly(t *testing.T) {
+	testenv.RequireUnixPermissions(t)
 	dir := filepath.Join(t.TempDir(), "runs")
 	s := Store{Dir: dir}
 	write(t, s, runA, started(runA, time.Now().UTC()))
@@ -88,7 +125,7 @@ func TestTruncatedTailIsReportedNotFatal(t *testing.T) {
 	write(t, s, runA, started(runA, now), ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	f.WriteString(`{"event_schema_version":9,"type":"node_start`) // killed mid-write
+	f.WriteString(`{"event_schema_version":10,"type":"node_start`) // killed mid-write
 	f.Close()
 	rec, err := s.Read(runA)
 	if err != nil {
@@ -254,14 +291,14 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	write(t, s, runA, started(runA, time.Now().UTC()))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	data, _ := os.ReadFile(path)
-	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":9`, `"event_schema_version":99`, 1)), 0o600)
+	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":10`, `"event_schema_version":109`, 1)), 0o600)
 	if _, err := s.Read(runA); err == nil {
 		t.Fatal("an event from a future schema was accepted")
 	}
 }
 
 func TestEmptyOrHeaderOnlyLogIsCorruptNotAnInterruptedRun(t *testing.T) {
-	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":9,"type":"run_st`} {
+	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":10,"type":"run_st`} {
 		t.Run(name, func(t *testing.T) {
 			s := Store{Dir: t.TempDir()}
 			dir := filepath.Join(s.Dir, runA)

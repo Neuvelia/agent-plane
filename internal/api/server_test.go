@@ -3,6 +3,8 @@ package api
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -137,6 +139,51 @@ func TestStartErrorsMapToStatusAndDiagnostics(t *testing.T) {
 
 func fakeEvent(seq uint64, typ events.Type, p events.Payload) events.Event {
 	return events.Event{SchemaVersion: events.SchemaVersion, Type: typ, Timestamp: time.Now().UTC(), Sequence: seq, RunID: runID, GraphID: "g", GraphVersion: "v", Payload: p}
+}
+
+// Recorded values (ADR-0023) are read through the existing events route: a run
+// of an earlier process replays them from the store, behind the same token,
+// including a maximal value whose JSON escaping is six times its size.
+func TestStoredRecordedValuesReplayThroughTheEventsRoute(t *testing.T) {
+	s, ts := newServer(t, nil)
+	big := strings.Repeat("\x01", events.MaxValueBytes)
+	sum := sha256.Sum256([]byte(big))
+	value := fakeEvent(2, events.ValueRecorded, events.ValueRecordedPayload{NodeRunID: "nr", Port: "out", Type: "string", SizeBytes: int64(len(big)), SHA256: hex.EncodeToString(sum[:]), Value: &big})
+	value.NodeID, value.NodeRunID = "n", "nr"
+	w := s.Store.NewWriter([]byte("schema_version: 0\n"))
+	for _, e := range []events.Event{fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}), value, fakeEvent(3, events.RunFinished, events.RunFinishedPayload{Status: "succeeded"})} {
+		if err := w.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := do(t, ts, "GET", "/runs/"+runID+"/events", "", false); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("values readable without token: %d", resp.StatusCode)
+	}
+	resp, body := do(t, ts, "GET", "/runs/"+runID+"/events", "", true)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "event: end") {
+		t.Fatalf("%d %.200s", resp.StatusCode, body)
+	}
+	var got *events.ValueRecordedPayload
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "data: {\"event_schema_version\"") {
+			var e events.Event
+			if err := json.Unmarshal([]byte(line[6:]), &e); err != nil {
+				t.Fatal(err)
+			}
+			if p, ok := e.Payload.(events.ValueRecordedPayload); ok {
+				got = &p
+			}
+		}
+	}
+	if got == nil || got.Value == nil || *got.Value != big || got.Truncated {
+		t.Fatal("recorded value did not replay intact")
+	}
+	if _, list := do(t, ts, "GET", "/runs", "", true); !strings.Contains(list, `"graph_version":"v"`) {
+		t.Fatalf("summary lacks graph_version: %s", list)
+	}
 }
 
 // A client that connects mid-run must see every event exactly once, in order.

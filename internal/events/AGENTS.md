@@ -15,6 +15,7 @@ the CLI, local run store, loopback API and desktop client.
 | Attempt lifecycle and trace lookup | `attempt.go` |
 | Return Envelopes, accepted-unit scope and declared conflicts | `unit.go` |
 | Human approval facts and bounded text | `approval.go` |
+| Opt-in recorded run values (schema 10) and their bounds | `value.go` |
 
 ## Preserve these contracts
 
@@ -24,12 +25,16 @@ the CLI, local run store, loopback API and desktop client.
   the distinction between `node_finished` after a start and
   `node_terminated` before one. The runtime owns state transitions and
   decides when to emit facts; this package owns their shape and collection.
-- New events use `SchemaVersion` 9. JSON readers accept schemas 1 through 9
+- New events use `SchemaVersion` 10. JSON readers accept schemas 1 through 10
   with their actual historical payload shapes; in-memory zero is a builder
   convention, not a serialized schema. Keep strict type/payload matching,
   unknown payload-field rejection and the schema-4 legacy Gate payload distinct
   from full Check Results introduced in schema 5. Do not synthesize missing
-  historical scope, duration or attempt metadata.
+  historical scope, duration or attempt metadata. `value_recorded` (schema
+  10, ADR-0023) carries at most `MaxValueBytes` of already-redacted UTF-8
+  text; `value` is omitted only with `truncated: true`, and an untruncated
+  value must match its `size_bytes` and `sha256`. The runtime owns redaction,
+  the per-run `MaxRunValueBytes` budget and whether recording is enabled.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes and approval
   facts survive progress retention limits. Logs and normalized progress share
   bounded retained and live budgets. An omitted progress event still consumes
@@ -68,7 +73,7 @@ the root policy.
   isolation: `emitter_test.go`, `progress_test.go`.
 - Checks, attempts, units, changed-file scope and approvals: `gate_test.go`,
   `attempt_test.go`, `unit_test.go`, `changed_files_test.go`,
-  `approval_test.go`.
+  `approval_test.go`, `value_test.go`.
 - Producer ordering and redaction: `internal/runtime/events_test.go`,
   `internal/runtime/progress_test.go`; durable replay and API delivery:
   `internal/store/` and `internal/api/` tests.

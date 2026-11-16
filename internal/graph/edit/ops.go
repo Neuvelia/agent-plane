@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strings"
 )
 
 // OpsVersion is the version of the operation vocabulary (ADR-0020).
@@ -32,6 +33,32 @@ const (
 	OpCanConnect = "can_connect"
 )
 
+// Operation names of ops_version 1 added by F2.2 (Node Inspector).
+const (
+	OpSetConfig   = "set_config"
+	OpUnsetConfig = "unset_config"
+	OpAddPort     = "add_port"
+	OpUpdatePort  = "update_port"
+	OpRemovePort  = "remove_port"
+	OpSetLoop     = "set_loop"
+	OpClearLoop   = "clear_loop"
+	OpSetUnits    = "set_units"
+
+	// Targeted loop edits: each changes one part of an existing loop in place.
+	OpSetLoopAttempts     = "set_loop_attempts"
+	OpSetLoopConfig       = "set_loop_config"
+	OpUnsetLoopConfig     = "unset_loop_config"
+	OpSetLoopGateInput    = "set_loop_gate_input"
+	OpRemoveLoopGateInput = "remove_loop_gate_input"
+	OpSetLoopBindings     = "set_loop_bindings"
+)
+
+// Port directions of the port operations.
+const (
+	DirectionInput  = "input"
+	DirectionOutput = "output"
+)
+
 // Op is one editor operation. Which fields apply depends on Op.
 type Op struct {
 	Op     string              `json:"op"`
@@ -44,6 +71,39 @@ type Op struct {
 	Layout *Position           `json:"layout,omitempty"`
 	Nodes  map[string]Position `json:"nodes,omitempty"`
 	Clear  bool                `json:"clear,omitempty"`
+
+	// F2.2 fields. A port operation names its port in Port because Name is
+	// set_name's.
+	Node        string          `json:"node,omitempty"`         // the node a config, port or loop operation edits
+	Path        []string        `json:"path,omitempty"`         // config keys from the node's config mapping down
+	Value       json.RawMessage `json:"value,omitempty"`        // set_config: a JSON scalar, list or object
+	Direction   string          `json:"direction,omitempty"`    // input or output
+	Port        string          `json:"port,omitempty"`         // the port a port operation edits
+	NewPort     string          `json:"new_port,omitempty"`     // update_port: rename the port
+	Required    *bool           `json:"required,omitempty"`     // add_port, update_port
+	MaxAttempts *int            `json:"max_attempts,omitempty"` // set_loop, set_loop_attempts; absent or null means the default
+	Gate        *LoopGate       `json:"gate,omitempty"`         // set_loop
+	Bindings    []LoopBinding   `json:"bindings,omitempty"`     // set_loop, set_loop_bindings
+	Units       []string        `json:"units,omitempty"`        // set_units; an empty list clears them
+}
+
+// LoopGate is the embedded Gate of set_loop.
+type LoopGate struct {
+	Inputs map[string]PortSpec `json:"inputs,omitempty"`
+	Config json.RawMessage     `json:"config"`
+}
+
+// PortSpec declares a port of a loop's embedded Gate.
+type PortSpec struct {
+	Type     string `json:"type"`
+	Required bool   `json:"required,omitempty"`
+}
+
+// LoopBinding feeds a loop's Gate input from the candidate's output or the
+// node's input.
+type LoopBinding struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // presentation operations never change the semantic version.
@@ -95,9 +155,61 @@ func (o Op) check() *Error {
 		return need(o.Clear != (len(o.Nodes) > 0), "exactly one of nodes or clear")
 	case OpAddEdge, OpRemoveEdge, OpCanConnect:
 		return firstErr(need(o.From != "", "from"), need(o.To != "", "to"))
+	case OpSetConfig:
+		return firstErr(need(o.Node != "", "node"), need(validPath(o.Path), "a path of non-empty keys"), need(len(o.Value) > 0, "value"))
+	case OpUnsetConfig:
+		return firstErr(need(o.Node != "", "node"), need(validPath(o.Path), "a path of non-empty keys"))
+	case OpAddPort:
+		return firstErr(o.portCheck(need), need(o.Type != "", "type"))
+	case OpUpdatePort:
+		return firstErr(o.portCheck(need), need(o.NewPort != "" || o.Type != "" || o.Required != nil, "at least one of new_port, type or required"))
+	case OpRemovePort:
+		return o.portCheck(need)
+	case OpSetLoop:
+		return firstErr(need(o.Node != "", "node"), need(o.Gate != nil && len(o.Gate.Config) > 0, "gate with config"))
+	case OpClearLoop:
+		return need(o.Node != "", "node")
+	case OpSetUnits:
+		return need(o.Units != nil, "units (use an empty list to clear them)")
+	case OpSetLoopAttempts:
+		return need(o.Node != "", "node")
+	case OpSetLoopConfig:
+		return firstErr(need(o.Node != "", "node"), need(validPath(o.Path), "a path of non-empty keys"), need(len(o.Value) > 0, "value"))
+	case OpUnsetLoopConfig:
+		return firstErr(need(o.Node != "", "node"), need(validPath(o.Path), "a path of non-empty keys"))
+	case OpSetLoopGateInput:
+		return firstErr(need(o.Node != "", "node"), need(o.Port != "", "port"), need(o.Type != "", "type"))
+	case OpRemoveLoopGateInput:
+		return firstErr(need(o.Node != "", "node"), need(o.Port != "", "port"))
+	case OpSetLoopBindings:
+		return firstErr(need(o.Node != "", "node"), need(o.Bindings != nil, "bindings"))
 	default:
-		return &Error{Code: CodeUnknownOp, Message: fmt.Sprintf("unknown operation %q", o.Op), OpIndex: -1, Suggestion: "operations of ops_version 1: add_node, remove_node, rename_node, set_name, set_layout, add_edge, remove_edge, can_connect"}
+		return &Error{Code: CodeUnknownOp, Message: fmt.Sprintf("unknown operation %q", o.Op), OpIndex: -1, Suggestion: "operations of ops_version 1: " + strings.Join(opNames, ", ")}
 	}
+}
+
+// opNames lists the operations of ops_version 1, for the unknown-operation hint.
+var opNames = []string{OpAddNode, OpRemoveNode, OpRenameNode, OpSetName, OpSetLayout, OpAddEdge, OpRemoveEdge, OpCanConnect,
+	OpSetConfig, OpUnsetConfig, OpAddPort, OpUpdatePort, OpRemovePort, OpSetLoop, OpClearLoop, OpSetUnits,
+	OpSetLoopAttempts, OpSetLoopConfig, OpUnsetLoopConfig, OpSetLoopGateInput, OpRemoveLoopGateInput, OpSetLoopBindings}
+
+func (o Op) portCheck(need func(bool, string) *Error) *Error {
+	return firstErr(need(o.Node != "", "node"), need(o.Direction == DirectionInput || o.Direction == DirectionOutput, "direction input or output"), need(o.Port != "", "port"))
+}
+
+// maxPathDepth bounds a config path; deeper config is edited as text.
+const maxPathDepth = 16
+
+func validPath(path []string) bool {
+	if len(path) == 0 || len(path) > maxPathDepth {
+		return false
+	}
+	for _, k := range path {
+		if k == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func firstErr(errs ...*Error) *Error {

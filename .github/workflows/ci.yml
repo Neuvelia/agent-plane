@@ -9,15 +9,51 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: check (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One OS failing must not hide the others: each OS needs its own evidence.
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            experimental: false
+            timeout: 30
+          - name: macos-arm64
+            os: macos-latest
+            experimental: false
+            timeout: 30
+          # Windows is not yet a supported target: main does not pass there
+          # (see docs/development-workflow.md, "CI matrix"). Its result is
+          # reported but does not block; drop `experimental` once it is green.
+          - name: windows-x64
+            os: windows-latest
+            experimental: true
+            # A hung Windows test otherwise runs to the 10 min go test limit.
+            timeout: 20
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: ${{ matrix.timeout }}
+    defaults:
+      run:
+        shell: bash
     steps:
+      # Windows runners check out with CRLF, which makes `gofmt -l` flag every
+      # Go file. Keep LF so formatting checks mean the same on all OSes.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - run: make check
-      - run: make build
+      # scripts/check.sh is the body of `make check`; invoking it directly
+      # avoids depending on GNU make being present on Windows runners.
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
+        if: runner.os != 'Windows'
+        run: make build
 
   race:
     runs-on: ubuntu-latest

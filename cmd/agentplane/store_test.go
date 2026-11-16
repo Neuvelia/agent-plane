@@ -12,6 +12,7 @@ import (
 
 	"agentplane/internal/events"
 	"agentplane/internal/store"
+	"agentplane/internal/testenv"
 )
 
 func cli(t *testing.T, args ...string) (int, string, string) {
@@ -23,6 +24,7 @@ func cli(t *testing.T, args ...string) (int, string, string) {
 
 func storedRun(t *testing.T, dir string, extra ...string) string {
 	t.Helper()
+	requireDemoTools(t)
 	args := append([]string{"run", demoGraphPath(t), "--approve", "approve", "--store-dir", dir}, extra...)
 	if code, out, errout := cli(t, args...); code != 0 {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, out, errout)
@@ -35,6 +37,7 @@ func storedRun(t *testing.T, dir string, extra ...string) string {
 }
 
 func TestStoredRunListsAndShowsIdenticallyFromAFreshInvocation(t *testing.T) {
+	requireDemoTools(t)
 	dir := t.TempDir()
 	// Live output of the same run, captured as JSON, is the reference.
 	var live struct {
@@ -112,6 +115,7 @@ func TestKilledRunIsInterruptedAndEarlierEventsStayReadable(t *testing.T) {
 }
 
 func TestRunWithoutStoreDirWritesNothing(t *testing.T) {
+	requireDemoTools(t)
 	cwd := t.TempDir()
 	prev, _ := os.Getwd()
 	if err := os.Chdir(cwd); err != nil {
@@ -136,6 +140,8 @@ func TestUnwritableStoreFailsBeforeAnyNodeRuns(t *testing.T) {
 }
 
 func TestStoredFilesNeverContainARedactedSecret(t *testing.T) {
+	requireDemoTools(t)
+	testenv.RequireExecutable(t, "/usr/bin/printenv")
 	dir := t.TempDir()
 	t.Setenv("AP_DEMO_SECRET", "hunter2-super-secret")
 	graph := filepath.Join(t.TempDir(), "g.yaml")
@@ -275,6 +281,7 @@ func withFailingStore(t *testing.T, n int) *failingPersister {
 // A write failure mid-run must not hide what the run did: the result is still
 // reported, with the run ID and partial log location, and the exit code is 1.
 func TestPersistFailureStillReportsTheRunResultAndExitsOne(t *testing.T) {
+	requireDemoTools(t)
 	fp := withFailingStore(t, 5)
 	dir := t.TempDir()
 	code, out, _ := cli(t, "run", demoGraphPath(t), "--approve", "approve", "--store-dir", dir, "--json")
@@ -309,6 +316,7 @@ func TestPersistFailureStillReportsTheRunResultAndExitsOne(t *testing.T) {
 // or was cancelled, because the run cannot be trusted to be on disk. The JSON
 // status still says what the run did.
 func TestPersistFailureKeepsTheRunStatusButExitsOneForAFailedRun(t *testing.T) {
+	requireDemoTools(t)
 	withFailingStore(t, 4)
 	code, out, _ := cli(t, "run", demoGraphPath(t), "--reject", "approve", "--store-dir", t.TempDir(), "--json")
 	if code != 1 {
@@ -332,6 +340,7 @@ func TestPersistFailureKeepsTheRunStatusButExitsOneForAFailedRun(t *testing.T) {
 }
 
 func TestPersistFailureInWatchModeFinishesTheWatchAndReports(t *testing.T) {
+	requireDemoTools(t)
 	withFailingStore(t, 3)
 	done := make(chan struct{})
 	var code int

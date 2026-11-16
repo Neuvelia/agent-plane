@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"agentplane/internal/events"
+	"agentplane/internal/testenv"
 )
 
 func TestCLIFakeCodexLoopInterventionGreenAndWatch(t *testing.T) {
@@ -22,6 +23,7 @@ func TestCLIFakeCodexLoopInterventionGreenAndWatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
+				testenv.RequireExecutable(t, "/usr/bin/git")
 				c := exec.Command("/usr/bin/git", args...)
 				c.Dir = workspace
 				if out, err := c.CombinedOutput(); err != nil {

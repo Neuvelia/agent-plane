@@ -1,0 +1,44 @@
+# Template: parallel shell branches. "left" and "right" run at the same time;
+# "join" starts after both and receives their text through typed edges.
+# The commands only print text: nothing is read, written or sent.
+schema_version: 0
+id: parallel-shell
+name: Parallel shell branches
+inputs: {}
+nodes:
+  left:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["left branch done"]
+    outputs:
+      stdout: {type: string, required: true}
+  right:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["right branch done"]
+    outputs:
+      stdout: {type: string, required: true}
+  join:
+    type: shell
+    inputs:
+      left_text: {type: string, required: true}
+      right_text: {type: string, required: true}
+    config:
+      command: /bin/sh
+      args: ["-c", 'printf "%s + %s\n" "$LEFT_TEXT" "$RIGHT_TEXT"']
+      input_env: {left_text: LEFT_TEXT, right_text: RIGHT_TEXT}
+    outputs:
+      stdout: {type: string, required: true}
+edges:
+  - {from: left.outputs.stdout, to: join.inputs.left_text}
+  - {from: right.outputs.stdout, to: join.inputs.right_text}
+outputs:
+  result: {from: join.outputs.stdout}
+metadata:
+  layout:
+    nodes:
+      left: {x: 0, y: 0}
+      right: {x: 0, y: 160}
+      join: {x: 320, y: 80}
