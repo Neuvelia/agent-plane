@@ -69,21 +69,24 @@ func TestWorkspaceWireShapeIsFrozen(t *testing.T) {
 	}
 }
 
-func TestWorkspaceEventsRequireSchemaTen(t *testing.T) {
-	for _, e := range workspaceFacts() {
-		e.SchemaVersion = 9
-		if _, err := json.Marshal(e); err == nil {
-			t.Fatalf("%s must not be serialized under schema 9", e.Type)
-		}
-		e.SchemaVersion = WorkspaceSchema
-		data, err := json.Marshal(e)
-		if err != nil {
-			t.Fatalf("%s under schema %d: %v", e.Type, WorkspaceSchema, err)
-		}
-		old := strings.Replace(string(data), fmt.Sprintf(`"event_schema_version":%d`, WorkspaceSchema), `"event_schema_version":9`, 1)
-		var got Event
-		if json.Unmarshal([]byte(old), &got) == nil {
-			t.Fatalf("%s must not decode under schema 9", e.Type)
+func TestWorkspaceEventsRequireTheirSchema(t *testing.T) {
+	// 10 is the schema just below: value_recorded owns it, workspace facts must not.
+	for _, below := range []int{9, WorkspaceSchema - 1} {
+		for _, e := range workspaceFacts() {
+			e.SchemaVersion = below
+			if _, err := json.Marshal(e); err == nil {
+				t.Fatalf("%s must not be serialized under schema %d", e.Type, below)
+			}
+			e.SchemaVersion = WorkspaceSchema
+			data, err := json.Marshal(e)
+			if err != nil {
+				t.Fatalf("%s under schema %d: %v", e.Type, WorkspaceSchema, err)
+			}
+			old := strings.Replace(string(data), fmt.Sprintf(`"event_schema_version":%d`, WorkspaceSchema), fmt.Sprintf(`"event_schema_version":%d`, below), 1)
+			var got Event
+			if json.Unmarshal([]byte(old), &got) == nil {
+				t.Fatalf("%s must not decode under schema %d", e.Type, below)
+			}
 		}
 	}
 }
