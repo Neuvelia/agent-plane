@@ -48,8 +48,8 @@ schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
 Storybook; the API and event contracts are unchanged. Slice E6 of F2.3 adds
 opt-in, bounded and redacted `value_recorded` events (event schema 10,
-ADR-0023 proposed, `--record-values`); its desktop presentation (E5b) is not
-implemented. Read the
+ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
+starts the sidecar with it; the edge inspector (E5b) is not implemented. Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without
