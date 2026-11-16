@@ -16,6 +16,12 @@ func cloneEvidencePayload(payload Payload) (Payload, bool) {
 	switch p := payload.(type) {
 	case ValueRecordedPayload:
 		return cloneValueRecorded(p), true
+	case WorkspaceConflictPayload:
+		p.Paths = append([]string{}, p.Paths...)
+		return p, true
+	case SourceWorkspaceChangedPayload:
+		p.Paths = append([]string{}, p.Paths...)
+		return p, true
 	case LegacyGateCheckPayload:
 		return CloneLegacyGate(p), true
 	case ReturnEnvelopePayload:

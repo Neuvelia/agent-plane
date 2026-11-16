@@ -311,3 +311,14 @@ failure when inspection cannot complete. Schema 8 adds only typed details to
 the existing CheckResult; the Return Envelope and correction loop use their
 established path. This is post-execution detection, not filesystem isolation.
 External writers can still alter the shared workspace. See ADR-0016.
+
+## Workspace isolation facts (F3.1)
+
+Event schema 10 adds five typed, bounded facts for isolated Agent units:
+`workspace_prepared`, `workspace_integrated`, `workspace_conflict`,
+`workspace_released` and the run-level `source_workspace_changed`. They are
+retained outside progress limits, deeply copied and fsynced by the run store.
+The events package only defines their shape; the runtime that emits them and
+the Git operations behind them (`internal/worktree`) arrive in later F3.1
+tasks. Readers accept schemas 1-10 and older streams contain none of these
+facts. See ADR-0024.

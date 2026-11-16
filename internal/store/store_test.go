@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -125,7 +126,7 @@ func TestTruncatedTailIsReportedNotFatal(t *testing.T) {
 	write(t, s, runA, started(runA, now), ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	f.WriteString(`{"event_schema_version":10,"type":"node_start`) // killed mid-write
+	f.WriteString(fmt.Sprintf(`{"event_schema_version":%d,"type":"node_start`, events.SchemaVersion)) // killed mid-write
 	f.Close()
 	rec, err := s.Read(runA)
 	if err != nil {
@@ -291,14 +292,14 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	write(t, s, runA, started(runA, time.Now().UTC()))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	data, _ := os.ReadFile(path)
-	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":10`, `"event_schema_version":109`, 1)), 0o600)
+	os.WriteFile(path, []byte(strings.Replace(string(data), fmt.Sprintf(`"event_schema_version":%d`, events.SchemaVersion), `"event_schema_version":99`, 1)), 0o600)
 	if _, err := s.Read(runA); err == nil {
 		t.Fatal("an event from a future schema was accepted")
 	}
 }
 
 func TestEmptyOrHeaderOnlyLogIsCorruptNotAnInterruptedRun(t *testing.T) {
-	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":10,"type":"run_st`} {
+	for name, content := range map[string]string{"empty": "", "torn first line": fmt.Sprintf(`{"event_schema_version":%d,"type":"run_st`, events.SchemaVersion)} {
 		t.Run(name, func(t *testing.T) {
 			s := Store{Dir: t.TempDir()}
 			dir := filepath.Join(s.Dir, runA)
@@ -322,5 +323,53 @@ func TestListReportsUnreadableRunsAsCorruptWithTheReason(t *testing.T) {
 	list, err := s.List()
 	if err != nil || len(list) != 1 || list[0].Status != StatusCorrupt || list[0].Error == "" || list[0].RunID != runA {
 		t.Fatalf("%v %+v", err, list)
+	}
+}
+
+// Workspace isolation facts (event schema 10, F3.1) are lifecycle-grade: they
+// round trip through the JSONL store unchanged and are fsynced like other
+// non-progress facts.
+func TestWorkspaceFactsRoundTripAndAreSynced(t *testing.T) {
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	const unit = "refs/agentplane/" + runA + "/units/worker-0123456789abcdef"
+	const tip = "refs/agentplane/" + runA + "/integrated"
+	now := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	node := func(e events.Event) events.Event { e.NodeID, e.NodeRunID = "worker", "nr"; return e }
+	attempt := func(e events.Event) events.Event { e = node(e); e.AttemptID = "att"; return e }
+	in := []events.Event{
+		started(runA, now),
+		node(ev(runA, 2, events.WorkspacePrepared, events.WorkspacePreparedPayload{BaseSHA: sha, Mode: events.WorkspaceModeWorktree, Path: "/w", SourceRoot: "/s"}, now)),
+		attempt(ev(runA, 3, events.WorkspaceIntegrated, events.WorkspaceIntegratedPayload{UnitRef: unit, UnitCommit: sha, IntegratedRef: tip, IntegratedCommit: sha, ChangedPaths: 2}, now)),
+		attempt(ev(runA, 4, events.WorkspaceConflict, events.WorkspaceConflictPayload{UnitRef: unit, UnitCommit: sha, TipCommit: sha, Paths: []string{"a.txt"}}, now)),
+		node(ev(runA, 5, events.WorkspaceReleased, events.WorkspaceReleasedPayload{Action: events.WorkspaceRemoved, Reason: events.ReleaseIntegrated, Path: "/w"}, now)),
+		ev(runA, 6, events.SourceWorkspaceChanged, events.SourceWorkspaceChangedPayload{Paths: []string{}, Indeterminate: true}, now),
+		finished(runA, 7, "succeeded", now),
+	}
+	s := Store{Dir: t.TempDir()}
+	write(t, s, runA, in...)
+	rec, err := s.Read(runA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.Events) != len(in) {
+		t.Fatalf("read %d events, wrote %d", len(rec.Events), len(in))
+	}
+	for i := range in {
+		a, _ := json.Marshal(in[i])
+		b, _ := json.Marshal(rec.Events[i])
+		if string(a) != string(b) {
+			t.Fatalf("event %d changed:\n%s\n%s", i, a, b)
+		}
+	}
+
+	f := &recordingFile{}
+	w := &Writer{file: f}
+	for _, e := range in[:3] {
+		if err := w.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Join(f.ops, ","); got != "write,sync,write,sync,write,sync" {
+		t.Fatalf("workspace facts must be fsynced like other lifecycle facts: %s", got)
 	}
 }
