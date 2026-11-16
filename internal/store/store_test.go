@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"agentplane/internal/events"
+	"agentplane/internal/testenv"
 )
 
 const runA = "11111111-1111-4111-8111-111111111111"
@@ -62,6 +63,7 @@ func TestRoundTripPreservesEventsAndGraph(t *testing.T) {
 }
 
 func TestPermissionsAreOwnerOnly(t *testing.T) {
+	testenv.RequireUnixPermissions(t)
 	dir := filepath.Join(t.TempDir(), "runs")
 	s := Store{Dir: dir}
 	write(t, s, runA, started(runA, time.Now().UTC()))

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -75,10 +76,11 @@ func (e composition) PreflightNode(ctx context.Context, id string, n graph.NodeD
 }
 func loopDefinition(budget int) *graph.Definition {
 	return &graph.Definition{SchemaVersion: 0, ID: "loop", Inputs: map[string]graph.InputDefinition{}, Edges: []graph.EdgeDefinition{{From: "work.outputs.raw_metadata", To: "down.inputs.result"}}, Outputs: map[string]graph.OutputDefinition{}, Nodes: map[string]graph.NodeDefinition{
-		"work": {Type: "agent", Config: graph.NodeConfig{"adapter": "fake", "task": "original SECRET task", "workspace": "/tmp", "allowed_paths": []string{"src/SECRET"}}, Outputs: map[string]graph.PortDefinition{"raw_metadata": {Type: graph.ValueTypeJSON, Required: true}}, Loop: &graph.LoopDefinition{MaxAttempts: budget, Gate: graph.LoopGateDefinition{Inputs: map[string]graph.PortDefinition{"candidate": {Type: graph.ValueTypeJSON, Required: true}}, Config: graph.NodeConfig{"check_id": "quality", "kind": "json_predicate", "input": "candidate", "field": []string{"ok"}, "operator": "eq", "expected": true}}, Bindings: []graph.LoopBinding{{From: "candidate.outputs.raw_metadata", To: "gate.inputs.candidate"}}}},
+		"work": {Type: "agent", Config: graph.NodeConfig{"adapter": "fake", "task": "original SECRET task", "workspace": os.TempDir(), "allowed_paths": []string{"src/SECRET"}}, Outputs: map[string]graph.PortDefinition{"raw_metadata": {Type: graph.ValueTypeJSON, Required: true}}, Loop: &graph.LoopDefinition{MaxAttempts: budget, Gate: graph.LoopGateDefinition{Inputs: map[string]graph.PortDefinition{"candidate": {Type: graph.ValueTypeJSON, Required: true}}, Config: graph.NodeConfig{"check_id": "quality", "kind": "json_predicate", "input": "candidate", "field": []string{"ok"}, "operator": "eq", "expected": true}}, Bindings: []graph.LoopBinding{{From: "candidate.outputs.raw_metadata", To: "gate.inputs.candidate"}}}},
 		"down": {Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}},
 	}}
 }
+
 func newLoopAdapter() *loopAdapter {
 	yes := true
 	return &loopAdapter{capable: &yes, produce: func(context.Context, agent.AgentExecutionInput, int) (agent.AgentExecutionOutput, error) {

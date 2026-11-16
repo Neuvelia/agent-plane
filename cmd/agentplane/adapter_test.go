@@ -8,11 +8,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"agentplane/internal/testenv"
 )
 
 func TestCLIExplicitCodexAdapterAgentAndShell(t *testing.T) {
 	dir := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
+		testenv.RequireExecutable(t, "/usr/bin/git")
 		c := exec.Command("/usr/bin/git", args...)
 		c.Dir = dir
 		if b, e := c.CombinedOutput(); e != nil {
@@ -48,6 +51,7 @@ func TestCLIAdapterSelectionAndNodeScopedFailures(t *testing.T) {
 			t.Fatalf("args=%v code=%d %s", args, code, &out)
 		}
 	}
+	testenv.RequireDarwinOrLinux(t, "the Codex adapter")
 	path := filepath.Join(t.TempDir(), "missing.yaml")
 	os.WriteFile(path, []byte("schema_version: 0\nid: missing-codex\ninputs: {}\nnodes:\n  work:\n    type: agent\n    config:\n      adapter: codex\n      workspace: /tmp\n      task: edit\n    outputs:\n      summary: {type: string}\nedges: []\noutputs: {}\n"), 0600)
 	out.Reset()

@@ -99,6 +99,41 @@ The implementer should:
 
 A green check is necessary, not sufficient. Acceptance criteria still need human and reviewer inspection.
 
+## CI matrix
+
+`.github/workflows/ci.yml` runs `scripts/check.sh` (the body of `make check`)
+on every push and pull request, on three runners: `linux-x64`
+(`ubuntu-latest`), `macos-arm64` (`macos-latest`) and `windows-x64`
+(`windows-latest`). Linux and macOS are required and also run `make build`.
+Windows is reported but non-blocking (`continue-on-error`, 20 minute cap)
+because main does not pass there yet; the job checks out with LF line endings
+so `gofmt -l` means the same on every OS. Remove `experimental` for Windows once
+it is green. The desktop shell stays outside this gate (`make desktop-check`).
+
+The Go tests compile on every OS. A test that needs something Windows lacks
+skips with a reason, using the test-only `internal/testenv` guards:
+`RequireExecutable` for absolute Unix tool paths (`/usr/bin/git`, `/bin/sh`,
+...), `RequireDarwinOrLinux` for components that reject other platforms by
+design, and `RequireUnixPermissions` for permission-bit assertions. On Linux
+and macOS nothing is skipped. Skips on Windows mark product work that waits
+for an owner decision on native Windows support:
+
+- Production code starts `/usr/bin/git` (`internal/gitstate/snapshot.go:64`,
+  `internal/runtime/workspace.go:45`), so git-evidence and changed-files tests
+  skip.
+- The Codex adapter accepts only Darwin and Linux
+  (`internal/agent/codex/adapter.go:75`).
+- The command Gate requires `/usr/bin/diff` and `/dev/fd/3`
+  (`internal/gate/config.go:62`, `internal/gate/command.go:63,90`).
+- Cancelling a shell child that already exited fails with "TerminateProcess:
+  Access is denied", which `internal/shell/executor.go` (around line 136)
+  reports as an exit failure instead of cancellation.
+- Shell-node fixtures and `.agents/graphs/demo-vertical.yaml` start
+  `/usr/bin/printf`, `/usr/bin/printenv` and `/bin/sh`.
+
+Still failing on Windows: `internal/api/docs_test.go:407,448` assert Unix file
+modes after a save (`-rw-rw-rw-` on Windows).
+
 ## Review session
 
 Start a fresh Codex session where practical.
