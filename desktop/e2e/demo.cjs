@@ -218,7 +218,7 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-close"]')
     // A file with anchors opens with a read-only canvas and an editable YAML view.
     const anchored = path.join(graphDir, 'anchors.yaml')
-    fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'graph', 'edit', 'testdata', 'hostile.yaml'), anchored)
+    fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'adapter', 'yamlgraph', 'edit', 'testdata', 'hostile.yaml'), anchored)
     await stubOpen(anchored)
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="canvas-readonly"]')
