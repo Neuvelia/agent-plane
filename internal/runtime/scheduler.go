@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/app/trace"
 	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
@@ -84,6 +85,18 @@ type Options struct {
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.
 	GraphVersion graph.Encoder
+	// Clock stamps events. Required: the engine never reads the wall clock.
+	Clock trace.Clock
+	// IDs generates run, node-run and attempt identifiers. Required.
+	IDs IDGenerator
+}
+
+// IDGenerator is the engine's source of identifiers; the composition root
+// supplies random ones and tests supply deterministic ones.
+type IDGenerator interface {
+	NewRunID() (events.RunID, error)
+	NewNodeRunID() (events.NodeRunID, error)
+	NewAttemptID() (events.AttemptID, error)
 }
 
 type completedNode struct {
@@ -109,11 +122,13 @@ type runMachine struct {
 	resolved    map[string]map[string]graph.Value
 	outputs     map[string]map[string]graph.Value
 	result      run.Result
-	emitter     *events.Collector
+	emitter     *trace.Collector
 	startedAt   time.Time
 	nodeStarted map[string]time.Time
 	decisions   DecisionProvider
 	values      *valueRecorder
+	attemptIDs  IDGenerator
+	clock       trace.Clock
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -225,14 +240,14 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 
 func newRunMachine(ctx context.Context, definition *graph.Definition, options Options) (*runMachine, error) {
 	live, persist := options.LiveEvents, options.Persist
-	if options.GraphVersion == nil {
-		return nil, errors.New("runtime options: GraphVersion is required")
+	if options.GraphVersion == nil || options.Clock == nil || options.IDs == nil {
+		return nil, errors.New("runtime options: GraphVersion, Clock and IDs are required")
 	}
 	version, err := graph.SemanticVersion(definition, options.GraphVersion)
 	if err != nil {
 		return nil, err
 	}
-	runID, err := events.NewRunID()
+	runID, err := options.IDs.NewRunID()
 	if err != nil {
 		return nil, err
 	}
@@ -249,15 +264,17 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 		outputs:     make(map[string]map[string]graph.Value, len(ids)),
 		result:      run.Result{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: run.RunRunning},
 		nodeStarted: make(map[string]time.Time, len(ids)),
+		attemptIDs:  options.IDs,
+		clock:       options.Clock,
 	}
 	for _, id := range ids {
-		nodeRunID, err := events.NewNodeRunID()
+		nodeRunID, err := options.IDs.NewNodeRunID()
 		if err != nil {
 			return nil, err
 		}
 		m.nodes[id] = &run.NodeResult{NodeID: id, NodeRunID: nodeRunID, State: run.NodePending}
 	}
-	m.emitter = events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live)
+	m.emitter = trace.NewCollectorWithLiveEvents(ctx, options.Clock, runID, definition.ID, version, live)
 	m.emitter.SetPersist(persist)
 	m.record("", "", string(run.RunRunning))
 	return m, nil
@@ -293,7 +310,7 @@ func (m *runMachine) record(id, from, to string) {
 				}
 			}
 			failureKind, _ := eventFailure(m.result.Failure)
-			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: time.Since(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
+			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: m.clock.Now().Sub(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
 		}
 	} else {
 		node := m.nodes[id]
@@ -306,7 +323,7 @@ func (m *runMachine) record(id, from, to string) {
 		default:
 			failureKind, codes := eventFailure(node.Failure)
 			if from == string(run.NodeRunning) {
-				duration := time.Since(m.nodeStarted[id]).Milliseconds()
+				duration := m.clock.Now().Sub(m.nodeStarted[id]).Milliseconds()
 				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes, DurationMS: &duration}
 			} else {
 				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes}

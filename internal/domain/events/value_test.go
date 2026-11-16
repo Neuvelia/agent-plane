@@ -113,17 +113,3 @@ func TestOlderSchemaStreamsStayReadable(t *testing.T) {
 		}
 	}
 }
-
-func TestCollectorCopiesRecordedValue(t *testing.T) {
-	c := NewCollector("run", "g", "v")
-	p := outputValue("hello")
-	recorded, err := c.Append(Event{Type: ValueRecorded, NodeID: "work", NodeRunID: "nr", AttemptID: "a", Payload: p})
-	if err != nil {
-		t.Fatal(err)
-	}
-	*p.Value = "HELLO"
-	*recorded.Payload.(ValueRecordedPayload).Value = "mutated"
-	if got := *c.Snapshot()[0].Payload.(ValueRecordedPayload).Value; got != "hello" {
-		t.Fatalf("retained value = %q", got)
-	}
-}

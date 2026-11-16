@@ -30,7 +30,7 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 			m.transitionNode(id, run.NodeRunning)
 		}
 		if l := m.definition.Nodes[id].Loop; l != nil {
-			aid, e := events.NewAttemptID()
+			aid, e := m.attemptIDs.NewAttemptID()
 			if e != nil {
 				m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureScheduler, Err: e}
 				m.transitionNode(id, run.NodeFailed)

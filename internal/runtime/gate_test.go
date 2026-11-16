@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/run"
 	"context"
@@ -69,7 +70,7 @@ func TestGateObservationFailsClosedAndOrdersFact(t *testing.T) {
 				f.CheckID = "other"
 			}
 			d := definition(map[string]graph.NodeDefinition{"gate": {Type: "gate", Config: graph.NodeConfig{"check_id": "SECRET-check", "kind": "json_predicate"}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}})
-			r, e := Run(context.Background(), d, nil, checkProbe{mode, f}, Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
+			r, e := Run(context.Background(), d, nil, checkProbe{mode, f}, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -122,7 +123,7 @@ func TestGateResultRedactsAndDetachesScopeAndReferences(t *testing.T) {
 			}
 			p := events.CheckResult{Version: 1, Scope: events.CheckScope{CheckedInputs: []string{"SECRET-input"}}, CheckID: "check", Kind: "json_predicate", Verdict: events.CheckGreen, Reason: "matched", Evidence: []events.GateEvidence{{Kind: "json_predicate", Source: "json_predicate", Reference: ref}}}
 			d := definition(map[string]graph.NodeDefinition{"gate": {Type: "gate", Config: graph.NodeConfig{"check_id": "check", "kind": "json_predicate"}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}})
-			r, err := Run(context.Background(), d, nil, checkProbe{"green", p}, Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
+			r, err := Run(context.Background(), d, nil, checkProbe{"green", p}, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
 			if err != nil || r.State != run.RunSucceeded {
 				t.Fatalf("%+v %v", r, err)
 			}

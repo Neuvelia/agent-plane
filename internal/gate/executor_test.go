@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/run"
 	"context"
@@ -464,7 +465,7 @@ func TestEveryGateKindTypedTraceAndDownstream(t *testing.T) {
 					d.GraphInputBindings = append(d.GraphInputBindings, graph.GraphInputBindingDefinition{From: graph.GraphInputReference("inputs." + name), To: graph.NodeInputReference("gate.inputs." + name)})
 				}
 				exec := &gatedSink{}
-				r, err := runtime.Run(context.Background(), d, in, exec, runtime.Options{GraphVersion: yamlgraph.Marshal})
+				r, err := runtime.Run(context.Background(), d, in, exec, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 				if err != nil || (r.State == run.RunSucceeded) != green || exec.started != green {
 					t.Fatalf("state/downstream: %+v %v", r, err)
 				}

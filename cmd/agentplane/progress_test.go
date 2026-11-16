@@ -1,6 +1,8 @@
 package main
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/app/trace"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/run"
 	"agentplane/internal/testenv"
@@ -92,7 +94,7 @@ printf '{"summary":"done","artifacts":[]}' >"$result"
 }
 
 func TestNormalizedHumanAndJSONOmissionRendering(t *testing.T) {
-	c := events.NewCollector("r", "g", "v")
+	c := trace.NewCollector(system.Clock{}, "r", "g", "v")
 	for range 5000 {
 		c.Append(events.Event{Type: events.Status, Payload: events.StatusPayload{Code: "working"}})
 	}

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/run"
 	"context"
@@ -65,7 +66,7 @@ func valueExecutor(text string) executorFunc {
 }
 
 func TestValueRecordingIsOffByDefault(t *testing.T) {
-	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("do it")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("do it")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
@@ -75,7 +76,7 @@ func TestValueRecordingIsOffByDefault(t *testing.T) {
 }
 
 func TestValueRecordingOrderAndShape(t *testing.T) {
-	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
@@ -134,7 +135,7 @@ func TestValueRecordingTruncatesAndRedactsAcrossTheCut(t *testing.T) {
 	secret := "TOPSECRET"
 	// The secret straddles the 16 KiB cut: bytes 16380..16388.
 	text := strings.Repeat("é", 8190) + secret + strings.Repeat("z", 100)
-	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("uses " + secret)}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{secret}})
+	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("uses " + secret)}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true, LogRedactions: []string{secret}})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
@@ -163,7 +164,7 @@ func TestValueRecordingTruncatesAndRedactsAcrossTheCut(t *testing.T) {
 
 func TestValueRecordingCutsAtRuneBoundary(t *testing.T) {
 	text := "a" + strings.Repeat("€", 6000) // 3-byte runes; 16384-1 is not a multiple of 3
-	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	for _, e := range recordedValues(result.Events) {
 		if p := valuePayload(t, e); p.Port == "text" {
 			if !p.Truncated || len(*p.Value) != 16384 || p.SizeBytes != int64(len(text)) || p.SHA256 != hexDigest(text) {
@@ -172,7 +173,7 @@ func TestValueRecordingCutsAtRuneBoundary(t *testing.T) {
 		}
 	}
 	text = "ab" + strings.Repeat("€", 6000)
-	result, _ = Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, _ = Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor(text), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	for _, e := range recordedValues(result.Events) {
 		if p := valuePayload(t, e); p.Port == "text" && len(*p.Value) != 16382 {
 			t.Fatalf("cut inside a rune: %d", len(*p.Value))
@@ -190,7 +191,7 @@ func TestValueRecordingRunBudgetOmitsLaterValues(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return map[string]graph.Value{"out": graph.NewStringValue(big)}, nil
 	})
-	result, err := Run(context.Background(), definition(defs), nil, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, MaxConcurrency: 4})
+	result, err := Run(context.Background(), definition(defs), nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true, MaxConcurrency: 4})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %v %v", result.State, err)
 	}
@@ -218,7 +219,7 @@ func TestValueRecordingRunBudgetOmitsLaterValues(t *testing.T) {
 }
 
 func TestValueRecordingOmitsInvalidUTF8(t *testing.T) {
-	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("ok\xffno"), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("ok\xffno"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	for _, e := range recordedValues(result.Events) {
 		if p := valuePayload(t, e); p.Port == "text" && (p.Value != nil || !p.Truncated || p.SizeBytes != 5 || p.SHA256 != hexDigest("ok\xffno")) {
 			t.Fatalf("invalid UTF-8 = %#v", p)
@@ -230,7 +231,7 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, errors.New("boom")
 	})
-	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	if result.State != run.RunFailed {
 		t.Fatal(result.State)
 	}
@@ -243,7 +244,7 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 	exec = func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
 		return map[string]graph.Value{"text": graph.NewStringValue("partial")}, nil
 	}
-	result, _ = Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, _ = Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	for _, e := range recordedValues(result.Events) {
 		if e.NodeID != "" {
 			t.Fatalf("rejected output recorded %#v", e)
@@ -255,7 +256,7 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 		<-ctx.Done()
 		return map[string]graph.Value{"text": graph.NewStringValue("late")}, ctx.Err()
 	}
-	result, _ = Run(ctx, valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, _ = Run(ctx, valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	if result.State != run.RunCancelled {
 		t.Fatal(result.State)
 	}
@@ -278,7 +279,7 @@ func TestValueRecordingAcceptsLongPortNames(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return map[string]graph.Value{out: graph.NewStringValue("done")}, nil
 	})
-	result, err := Run(context.Background(), def, map[string]graph.Value{in: graph.NewStringValue("go")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true})
+	result, err := Run(context.Background(), def, map[string]graph.Value{in: graph.NewStringValue("go")}, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %v %v", result.State, err)
 	}
@@ -317,7 +318,7 @@ func TestValueRecordingOmitsJSONWhoseStringsHoldASecret(t *testing.T) {
 			n, _ := graph.NewNumberValue("1")
 			return map[string]graph.Value{"n": n, "ok": graph.NewBooleanValue(true)}, nil
 		})
-		result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{secret}})
+		result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true, LogRedactions: []string{secret}})
 		if err != nil || result.State != run.RunSucceeded {
 			t.Fatalf("%s: run = %v %v", doc, result.State, err)
 		}
@@ -337,7 +338,7 @@ func TestValueRecordingOmitsJSONWhoseStringsHoldASecret(t *testing.T) {
 		}
 	}
 	// A JSON value without the secret is still carried whole.
-	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("t"), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{secret}})
+	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("t"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true, LogRedactions: []string{secret}})
 	for _, e := range recordedValues(result.Events) {
 		if p := valuePayload(t, e); p.Port == "doc" && (p.Value == nil || *p.Value != `{"k":[1,2]}` || p.Redacted) {
 			t.Fatalf("clean doc = %#v", p)
@@ -346,11 +347,11 @@ func TestValueRecordingOmitsJSONWhoseStringsHoldASecret(t *testing.T) {
 }
 
 func TestValueRecordingRejectsNonUTF8RedactionsBeforeStart(t *testing.T) {
-	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{"\xff\xfe"}})
+	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true, LogRedactions: []string{"\xff\xfe"}})
 	if err == nil || result.RunID != "" || len(result.Events) != 0 {
 		t.Fatalf("invalid redactions started a recording run: %v", err)
 	}
-	if _, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"\xff\xfe"}}); err != nil {
+	if _, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"\xff\xfe"}}); err != nil {
 		t.Fatalf("recording off must keep the existing byte-log behavior: %v", err)
 	}
 }

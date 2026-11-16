@@ -14,8 +14,6 @@ const (
 	AttemptFinished Type = "attempt_finished"
 )
 
-func NewAttemptID() (AttemptID, error) { id, err := newUUID(); return AttemptID(id), err }
-
 type AttemptStartedPayload struct {
 	Number      int `json:"number"`
 	MaxAttempts int `json:"max_attempts"`
