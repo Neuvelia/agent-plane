@@ -1,6 +1,6 @@
 # ADR-0024 - Workspace isolation with Git worktrees and deterministic integration
 
-**Status:** proposed (acceptance gated on one spike that needs a real Codex CLI, see "Validation")
+**Status:** accepted (2026-11-16; Codex spike passed, see "Validation")
 **Date:** 2026-11-16
 **Feature:** F3.1 (`docs/features/F3.1-workspace-isolation.md`)
 
@@ -270,6 +270,10 @@ Cons:
 - Still not a sandbox: absolute-path writes escape. The source guard only
   detects.
 - Linux and macOS only.
+- The agent cannot stage or commit inside its worktree: the Codex sandbox cannot
+  write the gitdir that lives in the source `.git` (`git add` exited 128). The
+  coordinator snapshots from the host, so nothing depends on it, but Agent task
+  text must not ask the agent to stage or commit.
 
 ## Compatibility and migration
 
@@ -291,7 +295,9 @@ missing-HEAD, old-Git and unsafe-root preflight; retention table; cancellation;
 source guard; schema round-trip with old fixtures; `go test -race ./...` and
 `make check`.
 
-**Acceptance gate for this ADR (not yet done; prepared in
+**Acceptance gate for this ADR (passed 2026-11-16; result recorded in
+`docs/validation/F3.1-codex-worktree-spike.md`: codex-cli 0.163.0, Apple Git
+2.50.1, every PASS check green, `git add` blocked as above). Prepared in
 `docs/validation/F3.1-codex-worktree-spike.md` with
 `scripts/spike-f3-1-codex-worktree.sh`):** a short authorized spike with a
 real installed Codex CLI in a disposable repository, recorded under
@@ -300,3 +306,8 @@ linked worktree whose gitdir lives in the source's `.git`, and in particular
 that its own `git status`/`git diff` calls do not fail. If it fails, switch the
 mechanism to Alternative A (same lifecycle and integration contract) and amend
 this ADR before implementation. The status stays `proposed` until then.
+
+Outcome: the linked-worktree mechanism is kept; Alternative A stays a documented
+fallback only. Residual risks not covered by the spike: other Codex versions and
+platforms (Linux was not run), very large repositories, and LFS (rejected in
+preflight).

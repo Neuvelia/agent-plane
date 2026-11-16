@@ -40,4 +40,4 @@ Graph editor (ADR-0020 to ADR-0022 accepted, ADR-0023 proposed; plan `docs/super
 
 Phase 3:
 [ADR-0024 - Workspace isolation with Git worktrees and deterministic integration](0024-workspace-isolation-with-git-worktrees.md)
-(proposed; acceptance gated on a real-Codex sandbox spike).
+(accepted; real-Codex sandbox spike passed).

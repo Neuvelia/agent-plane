@@ -56,7 +56,7 @@ feature contract.
 
 | Feature | Spec status |
 | --- | --- |
-| `F3.1-workspace-isolation.md` | Draft; ADR-0024 (proposed) pending one real-Codex spike |
+| `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
 
 ## Later phases
 
