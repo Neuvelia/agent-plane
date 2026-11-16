@@ -8,7 +8,9 @@ import (
 	"time"
 )
 
-const SchemaVersion = 10
+// SchemaVersion is the event schema new events are stamped with. Readers
+// accept every earlier schema with its historical shape.
+const SchemaVersion = 11
 
 type RunID string
 type NodeRunID string
@@ -169,6 +171,46 @@ func (e Event) Validate() error {
 			return err
 		}
 
+	case WorkspacePreparedPayload:
+		payloadType = WorkspacePrepared
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceIntegratedPayload:
+		payloadType = WorkspaceIntegrated
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceConflictPayload:
+		payloadType = WorkspaceConflict
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceReleasedPayload:
+		payloadType = WorkspaceReleased
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case SourceWorkspaceChangedPayload:
+		payloadType = SourceWorkspaceChanged
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
 	case AttemptStartedPayload:
 		payloadType = AttemptStarted
 		if err := validateAttempt(e); err != nil {
@@ -299,6 +341,16 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = ApprovalRequestedPayload{}
 	case ApprovalDecided:
 		payload = ApprovalDecidedPayload{}
+	case WorkspacePrepared:
+		payload = WorkspacePreparedPayload{}
+	case WorkspaceIntegrated:
+		payload = WorkspaceIntegratedPayload{}
+	case WorkspaceConflict:
+		payload = WorkspaceConflictPayload{}
+	case WorkspaceReleased:
+		payload = WorkspaceReleasedPayload{}
+	case SourceWorkspaceChanged:
+		payload = SourceWorkspaceChangedPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -364,6 +416,31 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		payload = p
 	case ApprovalDecidedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspacePreparedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceIntegratedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceConflictPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceReleasedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case SourceWorkspaceChangedPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}

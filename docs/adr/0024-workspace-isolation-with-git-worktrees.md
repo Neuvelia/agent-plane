@@ -162,11 +162,30 @@ unit: `gate_check` -> `return_envelope` -> `attempt_finished` ->
 `workspace_integrated`. Operational failures emit no verdict and no envelope.
 Payload contents are fixed by the feature spec's Observability section.
 
-The event schema **number is not fixed here**. ADR-0023 (proposed) also claims
-the next schema. The numbers are assigned by merge order at implementation:
-the first to land takes 10, the other 11, and the later ADR is amended with the
-final number. Both changes are additive; schemas 1-9 stay readable and consumers
-that ignore unknown types keep working.
+Event schema **11** carries these facts. This was decided by merge order, as
+planned: the events task was first implemented against schema 9 and named
+schema 10, but ADR-0023 (`value_recorded`) landed first and holds schema 10, so
+these facts take the next free number. Both changes are additive; schemas 1-10
+stay readable and consumers that ignore unknown types keep working.
+
+Payloads (all bounded, validated, deeply copied, retained outside progress
+limits, fsynced by the store like other non-progress facts):
+
+| Event | Scope | Payload |
+| --- | --- | --- |
+| `workspace_prepared` | node run | `base_sha`, `mode` (`worktree`), `path`, `source_root` |
+| `workspace_integrated` | accepted attempt | `unit_ref`, `unit_commit`, `integrated_ref`, `integrated_commit`, `changed_paths` |
+| `workspace_conflict` | accepted attempt | `unit_ref`, `unit_commit`, `tip_commit`, `paths` (sorted, unique, <= 64, each <= 1024 bytes), `omitted` |
+| `workspace_released` | node run | `action` (`removed`/`retained`), `reason`, `path`, `cleanup_error` (error class, only with `cleanup_failed`) |
+| `source_workspace_changed` | run | `paths` (as above), `omitted`, `indeterminate` |
+
+`reason` is a closed vocabulary: removed with `integrated` or `policy_never`;
+retained with `policy_always`, `exhausted`, `conflict`, `error`, `cancelled` or
+`cleanup_failed`. A path that cannot be represented (over-long, absolute,
+parent traversal, invalid UTF-8) is counted in `omitted`, never dropped
+silently (`events.BoundWorkspacePaths`). `indeterminate: true` means the source
+could not be inspected and nothing is known; it never means unchanged, and it
+carries no paths.
 
 ### 11. Code placement
 

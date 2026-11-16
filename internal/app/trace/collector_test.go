@@ -236,3 +236,56 @@ func TestCollectorCopiesRecordedValue(t *testing.T) {
 		t.Fatalf("retained value = %q", got)
 	}
 }
+
+func TestWorkspaceFactsSurviveProgressLimitsAndStayDetached(t *testing.T) {
+	const (
+		shaA = "0123456789abcdef0123456789abcdef01234567"
+		shaB = "89abcdef0123456789abcdef0123456789abcdef"
+		ref1 = "refs/agentplane/run-1/units/worker-0123456789abcdef"
+	)
+	ws := func(typ events.Type, payload events.Payload) events.Event {
+		e := events.Event{SchemaVersion: events.SchemaVersion, Type: typ, Timestamp: time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC), Sequence: 7, RunID: "run-1", GraphID: "g", GraphVersion: "sha256-v0:x", NodeID: "worker", NodeRunID: "nr", Payload: payload}
+		switch typ {
+		case events.WorkspaceConflict:
+			e.AttemptID = "att"
+		case events.SourceWorkspaceChanged:
+			e.NodeID, e.NodeRunID = "", ""
+		}
+		return e
+	}
+	c := NewCollector(system.Clock{}, "run-1", "g", "v")
+	for range 5000 {
+		c.Append(events.Event{Type: events.Status, Payload: events.StatusPayload{Code: "working"}})
+	}
+	paths := []string{"a.txt", "b.txt"}
+	prepared := ws(events.WorkspacePrepared, events.WorkspacePreparedPayload{BaseSHA: shaA, Mode: events.WorkspaceModeWorktree, Path: "/cache/agentplane/wt", SourceRoot: "/home/u/repo"})
+	conflict := ws(events.WorkspaceConflict, events.WorkspaceConflictPayload{UnitRef: ref1, UnitCommit: shaA, TipCommit: shaB, Paths: paths})
+	source := ws(events.SourceWorkspaceChanged, events.SourceWorkspaceChangedPayload{Paths: []string{"x"}})
+	for _, e := range []events.Event{prepared, conflict, source} {
+		if _, err := c.Append(e); err != nil {
+			t.Fatalf("%s: %v", e.Type, err)
+		}
+	}
+	paths[0] = "mutated"
+	seen := map[events.Type]bool{}
+	for _, e := range c.Snapshot() {
+		seen[e.Type] = true
+		if e.Type == events.WorkspaceConflict {
+			got := e.Payload.(events.WorkspaceConflictPayload)
+			if got.Paths[0] != "a.txt" {
+				t.Fatal("collector retained an alias of the caller's slice")
+			}
+			got.Paths[0] = "also mutated"
+		}
+	}
+	for _, typ := range []events.Type{events.WorkspacePrepared, events.WorkspaceConflict, events.SourceWorkspaceChanged} {
+		if !seen[typ] {
+			t.Fatalf("%s was dropped by progress retention limits", typ)
+		}
+	}
+	for _, e := range c.Snapshot() {
+		if e.Type == events.WorkspaceConflict && e.Payload.(events.WorkspaceConflictPayload).Paths[0] != "a.txt" {
+			t.Fatal("a snapshot consumer mutated retained state")
+		}
+	}
+}

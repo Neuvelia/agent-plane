@@ -93,7 +93,7 @@ func TestValueRecordedRejectsInvalidPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mutation := range []struct{ from, to string }{
-		{`"event_schema_version":10`, `"event_schema_version":9`},
+		{fmt.Sprintf(`"event_schema_version":%d`, SchemaVersion), `"event_schema_version":9`},
 		{`"redacted":false`, `"redacted":false,"extra":1`},
 		{`"size_bytes":5`, `"size_bytes":"5"`},
 	} {
