@@ -1,4 +1,4 @@
-# ADR-0024 - Attempt diff capture for Attempt Compare
+# ADR-0026 - Attempt diff capture for Attempt Compare
 
 **Status:** proposed for F2.8b (owner decisions recorded 2026-11-15; see "Owner decisions"); the Option C
 part (F2.8a) is implemented

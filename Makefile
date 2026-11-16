@@ -1,7 +1,7 @@
-.PHONY: fmt test vet check build clean desktop-check desktop-e2e desktop-stories
+.PHONY: fmt test vet check verify-changes build clean desktop-check desktop-e2e desktop-stories
 
 fmt:
-	gofmt -w ./cmd ./internal
+	gofmt -w ./cmd ./internal ./scripts/verifychanges
 
 test:
 	go test ./...
@@ -11,6 +11,10 @@ vet:
 
 check:
 	./scripts/check.sh
+
+# Inventories staged, unstaged and untracked paths; does not run checks.
+verify-changes:
+	go run ./scripts/verifychanges
 
 build:
 	mkdir -p bin
