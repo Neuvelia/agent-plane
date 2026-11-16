@@ -97,6 +97,13 @@ The implementer should:
 
 `make check` is the minimum repository gate.
 
+`make verify-changes` prints a read-only JSON inventory of local staged,
+unstaged and non-ignored untracked paths. Each path has sorted `sources`, and
+the document has `checks_executed: false`. A successful exit means the
+inventory was collected; it does not mean tests were selected, run or passed.
+This command is a foundation for later selective verification and does not
+replace `make check`.
+
 For changes under `desktop/`, also run `npm run check` there. CI reports the
 Go `make check`/build, full `go test -race ./...` and desktop `npm run check`
 as separate jobs on pushes and pull requests. For concurrency changes, run
