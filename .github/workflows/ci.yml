@@ -128,11 +128,15 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('desktop/package-lock.json') }}
+      # System libraries (and xvfb) first, so the Electron run below has them; the
+      # locked Playwright version comes from `npm ci`, never from a fresh npx download.
+      - name: Install desktop dependencies
+        run: npm ci --prefix desktop
+      - name: Install Chromium system dependencies
+        run: npx --prefix desktop playwright install --with-deps chromium
       # `make desktop-*` run `npm ci` (never `npm install`) and pick xvfb-run on Linux.
       - name: Electron e2e
         run: make desktop-e2e E2E_SHOTS=e2e-shots
-      - name: Install Chromium system dependencies
-        run: npx --prefix desktop playwright install --with-deps chromium
       - name: Storybook smoke
         run: make desktop-stories
       - name: Upload e2e screenshots

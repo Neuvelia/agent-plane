@@ -126,9 +126,10 @@ it is green. The desktop shell stays outside this gate (`make desktop-check`).
 
 Two desktop jobs run beside it. `desktop` runs `npm ci --ignore-scripts` and
 `npm run check` (typecheck, reducer tests, build, Storybook build, bundle scan).
-`desktop-e2e` runs `make desktop-e2e` (real Electron against `bin/agentplane`
-under `xvfb-run`) and then `make desktop-stories` (Storybook smoke in
-Playwright Chromium, installed with system dependencies). Both pin Node 24 and
+`desktop-e2e` first runs `npm ci` and installs the Playwright Chromium system
+dependencies (which also provide xvfb), then `make desktop-e2e` (real Electron
+against `bin/agentplane` under `xvfb-run`) and `make desktop-stories`
+(Storybook smoke in Playwright Chromium). Both pin Node 24 and
 use `npm ci`; `desktop-e2e` caches the npm cache, `~/.cache/electron` and
 `~/.cache/ms-playwright`, and uploads `desktop/e2e-shots` as the
 `desktop-e2e-screenshots` artifact on failure. They have no path filter, so a
