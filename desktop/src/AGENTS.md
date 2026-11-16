@@ -11,6 +11,7 @@ spec before changing a screen, API wrapper or event view. The sibling
 | --- | --- |
 | Bridge types and thin API calls | `types.ts`, `api.ts`; editor calls in `editor/api.ts` |
 | Event-derived node/run/approval detail | `reducer.ts` |
+| Attempt compare (F2.8a): pure model and view | `compare.ts`, `AttemptCompare.tsx`, `check.tsx` |
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
 | Runs, inspector, approvals and New run screens | `views.tsx`, `preflight.ts`, `GraphMap.tsx`, `NodePanel.tsx` |
@@ -70,6 +71,7 @@ as implemented merely because the full spec describes it.
 ## Choose regression tests
 
 - Event reduction, replay and stream loss: `desktop/test/reducer.test.ts`.
+- Attempt compare model and view: `desktop/test/compare.test.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.
 - Dashboard, timeline and bounded event detail: `desktop/test/dashboard.test.ts`,
