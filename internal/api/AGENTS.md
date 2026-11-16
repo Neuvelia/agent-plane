@@ -12,6 +12,7 @@ document or event contract.
 | Live event replay and pending human decisions | `hub.go` |
 | Graph grants, open/edit/stat/save and file checks | `docs.go` |
 | Graph document response types | `docs_dto.go` |
+| Read-only capability report routes (ADR-0025) | `capabilities.go`; detection in `internal/capability` |
 | CLI composition of store, validators and executors | `cmd/agentplane/serve.go` |
 | Renderer forwarding and sidecar token ownership | `desktop/electron/main.cjs`, `desktop/electron/allowlist.cjs` |
 | Native graph choice and recent-file grant registration | `desktop/electron/graphs.cjs` |
@@ -71,6 +72,8 @@ authentication mechanism.
 - Grants, edit/save conflicts, path safety, limits and DTOs: `docs_test.go`.
 - CLI composition: `cmd/agentplane/serve_test.go`; CLI/API diagnostic parity:
   `cmd/agentplane/validation_test.go`.
+- Capability routes, single flight and body rules: `capabilities_test.go`;
+  detection itself: `internal/capability/capability_test.go`.
 - Renderer route exposure: `desktop/test/allowlist.test.ts`.
 
 SSE uses Electron main's separate `ap:subscribe` bridge in
