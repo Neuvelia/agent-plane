@@ -303,13 +303,27 @@ func TestExecuteNonzeroExitPreservesEvidence(t *testing.T) {
 	}
 }
 
+// samePath compares after resolving symlinks and Windows 8.3 short names on
+// both sides, since the child reports whichever spelling the OS hands it.
+func samePath(t *testing.T, got, want string) bool {
+	t.Helper()
+	resolvedGot, err := filepath.EvalSymlinks(got)
+	if err != nil {
+		return false
+	}
+	resolvedWant, err := filepath.EvalSymlinks(want)
+	if err != nil {
+		t.Fatalf("resolving %q: %v", want, err)
+	}
+	return resolvedGot == resolvedWant
+}
+
 func TestExecuteCwdAndExplicitEnvironment(t *testing.T) {
 	dir := t.TempDir()
 	node := helperNode("cwd")
 	node.Config["cwd"] = dir
 	result, err := (Executor{}).Execute(context.Background(), "worker", node, nil)
-	resolvedDir, resolveErr := filepath.EvalSymlinks(dir)
-	if err != nil || resolveErr != nil || result.Stdout != resolvedDir {
+	if err != nil || !samePath(t, result.Stdout, dir) {
 		t.Fatalf("cwd = %#v / %v", result, err)
 	}
 	t.Setenv("SHELL_ALLOWED", "inherited")
@@ -337,8 +351,7 @@ func TestExecuteResolvesRelativeCwdFromRunnerDirectory(t *testing.T) {
 	node := helperNode("cwd")
 	node.Config["cwd"] = relativeDir
 	result, err := (Executor{}).Execute(context.Background(), "worker", node, nil)
-	resolvedTarget, resolveErr := filepath.EvalSymlinks(targetDir)
-	if err != nil || resolveErr != nil || result.Stdout != resolvedTarget {
+	if err != nil || !samePath(t, result.Stdout, targetDir) {
 		t.Fatalf("relative cwd %q = %#v / %v", relativeDir, result, err)
 	}
 }

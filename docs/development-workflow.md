@@ -145,8 +145,17 @@ for an owner decision on native Windows support:
 - Shell-node fixtures and `.agents/graphs/demo-vertical.yaml` start
   `/usr/bin/printf`, `/usr/bin/printenv` and `/bin/sh`.
 
-Still failing on Windows: `internal/api/docs_test.go:407,448` assert Unix file
-modes after a save (`-rw-rw-rw-` on Windows).
+Tests that cannot hold on Windows skip with a reason rather than fail:
+`testenv.RequireUnixPermissions` and `testenv.HasUnixPermissions` for file-mode
+assertions (`internal/api` save tests), and `testenv.SkipOnWindows` for
+fixtures the platform cannot create (a file name with a newline, an invalid
+UTF-8 argv byte in `scripts/verifychanges`). Path comparisons against a child's
+working directory resolve both sides with `filepath.EvalSymlinks`, so 8.3 short
+names (`RUNNER~1`) compare equal.
+
+A local `go test ./...` on Windows (Go 1.27) passes with these guards. The
+`windows-x64` job has not been observed green on a GitHub runner since they
+landed, so `experimental` stays until one run of that job is green.
 
 ## Review session
 
