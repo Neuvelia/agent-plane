@@ -24,14 +24,21 @@ const (
 	// WorkspaceSchema is the first event schema that carries these facts.
 	WorkspaceSchema = 11
 
-	MaxWorkspacePaths     = 64   // repository paths per payload; the rest is counted in Omitted
-	MaxWorkspacePathBytes = 1024 // one repository path
-	MaxWorkspaceLocalPath = 4096 // one absolute local directory
-	MaxWorkspaceRefBytes  = 512
+	// MaxWorkspacePaths bounds repository paths per payload; the rest is counted in Omitted.
+	MaxWorkspacePaths = 64
+	// MaxWorkspacePathBytes bounds one repository path.
+	MaxWorkspacePathBytes = 1024
+	// MaxWorkspaceLocalPath bounds one absolute local directory.
+	MaxWorkspaceLocalPath = 4096
+	// MaxWorkspaceRefBytes bounds one ref name.
+	MaxWorkspaceRefBytes = 512
 
+	// WorkspaceModeWorktree is the only isolation mode: a linked Git worktree.
 	WorkspaceModeWorktree = "worktree"
 
-	WorkspaceRemoved  = "removed"
+	// WorkspaceRemoved is the release action for a worktree that was deleted.
+	WorkspaceRemoved = "removed"
+	// WorkspaceRetained is the release action for a worktree that was kept.
 	WorkspaceRetained = "retained"
 )
 
@@ -53,6 +60,7 @@ var (
 	workspaceErrC = regexp.MustCompile(`^[a-z][a-z_]{0,63}$`)
 )
 
+// WorkspacePreparedPayload records that an isolated worktree exists for a node run.
 type WorkspacePreparedPayload struct {
 	BaseSHA    string `json:"base_sha"`
 	Mode       string `json:"mode"`
@@ -60,6 +68,7 @@ type WorkspacePreparedPayload struct {
 	SourceRoot string `json:"source_root"` // absolute local source repository
 }
 
+// WorkspaceIntegratedPayload records that an accepted unit was merged onto the integration tip.
 type WorkspaceIntegratedPayload struct {
 	UnitRef          string `json:"unit_ref"`
 	UnitCommit       string `json:"unit_commit"`
@@ -68,6 +77,7 @@ type WorkspaceIntegratedPayload struct {
 	ChangedPaths     uint64 `json:"changed_paths"` // paths the unit changed relative to the previous tip
 }
 
+// WorkspaceConflictPayload records that merging an accepted unit conflicted; the tip stays unchanged.
 type WorkspaceConflictPayload struct {
 	UnitRef    string   `json:"unit_ref"`
 	UnitCommit string   `json:"unit_commit"`
@@ -76,6 +86,7 @@ type WorkspaceConflictPayload struct {
 	Omitted    uint64   `json:"omitted"`
 }
 
+// WorkspaceReleasedPayload records whether a node run's worktree was removed or retained, and why.
 type WorkspaceReleasedPayload struct {
 	Action       string `json:"action"` // removed | retained
 	Reason       string `json:"reason"`
@@ -163,6 +174,7 @@ func validateRepositoryPaths(paths []string) error {
 	return nil
 }
 
+// Validate checks that the base commit, mode and directories are well formed.
 func (p WorkspacePreparedPayload) Validate() error {
 	if !validWorkspaceSHA(p.BaseSHA) {
 		return errors.New("workspace base_sha must be a full commit id")
@@ -176,6 +188,7 @@ func (p WorkspacePreparedPayload) Validate() error {
 	return nil
 }
 
+// Validate checks that the refs are under refs/agentplane and the commits are full ids.
 func (p WorkspaceIntegratedPayload) Validate() error {
 	if !validWorkspaceRef(p.UnitRef) || !validWorkspaceRef(p.IntegratedRef) {
 		return errors.New("workspace refs must be under refs/agentplane")
@@ -186,6 +199,7 @@ func (p WorkspaceIntegratedPayload) Validate() error {
 	return nil
 }
 
+// Validate checks the refs, commits and bounded sorted paths; a conflict names at least one path.
 func (p WorkspaceConflictPayload) Validate() error {
 	if !validWorkspaceRef(p.UnitRef) {
 		return errors.New("workspace unit_ref must be under refs/agentplane")
@@ -202,6 +216,7 @@ func (p WorkspaceConflictPayload) Validate() error {
 	return nil
 }
 
+// Validate checks that the action, reason and cleanup error class agree with each other.
 func (p WorkspaceReleasedPayload) Validate() error {
 	switch p.Action {
 	case WorkspaceRemoved:
@@ -229,6 +244,7 @@ func (p WorkspaceReleasedPayload) Validate() error {
 	return nil
 }
 
+// Validate checks the bounded paths and that an indeterminate observation carries none.
 func (p SourceWorkspaceChangedPayload) Validate() error {
 	if err := validateRepositoryPaths(p.Paths); err != nil {
 		return err
@@ -255,20 +271,35 @@ func validateWorkspace(e Event) error {
 	}
 	switch e.Type {
 	case SourceWorkspaceChanged:
-		if e.NodeID != "" || e.NodeRunID != "" || e.AttemptID != "" {
-			return errors.New("source_workspace_changed is a run-level fact")
-		}
+		return validateRunScoped(e)
 	case WorkspacePrepared, WorkspaceReleased:
-		if e.NodeID == "" || e.NodeRunID == "" {
-			return fmt.Errorf("%s requires node and node run IDs", e.Type)
-		}
-		if e.AttemptID != "" {
-			return fmt.Errorf("%s is not attempt-scoped", e.Type)
-		}
+		return validateNodeRunScoped(e)
 	case WorkspaceIntegrated, WorkspaceConflict:
-		if e.NodeID == "" || e.NodeRunID == "" || e.AttemptID == "" {
-			return fmt.Errorf("%s requires node, node run and attempt IDs", e.Type)
-		}
+		return validateAttemptScoped(e)
+	}
+	return nil
+}
+
+func validateRunScoped(e Event) error {
+	if e.NodeID != "" || e.NodeRunID != "" || e.AttemptID != "" {
+		return errors.New("source_workspace_changed is a run-level fact")
+	}
+	return nil
+}
+
+func validateNodeRunScoped(e Event) error {
+	if e.NodeID == "" || e.NodeRunID == "" {
+		return fmt.Errorf("%s requires node and node run IDs", e.Type)
+	}
+	if e.AttemptID != "" {
+		return fmt.Errorf("%s is not attempt-scoped", e.Type)
+	}
+	return nil
+}
+
+func validateAttemptScoped(e Event) error {
+	if e.NodeID == "" || e.NodeRunID == "" || e.AttemptID == "" {
+		return fmt.Errorf("%s requires node, node run and attempt IDs", e.Type)
 	}
 	return nil
 }

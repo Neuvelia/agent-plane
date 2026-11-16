@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// SchemaVersion is the event schema new events are stamped with. Readers
+// accept every earlier schema with its historical shape.
 const SchemaVersion = 11
 
 type RunID string

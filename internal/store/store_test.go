@@ -126,7 +126,7 @@ func TestTruncatedTailIsReportedNotFatal(t *testing.T) {
 	write(t, s, runA, started(runA, now), ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	f.WriteString(fmt.Sprintf(`{"event_schema_version":%d,"type":"node_start`, events.SchemaVersion)) // killed mid-write
+	fmt.Fprintf(f, `{"event_schema_version":%d,"type":"node_start`, events.SchemaVersion) // killed mid-write
 	f.Close()
 	rec, err := s.Read(runA)
 	if err != nil {
