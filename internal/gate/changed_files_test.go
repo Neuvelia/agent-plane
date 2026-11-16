@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/gitstate"
 	"agentplane/internal/testenv"
 )

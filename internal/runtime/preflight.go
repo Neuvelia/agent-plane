@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // runPreparation contains only values established before a run starts.

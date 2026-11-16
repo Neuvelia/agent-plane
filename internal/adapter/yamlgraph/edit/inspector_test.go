@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // inspectorGraph has every node type, a loop, edges, graph inputs and

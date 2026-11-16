@@ -433,7 +433,7 @@ func TestUnboundNodesHaveNoDependencies(t *testing.T) {
 }
 
 func TestCompiledDependenciesAreSortedAndIndependentOfDefinitionMutation(t *testing.T) {
-	data, err := os.ReadFile("../../.agents/graphs/hello-parallel.yaml")
+	data, err := os.ReadFile("../../../.agents/graphs/hello-parallel.yaml")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}

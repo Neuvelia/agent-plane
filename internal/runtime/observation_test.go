@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 type observedProbe struct {

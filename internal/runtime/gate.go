@@ -3,7 +3,7 @@ package runtime
 import (
 	"sync"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 // CheckCapture redacts before bounding retained bytes and drains the entire stream.

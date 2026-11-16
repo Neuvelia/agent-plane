@@ -1,7 +1,7 @@
 package main
 
 import (
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/runtime"
 	"agentplane/internal/testenv"
 	"bytes"

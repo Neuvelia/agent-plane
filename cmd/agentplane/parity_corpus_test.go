@@ -130,7 +130,7 @@ var derived = []string{
 
 func TestNoStaticCodeIsMissingFromTheCorpus(t *testing.T) {
 	re := regexp.MustCompile(`"([EW]_[A-Z0-9_]+)"`)
-	files, _ := filepath.Glob("../../internal/graph/*.go")
+	files, _ := filepath.Glob("../../internal/domain/graph/*.go")
 	files = append(files, "validation.go")
 	seen := map[string]bool{}
 	var source strings.Builder

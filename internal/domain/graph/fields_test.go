@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
 	"agentplane/internal/fields/fieldstest"
 	"agentplane/internal/gate"
-	"agentplane/internal/graph"
 )
 
 // validateOne runs graph.Validate on a graph holding n and returns the

@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // repoGraphs are the example graphs the engine ships.
 func repoGraphs(t *testing.T) map[string][]byte {
 	t.Helper()
-	return readAll(t, "../../../.agents/graphs/*.yaml")
+	return readAll(t, "../../../../.agents/graphs/*.yaml")
 }
 
 // fixtures are the E0 spike fixtures (hostile, CRLF, BOM, long lines, comments).

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 func recordedValues(evs []events.Event) []events.Event {

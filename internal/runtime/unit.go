@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 // AcceptedProvenance identifies the immutable runtime value, not a file snapshot.

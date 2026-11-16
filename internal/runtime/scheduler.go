@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/gitstate"
-	"agentplane/internal/graph"
 )
 
 // Executor runs one node with resolved inputs. Implementations must respect

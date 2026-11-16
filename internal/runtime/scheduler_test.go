@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 type executorFunc func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error)

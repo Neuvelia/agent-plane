@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // randomInspectorOp returns an inspector operation on inspectorGraph's nodes.

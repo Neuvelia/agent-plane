@@ -3,7 +3,7 @@ package edit
 import (
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 const linesGraph = `# header

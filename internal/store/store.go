@@ -16,7 +16,7 @@ import (
 	"sort"
 	"time"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 const (

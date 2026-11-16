@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 
 	"go.yaml.in/yaml/v3"
 )

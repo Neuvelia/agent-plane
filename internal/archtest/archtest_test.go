@@ -38,9 +38,6 @@ const (
 
 // legacyLayers classifies packages that predate the layered layout.
 var legacyLayers = map[string]layer{
-	"internal/graph":             layerDomain,
-	"internal/events":            layerDomain,
-	"internal/graph/edit":        layerAdapter,
 	"internal/runtime":           layerApp,
 	"internal/agent":             layerAdapter,
 	"internal/agent/codex":       layerAdapter,

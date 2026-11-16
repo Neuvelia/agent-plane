@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"agentplane/internal/api"
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/store"
 )
 

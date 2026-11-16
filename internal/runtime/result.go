@@ -3,8 +3,8 @@ package runtime
 import (
 	"fmt"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 // FailureKind identifies which in-memory execution contract failed.

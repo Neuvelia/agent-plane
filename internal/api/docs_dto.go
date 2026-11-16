@@ -3,8 +3,8 @@ package api
 import (
 	"fmt"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // The document DTO is the editor's view of a graph definition. It has explicit

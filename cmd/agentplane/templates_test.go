@@ -15,8 +15,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // F2.12: the graph templates offered by "New graph" are ordinary graph files.

@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"context"
 	"encoding/json"
 	"strings"

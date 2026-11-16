@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 )
 
@@ -186,7 +186,7 @@ func TestOpenReturnsTheDocument(t *testing.T) {
 
 func TestOpenSaysWhyACanvasIsReadOnly(t *testing.T) {
 	_, ts, dir := docServer(t)
-	hostile, err := os.ReadFile("../graph/edit/testdata/hostile.yaml")
+	hostile, err := os.ReadFile("../adapter/yamlgraph/edit/testdata/hostile.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

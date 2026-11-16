@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 // acceptBatchResults runs on the coordinator after worker results are sorted.

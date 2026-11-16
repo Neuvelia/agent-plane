@@ -46,7 +46,7 @@ outputs:
 }
 
 func TestParseParallelExampleContracts(t *testing.T) {
-	data, err := os.ReadFile("../../.agents/graphs/hello-parallel.yaml")
+	data, err := os.ReadFile("../../../.agents/graphs/hello-parallel.yaml")
 	if err != nil {
 		t.Fatalf("read example graph: %v", err)
 	}
@@ -551,7 +551,7 @@ outputs: {}
 }
 
 func TestRoundTripPreservesDefinition(t *testing.T) {
-	data, err := os.ReadFile("../../.agents/graphs/hello-parallel.yaml")
+	data, err := os.ReadFile("../../../.agents/graphs/hello-parallel.yaml")
 	if err != nil {
 		t.Fatalf("read example graph: %v", err)
 	}

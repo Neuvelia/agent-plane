@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 // ApprovalRequest is what a DecisionProvider shows to a person. Prompt and

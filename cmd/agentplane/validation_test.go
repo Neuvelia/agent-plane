@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 const shellNoCommand = `schema_version: 0

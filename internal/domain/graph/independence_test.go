@@ -62,7 +62,7 @@ func referenceIndependence(def *Definition) map[string][]string {
 }
 
 func TestIndependenceEqualsTheReferenceForTheCorpusGraphs(t *testing.T) {
-	files, err := filepath.Glob("../../.agents/graphs/*.yaml")
+	files, err := filepath.Glob("../../../.agents/graphs/*.yaml")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no corpus graphs: %v", err)
 	}

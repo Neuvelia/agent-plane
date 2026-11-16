@@ -8,7 +8,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/runtime"
 )
 

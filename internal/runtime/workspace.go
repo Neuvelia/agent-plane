@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 type workspaceIdentity struct {

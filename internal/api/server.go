@@ -16,10 +16,10 @@ import (
 	"sync"
 	"time"
 
+	"agentplane/internal/adapter/yamlgraph/edit"
 	"agentplane/internal/capability"
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/store"
 )

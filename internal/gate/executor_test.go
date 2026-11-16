@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/testenv"
 )

@@ -17,8 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
-	"agentplane/internal/graph"
 )
 
 // Executor satisfies runtime.Executor without adding process details to the

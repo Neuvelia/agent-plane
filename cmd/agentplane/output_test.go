@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 func TestWatchDisplaysPartialLogBeforeNodeFinishes(t *testing.T) {

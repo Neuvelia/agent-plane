@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 func TestParseInputsPreservesDeclaredTypesAndFirstEquals(t *testing.T) {

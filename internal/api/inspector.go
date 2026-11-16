@@ -3,9 +3,9 @@ package api
 import (
 	"sort"
 
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
 )
 
 // Node inspector data (F2.2, ADR-0021). The API does not know the executors:

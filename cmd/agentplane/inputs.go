@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 type inputFlags []string

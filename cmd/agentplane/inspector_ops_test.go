@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // F2.2: every Gate kind can be configured with inspector operations alone into

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 )
 

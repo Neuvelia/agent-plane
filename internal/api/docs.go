@@ -14,8 +14,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // Graph document API (ADR-0021). A client addresses a graph by an opaque grant,
