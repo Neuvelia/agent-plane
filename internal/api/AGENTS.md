@@ -13,6 +13,7 @@ document or event contract.
 | Graph grants, open/edit/stat/save and file checks | `docs.go` |
 | Graph document response types | `docs_dto.go` |
 | Inspector data: node-type descriptors, Advanced entries, independence (F2.2) | `inspector.go`, `inspector_dto.go` |
+| Read-only capability report routes (ADR-0025) | `capabilities.go`; detection in `internal/capability` |
 | CLI composition of store, validators and executors | `cmd/agentplane/serve.go` |
 | Node-type catalogue from the validators' descriptors | `cmd/agentplane/catalogue.go` |
 | Renderer forwarding and sidecar token ownership | `desktop/electron/main.cjs`, `desktop/electron/allowlist.cjs` |
@@ -86,6 +87,8 @@ authentication mechanism.
   the real catalogue: `cmd/agentplane/catalogue_test.go`.
 - CLI composition: `cmd/agentplane/serve_test.go`; CLI/API diagnostic parity:
   `cmd/agentplane/validation_test.go`.
+- Capability routes, single flight and body rules: `capabilities_test.go`;
+  detection itself: `internal/capability/capability_test.go`.
 - Renderer route exposure: `desktop/test/allowlist.test.ts`.
 
 SSE uses Electron main's separate `ap:subscribe` bridge in

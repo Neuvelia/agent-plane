@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"agentplane/internal/capability"
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/graph/edit"
@@ -63,6 +64,9 @@ type Server struct {
 	// descriptors; every config key is then shown as Advanced. Read-only once
 	// serving starts.
 	NodeTypes []NodeType
+	// Capabilities serves the read-only capability report (ADR-0025); nil
+	// answers 503.
+	Capabilities *capability.Service
 
 	docs     docState // graph document grants (ADR-0021)
 	baseCtx  context.Context
@@ -139,6 +143,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /graphs/stat", s.statDoc)
 	mux.HandleFunc("POST /graphs/edit", s.editDoc)
 	mux.HandleFunc("PUT /graphs/save", s.saveDoc)
+	mux.HandleFunc("GET /capabilities", s.getCapabilities)
+	mux.HandleFunc("POST /capabilities/check", s.checkCapabilities)
 	return s.guard(mux)
 }
 

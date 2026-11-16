@@ -10,13 +10,17 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 
+	"agentplane/internal/agent/codex"
 	"agentplane/internal/api"
+	"agentplane/internal/capability"
 	"agentplane/internal/events"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
 	"agentplane/internal/store"
+	"agentplane/internal/version"
 )
 
 // serveStdin is replaced in tests. The server exits when it is closed, which is
@@ -34,8 +38,12 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
 	var redactEnv inputFlags
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
+	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path, used only for capability detection")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return usageError("serve", err, false, stdout, stderr)
+	}
+	if *codexBin != "" && !filepath.IsAbs(*codexBin) {
+		return usageError("serve", errors.New("--codex-bin must be an absolute path"), false, stdout, stderr)
 	}
 	if *concurrency < 1 {
 		return usageError("serve", errors.New("--max-concurrency must be at least 1"), false, stdout, stderr)
@@ -72,6 +80,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		ValidateDefinition: diagnosticsFor,
 		NodeTypes:          nodeCatalogue(),
 		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues}),
+		Capabilities:       &capability.Service{Detect: capabilityDetector(*codexBin).Detect},
 	}
 	if onServe != nil {
 		onServe(server)
@@ -175,6 +184,17 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 		}
 		return nil
 	}
+}
+
+// capabilityDetector composes F2.11 detection: Git at the engine's fixed path
+// and the Codex adapter's own Detect, which runs only when a binary was given.
+// Agent execution in serve is unchanged by --codex-bin (ADR-0025).
+func capabilityDetector(codexBin string) capability.Detector {
+	codexAgent := capability.Agent{ID: "codex"}
+	if codexBin != "" {
+		codexAgent.Adapter = codex.Adapter{Binary: codexBin}
+	}
+	return capability.Detector{EngineVersion: version.String(), Agents: []capability.Agent{codexAgent}}
 }
 
 // onServe lets tests reach the running server (for example its Hub) without

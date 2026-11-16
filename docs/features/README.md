@@ -53,6 +53,8 @@ feature contract.
 | `F2.3-E6-recorded-run-values.md` | Implemented (engine slice E6 and desktop switch, opt-in); ADR-0023 (accepted) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
 | `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0024 (proposed, owner decisions recorded) |
+| `F2.11-onboarding-capability-detection.md` | Go side implemented; ADR-0025 (proposed); desktop pending |
+| `F2.12-graph-templates.md` | Templates and Go tests implemented; no ADR; desktop picker pending |
 
 ## Later phases
 

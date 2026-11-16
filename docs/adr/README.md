@@ -40,3 +40,5 @@ Graph editor (ADR-0020 to ADR-0022 accepted, ADR-0023 proposed; plan `docs/super
 
 F2.8 Attempt Compare (proposed for F2.8b; owner decisions recorded 2026-11-15):
 [ADR-0024 - Attempt diff capture for Attempt Compare](0024-attempt-diff-capture.md).
+
+Onboarding (proposed): [ADR-0025 - Read-only capability report on the loopback API](0025-capability-report.md).
