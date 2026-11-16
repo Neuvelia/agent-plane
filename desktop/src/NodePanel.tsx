@@ -1,37 +1,12 @@
 import { useState } from 'react'
 import { decide } from './api'
+import { AttemptCompare } from './AttemptCompare'
+import { CheckResultView } from './check'
+import { canCompare, defaultPair } from './compare'
 import { useI18n } from './i18n/context'
-import { displayStatus, nodeView, type Attempt, type RunView } from './reducer'
-import { ApprovalPill, NodePill, OutcomePill, VerdictPill } from './status'
+import { displayStatus, nodeView, type RunView } from './reducer'
+import { ApprovalPill, NodePill, OutcomePill } from './status'
 import { Button, Card, KeyValue, SegmentedControl, Tag } from './ui/primitives'
-
-function Evidence({ attempt }: { attempt: Attempt }) {
-  const check = attempt.check
-  if (!check) return null
-  return (
-    <div className="check" data-testid="check-result">
-      <div className="row">
-        <VerdictPill verdict={check.verdict} />
-        <span className="mono">{check.checkId}</span>
-        <Tag>{check.kind}</Tag>
-        <span className="mu mono">{check.durationMs} ms</span>
-      </div>
-      <div className="reason" data-testid="check-reason">
-        {check.reason}
-      </div>
-      {check.evidence.map((e, i) => (
-        <div className="evidence mono" key={i}>
-          <span className="mu">{e.source}</span>
-          {e.path && <span> path={e.path}</span>}
-          {e.exitCode !== undefined && <span> exit={e.exitCode}</span>}
-          {e.stdout && <pre>{e.stdout}</pre>}
-          {e.stderr && <pre>{e.stderr}</pre>}
-          {e.omitted ? <span className="mu"> +{e.omitted} omitted</span> : null}
-        </div>
-      ))}
-    </div>
-  )
-}
 
 export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = false }: { runId: string; nodeRunId: string; prompt: string; context: { name: string; value: string }[]; disabled?: boolean }) {
   const { t } = useI18n()
@@ -70,8 +45,10 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
 /** Detail of one node. Keyed by node id by the caller, so the chosen attempt and tab reset per node. */
 export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; nodeId: string | null; lost?: boolean; kind?: string }) {
   const { t } = useI18n()
-  const [tab, setTab] = useState<'attempts' | 'log'>('attempts')
+  const [tab, setTab] = useState<'attempts' | 'compare' | 'log'>('attempts')
   const [chosen, setChosen] = useState<string | null>(null)
+  // The compared pair is view state only. Until the person picks, it follows the default (FR2).
+  const [pair, setPair] = useState<{ from: string; to: string } | null>(null)
   if (!nodeId)
     return (
       <Card testId="node-panel-empty">
@@ -82,6 +59,9 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
   const status = displayStatus(n)
   // Unless the person picked one, follow the latest attempt as new ones arrive.
   const shown = n.attempts.find((a) => a.id === chosen) ?? n.attempts[n.attempts.length - 1]
+  const comparable = canCompare(n)
+  const compared = pair ?? defaultPair(n)
+  const view = tab === 'compare' && !comparable ? 'attempts' : tab
   return (
     <Card title={n.id} subtitle={kind ? <Tag>{kind}</Tag> : undefined} action={<NodePill status={status} />} testId="node-panel">
       {n.failureKind && (
@@ -102,14 +82,16 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
       )}
       <SegmentedControl
         label={t('node.view')}
-        value={tab}
+        value={view}
         onChange={setTab}
         segments={[
           { value: 'attempts', label: n.attempts.length ? t('node.attemptsCount', { count: n.attempts.length }) : t('node.attempts'), testId: 'tab-attempts' },
+          ...(comparable ? [{ value: 'compare' as const, label: t('compare.tab'), testId: 'tab-compare' }] : []),
           { value: 'log', label: t('node.log'), testId: 'tab-log' },
         ]}
       />
-      {tab === 'attempts' &&
+      {view === 'compare' && compared && <AttemptCompare run={run} node={n} kind={kind} from={compared.from} to={compared.to} onChange={setPair} />}
+      {view === 'attempts' &&
         (n.attempts.length === 0 || !shown ? (
           <div className="mu">{t('node.noLoop')}</div>
         ) : (
@@ -127,12 +109,12 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
                 <b>{t('node.attempt', { n: shown.number, max: shown.max })}</b>
                 <OutcomePill outcome={shown.outcome} />
               </div>
-              <Evidence attempt={shown} />
+              {shown.check && <CheckResultView check={shown.check} />}
               {shown.log && <pre className="log small">{shown.log}</pre>}
             </div>
           </>
         ))}
-      {tab === 'log' && <pre className="log" data-testid="node-log" tabIndex={0}>{n.log || t('node.noLog')}</pre>}
+      {view === 'log' && <pre className="log" data-testid="node-log" tabIndex={0}>{n.log || t('node.noLog')}</pre>}
     </Card>
   )
 }

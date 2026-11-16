@@ -52,6 +52,7 @@ feature contract.
 | `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (accepted) |
 | `F2.3-E6-recorded-run-values.md` | Implemented (engine slice E6 and desktop switch, opt-in); ADR-0023 (accepted) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
+| `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0024 (proposed, owner decisions recorded) |
 
 ## Later phases
 

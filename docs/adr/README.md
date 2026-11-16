@@ -37,3 +37,6 @@ Graph editor (ADR-0020 to ADR-0022 accepted, ADR-0023 proposed; plan `docs/super
 [ADR-0022 - Canvas layout stored in `metadata.layout`](0022-graph-layout-metadata.md),
 [ADR-0023 - Recorded run values for edge inspection](0023-recorded-run-values.md)
 (proposed; one product decision open: opt-in or default-on).
+
+F2.8 Attempt Compare (proposed for F2.8b; owner decisions recorded 2026-11-15):
+[ADR-0024 - Attempt diff capture for Attempt Compare](0024-attempt-diff-capture.md).

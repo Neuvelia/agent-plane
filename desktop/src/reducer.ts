@@ -43,6 +43,17 @@ export interface Attempt {
   outcome?: string
   check?: CheckView
   log: string
+  /** Event timestamps (ISO) of attempt_started / attempt_finished. */
+  startedAt?: string
+  finishedAt?: string
+  /**
+   * Sorted Git-observed paths from this attempt's node_evidence. Undefined means
+   * not observed (no evidence event), which is different from an empty list.
+   */
+  changedFiles?: string[]
+  /** Feedback linkage from attempt_input: the attempt and check whose result this attempt received. */
+  previousAttemptId?: string
+  previousCheckId?: string
 }
 
 export interface ApprovalView {
@@ -192,13 +203,34 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
     case 'attempt_started':
       if (id && event.attempt_id) {
         const n = node(state, id)
-        n.attempts.push({ id: event.attempt_id, number: num(p.number), max: num(p.max_attempts), log: '' })
+        n.attempts.push({ id: event.attempt_id, number: num(p.number), max: num(p.max_attempts), log: '', startedAt: event.timestamp })
       }
       break
     case 'attempt_finished':
       if (id) {
         const a = attemptFor(node(state, id), event.attempt_id)
-        if (a) a.outcome = str(p.outcome)
+        if (a) {
+          a.outcome = str(p.outcome)
+          a.finishedAt = event.timestamp
+        }
+      }
+      break
+    case 'attempt_input':
+      // Only an exact attempt match: feedback must never be attached to the wrong attempt.
+      if (id && event.attempt_id) {
+        const a = node(state, id).attempts.find((x) => x.id === event.attempt_id)
+        if (a) {
+          a.previousAttemptId = str(p.previous_attempt_id) || undefined
+          a.previousCheckId = str(p.previous_check_id) || undefined
+        }
+      }
+      break
+    case 'node_evidence':
+      // Evidence without an attempt ID belongs to a non-loop node; it has no attempt to compare.
+      if (id && event.attempt_id) {
+        const a = node(state, id).attempts.find((x) => x.id === event.attempt_id)
+        const files = (Array.isArray(p.changed_files) ? p.changed_files : []) as Record<string, unknown>[]
+        if (a) a.changedFiles = [...new Set(files.map((f) => str(f.path)).filter((path) => path !== ''))].sort()
       }
       break
     case 'gate_check':

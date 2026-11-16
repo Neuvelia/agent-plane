@@ -157,6 +157,22 @@ table.runs{width:100%;border-collapse:collapse}
 .react-flow__edge.flow .react-flow__edge-path{stroke:var(--brand)}
 .react-flow__handle{opacity:0}
 .banner{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--radius-12);background:var(--bad-soft);color:var(--fg)}
+/* F2.8a attempt compare */
+.cmp{display:flex;flex-direction:column;gap:var(--space-10)}
+.cmp p{margin:0}
+.cmp-controls{display:flex;align-items:flex-end;gap:var(--space-8);flex-wrap:wrap}
+.cmp-controls .field{flex:1 1 140px;min-width:0}
+.cmp select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);width:100%}
+.cmp-scroll{overflow-x:auto}
+.cmp-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
+.cmp-table th,.cmp-table td{text-align:left;vertical-align:top;padding:var(--space-8);border-bottom:1px solid var(--fill-6);overflow-wrap:anywhere}
+.cmp-table thead th{font-weight:600}
+.cmp-table th[scope=row]{width:28%}
+.cmp-files ul{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.cmp-files li{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.cmp-feedback{background:var(--inset);border-radius:var(--radius-12);padding:10px;display:flex;flex-direction:column;gap:6px}
+.cmp-contents{border:1px dashed var(--fill-6);border-radius:var(--radius-12);padding:10px}
+.fine{font-size:12px}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 .rail-item{position:relative}.rail-badge{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;font-size:10px}

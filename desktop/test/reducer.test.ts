@@ -55,6 +55,29 @@ describe('demo run reduced from events', () => {
     expect(run.nodes.fast!.log).toBe('fast branch done')
   })
 
+  it('records attempt timestamps and the feedback linkage from attempt_input (F2.8a)', () => {
+    const flaky = run.nodes.flaky!
+    const started = approve.filter((e) => e.type === 'attempt_started' && e.node_id === 'flaky')
+    const finished = approve.filter((e) => e.type === 'attempt_finished' && e.node_id === 'flaky')
+    expect(flaky.attempts.map((a) => a.startedAt)).toEqual(started.map((e) => e.timestamp))
+    expect(flaky.attempts.map((a) => a.finishedAt)).toEqual(finished.map((e) => e.timestamp))
+    expect(flaky.attempts[0]!.previousAttemptId).toBeUndefined()
+    expect(flaky.attempts[1]!.previousAttemptId).toBe(flaky.attempts[0]!.id)
+    expect(flaky.attempts[1]!.previousCheckId).toBe('flaky-ready')
+    // Shell producers emit no node_evidence: not observed, never an empty list.
+    expect(flaky.attempts.map((a) => a.changedFiles)).toEqual([undefined, undefined])
+  })
+
+  it('attaches node_evidence only to the attempt it names, and ignores it without an attempt ID', () => {
+    const [a1, a2] = run.nodes.flaky!.attempts.map((a) => a.id)
+    const base = approve.find((e) => e.type === 'attempt_finished' && e.attempt_id === a1)!
+    const evidence = (attempt: string | undefined, seq: number): ApEvent => ({ ...base, sequence: seq, type: 'node_evidence', attempt_id: attempt, payload: { adapter_id: 'x', adapter_version: '', changed_files: [{ path: 'b.go', provenance: 'observed' }, { path: 'a.go', provenance: 'observed' }] } })
+    let state = reduceAll(approve)
+    state = reduce(state, evidence(a2, 1000))
+    state = reduce(state, evidence(undefined, 1001))
+    expect(state.nodes.flaky!.attempts.map((a) => a.changedFiles)).toEqual([undefined, ['a.go', 'b.go']])
+  })
+
   it('derives "retrying" from the second attempt, not from stored state', () => {
     const i = firstIndex(approve, (e) => e.type === 'attempt_started' && e.payload.number === 2)
     const state = reduceAll(approve.slice(0, i + 1))
