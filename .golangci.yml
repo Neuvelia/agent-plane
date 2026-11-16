@@ -91,6 +91,9 @@ linters:
         linters: [funlen, gocognit, gocyclo, nestif, forbidigo, goconst, errcheck]
       - path: ^cmd/agentplane/
         linters: [forbidigo]
+      # Adapters touch the world (R4 constrains domain and application code).
+      - path: ^internal/(adapter|agent|gate|shell|gitstate|store|api)/
+        linters: [forbidigo]
 
 issues:
   max-issues-per-linter: 0

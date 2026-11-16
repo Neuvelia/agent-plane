@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/run"
 	"context"
@@ -51,7 +52,7 @@ func TestAgentSummaryEdgeToDeterministicNode(t *testing.T) {
 		consumed = ids
 		return map[string]graph.Value{"result": graph.NewStringValue(text)}, nil
 	}}
-	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("task")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
+	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("task")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("Run=%+v %v", result, err)
 	}
@@ -103,7 +104,7 @@ func TestAgentFailureRetainsIndependentSiblingAndSafeEvents(t *testing.T) {
 		<-m.Started
 		return map[string]graph.Value{"kept": graph.NewStringValue("immutable accepted sibling")}, nil
 	}}
-	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("TASK_SENTINEL")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
+	result, err := runtime.Run(context.Background(), d, map[string]graph.Value{"job": graph.NewStringValue("TASK_SENTINEL")}, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})
 	<-siblingStarted
 	if err != nil || result.State != run.RunFailed || !errors.Is(result.Failure.Err, cause) {
 		t.Fatalf("Run=%+v %v", result, err)
@@ -196,7 +197,7 @@ outputs:
 		t.Fatalf("metadata hash=%s %v", hash, err)
 	}
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "parsed fixture done"}}
-	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal})
+	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("parsed Run=%+v %v", result, err)
 	}

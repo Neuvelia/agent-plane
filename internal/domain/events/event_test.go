@@ -7,24 +7,6 @@ import (
 	"time"
 )
 
-func TestIDsAreUniqueAndUUIDShaped(t *testing.T) {
-	a, err := NewRunID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := NewRunID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	node, err := NewNodeRunID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a == b || string(a) == string(node) || len(a) != 36 || a[14] != '4' {
-		t.Fatalf("IDs: %q %q %q", a, b, node)
-	}
-}
-
 func TestEventJSONRoundTripsTypedPayload(t *testing.T) {
 	e := Event{SchemaVersion: SchemaVersion, Type: LogChunk, Timestamp: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC), Sequence: 3, RunID: "run", GraphID: "graph", GraphVersion: "sha256-v0:test", NodeID: "node", NodeRunID: "node-run", Payload: LogChunkPayload{Stream: Stdout, Data: []byte{0, 255, 'x'}}}
 	data, err := json.Marshal(e)

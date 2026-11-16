@@ -1,8 +1,11 @@
-package events
+package trace
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/domain/events"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -10,12 +13,12 @@ import (
 
 func TestCheckResultReferenceRoundTrips(t *testing.T) {
 	line := 7
-	refs := []*EvidenceReference{nil}
-	for _, kind := range []ReferenceKind{"file", "test", "diff", "artifact"} {
-		refs = append(refs, &EvidenceReference{Kind: kind, State: "known", Identifier: "resource"}, &EvidenceReference{Kind: kind, State: "unavailable", Reason: "not supplied"}, &EvidenceReference{Kind: kind, State: "invalid", Reason: "bad reference"})
+	refs := []*events.EvidenceReference{nil}
+	for _, kind := range []events.ReferenceKind{"file", "test", "diff", "artifact"} {
+		refs = append(refs, &events.EvidenceReference{Kind: kind, State: "known", Identifier: "resource"}, &events.EvidenceReference{Kind: kind, State: "unavailable", Reason: "not supplied"}, &events.EvidenceReference{Kind: kind, State: "invalid", Reason: "bad reference"})
 	}
-	refs = append(refs, &EvidenceReference{Kind: "file", State: "known", Identifier: "file.go", Line: &line})
-	for _, verdict := range []CheckVerdict{CheckGreen, CheckRed} {
+	refs = append(refs, &events.EvidenceReference{Kind: "file", State: "known", Identifier: "file.go", Line: &line})
+	for _, verdict := range []events.CheckVerdict{events.CheckGreen, events.CheckRed} {
 		for _, ref := range refs {
 			p := gateFact()
 			p.Verdict = verdict
@@ -30,7 +33,7 @@ func TestCheckResultReferenceRoundTrips(t *testing.T) {
 				t.Fatal(err)
 			}
 			shuffled, _ := json.Marshal(fields)
-			var got CheckResult
+			var got events.CheckResult
 			if err := json.Unmarshal(shuffled, &got); err != nil || !reflect.DeepEqual(p, got) || !bytes.Contains(b, []byte(`"duration_ns":0`)) {
 				t.Fatalf("roundtrip: %s %+v %v", b, got, err)
 			}
@@ -39,10 +42,10 @@ func TestCheckResultReferenceRoundTrips(t *testing.T) {
 	exit := 0
 	p := gateFact()
 	p.Kind = "command"
-	p.Verdict = CheckGreen
-	p.Evidence = []GateEvidence{{Kind: "command", Source: "command", ExitCode: &exit, Stdout: []byte{0, 255}}}
+	p.Verdict = events.CheckGreen
+	p.Evidence = []events.GateEvidence{{Kind: "command", Source: "command", ExitCode: &exit, Stdout: []byte{0, 255}}}
 	b, _ := json.Marshal(p)
-	var got CheckResult
+	var got events.CheckResult
 	if err := json.Unmarshal(b, &got); err != nil || *got.Evidence[0].ExitCode != 0 || got.Evidence[0].Stdout[1] != 255 {
 		t.Fatalf("zero/bytes: %s %v", b, err)
 	}
@@ -68,26 +71,26 @@ func TestCheckResultRejectsMalformedBeforeTrace(t *testing.T) {
 		cases = append(cases, strings.Replace(string(good), `"source":"json_predicate"`, `"source":"json_predicate","reference":`+ref, 1))
 	}
 	for i, raw := range cases {
-		var p CheckResult
+		var p events.CheckResult
 		if err := json.Unmarshal([]byte(raw), &p); err == nil {
 			t.Errorf("case %d accepted %s", i, raw)
 		}
-		var event Event
+		var event events.Event
 		envelope := `{"event_schema_version":5,"type":"gate_check","payload":` + raw + `}`
 		if err := json.Unmarshal([]byte(envelope), &event); err == nil {
 			t.Errorf("case %d entered trace", i)
 		}
 	}
-	for _, mutate := range []func(*CheckResult){
-		func(p *CheckResult) { p.DurationNS = -1 }, func(p *CheckResult) { p.Version = 0 }, func(p *CheckResult) { p.Scope.CheckedInputs[0] = "\xff" }, func(p *CheckResult) {
-			p.Evidence[0].Reference = &EvidenceReference{Kind: "file", State: "known", Identifier: "\xff"}
-		}, func(p *CheckResult) { p.Evidence = make([]GateEvidence, 33) },
-		func(p *CheckResult) { p.Evidence[0].Path = strings.Repeat("<", MaxGatePayload/6) },
+	for _, mutate := range []func(*events.CheckResult){
+		func(p *events.CheckResult) { p.DurationNS = -1 }, func(p *events.CheckResult) { p.Version = 0 }, func(p *events.CheckResult) { p.Scope.CheckedInputs[0] = "\xff" }, func(p *events.CheckResult) {
+			p.Evidence[0].Reference = &events.EvidenceReference{Kind: "file", State: "known", Identifier: "\xff"}
+		}, func(p *events.CheckResult) { p.Evidence = make([]events.GateEvidence, 33) },
+		func(p *events.CheckResult) { p.Evidence[0].Path = strings.Repeat("<", events.MaxGatePayload/6) },
 	} {
 		p := gateFact()
 		mutate(&p)
-		c := NewCollector("r", "g", "v")
-		if _, err := c.Append(Event{Type: GateCheck, Payload: p}); err == nil || len(c.Snapshot()) != 0 {
+		c := NewCollector(system.Clock{}, "r", "g", "v")
+		if _, err := c.Append(events.Event{Type: events.GateCheck, Payload: p}); err == nil || len(c.Snapshot()) != 0 {
 			t.Fatal("invalid result retained")
 		}
 	}
@@ -95,22 +98,22 @@ func TestCheckResultRejectsMalformedBeforeTrace(t *testing.T) {
 
 func TestFrozenLegacyGateAndVersionShapes(t *testing.T) {
 	frozen := `{"event_schema_version":4,"type":"gate_check","payload":{"check_id":"old","kind":"json_predicate","verdict":"red","reason":"mismatch","evidence":[{"source":"json_predicate"}]}}`
-	var e Event
+	var e events.Event
 	if err := json.Unmarshal([]byte(frozen), &e); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := e.Payload.(LegacyGateCheckPayload); !ok {
+	if _, ok := e.Payload.(events.LegacyGateCheckPayload); !ok {
 		t.Fatal("legacy upgraded")
 	}
 	b, err := json.Marshal(e)
 	if err != nil || bytes.Contains(b, []byte("duration_ns")) || bytes.Contains(b, []byte("checked_inputs")) {
 		t.Fatal("fabricated legacy metadata")
 	}
-	if len(CheckResults([]Event{e}, "r", "n")) != 0 {
+	if len(events.CheckResults([]events.Event{e}, "r", "n")) != 0 {
 		t.Fatal("legacy lookup upgraded")
 	}
-	full, _ := json.Marshal(Event{SchemaVersion: 5, Type: GateCheck, Payload: gateFact()})
-	for _, raw := range []string{strings.Replace(frozen, `"event_schema_version":4`, `"event_schema_version":5`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":4`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":11`, 1)} {
+	full, _ := json.Marshal(events.Event{SchemaVersion: 5, Type: events.GateCheck, Payload: gateFact()})
+	for _, raw := range []string{strings.Replace(frozen, `"event_schema_version":4`, `"event_schema_version":5`, 1), strings.Replace(string(full), `"event_schema_version":5`, `"event_schema_version":4`, 1), strings.Replace(string(full), `"event_schema_version":5`, fmt.Sprintf(`"event_schema_version":%d`, events.SchemaVersion+1), 1)} {
 		if json.Unmarshal([]byte(raw), &e) == nil {
 			t.Fatal("incompatible shape accepted")
 		}
@@ -126,9 +129,9 @@ func TestFrozenLegacyGateAndVersionShapes(t *testing.T) {
 func TestCheckResultsFilterOrderAndDetach(t *testing.T) {
 	line := 2
 	p := gateFact()
-	p.Evidence[0].Reference = &EvidenceReference{Kind: "file", State: "known", Identifier: "x", Line: &line}
-	trace := []Event{{SchemaVersion: 5, RunID: "r", NodeRunID: "n", Type: GateCheck, Sequence: 9, Payload: p}, {SchemaVersion: 5, RunID: "other", NodeRunID: "n", Type: GateCheck, Sequence: 2, Payload: p}, {SchemaVersion: 5, RunID: "r", NodeRunID: "other", Type: GateCheck, Sequence: 3, Payload: p}, {SchemaVersion: 5, RunID: "r", NodeRunID: "n", Type: GateCheck, Sequence: 1, Payload: func() CheckResult { q := CloneGate(p); q.CheckID = "first"; return q }()}}
-	got := CheckResults(trace, "r", "n")
+	p.Evidence[0].Reference = &events.EvidenceReference{Kind: "file", State: "known", Identifier: "x", Line: &line}
+	trace := []events.Event{{SchemaVersion: 5, RunID: "r", NodeRunID: "n", Type: events.GateCheck, Sequence: 9, Payload: p}, {SchemaVersion: 5, RunID: "other", NodeRunID: "n", Type: events.GateCheck, Sequence: 2, Payload: p}, {SchemaVersion: 5, RunID: "r", NodeRunID: "other", Type: events.GateCheck, Sequence: 3, Payload: p}, {SchemaVersion: 5, RunID: "r", NodeRunID: "n", Type: events.GateCheck, Sequence: 1, Payload: func() events.CheckResult { q := events.CloneGate(p); q.CheckID = "first"; return q }()}}
+	got := events.CheckResults(trace, "r", "n")
 	if len(got) != 2 || got[0].CheckID != "first" || got[1].CheckID != "check" {
 		t.Fatal("lookup filter/order")
 	}
@@ -138,19 +141,19 @@ func TestCheckResultsFilterOrderAndDetach(t *testing.T) {
 	if p.Scope.CheckedInputs[0] != "data" || p.Evidence[0].Reference.Identifier != "x" || line != 2 {
 		t.Fatal("lookup aliased")
 	}
-	if len(CheckResults(trace, "", "n")) != 0 || len(CheckResults(trace, "r", "missing")) != 0 {
+	if len(events.CheckResults(trace, "", "n")) != 0 || len(events.CheckResults(trace, "r", "missing")) != 0 {
 		t.Fatal("absent identity lookup")
 	}
 }
 
 func TestGreenMayOmitEvidenceAndRedCannot(t *testing.T) {
 	p := gateFact()
-	p.Verdict = CheckGreen
-	p.Evidence = []GateEvidence{}
+	p.Verdict = events.CheckGreen
+	p.Evidence = []events.GateEvidence{}
 	b, _ := json.Marshal(p)
-	var got CheckResult
-	c := NewCollector("r", "g", "v")
-	if _, err := c.Append(Event{Type: GateCheck, Payload: p}); err != nil {
+	var got events.CheckResult
+	c := NewCollector(system.Clock{}, "r", "g", "v")
+	if _, err := c.Append(events.Event{Type: events.GateCheck, Payload: p}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := json.Marshal(c.Snapshot()[0]); err != nil {
@@ -159,7 +162,7 @@ func TestGreenMayOmitEvidenceAndRedCannot(t *testing.T) {
 	if err := json.Unmarshal(b, &got); err != nil || got.Evidence == nil || len(got.Evidence) != 0 {
 		t.Fatalf("green empty evidence: %s %v", b, err)
 	}
-	p.Verdict = CheckRed
+	p.Verdict = events.CheckRed
 	if p.Validate() == nil {
 		t.Fatal("red empty evidence accepted")
 	}
@@ -208,11 +211,11 @@ func TestFullResultRejectsCaseAliasesAndForbiddenReferenceFields(t *testing.T) {
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
-			var result CheckResult
+			var result events.CheckResult
 			if err := json.Unmarshal([]byte(raw), &result); err == nil {
 				t.Errorf("direct decode accepted forbidden field: %s", raw)
 			}
-			var event Event
+			var event events.Event
 			envelope := `{"event_schema_version":5,"type":"gate_check","payload":` + raw + `}`
 			if err := json.Unmarshal([]byte(envelope), &event); err == nil {
 				t.Errorf("event decode accepted forbidden field: %s", raw)
@@ -221,7 +224,7 @@ func TestFullResultRejectsCaseAliasesAndForbiddenReferenceFields(t *testing.T) {
 	}
 	// Freeze the legacy decoder's existing case-insensitive matching behavior.
 	legacy := `{"event_schema_version":4,"type":"gate_check","payload":{"check_id":"old","kind":"json_predicate","verdict":"red","reason":"mismatch","evidence":[{"SOURCE":"json_predicate"}]}}`
-	var event Event
+	var event events.Event
 	if err := json.Unmarshal([]byte(legacy), &event); err != nil {
 		t.Fatalf("legacy decoding changed: %v", err)
 	}

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
@@ -45,12 +46,12 @@ func TestSchedulerExecutorCorrelationCompatibility(t *testing.T) {
 		legacyCalls++
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, legacy, Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), def, nil, legacy, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded || legacyCalls != 2 {
 		t.Fatalf("legacy=%+v %v calls=%d", result, err, legacyCalls)
 	}
 	p := &correlationProbe{received: map[string]run.ExecutionCorrelation{}}
-	result, err = Run(context.Background(), def, nil, p, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
+	result, err = Run(context.Background(), def, nil, p, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})
 	if err != nil || result.State != run.RunSucceeded || p.legacy != 0 {
 		t.Fatalf("correlated=%+v %v", result, err)
 	}
@@ -71,7 +72,7 @@ func TestSchedulerExecutorCorrelationCompatibility(t *testing.T) {
 }
 func TestSchedulerExistingLogsTakePrecedenceOverCorrelation(t *testing.T) {
 	p := &combinedProbe{correlationProbe: &correlationProbe{received: map[string]run.ExecutionCorrelation{}}}
-	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded || p.logs != 1 || p.legacy != 0 || len(p.received) != 0 {
 		t.Fatalf("precedence=%+v %+v %v", p, result, err)
 	}

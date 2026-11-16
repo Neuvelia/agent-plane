@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/run"
 	"bytes"
@@ -34,7 +35,7 @@ func TestRunRedactsSplitSecretsBeforeLogEvents(t *testing.T) {
 		observe("stderr", []byte("ret done"))
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"secret"}})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"secret"}})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
@@ -71,7 +72,7 @@ func TestRunRejectsRedactionsWithoutSafeMarkerBeforeStart(t *testing.T) {
 		t.Fatal("executor called")
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{string(allBytes)}})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{string(allBytes)}})
 	if err == nil || result.RunID != "" || len(result.Events) != 0 {
 		t.Fatalf("invalid redactions started a run: %#v, %v", result, err)
 	}
@@ -90,7 +91,7 @@ func TestConcurrentRunLogCorrelation(t *testing.T) {
 	})
 	done := make(chan run.Result, 1)
 	go func() {
-		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
+		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})
 		done <- result
 	}()
 	<-started
@@ -136,7 +137,7 @@ func TestLateLogCallbackDoesNotChangeFinishedRun(t *testing.T) {
 		late = observe
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
@@ -162,11 +163,11 @@ func TestRunEmitsCorrelatedLifecycleAndUniqueIDs(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
-	first, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
+	first, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
+	second, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +206,7 @@ func TestRunDeliversLiveEventsInSequence(t *testing.T) {
 	live := make(chan events.Event)
 	done := make(chan run.Result, 1)
 	go func() {
-		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, LiveEvents: live})
+		result, _ := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LiveEvents: live})
 		done <- result
 	}()
 	var received []events.Event
@@ -237,7 +238,7 @@ func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
 		}
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 1})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 1})
 	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("result = %#v, %v", result, err)
 	}
@@ -278,7 +279,7 @@ func TestConcurrentRunEventsHaveUniqueMonotonicSequence(t *testing.T) {
 	group.Add(1)
 	go func() {
 		defer group.Done()
-		result, err = Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
+		result, err = Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})
 	}()
 	<-started
 	<-started
@@ -308,7 +309,7 @@ func TestBindingFailureEmitsTerminalWithoutStart(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("result = %#v, %v", result, err)
 	}
@@ -341,7 +342,7 @@ func TestCancelledRunHasOneFinalEvent(t *testing.T) {
 	})
 	done := make(chan run.Result, 1)
 	go func() {
-		result, _ := Run(ctx, def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 1})
+		result, _ := Run(ctx, def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 1})
 		done <- result
 	}()
 	<-started
@@ -371,7 +372,7 @@ func TestPreflightFailureHasNoRunIdentityOrEvents(t *testing.T) {
 		t.Fatal("executor called")
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err == nil || result.RunID != "" || len(result.Events) != 0 {
 		t.Fatalf("preflight = %#v, %v", result, err)
 	}
@@ -383,7 +384,7 @@ func TestGraphOutputFailureFinishesAfterSuccessfulNode(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("result = %#v, %v", result, err)
 	}
