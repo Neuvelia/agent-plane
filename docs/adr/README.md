@@ -37,3 +37,7 @@ Graph editor (ADR-0020 to ADR-0022 accepted, ADR-0023 proposed; plan `docs/super
 [ADR-0022 - Canvas layout stored in `metadata.layout`](0022-graph-layout-metadata.md),
 [ADR-0023 - Recorded run values for edge inspection](0023-recorded-run-values.md)
 (proposed; one product decision open: opt-in or default-on).
+
+Phase 3:
+[ADR-0024 - Workspace isolation with Git worktrees and deterministic integration](0024-workspace-isolation-with-git-worktrees.md)
+(accepted; real-Codex sandbox spike passed).
