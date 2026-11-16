@@ -46,7 +46,10 @@ F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
 (ADR-0019). The desktop UI observes and steers runs through that API; it never
 schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
-Storybook; the API and event contracts are unchanged. Read the
+Storybook; the API and event contracts are unchanged. The graph editor (F2.1,
+F2.4 Issues panel) and the F2.2 node inspector edit graph files through
+versioned operations (ADR-0020, ADR-0021); inspector fields come from
+descriptors owned by the validators (`internal/fields`). Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without
