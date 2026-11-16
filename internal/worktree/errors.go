@@ -11,6 +11,7 @@ import (
 // diagnostics, which are repository-controlled text.
 type Code string
 
+// Failure codes of this package.
 const (
 	CodeWorkspace    Code = "workspace"     // source is not a usable non-bare Git worktree root
 	CodeGitVersion   Code = "git_version"   // Git missing or older than 2.38

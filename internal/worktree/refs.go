@@ -40,26 +40,39 @@ func UnitRef(runID, nodeID string) (string, error) {
 	if err := validateID("run id", runID); err != nil {
 		return "", err
 	}
-	if nodeID == "" || len(nodeID) > maxNodeIDBytes || !utf8.ValidString(nodeID) || strings.ContainsRune(nodeID, 0) {
+	if !validNodeID(nodeID) {
 		return "", errors.New("node id must be 1-4096 bytes of valid UTF-8 without NUL")
 	}
+	sum := sha256.Sum256([]byte(nodeID))
+	return refRoot + runID + "/units/" + refPrefix(nodeID) + "-" + hex.EncodeToString(sum[:8]), nil
+}
+
+func validNodeID(id string) bool {
+	return id != "" && len(id) <= maxNodeIDBytes && utf8.ValidString(id) && !strings.ContainsRune(id, 0)
+}
+
+// refPrefix is the readable part of a unit ref: characters Git accepts
+// unchanged, everything else replaced by an underscore.
+func refPrefix(nodeID string) string {
 	var prefix strings.Builder
 	for _, r := range nodeID {
 		if prefix.Len() >= refPrefixBytes {
 			break
 		}
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		if refSafeRune(r) {
 			prefix.WriteRune(r)
-		default:
+		} else {
 			prefix.WriteByte('_')
 		}
 	}
 	if prefix.Len() == 0 {
-		prefix.WriteString("node")
+		return "node"
 	}
-	sum := sha256.Sum256([]byte(nodeID))
-	return refRoot + runID + "/units/" + prefix.String() + "-" + hex.EncodeToString(sum[:8]), nil
+	return prefix.String()
+}
+
+func refSafeRune(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_'
 }
 
 // IntegratedRef names the tip of the run's integration history.

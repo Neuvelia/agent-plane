@@ -52,23 +52,8 @@ func NewManager(root string) (*Manager, error) {
 		return nil, fail(CodeWorktreeRoot, "worktree root must be an absolute path", nil)
 	}
 	root = filepath.Clean(root)
-	info, err := os.Lstat(root)
-	switch {
-	case os.IsNotExist(err):
-		if err := os.MkdirAll(root, 0o700); err != nil {
-			return nil, fail(CodeWorktreeRoot, "cannot create the worktree root", err)
-		}
-		if info, err = os.Lstat(root); err != nil {
-			return nil, fail(CodeWorktreeRoot, "cannot inspect the worktree root", err)
-		}
-	case err != nil:
-		return nil, fail(CodeWorktreeRoot, "cannot inspect the worktree root", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return nil, fail(CodeWorktreeRoot, "worktree root must be a real directory, not a symlink or file", nil)
-	}
-	if info.Mode().Perm()&0o077 != 0 {
-		return nil, fail(CodeWorktreeRoot, fmt.Sprintf("worktree root permissions %o expose it to other users; run chmod 700 on it", info.Mode().Perm()), nil)
+	if err := ensureRoot(root); err != nil {
+		return nil, err
 	}
 	real, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -77,29 +62,42 @@ func NewManager(root string) (*Manager, error) {
 	return &Manager{root: real, live: map[*Handle]struct{}{}}, nil
 }
 
+// ensureRoot creates a missing root with mode 0700 and rejects a root that is
+// not a private, real directory.
+func ensureRoot(root string) error {
+	info, err := os.Lstat(root)
+	switch {
+	case os.IsNotExist(err):
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return fail(CodeWorktreeRoot, "cannot create the worktree root", err)
+		}
+		if info, err = os.Lstat(root); err != nil {
+			return fail(CodeWorktreeRoot, "cannot inspect the worktree root", err)
+		}
+	case err != nil:
+		return fail(CodeWorktreeRoot, "cannot inspect the worktree root", err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+		return fail(CodeWorktreeRoot, "worktree root must be a real directory, not a symlink or file", nil)
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return fail(CodeWorktreeRoot, fmt.Sprintf("worktree root permissions %o expose it to other users; run chmod 700 on it", info.Mode().Perm()), nil)
+	}
+	return nil
+}
+
 // Root returns the canonical worktree root.
 func (m *Manager) Root() string { return m.root }
 
 // Create adds a detached linked worktree at src.BaseSHA. Preflight must have
 // accepted the source first: Create trusts that no filter driver is configured.
 func (m *Manager) Create(ctx context.Context, src Source, runID, nodeRunID string) (*Handle, error) {
-	if err := validateID("run id", runID); err != nil {
-		return nil, fail(CodeInvalidInput, err.Error(), nil)
-	}
-	if err := validateID("node run id", nodeRunID); err != nil {
-		return nil, fail(CodeInvalidInput, err.Error(), nil)
-	}
-	if !shaPattern.MatchString(src.BaseSHA) || !filepath.IsAbs(src.Root) {
-		return nil, fail(CodeInvalidInput, "source was not produced by Preflight", nil)
-	}
-	if within(src.Root, m.root) {
-		return nil, fail(CodeWorktreeRoot, "worktree root must not be inside the source workspace", nil)
+	if err := m.validateCreate(src, runID, nodeRunID); err != nil {
+		return nil, err
 	}
 	path := filepath.Join(m.root, "agentplane-"+runID+"-"+nodeRunID)
-	if _, err := os.Lstat(path); err == nil {
-		return nil, fail(CodeCreate, "the worktree directory already exists; refusing to reuse it", nil)
-	} else if !os.IsNotExist(err) {
-		return nil, fail(CodeCreate, "cannot inspect the worktree directory", err)
+	if err := requireAbsent(path); err != nil {
+		return nil, err
 	}
 	if _, err := gitstate.Run(ctx, src.Root, gitstate.RunOptions{Timeout: mutateTimeout}, "worktree", "add", "--quiet", "--detach", path, src.BaseSHA); err != nil {
 		return nil, fail(CodeCreate, "git could not create the worktree (check free disk space and that the base commit still exists)", err)
@@ -112,6 +110,34 @@ func (m *Manager) Create(ctx context.Context, src Source, runID, nodeRunID strin
 	m.live[h] = struct{}{}
 	m.mu.Unlock()
 	return h, nil
+}
+
+func (m *Manager) validateCreate(src Source, runID, nodeRunID string) error {
+	if err := validateID("run id", runID); err != nil {
+		return fail(CodeInvalidInput, err.Error(), nil)
+	}
+	if err := validateID("node run id", nodeRunID); err != nil {
+		return fail(CodeInvalidInput, err.Error(), nil)
+	}
+	if !shaPattern.MatchString(src.BaseSHA) || !filepath.IsAbs(src.Root) {
+		return fail(CodeInvalidInput, "source was not produced by Preflight", nil)
+	}
+	if within(src.Root, m.root) {
+		return fail(CodeWorktreeRoot, "worktree root must not be inside the source workspace", nil)
+	}
+	return nil
+}
+
+// requireAbsent refuses to reuse an existing worktree directory.
+func requireAbsent(path string) error {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return fail(CodeCreate, "the worktree directory already exists; refusing to reuse it", nil)
+	}
+	if !os.IsNotExist(err) {
+		return fail(CodeCreate, "cannot inspect the worktree directory", err)
+	}
+	return nil
 }
 
 // SnapshotResult describes the commit recorded for a unit.

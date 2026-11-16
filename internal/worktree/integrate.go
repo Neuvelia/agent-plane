@@ -27,50 +27,21 @@ type IntegrateResult struct {
 // tipRef starts at the base commit. On success tipRef advances to a merge commit
 // (parents: previous tip, unit); on conflict nothing is written. There is no
 // automatic resolution.
-func (m *Manager) Integrate(ctx context.Context, src Source, tipRef, unitCommit string) (IntegrateResult, error) {
-	if err := validateRef(tipRef); err != nil || !strings.HasSuffix(tipRef, "/integrated") {
-		return IntegrateResult{}, fail(CodeInvalidInput, "tip ref must be a run's integrated ref", nil)
-	}
-	if !shaPattern.MatchString(unitCommit) || !shaPattern.MatchString(src.BaseSHA) || !strings.HasPrefix(src.Root, "/") {
-		return IntegrateResult{}, fail(CodeInvalidInput, "source or unit commit is invalid", nil)
+func (*Manager) Integrate(ctx context.Context, src Source, tipRef, unitCommit string) (IntegrateResult, error) {
+	if err := validateIntegrateInput(src, tipRef, unitCommit); err != nil {
+		return IntegrateResult{}, err
 	}
 	opts := gitstate.RunOptions{Timeout: mutateTimeout}
-
-	tip, expected := src.BaseSHA, strings.Repeat("0", len(src.BaseSHA)) // zero id: the ref must not exist yet
-	cur, err := gitstate.Run(ctx, src.Root, opts, "rev-parse", "--verify", "--quiet", tipRef+"^{commit}")
-	switch {
-	case err == nil:
-		tip = strings.TrimSpace(string(cur.Stdout))
-		expected = tip
-	default:
-		var runErr *gitstate.RunError
-		if !errors.As(err, &runErr) || runErr.Class != gitstate.RunExit || runErr.ExitCode != 1 {
-			return IntegrateResult{}, fail(CodeIntegrate, "git could not read the integration tip", err)
-		}
-	}
-	if !shaPattern.MatchString(tip) {
-		return IntegrateResult{}, fail(CodeIntegrate, "git returned an unexpected tip id", nil)
-	}
-
-	merged, err := gitstate.Run(ctx, src.Root, opts, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", "--merge-base="+src.BaseSHA, tip, unitCommit)
+	tip, expected, err := readTip(ctx, src, opts, tipRef)
 	if err != nil {
-		var runErr *gitstate.RunError
-		if errors.As(err, &runErr) && runErr.Class == gitstate.RunExit && runErr.ExitCode == 1 {
-			paths := conflictPaths(merged.Stdout)
-			res := IntegrateResult{Conflict: true, TipCommit: tip}
-			if len(paths) > MaxConflictPaths {
-				res.Omitted = len(paths) - MaxConflictPaths
-				paths = paths[:MaxConflictPaths]
-			}
-			res.ConflictPaths = paths
-			return res, nil
-		}
-		return IntegrateResult{}, fail(CodeIntegrate, "git could not merge the unit", err)
+		return IntegrateResult{}, err
 	}
-	fields := strings.Split(string(merged.Stdout), "\x00")
-	tree := strings.TrimSpace(fields[0])
-	if !shaPattern.MatchString(tree) {
-		return IntegrateResult{}, fail(CodeIntegrate, "git returned an unexpected merged tree id", nil)
+	tree, conflict, err := mergeUnit(ctx, src, opts, tip, unitCommit)
+	if err != nil {
+		return IntegrateResult{}, err
+	}
+	if conflict != nil {
+		return *conflict, nil
 	}
 	commit, err := commitTree(ctx, src.Root, tree, "agentplane integrate unit", tip, unitCommit)
 	if err != nil {
@@ -86,6 +57,67 @@ func (m *Manager) Integrate(ctx context.Context, src Source, tipRef, unitCommit 
 		return IntegrateResult{}, err
 	}
 	return IntegrateResult{TipCommit: commit, ChangedPaths: changed}, nil
+}
+
+func validateIntegrateInput(src Source, tipRef, unitCommit string) error {
+	if err := validateRef(tipRef); err != nil || !strings.HasSuffix(tipRef, "/integrated") {
+		return fail(CodeInvalidInput, "tip ref must be a run's integrated ref", nil)
+	}
+	if !shaPattern.MatchString(unitCommit) || !shaPattern.MatchString(src.BaseSHA) || !strings.HasPrefix(src.Root, "/") {
+		return fail(CodeInvalidInput, "source or unit commit is invalid", nil)
+	}
+	return nil
+}
+
+// isGitExit reports whether err is Git running and exiting with code.
+func isGitExit(err error, code int) bool {
+	var runErr *gitstate.RunError
+	return errors.As(err, &runErr) && runErr.Class == gitstate.RunExit && runErr.ExitCode == code
+}
+
+// readTip returns the current integration tip and the value the compare-and-swap
+// must expect. A missing ref starts at the base commit and expects a zero id.
+func readTip(ctx context.Context, src Source, opts gitstate.RunOptions, tipRef string) (tip, expected string, err error) {
+	tip, expected = src.BaseSHA, strings.Repeat("0", len(src.BaseSHA)) // zero id: the ref must not exist yet
+	cur, runErr := gitstate.Run(ctx, src.Root, opts, "rev-parse", "--verify", "--quiet", tipRef+"^{commit}")
+	if runErr == nil {
+		tip = strings.TrimSpace(string(cur.Stdout))
+		expected = tip
+	} else if !isGitExit(runErr, 1) {
+		return "", "", fail(CodeIntegrate, "git could not read the integration tip", runErr)
+	}
+	if !shaPattern.MatchString(tip) {
+		return "", "", fail(CodeIntegrate, "git returned an unexpected tip id", nil)
+	}
+	return tip, expected, nil
+}
+
+// mergeUnit three-way merges the unit onto tip. A conflict is a normal result,
+// not an error: it is returned with an unchanged tip and bounded paths.
+func mergeUnit(ctx context.Context, src Source, opts gitstate.RunOptions, tip, unitCommit string) (tree string, conflict *IntegrateResult, err error) {
+	merged, runErr := gitstate.Run(ctx, src.Root, opts, "merge-tree", "--write-tree", "--name-only", "--no-messages", "-z", "--merge-base="+src.BaseSHA, tip, unitCommit)
+	if runErr != nil {
+		if !isGitExit(runErr, 1) {
+			return "", nil, fail(CodeIntegrate, "git could not merge the unit", runErr)
+		}
+		return "", conflictResult(merged.Stdout, tip), nil
+	}
+	tree = strings.TrimSpace(strings.Split(string(merged.Stdout), "\x00")[0])
+	if !shaPattern.MatchString(tree) {
+		return "", nil, fail(CodeIntegrate, "git returned an unexpected merged tree id", nil)
+	}
+	return tree, nil, nil
+}
+
+func conflictResult(output []byte, tip string) *IntegrateResult {
+	paths := conflictPaths(output)
+	res := IntegrateResult{Conflict: true, TipCommit: tip}
+	if len(paths) > MaxConflictPaths {
+		res.Omitted = len(paths) - MaxConflictPaths
+		paths = paths[:MaxConflictPaths]
+	}
+	res.ConflictPaths = paths
+	return &res
 }
 
 // conflictPaths extracts the sorted unique path names from `merge-tree

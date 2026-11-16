@@ -1,3 +1,4 @@
+// Package gitstate observes and runs Git commands under hardened settings.
 package gitstate
 
 import (
@@ -14,6 +15,7 @@ import (
 // cannot reach events or terminals through an error message.
 type RunClass string
 
+// Run classes returned in RunError.Class.
 const (
 	RunExit        RunClass = "exit"         // Git ran and returned a non-zero status
 	RunTimeout     RunClass = "timeout"      // the per-command time bound elapsed
