@@ -19,6 +19,18 @@ jobs:
       - run: make check
       - run: make build
 
+  race:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test -race ./...
+
   desktop:
     runs-on: ubuntu-latest
     steps:
