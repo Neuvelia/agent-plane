@@ -256,6 +256,7 @@ var (
 	shMetachars   = []string{"`", "$(", ">", "<", "|", "&"}
 	shDeniedWords = regexp.MustCompile(`\b(rm|mv|cp|dd|ln|chmod|chown|sudo|su|curl|wget|nc|ncat|ssh|scp|rsync|git|eval|exec|source|kill|mkfs|npm|pip|go|docker)\b`)
 	shVariable    = regexp.MustCompile(`\$\{?([A-Za-z_][A-Za-z0-9_]*)`)
+	shVarRef      = regexp.MustCompile(`^\$(\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z_][A-Za-z0-9_]*)`)
 	secretKey     = regexp.MustCompile(`(?im)^\s*-?\s*"?(token|secret|password|api_key)"?\s*:`)
 	secretValue   = regexp.MustCompile(`sk-|ghp_|github_pat_|AKIA[0-9A-Z]{16}|xox[abp]-|-----BEGIN`)
 )
@@ -362,6 +363,93 @@ func safeShellScript(n graph.NodeDefinition) bool {
 			return false
 		}
 	}
+	return shellCommandWordsAllowed(script)
+}
+
+// shBuiltins is the S2 allowlist. An empty child environment does not stop
+// /bin/sh from finding programs (dash falls back to a default PATH), so every
+// command word must be one of these builtins or keywords; anything else,
+// including an absolute path, is rejected.
+var shBuiltins = map[string]bool{
+	"printf": true, "echo": true, "test": true, "[": true, "]": true,
+	"if": true, "then": true, "else": true, "fi": true,
+}
+
+// shellCommandWordsAllowed tokenizes script and reports whether every word in
+// command position is an unquoted allowlisted builtin. It accepts only the
+// syntax the templates use: words, single- and double-quoted strings,
+// $NAME/${NAME} references, and the separators ";" and newline. Any other
+// unquoted character (subshells, globs, redirection, comments, escapes) is
+// rejected rather than interpreted.
+func shellCommandWordsAllowed(script string) bool {
+	const plain = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.,:=%+/[]"
+	cmdPos := true
+	i := 0
+	for i < len(script) {
+		c := script[i]
+		switch {
+		case c == ' ' || c == '\t':
+			i++
+			continue
+		case c == ';' || c == '\n':
+			cmdPos = true
+			i++
+			continue
+		}
+		// Read one word.
+		var word strings.Builder
+		quoted := false
+		for i < len(script) {
+			c = script[i]
+			if c == ' ' || c == '\t' || c == ';' || c == '\n' {
+				break
+			}
+			switch {
+			case c == '\'':
+				end := strings.IndexByte(script[i+1:], '\'')
+				if end < 0 {
+					return false
+				}
+				quoted = true
+				i += end + 2
+			case c == '"':
+				j := i + 1
+				for j < len(script) && script[j] != '"' {
+					if script[j] == '\\' {
+						j++
+					}
+					j++
+				}
+				if j >= len(script) {
+					return false
+				}
+				quoted = true
+				i = j + 1
+			case c == '$':
+				m := shVarRef.FindString(script[i:])
+				if m == "" {
+					return false
+				}
+				quoted = true // a variable never names a builtin
+				i += len(m)
+			case strings.IndexByte(plain, c) >= 0:
+				word.WriteByte(c)
+				i++
+			default:
+				return false
+			}
+		}
+		if cmdPos {
+			if quoted || !shBuiltins[word.String()] {
+				return false
+			}
+			switch word.String() {
+			case "if", "then", "else":
+				continue // the next word is a command again
+			}
+			cmdPos = false
+		}
+	}
 	return true
 }
 
@@ -392,6 +480,14 @@ func TestSafetyRulesRejectUnsafeFixtures(t *testing.T) {
 		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"rm x\"]\n")},
 		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"printf %s $HOME\"]\n")},
 		{"S2", shell("      command: /bin/sh\n      args: [\"printf x\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"unlink important.txt\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"/usr/bin/find . -delete\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"find . -delete\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"tee out.txt\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"python3 -c 'print(1)'\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"/bin/printf x\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"printf x; 'unlink' y\"]\n")},
+		{"S2", shell("      command: /bin/sh\n      args: [\"-c\", \"if [ 1 ]; then unlink y; fi\"]\n")},
 		{"S3", shell("      command: /usr/bin/printf\n      args: [\"x\"]\n      cwd: /tmp\n")},
 		{"S3", shell("      command: /usr/bin/printf\n      args: [\"x\"]\n      env_allowlist: [HOME]\n")},
 		{"S3", shell("      command: /usr/bin/printf\n      args: [\"x\"]\n      env: {A: b}\n")},
