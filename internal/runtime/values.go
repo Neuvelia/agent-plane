@@ -1,10 +1,14 @@
 package runtime
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"io"
 	"sort"
+	"strings"
 	"unicode/utf8"
 
 	"agentplane/internal/events"
@@ -85,6 +89,14 @@ func (r *valueRecorder) payload(port string, v graph.Value, nodeRunID events.Nod
 		p.Truncated = true
 		return p
 	}
+	if v.Type() == graph.ValueTypeJSON && jsonStringsContainSecret([]byte(raw), r.redactor.secrets) {
+		// A JSON string may spell a secret with any mix of escapes (\", \\,
+		// A, é, surrogate pairs), so byte redaction cannot be complete.
+		// Decoding every key and string and omitting the text when one holds a
+		// secret is: the text is never carried, only the size and digest.
+		p.Truncated, p.Redacted = true, true
+		return p
+	}
 	limit := events.MaxValueBytes
 	if r.budget < limit {
 		limit = r.budget
@@ -98,6 +110,35 @@ func (r *valueRecorder) payload(port string, v graph.Value, nodeRunID events.Nod
 	p.Truncated = cut
 	p.Value = &carried
 	return p
+}
+
+// jsonStringsContainSecret reports whether any decoded object key or string in
+// raw contains a secret. Numbers, literals and structure are raw text and are
+// already covered by byte redaction. Undecodable input counts as containing one.
+func jsonStringsContainSecret(raw []byte, secrets [][]byte) bool {
+	if len(secrets) == 0 {
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			return false
+		}
+		if err != nil {
+			return true
+		}
+		s, ok := token.(string)
+		if !ok {
+			continue
+		}
+		for _, secret := range secrets {
+			if strings.Contains(s, string(secret)) {
+				return true
+			}
+		}
+	}
 }
 
 func (m *runMachine) recordGraphInputs(inputs map[string]graph.Value) {

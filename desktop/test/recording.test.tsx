@@ -71,6 +71,9 @@ describe('serve flags', () => {
     const flags = serveFlags({ enabled: true, redactEnv: ['A', 'GONE'] }, { A: 'secret' })
     expect(flags).toEqual({ args: ['--redact-env', 'A'], recording: false, missing: ['GONE'] })
   })
+  it('reports unset names only when recording is enabled', () => {
+    expect(serveFlags({ enabled: false, redactEnv: ['A', 'GONE'] }, { A: 'secret' })).toEqual({ args: ['--redact-env', 'A'], recording: false, missing: [] })
+  })
   it('never puts an environment value into the arguments', () => {
     expect(JSON.stringify(serveFlags({ enabled: true, redactEnv: ['A'] }, { A: 'hunter2' }))).not.toContain('hunter2')
   })

@@ -46,8 +46,8 @@ func (p ValueRecordedPayload) Validate() error {
 	if !recordedValueTypes[p.Type] {
 		return errors.New("recorded value has an unknown type")
 	}
-	if p.Port == "" || len(p.Port) > 256 || !utf8.ValidString(p.Port) {
-		return errors.New("recorded value requires a bounded port")
+	if !validRecordedPort(p.Port) {
+		return errors.New("recorded value port must be a graph identifier or inputs.<identifier>")
 	}
 	if p.SizeBytes < 0 {
 		return errors.New("recorded value size must not be negative")
@@ -85,6 +85,27 @@ func (p ValueRecordedPayload) Validate() error {
 		return errors.New("recorded value sha256 does not match its text")
 	}
 	return nil
+}
+
+// validRecordedPort accepts exactly the port forms a valid graph can produce:
+// an output port identifier or GraphInputPortPrefix plus a graph input
+// identifier. It mirrors graph.ValidIdentifier (docs/graph-spec.md) without a
+// length cap, because the graph contract has none and appendEvent panics on an
+// invalid event; events stays free of a graph import.
+func validRecordedPort(port string) bool {
+	return validPortIdentifier(strings.TrimPrefix(port, GraphInputPortPrefix))
+}
+
+func validPortIdentifier(identifier string) bool {
+	if identifier == "" || identifier[0] < 'a' || identifier[0] > 'z' {
+		return false
+	}
+	for _, character := range identifier[1:] {
+		if (character < 'a' || character > 'z') && (character < '0' || character > '9') && character != '-' && character != '_' {
+			return false
+		}
+	}
+	return true
 }
 
 func validateValueRecorded(e Event, p ValueRecordedPayload) error {

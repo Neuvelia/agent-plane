@@ -273,7 +273,7 @@ export const pl: Record<MessageKey, string> = {
   'settings.values.explain': 'Gdy włączone, każde wejście grafu i każde zaakceptowane wyjście węzła zapisuje się w historii przebiegów na tym komputerze, aby można było zobaczyć wartość, która przeszła przez krawędź. Wartości zostają na tym komputerze i nie są nigdzie wysyłane. Każda wartość jest przycinana do 16 KiB, a każdy przebieg do 1 MiB. Domyślnie wyłączone.',
   'settings.values.redactionWarning': 'Ukrywane są tylko zmienne środowiskowe wymienione poniżej. Każde inne hasło, token lub prywatne dane w wartości zapisują się bez zmian.',
   'settings.values.redactEnv': 'Zmienne środowiskowe do ukrycia',
-  'settings.values.redactEnvHelp': 'Tylko nazwy, oddzielone spacjami lub przecinkami, na przykład GITHUB_TOKEN. Aplikacja odczytuje ich wartości przy starcie i nigdy ich nie pokazuje. Jeśli wymieniona zmienna nie jest ustawiona, zapis pozostaje wyłączony.',
+  'settings.values.redactEnvHelp': 'Tylko nazwy, oddzielone spacjami lub przecinkami, na przykład GITHUB_TOKEN. Aplikacja odczytuje ich wartości przy starcie i nigdy ich nie pokazuje. Jeśli wymieniona zmienna nie jest ustawiona, zapis pozostaje wyłączony. Silnik odmawia też uruchomienia każdego pliku grafu, który zawiera wartość wymienionej zmiennej.',
   'settings.values.save': 'Zapisz',
   'settings.values.restart': 'Zapisano. Zmiana zadziała przy następnym uruchomieniu Tarmind. Już zapisane przebiegi się nie zmieniają.',
   'settings.values.sessionOn': 'Zapis jest włączony w tej sesji.',

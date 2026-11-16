@@ -264,6 +264,85 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 	}
 }
 
+// The graph contract has no identifier length cap; recording must not turn a
+// valid long port name into an invalid event (appendEvent panics on one).
+func TestValueRecordingAcceptsLongPortNames(t *testing.T) {
+	out, in := "o"+strings.Repeat("u", 259), "i"+strings.Repeat("n", 259)
+	def := definition(map[string]graph.NodeDefinition{
+		"a": {Type: "test", Inputs: map[string]graph.PortDefinition{in: {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{out: {Type: graph.ValueTypeString, Required: true}}},
+	})
+	def.Inputs = map[string]graph.InputDefinition{in: {Type: graph.ValueTypeString, Required: true}}
+	def.GraphInputBindings = []graph.GraphInputBindingDefinition{{From: graph.GraphInputReference("inputs." + in), To: graph.NodeInputReference("a.inputs." + in)}}
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		return map[string]graph.Value{out: graph.NewStringValue("done")}, nil
+	})
+	result, err := Run(context.Background(), def, map[string]graph.Value{in: graph.NewStringValue("go")}, exec, Options{RecordValues: true})
+	if err != nil || result.State != RunSucceeded {
+		t.Fatalf("run = %v %v", result.State, err)
+	}
+	got := map[string]string{}
+	for _, e := range recordedValues(result.Events) {
+		p := valuePayload(t, e)
+		got[p.Port] = *p.Value
+		data, err := json.Marshal(e)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var back events.Event
+		if err := json.Unmarshal(data, &back); err != nil || back.Payload.(events.ValueRecordedPayload).Port != p.Port {
+			t.Fatalf("round trip: %v", err)
+		}
+	}
+	if len(got) != 2 || got[out] != "done" || got["inputs."+in] != "go" {
+		t.Fatalf("values = %v", got)
+	}
+}
+
+func TestValueRecordingOmitsJSONWhoseStringsHoldASecret(t *testing.T) {
+	secret := `q"b\s&<é`
+	marshalled, _ := json.Marshal(secret) // "q\"b\\s&<é"
+	for _, doc := range []string{
+		`{"v":` + string(marshalled) + `}`,
+		`{"v":"q\"b\\s&<é"}`, // ASCII-only escapes
+		`{"q\"b\\s&<é":1}`,   // as an object key, arbitrary escapes
+		`["x q\"b\\s&<é y"]`, // inside a longer string
+	} {
+		exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
+			if id == "a" {
+				v, err := graph.NewJSONValue(json.RawMessage(doc))
+				return map[string]graph.Value{"text": graph.NewStringValue("t"), "doc": v}, err
+			}
+			n, _ := graph.NewNumberValue("1")
+			return map[string]graph.Value{"n": n, "ok": graph.NewBooleanValue(true)}, nil
+		})
+		result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, exec, Options{RecordValues: true, LogRedactions: []string{secret}})
+		if err != nil || result.State != RunSucceeded {
+			t.Fatalf("%s: run = %v %v", doc, result.State, err)
+		}
+		var found bool
+		for _, e := range recordedValues(result.Events) {
+			p := valuePayload(t, e)
+			if e.NodeID != "a" || p.Port != "doc" {
+				continue
+			}
+			found = true
+			if p.Value != nil || !p.Truncated || !p.Redacted || p.SizeBytes != int64(len(doc)) || p.SHA256 != hexDigest(doc) {
+				t.Fatalf("%s: payload = %#v", doc, p)
+			}
+		}
+		if !found {
+			t.Fatalf("%s: doc not recorded", doc)
+		}
+	}
+	// A JSON value without the secret is still carried whole.
+	result, _ := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("t"), Options{RecordValues: true, LogRedactions: []string{secret}})
+	for _, e := range recordedValues(result.Events) {
+		if p := valuePayload(t, e); p.Port == "doc" && (p.Value == nil || *p.Value != `{"k":[1,2]}` || p.Redacted) {
+			t.Fatalf("clean doc = %#v", p)
+		}
+	}
+}
+
 func TestValueRecordingRejectsNonUTF8RedactionsBeforeStart(t *testing.T) {
 	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("x")}, valueExecutor("hi"), Options{RecordValues: true, LogRedactions: []string{"\xff\xfe"}})
 	if err == nil || result.RunID != "" || len(result.Events) != 0 {
