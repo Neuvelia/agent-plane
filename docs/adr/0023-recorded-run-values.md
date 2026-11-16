@@ -1,7 +1,14 @@
 # ADR-0023 - Recorded run values for edge inspection
 
-**Status:** proposed (one product decision open: the default, see "Open decision")
+**Status:** accepted (recording is opt-in, off by default: decided by the owner on 2026-11-15)
 **Date:** 2026-11-14
+**Implementation:** engine slice E6 implemented with the opt-in default
+(`docs/features/F2.3-E6-recorded-run-values.md`). Interpretations recorded in
+that spec and kept: `size_bytes` and `sha256` describe the full value after
+redaction, `value` is always a string in a per-type text form, text that is
+not valid UTF-8 is recorded without `value`, nothing is recorded on the target
+side, and values are read through the existing events stream. The desktop
+Settings switch and sidecar flags are wired; the edge inspector is slice E5b.
 
 ## Context
 
@@ -62,7 +69,9 @@ The plan left open whether recording is opt-in or default-on. This ADR proposes 
 because values are user data that the explicit-list redaction cannot fully protect, and because AGENTS.md
 forbids secrets in events. The cost is that edge inspection needs a one-time switch. If the product owner
 prefers default-on, decision 5 changes to default-on with the same switch to turn it off; decisions 1-4 and 6-8
-do not change. This ADR stays **proposed** until that is answered.
+do not change.
+
+**Decision (owner, 2026-11-15):** opt-in, off by default, as proposed. Decision 5 stands unchanged.
 
 ## Alternatives considered
 

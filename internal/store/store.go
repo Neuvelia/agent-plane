@@ -44,12 +44,15 @@ type Store struct{ Dir string }
 
 // Summary describes one stored run without loading its whole log.
 type Summary struct {
-	RunID      string    `json:"run_id"`
-	GraphID    string    `json:"graph_id"`
-	StartedAt  time.Time `json:"started_at"`
-	Status     string    `json:"status"`
-	EventCount int       `json:"event_count"`
-	Truncated  bool      `json:"truncated,omitempty"`
+	RunID   string `json:"run_id"`
+	GraphID string `json:"graph_id"`
+	// GraphVersion is the semantic version hash of the executed graph, taken
+	// from the first event; empty for an unreadable run.
+	GraphVersion string    `json:"graph_version,omitempty"`
+	StartedAt    time.Time `json:"started_at"`
+	Status       string    `json:"status"`
+	EventCount   int       `json:"event_count"`
+	Truncated    bool      `json:"truncated,omitempty"`
 	// Error explains a run that cannot be read or was stopped; Status is
 	// "corrupt" for an unreadable log.
 	Error string `json:"error,omitempty"`
@@ -256,6 +259,7 @@ func (s Store) Read(runID string) (Record, error) {
 			rec.Events = append(rec.Events, e)
 			if rec.Summary.GraphID == "" {
 				rec.Summary.GraphID = e.GraphID
+				rec.Summary.GraphVersion = e.GraphVersion
 				rec.Summary.StartedAt = e.Timestamp
 			}
 			if p, ok := e.Payload.(events.RunFinishedPayload); ok {

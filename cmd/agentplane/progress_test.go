@@ -102,7 +102,7 @@ func TestNormalizedHumanAndJSONOmissionRendering(t *testing.T) {
 	if code := writeJSON(&out, &errout, documentForRun(result, nil), 0); code != 0 {
 		t.Fatal(code)
 	}
-	if !strings.Contains(out.String(), `"type":"progress_omitted"`) || !strings.Contains(out.String(), `"retained_events":904`) || !strings.Contains(out.String(), `"event_schema_version":9`) {
+	if !strings.Contains(out.String(), `"type":"progress_omitted"`) || !strings.Contains(out.String(), `"retained_events":904`) || !strings.Contains(out.String(), `"event_schema_version":10`) {
 		t.Fatal("JSON omission missing")
 	}
 	out.Reset()

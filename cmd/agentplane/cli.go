@@ -54,7 +54,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--max-concurrency N] [--watch | --json] | agentplane serve [--store-dir DIR] [--max-concurrency N] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -132,6 +132,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	var redactEnv inputFlags
 	var approveNodes, rejectNodes inputFlags
 	storeDir := fs.String("store-dir", "", "persist the run under this directory (events.jsonl + graph.yaml)")
+	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
 	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
@@ -186,20 +187,15 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions}
+	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
 	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}
 		if err := runStore.Check(); err != nil {
 			return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 		}
-		for _, secret := range redactions {
-			if secret != "" && (bytes.Contains(graphBytes, []byte(secret)) || definitionHoldsSecret(def, secret)) {
-				// The snapshot is a byte copy, so a secret embedded in the graph
-				// would be duplicated into the store. Graphs must reference
-				// secrets, never contain them (AGENTS.md).
-				return commandError("run", "error", "graph", errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run"), nil, *jsonMode, stdout, stderr, exitGraph)
-			}
+		if graphHoldsSecret(def, graphBytes, redactions) {
+			return commandError("run", "error", "graph", errGraphHoldsSecret, nil, *jsonMode, stdout, stderr, exitGraph)
 		}
 		writer = openPersister(runStore, graphBytes)
 		opts.Persist = writer.Append
@@ -313,6 +309,20 @@ type persister interface {
 }
 
 var openPersister = func(s store.Store, graph []byte) persister { return s.NewWriter(graph) }
+
+var errGraphHoldsSecret = errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run")
+
+// graphHoldsSecret guards the store's byte copy of the graph: a secret embedded
+// in the graph would be duplicated into the store. Graphs must reference
+// secrets, never contain them (AGENTS.md). `run --store-dir` and `serve` share it.
+func graphHoldsSecret(def *graph.Definition, graphBytes []byte, redactions []string) bool {
+	for _, secret := range redactions {
+		if secret != "" && (bytes.Contains(graphBytes, []byte(secret)) || definitionHoldsSecret(def, secret)) {
+			return true
+		}
+	}
+	return false
+}
 
 // definitionHoldsSecret reports whether any string in the parsed definition -
 // values, map keys such as node and port IDs, edge references, bindings - holds

@@ -48,10 +48,14 @@ it does not execute graphs or define event payloads.
   client policy into `store`.
 - The store copies graph bytes and adds no redaction. CLI `run` refuses to
   store a graph containing a configured `--redact-env` secret, including a
-  parsed string value hidden by YAML escapes or folding. Keep this check
-  before any run starts. Event redaction happens before `Writer.Append`;
-  neither the store nor its file permissions make arbitrary graph bytes safe
-  to persist.
+  parsed string value hidden by YAML escapes or folding; `serve` applies the
+  same refusal to its own `--redact-env` secrets. Keep this check before any
+  run starts. Event redaction happens before `Writer.Append`; neither the
+  store nor its file permissions make arbitrary graph bytes safe to persist.
+- Opt-in `value_recorded` facts (ADR-0023) are ordinary non-progress events:
+  they are written and synced like lifecycle facts and replayed by `Read`
+  with no second file or read path. Summaries carry `graph_version` from the
+  first event. Older schema logs stay readable and simply have no values.
 
 The active contract is `docs/features/F2.9-run-store.md` and
 `docs/adr/0019-local-run-store-and-loopback-api.md`. Read

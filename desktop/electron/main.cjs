@@ -5,6 +5,7 @@ const path = require('node:path')
 const { isAllowed } = require('./allowlist.cjs')
 const { createGraphHandlers } = require('./graphs.cjs')
 const { createRecents } = require('./recents.cjs')
+const { createRecordingSettings, serveFlags } = require('./recording.cjs')
 
 // The sidecar is the Go engine. The renderer is only a client of its API.
 const repoRoot = path.resolve(__dirname, '..', '..')
@@ -15,10 +16,16 @@ let sidecar = null
 let api = null // { base, token } - kept in this process only
 let ready = null
 const streams = new Map() // subId -> { controller, sender }
+// Recording is fixed per sidecar process (ADR-0023): a changed preference
+// applies when the app next starts the sidecar, never to a running one.
+const recordingSettings = createRecordingSettings(path.join(app.getPath('userData'), 'recording.json'))
+let session = { recording: false, missing: [] }
 
 function startSidecar() {
   return new Promise((resolve, reject) => {
-    const child = spawn(binary, ['serve', '--store-dir', storeDir], { stdio: ['pipe', 'pipe', 'pipe'] })
+    const flags = serveFlags(recordingSettings.load(), process.env)
+    session = { recording: flags.recording, missing: flags.missing }
+    const child = spawn(binary, ['serve', '--store-dir', storeDir, ...flags.args], { stdio: ['pipe', 'pipe', 'pipe'] })
     sidecar = child
     let buffer = ''
     let settled = false
@@ -129,6 +136,14 @@ ipcMain.handle('ap:recentGraphs', () => graphs.recentGraphs())
 ipcMain.handle('ap:openRecentGraph', (_e, id) => graphs.openRecentGraph(id))
 ipcMain.handle('ap:touchRecent', (_e, grant) => graphs.touchRecent(grant))
 ipcMain.handle('ap:closeGraph', (_e, grant) => graphs.closeGraph(grant))
+// The renderer reads and changes only the preference; it learns whether this
+// session records and which configured names are unset, never their values.
+const recordingView = (settings) => ({ ...settings, active: session.recording, missing: [...session.missing] })
+ipcMain.handle('ap:recordingSettings', () => recordingView(recordingSettings.load()))
+ipcMain.handle('ap:setRecordingSettings', (_e, input) => {
+  const result = recordingSettings.save(input)
+  return result.ok ? { ok: true, settings: recordingView(result.settings) } : result
+})
 ipcMain.on('ap:subscribe', (e, subId, runId) => void stream(e.sender, subId, String(runId)))
 ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.controller.abort())
 ipcMain.handle('ap:pickGraph', async (e) => {

@@ -1,5 +1,5 @@
 import type { OpenResponse, ValidateResponse } from '../editor/types'
-import type { ApEvent, ApiResponse, GraphSummary, PendingApproval, RecentGraph, RunSummary } from '../types'
+import type { ApEvent, ApiResponse, GraphSummary, PendingApproval, RecentGraph, RecordingSettings, RunSummary } from '../types'
 
 // In-memory stand-in for the Electron preload bridge (window.agentplane).
 // It replays recorded fixtures: no sidecar, no network, no filesystem.
@@ -49,6 +49,10 @@ export interface BridgeData {
   hang?: boolean
   /** Makes every approval decision fail with this HTTP status and message. */
   decisionFailure?: { status: number; message: string }
+  /** The "Record run values" preference and engine session. Default: off. */
+  recording?: RecordingSettings
+  /** Saving the recording preference fails as when user data cannot be written. */
+  recordingSaveFails?: boolean
 }
 
 export function createBridge(data: BridgeData): Window['agentplane'] {
@@ -120,5 +124,14 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
     openRecentGraph: async () => (data.graph?.opened ? { ok: true, grant: 'story-grant', label: data.graph.opened.label, exists: true } : { ok: false, code: 'not_found', message: 'that graph is no longer in the list' }),
     touchRecent: async () => true,
     closeGraph: async () => true,
+    recordingSettings: async () => structuredClone(data.recording ?? { enabled: false, redactEnv: [], active: false, missing: [] }),
+    setRecordingSettings: async (s) => {
+      if (data.recordingSaveFails) return { ok: false, code: 'save_failed' }
+      const bad = s.redactEnv.find((n) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
+      if (bad !== undefined) return { ok: false, code: 'invalid', name: bad }
+      const current = data.recording ?? { enabled: false, redactEnv: [], active: false, missing: [] }
+      data.recording = { ...current, enabled: s.enabled, redactEnv: [...s.redactEnv] }
+      return { ok: true, settings: structuredClone(data.recording) }
+    },
   }
 }

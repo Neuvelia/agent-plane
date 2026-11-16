@@ -83,6 +83,10 @@ type Options struct {
 	// (F2.9). A failure never stops the run; it is reported in
 	// RunResult.PersistError and the caller must treat the run as not durable.
 	Persist func(events.Event) error
+	// RecordValues emits one bounded, redacted value_recorded fact per supplied
+	// graph input and per accepted output port (ADR-0023). Off by default;
+	// LogRedactions apply and must be valid UTF-8 when it is on.
+	RecordValues bool
 }
 
 type completedNode struct {
@@ -112,6 +116,7 @@ type runMachine struct {
 	startedAt   time.Time
 	nodeStarted map[string]time.Time
 	decisions   DecisionProvider
+	values      *valueRecorder
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight

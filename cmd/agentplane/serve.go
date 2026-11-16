@@ -31,11 +31,20 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	fs.SetOutput(io.Discard)
 	dir := fs.String("store-dir", defaultStoreDir, "run store directory")
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes per run")
+	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
+	var redactEnv inputFlags
+	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return usageError("serve", err, false, stdout, stderr)
 	}
 	if *concurrency < 1 {
 		return usageError("serve", errors.New("--max-concurrency must be at least 1"), false, stdout, stderr)
+	}
+	// An unset variable refuses to start: recording must never run with a
+	// redaction list that silently lost an entry (ADR-0023).
+	redactions, err := redactionsFromEnv(redactEnv)
+	if err != nil {
+		return usageError("serve", err, false, stdout, stderr)
 	}
 	runStore := store.Store{Dir: *dir}
 	if err := runStore.Check(); err != nil {
@@ -61,7 +70,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Token: token, Store: runStore, Hub: api.NewHub(),
 		Validate:           validateForAPI,
 		ValidateDefinition: diagnosticsFor,
-		Start:              starter(runStore, *concurrency),
+		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues}),
 	}
 	if onServe != nil {
 		onServe(server)
@@ -99,11 +108,21 @@ func validateForAPI(path string) (string, []graph.Diagnostic, error) {
 // starter composes the same validation and execution as `agentplane run`, and
 // persists every event to the run store before the hub (and so any client) can
 // see it.
-func starter(runStore store.Store, concurrency int) api.StartFunc {
+// serveRunOptions is the per-server run configuration fixed at startup.
+type serveRunOptions struct {
+	concurrency  int
+	redactions   []string
+	recordValues bool
+}
+
+func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 	return func(ctx context.Context, graphPath string, inputs []string, persist func(events.Event) error, decisions runtime.DecisionProvider) error {
 		def, graphBytes, err := readDefinitionBytes(graphPath)
 		if err != nil {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
+		}
+		if graphHoldsSecret(def, graphBytes, config.redactions) {
+			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: errGraphHoldsSecret.Error()}
 		}
 		validation := graph.Validate(def)
 		if validation.HasErrors() {
@@ -138,7 +157,7 @@ func starter(runStore store.Store, concurrency int) api.StartFunc {
 			}
 			return persist(e)
 		}
-		opts := runtime.Options{MaxConcurrency: concurrency, Decisions: decisions, Persist: sink}
+		opts := runtime.Options{MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr

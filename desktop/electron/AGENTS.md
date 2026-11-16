@@ -13,6 +13,7 @@ spec before changing an IPC or API boundary.
 | The narrow `window.agentplane` bridge and subscriptions | `preload.cjs` |
 | Native graph dialogs, grant registration and revocation | `graphs.cjs` |
 | Recent graph paths held in main-process user data | `recents.cjs` |
+| "Record run values" preference and `serve` flags (ADR-0023) | `recording.cjs` |
 | Renderer bridge types and API wrappers | `desktop/src/types.ts`, `desktop/src/api.ts`, `desktop/src/editor/api.ts` |
 | Go API routes, grant checks and run decisions | `internal/api/AGENTS.md` |
 
@@ -44,6 +45,16 @@ spec before changing an IPC or API boundary.
   owns path checks, conflict detection and atomic save. Electron main and
   preload do not implement graph validation, scheduling, retry or run-state
   reduction; the renderer derives run state from events.
+- "Record run values" is a main-process preference in user data
+  (`recording.json`, 0600), off by default and read when the sidecar starts;
+  a change applies at the next start, never to the running sidecar (whose
+  grants and runs would be lost). Main validates the shape strictly (a
+  boolean and at most 16 plain variable names) and passes `--redact-env`
+  only for names set in its environment, plus `--record-values` only when
+  enabled and no configured name is unset, so `serve` always starts. The
+  renderer gets the preference, whether this session records and the unset
+  names, never environment values; it uses the dedicated
+  `ap:recordingSettings`/`ap:setRecordingSettings` IPC, not `ap:request`.
 - Keep the sidecar's stdin connected for shutdown, cancel streams before
   quit, and retain the bounded forced-kill fallback. Sidecar/API failures
   must remain visible as connection or request errors rather than a guessed
@@ -61,6 +72,7 @@ requirements, when describing implemented behavior.
 - Generic route exposure and path escapes: `desktop/test/allowlist.test.ts`.
 - Graph dialogs, grants and revocation: `desktop/test/graphs-handlers.test.ts`.
 - Recent-list privacy, ordering and failure: `desktop/test/recents.test.ts`.
+- Recording preference, validation and `serve` flags: `desktop/test/recording.test.tsx`.
 - Real bridge, sidecar, API and editor path: `desktop/e2e/demo.cjs`.
 - API auth, SSE and grant checks: `internal/api/server_test.go`,
   `internal/api/docs_test.go`.
