@@ -13,14 +13,26 @@ import (
 	"testing"
 )
 
-// RequireExecutable skips t unless every path is an existing regular file.
-// Use it for absolute Unix tool paths (/usr/bin/git, /bin/sh, ...) that the test
-// or the code under test starts directly.
+// RequireExecutable requires every path to be an existing regular file. Use it
+// for absolute Unix tool paths (/usr/bin/git, /bin/sh, ...) that the test or the
+// code under test starts directly. A missing tool fails t on Linux and macOS,
+// where it is a broken runner rather than a platform gap, so CI cannot stay
+// green by skipping; on other platforms t is skipped.
 func RequireExecutable(t testing.TB, paths ...string) {
+	t.Helper()
+	requireExecutable(t, runtime.GOOS, paths...)
+}
+
+func requireExecutable(t testing.TB, goos string, paths ...string) {
 	t.Helper()
 	for _, p := range paths {
 		if info, err := os.Stat(p); err != nil || !info.Mode().IsRegular() {
-			t.Skipf("%s is not available on this platform", p)
+			if goos == "linux" || goos == "darwin" {
+				t.Fatalf("%s is not available on this platform", p)
+			} else {
+				t.Skipf("%s is not available on this platform", p)
+			}
+			return
 		}
 	}
 }
