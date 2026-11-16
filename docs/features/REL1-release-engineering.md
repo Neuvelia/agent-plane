@@ -33,7 +33,7 @@ honest statement of limits.
   alpha artifacts are explicitly unsigned).
 - Auto-update. An updater is network egress that the user did not ask for.
 - Package managers (Homebrew tap, winget, apt/rpm repositories), Docker image.
-- Migrating the desktop shell from Electron to Tauri (see ADR-0026).
+- Any other desktop shell. Electron is the decided shell (ADR-0026).
 - Bundling Git or the Codex CLI. They stay external prerequisites.
 - Any cloud service, account, telemetry or crash reporting.
 - Windows artifacts, until the Windows gaps below are closed.
@@ -211,7 +211,7 @@ SHA-256, and the attestation reference, as its audit trail.
    rename prerequisite). Still open: the exact bundle identifier (for example a
    reverse-DNS id under the owner's domain) and whether the public repository is
    renamed to match.
-4. Electron or Tauri for the alpha (ADR-0026 proposes Electron).
+4. Resolved: Electron (ADR-0026).
 5. Should arm64 Linux be in the first release, or only macOS arm64 and Linux amd64?
 
 ## Out of scope for this iteration

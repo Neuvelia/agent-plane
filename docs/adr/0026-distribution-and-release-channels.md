@@ -1,6 +1,6 @@
 # ADR-0026 - Distribution channels, desktop shell and release tooling
 
-**Status:** proposed
+**Status:** proposed (shell decision accepted by the owner)
 **Date:** 2026-11-16
 
 Numbering note: ADR-0024 and ADR-0025 are used by branches that are not yet
@@ -23,11 +23,10 @@ remote service implicitly.
 1. **Channel.** GitHub Releases are the single channel for alpha: CLI archives,
    desktop packages, `SHA256SUMS` and provenance attestations. Package managers
    come later and only point at these artifacts.
-2. **Shell.** Ship the existing Electron shell for the alpha. Revisit Tauri after
-   Phase 3, when the engine API and the sidecar contract are stable. The renderer
-   (React, talking to the loopback API) and the engine do not depend on Electron;
-   only `desktop/electron/` (main, preload, allowlist, recents, graph dialogs) would
-   be rewritten.
+2. **Shell.** Electron is the desktop shell, for the alpha and beyond. Tauri is
+   rejected (owner decision, 2026-11-16); the architecture plan's Tauri
+   recommendation is superseded for this product. The renderer and engine stay
+   independent of the shell through the loopback API, but no migration is planned.
 3. **Tooling.** The CLI is built by a small script in `scripts/` driven by a GitHub
    Actions matrix (`CGO_ENABLED=0`, `-trimpath`, `-ldflags -X` for version, commit
    and date). The desktop is packaged with `electron-builder`, a development-only
@@ -43,18 +42,19 @@ remote service implicitly.
 
 ## Alternatives considered
 
-### Tauri now
+### Tauri (rejected)
 
 Pros:
 
-- Smaller footprint; the architecture plan recommends it.
+- Smaller footprint; the architecture plan recommended it.
 - Rust core fits a signed, sandboxed shell.
 
 Cons:
 
 - Rewrites the Electron main process, the preload and tests, and adds a Rust
-  toolchain to CI, before the contracts are stable and with no user demand yet.
-- Delays the first public build for little user-visible gain.
+  toolchain to CI, with no user-visible gain.
+- Delays the first public build.
+- Rejected by the owner: one shell, one toolchain.
 
 ### GoReleaser for the CLI
 
@@ -103,7 +103,8 @@ Cons:
 
 ### Negative / trade-offs
 
-- Electron's footprint ships in the alpha.
+- Electron's footprint ships in the product; the team owns Electron security
+  updates (version bumps, `contextIsolation`, CSP) as a standing maintenance task.
 - Unsigned artifacts cause OS warnings; users must follow documented steps.
 - Linux and macOS only; Windows users wait.
 - Users update by hand.
@@ -111,8 +112,7 @@ Cons:
 ## Compatibility and migration
 
 No graph, event, store or API change. The CLI `version` output gains fields; its
-first line remains the bare version. Moving to Tauri later replaces only the
-shell, with the loopback API as the stable boundary (ADR-0019, ADR-0021).
+first line remains the bare version. The loopback API stays the boundary between shell and engine (ADR-0019, ADR-0021).
 
 ## Validation
 
