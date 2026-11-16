@@ -65,6 +65,20 @@ export interface RecentGraph {
   label: string
 }
 
+/**
+ * "Record run values" (ADR-0023). `enabled` and `redactEnv` are the saved
+ * preference; `active` and `missing` describe the running engine, which keeps
+ * its flags until the app restarts. Environment values are never exposed.
+ */
+export interface RecordingSettings {
+  enabled: boolean
+  redactEnv: string[]
+  active: boolean
+  missing: string[]
+}
+
+export type RecordingSaveResult = { ok: true; settings: RecordingSettings } | { ok: false; code: 'invalid' | 'save_failed'; name?: string }
+
 declare global {
   interface Window {
     agentplane: {
@@ -77,6 +91,8 @@ declare global {
       openRecentGraph: (id: string) => Promise<GraphGrantResult>
       touchRecent: (grant: string) => Promise<boolean>
       closeGraph: (grant: string) => Promise<boolean>
+      recordingSettings: () => Promise<RecordingSettings>
+      setRecordingSettings: (settings: { enabled: boolean; redactEnv: string[] }) => Promise<RecordingSaveResult>
     }
   }
 }

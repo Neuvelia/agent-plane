@@ -70,6 +70,8 @@ input::placeholder,textarea::placeholder{color:var(--muted)}
 input{height:var(--size-nav)}
 textarea{min-height:64px;resize:vertical}
 .field{display:flex;flex-direction:column;gap:6px}
+.check{display:flex;align-items:center;gap:var(--space-10)}
+.check input{width:18px;height:18px;padding:0;flex:none;accent-color:var(--focus)}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .row.between{justify-content:space-between}
 .seg{display:inline-flex;gap:2px;padding:3px;border-radius:var(--radius-pill);background:var(--fill-6)}
