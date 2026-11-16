@@ -702,16 +702,26 @@ func TestLargeGraphIsFast(t *testing.T) {
 	if edges := len(parse(t, src).Edges); edges < 390 {
 		t.Fatalf("generated only %d edges", edges)
 	}
-	start := time.Now()
-	if _, err := Apply([]byte(src), []Op{{Op: OpAddNode, ID: "extra", Type: "shell", Layout: &Position{X: 1, Y: 2}}}); err != nil {
-		t.Fatal(err)
+	// Wall-clock time on a shared CI runner is noisy: a scheduling pause makes a
+	// single sample slow without the code being slow. A real regression slows
+	// every sample, so the best of several is compared with the limit.
+	const samples = 5
+	best := time.Duration(1<<63 - 1)
+	for i := 0; i < samples; i++ {
+		start := time.Now()
+		if _, err := Apply([]byte(src), []Op{{Op: OpAddNode, ID: "extra", Type: "shell", Layout: &Position{X: 1, Y: 2}}}); err != nil {
+			t.Fatal(err)
+		}
+		if d := time.Since(start); d < best {
+			best = d
+		}
 	}
 	limit := 250 * time.Millisecond
 	if raceDetector {
 		limit *= 10 // the race detector slows this down by an order of magnitude
 	}
-	if d := time.Since(start); d > limit {
-		t.Errorf("applying one operation to a 200-node graph took %v (limit %v)", d, limit)
+	if best > limit {
+		t.Errorf("applying one operation to a 200-node graph took %v at best of %d samples (limit %v)", best, samples, limit)
 	}
 }
 
