@@ -93,7 +93,7 @@ function RecordValues() {
         </p>
       ) : (
         <div className="stack">
-          <div className="check">
+          <div className="toggle">
             <input id={checkId} type="checkbox" checked={enabled} disabled={!current || busy} onChange={(e) => setEnabled(e.target.checked)} aria-describedby={explainId} data-testid="values-record" />
             <label htmlFor={checkId}>{t('settings.values.record')}</label>
           </div>
