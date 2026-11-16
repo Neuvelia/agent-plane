@@ -94,20 +94,26 @@ func indexed(top *yaml.Node, key string, n int) *yaml.Node {
 	return seq.Content[n]
 }
 
-var parseLine = regexp.MustCompile(`line (\d+)`)
+var parseLine = regexp.MustCompile(`line (\d+)(?:: ([^\n]*))?`)
+
+// firstParseEntry returns the line and the entry text of the first `line N`
+// the message names; line and column must come from the same entry.
+func firstParseEntry(message string) (line int, entry string) {
+	m := parseLine.FindStringSubmatch(message)
+	if m == nil {
+		return 0, ""
+	}
+	line, _ = strconv.Atoi(m[1])
+	return line, m[2]
+}
 
 // ParseErrorLine extracts the 1-based line a YAML or decoding error names, or 0.
 func ParseErrorLine(message string) int {
-	m := parseLine.FindStringSubmatch(message)
-	if m == nil {
-		return 0
-	}
-	n, _ := strconv.Atoi(m[1])
-	return n
+	line, _ := firstParseEntry(message)
+	return line
 }
 
 var (
-	parseEntry      = regexp.MustCompile(`line (\d+): ([^\n]*)`)
 	unknownField    = regexp.MustCompile(`^field (.+) not found in type `)
 	cannotUnmarshal = regexp.MustCompile("^cannot unmarshal (!!\\w+)(?: (`.*`))? into ")
 )
@@ -120,12 +126,11 @@ var (
 // the YAML tree; it is reported only when exactly one node on the named line
 // fits the message, never guessed.
 func ParseErrorColumn(text []byte, message string) int {
-	m := parseEntry.FindStringSubmatch(message)
-	if m == nil {
+	line, entry := firstParseEntry(message)
+	if line == 0 {
 		return 0
 	}
-	line, _ := strconv.Atoi(m[1])
-	fits := fitter(line, m[2])
+	fits := fitter(line, entry)
 	if fits == nil {
 		return 0
 	}

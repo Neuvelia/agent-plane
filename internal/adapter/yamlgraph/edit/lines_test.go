@@ -103,6 +103,17 @@ func TestParseErrorColumnComesFromTheFailingNodeNotFromTheMessage(t *testing.T) 
 	}
 }
 
+func TestParseErrorLineAndColumnComeFromTheFirstEntry(t *testing.T) {
+	text := []byte("schema_version: 0\nid: g\nnodes:\n  a:\n    type: shell\n    first: 1\nsecond: 2\n")
+	message := "yaml: unmarshal errors:\n  line 6: field first not found in type graph.Definition\n  line 7: field second not found in type graph.Definition"
+	if got := ParseErrorLine(message); got != 6 {
+		t.Errorf("line %d, want 6", got)
+	}
+	if got := ParseErrorColumn(text, message); got != 5 {
+		t.Errorf("column %d, want 5 (the line 6 entry; the line 7 entry is at column 1)", got)
+	}
+}
+
 func TestParseErrorColumnIsZeroWhenThereIsNothingToLocate(t *testing.T) {
 	if got := ParseErrorColumn([]byte("a: 1"), "parse graph definition: schema_version is required"); got != 0 {
 		t.Errorf("a message without a line has no column: %d", got)
