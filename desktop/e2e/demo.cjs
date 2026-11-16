@@ -1,18 +1,19 @@
 'use strict'
 // End-to-end check of the real Electron app against the real Go sidecar.
 //   xvfb-run -a node e2e/demo.cjs [screenshot-dir]
-// Requires `make build` (bin/agentplane) and `npm run build` (dist/).
+// Requires `make build` (bin/agentplane, bin/agentplane.exe on Windows) and `npm run build` (dist/).
 const { _electron } = require('playwright')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { binaryName } = require('../electron/sidecar.cjs')
 
 const root = path.resolve(__dirname, '..', '..')
 const graph = path.join(root, '.agents', 'graphs', 'demo-vertical.yaml')
 const shots = process.argv[2]
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ap-e2e-'))
-const env = { ...process.env, AGENTPLANE_BIN: path.join(root, 'bin', 'agentplane'), AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
+const env = { ...process.env, AGENTPLANE_BIN: path.join(root, 'bin', binaryName(process.platform)), AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
 delete env.NODE_OPTIONS
 
 async function launch() {

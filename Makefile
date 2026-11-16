@@ -27,7 +27,7 @@ metrics:
 
 build:
 	mkdir -p bin
-	go build -o bin/agentplane ./cmd/agentplane
+	go build -o bin/agentplane$(shell go env GOEXE) ./cmd/agentplane
 
 clean:
 	rm -rf bin tmp

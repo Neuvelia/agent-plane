@@ -6,7 +6,7 @@ Electron shell and React renderer over the local `agentplane serve` sidecar
 ## Run it
 
 ```bash
-make build                   # builds bin/agentplane (the sidecar)
+make build                   # builds bin/agentplane (bin/agentplane.exe on Windows)
 cd desktop && npm ci
 npm start                    # builds the renderer and opens the app
 ```
@@ -16,6 +16,41 @@ then **Run**. Two branches run concurrently, `flaky` is rejected by its Gate and
 retried alone, then the graph stops at the `approve` human node until you press
 **Approve** (or **Reject**). Runs are stored under the app's user-data directory
 (`AGENTPLANE_STORE_DIR` overrides it) and survive restarts.
+
+## Platforms and the sidecar binary
+
+Main resolves the sidecar in `electron/sidecar.cjs`: `AGENTPLANE_BIN` if set,
+otherwise `bin/agentplane` under the repository root (`bin/agentplane.exe` on
+Windows, where `go build` appends `.exe`). `make build` uses `go env GOEXE`, so the
+same target writes the right name on every platform; without `make`, run
+`go build -o bin/agentplane.exe ./cmd/agentplane`. A missing binary stops startup
+with an error naming the path that was tried and how to build it
+(`test/sidecar.test.ts`).
+
+Packaged app (not implemented): the repository-relative default holds only for a
+checkout (`npm start`). A packaged app is expected to ship the engine under
+`process.resourcesPath` and pass that path through the same resolver; that choice
+is deferred until packaging is activated.
+
+Verified platforms:
+
+| Platform | Status |
+| --- | --- |
+| Linux (xvfb) | `npm run check` and `make desktop-e2e` |
+| Windows 11 | engine build, `npm run check`, and the first half of `e2e/demo.cjs` (see below); not the full e2e |
+| macOS | not verified |
+
+Windows notes (Windows 11, Go 1.27, Node 24, real window, unattended):
+`go build` wrote `bin/agentplane.exe`; `npm run check` passed; the app started the
+sidecar and the demo flow, approve/reject, graph open/save through grants and the
+editor round trip ran against it. Not verified: the full e2e (a drag in the canvas
+timed out when run without interaction), the "engine dies mid-run" step and the
+missing-binary dialog in a real window (covered only by the unit test). Known
+Linux assumptions in `e2e/demo.cjs` that still need a Windows variant: `pkill` in
+the connection-lost step, `/usr/bin/printf` in the editor round trip,
+`bin/agentplane` in the CLI round trip, `/tmp/never.yaml`, and `xvfb-run`.
+Shutdown itself is portable: closing the sidecar's stdin ends it, and the 1.5 s
+`kill()` fallback maps to `TerminateProcess`.
 
 ## Checks
 
