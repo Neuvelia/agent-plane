@@ -70,14 +70,17 @@ a dev dependency and is never part of the packaged app.
 - **The renderer is sandboxed.** `contextIsolation` is on, `nodeIntegration` is
   off, the CSP allows only the bundle, and the sidecar port/token never leave
   the main process (`electron/main.cjs`). The preload exposes `request`,
-  `subscribe`, `pickGraph` and the graph-file calls (`openGraph`, `newGraph`,
+  `subscribe` and the graph-file calls (`openGraph`, `newGraph`,
   `recentGraphs`, `openRecentGraph`, `touchRecent`, `closeGraph`), and the main
   process forwards only an exact list of routes (`electron/allowlist.cjs`):
-  never `/graphs/grants`, which only main calls. Graph files for the editor are
-  chosen in native dialogs in main (`electron/graphs.cjs`) and reach the
-  renderer only as opaque grants and file names, never paths (ADR-0021). Recently
-  opened graphs are kept by main in the user data directory
-  (`electron/recents.cjs`).
+  never `/graphs/grants`, which only main calls. Graph files for the editor and
+  for New run are chosen in native dialogs in main (`electron/graphs.cjs`) and
+  reach the renderer only as opaque grants and file names, never paths
+  (ADR-0021). New run validates and starts with the grant; main refuses a
+  `graph_path` or `path` in the body of `POST /runs` and `POST /graphs/validate`
+  (the Go API still accepts them for non-renderer clients). Recently opened
+  graphs, including those chosen on New run, are kept by main in the user data
+  directory (`electron/recents.cjs`).
 - **Recording run values is opt-in.** Settings has a "Record run values" switch,
   off by default (ADR-0023). Main keeps it in user data (`electron/recording.cjs`)
   and starts the sidecar with `--record-values` and `--redact-env NAME` for the

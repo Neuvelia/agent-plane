@@ -294,6 +294,7 @@ export const en = {
   'approvals.context': 'Context',
   'config.title': 'New run',
   'config.graphFile': 'Graph file',
+  'config.noGraph': 'No graph chosen',
   'config.choose': 'Choose…',
   'config.validate': 'Validate',
   'config.inputs': 'Inputs (key=value, one per line)',

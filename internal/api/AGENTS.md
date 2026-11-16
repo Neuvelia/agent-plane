@@ -56,8 +56,9 @@ document or event contract.
   Electron main keeps the API token and uses an exact renderer route
   allowlist that excludes grant registration and revocation. The API's bearer
   token alone does not distinguish Electron main from a renderer that somehow
-  obtained it. Existing read/run endpoints still accept `path`/`graph_path`;
-  write endpoints must stay grant-only.
+  obtained it. Existing read/run endpoints still accept `path`/`graph_path`
+  for clients other than the desktop renderer, whose main process refuses
+  those keys (ADR-0021, decision 9); write endpoints must stay grant-only.
 - `POST /graphs/edit` applies `graph/edit` operations in memory. Only
   `PUT /graphs/save` writes the granted file. Preserve text/size limits,
   `base_hash` conflict responses, symlink and directory rechecks, atomic

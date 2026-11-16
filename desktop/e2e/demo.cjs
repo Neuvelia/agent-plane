@@ -33,10 +33,13 @@ const status = (page, id) => page.locator(`[data-testid="node-${id}"]`).getAttri
 const waitStatus = (page, id, want) =>
   page.waitForFunction(([i, w]) => document.querySelector(`[data-testid="node-${i}"]`)?.getAttribute('data-status') === w, [id, want], { timeout: 15000 })
 
-async function startDemo(page) {
+// The native dialog is replaced in the main process, from this test process only: a renderer cannot reach it.
+const stubOpenDialog = (app, file) => app.evaluate(({ dialog }, f) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] }) }, file)
+
+async function startDemo(app, page) {
+  await stubOpenDialog(app, graph)
   await page.click('[data-testid="nav-new"]')
-  await page.fill('[data-testid="graph-path"]', graph)
-  await page.click('[data-testid="validate"]')
+  await page.click('[data-testid="choose"]')
   await page.waitForSelector('[data-testid="preflight-status"]')
   assert.equal(await page.textContent('[data-testid="preflight-status"]'), 'Ready')
   await page.click('[data-testid="run"]')
@@ -74,7 +77,7 @@ async function startDemo(page) {
     const original = fs.readFileSync(graph, 'utf8')
     const editable = path.join(graphDir, 'demo.yaml')
     fs.writeFileSync(editable, original)
-    const stubOpen = (p) => app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, p)
+    const stubOpen = (p) => stubOpenDialog(app, p)
     const stubSave = (p) => app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: file }) }, p)
     await stubOpen(editable)
     const opened = await page.evaluate(() => window.agentplane.openGraph())
@@ -500,7 +503,7 @@ async function startDemo(page) {
     await page.click('[data-testid="nav-runs"]')
 
     // 1. Run: two branches in parallel, one red -> retry, then a human gate.
-    await startDemo(page)
+    await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
     assert.equal(await status(page, 'fast'), 'succeeded')
     assert.equal(await status(page, 'flaky'), 'succeeded')
@@ -598,7 +601,7 @@ async function startDemo(page) {
     await shot(page, '5-after-restart')
 
     // 5. Reject: the run fails, the dependent node is skipped.
-    await startDemo(page)
+    await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
     await page.click('[data-testid="node-approve"]')
     await page.click('[data-testid="approval-box"] button.danger')
@@ -606,9 +609,44 @@ async function startDemo(page) {
     assert.equal(await status(page, 'approve'), 'failed')
     assert.equal(await status(page, 'apply'), 'skipped')
     await shot(page, '6-rejected')
+
+    // #56: New run chooses the graph in the native dialog and holds only a grant. It starts the run
+    // from the file as saved when the run starts, and the renderer cannot send a path at all.
+    const say = (word) => `schema_version: 0\nid: newrun\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: {command: /usr/bin/printf, args: ["${word}\\n"]}\nedges: []\noutputs: {}\n`
+    const chosen = path.join(graphDir, 'new-run.yaml')
+    fs.writeFileSync(chosen, say('first'))
+    await stubOpenDialog(app, chosen)
+    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="quick-open"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml', 'Open graph on the Dashboard lands on New run with the file chosen')
+    await page.click('[data-testid="nav-new"]')
+    assert.equal(await page.locator('[data-testid="graph-path"]').count(), 0, 'New run has no field for a path')
+    await page.click('[data-testid="choose"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml')
+    assert.equal((await page.content()).includes(work), false, 'the page never shows the path')
+    // The file is saved again after it was chosen and checked: the run reads the saved bytes.
+    fs.writeFileSync(chosen, say('second'))
+    await page.click('[data-testid="run"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
+    const listed = (await page.evaluate(() => window.agentplane.request('GET', '/runs'))).body.runs
+    const started = listed.filter((r) => r.graph_id === 'newrun')
+    assert.equal(started.length, 1)
+    const detail = await page.evaluate((id) => window.agentplane.request('GET', `/runs/${id}`), started[0].run_id)
+    assert.ok(detail.body.graph.includes('second') && !detail.body.graph.includes('first'), 'the run used the saved bytes of the chosen file')
+    // A path is refused by main before it reaches the engine, on both routes, in any key spelling.
+    for (const [route, body] of [['/runs', { graph_path: chosen, inputs: [] }], ['/runs', { GRAPH_PATH: chosen }], ['/graphs/validate', { path: chosen }]]) {
+      const refusedBody = await page.evaluate(([r, b]) => window.agentplane.request('POST', r, b), [route, body])
+      assert.equal(refusedBody.status, 400, `${route} ${Object.keys(body)}`)
+      assert.equal(refusedBody.body.error.message, 'body not allowed')
+    }
+    const afterRefusals = (await page.evaluate(() => window.agentplane.request('GET', '/runs'))).body.runs
+    assert.equal(afterRefusals.length, listed.length, 'a refused path starts no run')
+
     // 6. If the engine dies mid-run the UI says the connection was lost and keeps
     //    the last events it received; it must not invent a run status.
-    await startDemo(page)
+    await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
     // SIGKILL simulates a crash (SIGTERM would be a graceful, complete shutdown).
     // "[a]gentplane" keeps the pattern from matching pkill's own shell.

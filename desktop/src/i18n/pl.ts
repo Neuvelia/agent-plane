@@ -294,6 +294,7 @@ export const pl: Record<MessageKey, string> = {
   'approvals.context': 'Kontekst',
   'config.title': 'Nowe uruchomienie',
   'config.graphFile': 'Plik grafu',
+  'config.noGraph': 'Nie wybrano grafu',
   'config.choose': 'Wybierz…',
   'config.validate': 'Sprawdź',
   'config.inputs': 'Wejścia (klucz=wartość, po jednym w wierszu)',

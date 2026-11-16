@@ -38,14 +38,16 @@ function failure(r: ApiResponse<ErrorBody>): ApiFailure {
   return { message: r.body?.error?.message ?? `request failed (${r.status})`, diagnostics: r.body?.diagnostics ?? [] }
 }
 
-export async function validateGraph(path: string): Promise<{ status: string; diagnostics: Diagnostic[] } | ApiFailure> {
-  const r = await bridge().request<{ status: string; diagnostics: Diagnostic[] } & ErrorBody>('POST', '/graphs/validate', { path })
+/** Validates the granted file as it is on disk. */
+export async function validateGraph(grant: string): Promise<{ status: string; diagnostics: Diagnostic[] } | ApiFailure> {
+  const r = await bridge().request<{ status: string; diagnostics: Diagnostic[] } & ErrorBody>('POST', '/graphs/validate', { grant })
   if (r.status === 200 && r.body) return { status: r.body.status, diagnostics: r.body.diagnostics }
   return failure(r as ApiResponse<ErrorBody>)
 }
 
-export async function startRun(graphPath: string, inputs: string[]): Promise<{ runId: string } | ApiFailure> {
-  const r = await bridge().request<{ run_id: string } & ErrorBody>('POST', '/runs', { graph_path: graphPath, inputs })
+/** Starts a run from the saved bytes of the granted file. */
+export async function startRun(grant: string, inputs: string[]): Promise<{ runId: string } | ApiFailure> {
+  const r = await bridge().request<{ run_id: string } & ErrorBody>('POST', '/runs', { graph_grant: grant, inputs })
   if (r.status === 202 && r.body && 'run_id' in r.body) return { runId: r.body.run_id }
   return failure(r as ApiResponse<ErrorBody>)
 }
