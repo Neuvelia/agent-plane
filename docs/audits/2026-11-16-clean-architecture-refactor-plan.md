@@ -177,3 +177,35 @@ import paths and package names change; `desktop/` is unaffected and
 4. Lint is blocking in CI from stage 1, scoped to code a change touches
    (`new-from-merge-base: origin/main`), so legacy findings do not block.
 5. A single ADR covers the layering decision.
+
+## 10. Stage 2 outcome and adjustments
+
+Delivered in stack 2/N: `graph` -> `internal/domain/graph`, `events` ->
+`internal/domain/events`, `graph/edit` -> `internal/adapter/yamlgraph/edit`; YAML
+parsing/encoding and the schema-v0 DTOs live in `internal/adapter/yamlgraph`;
+the domain `graph` package no longer imports YAML and carries no `yaml` tags.
+
+Adjustments to the plan, with reasons:
+
+- **Package name `events` is kept** (`internal/domain/events`) instead of
+  `event`: dozens of local variables are named `event` and would shadow the
+  package. Plural is the established domain term.
+- **Semantic version hashing uses an injected encoder.** `graph_version` is
+  `sha256` of the canonical YAML bytes (a contract), so the domain cannot hash
+  without a YAML encoder. `graph.SemanticVersion(def, graph.Encoder)` receives
+  it; `runtime.Options.GraphVersion` is required and the composition root passes
+  `yamlgraph.Marshal`. Stage 3 folds this into the engine's ports.
+- **YAML error text is preserved.** DTO type names in decoder errors are mapped
+  back to the domain names (`graph.Definition`, ...), because parse error text is
+  user-visible and the editor derives line numbers from it.
+- **`domain/run` extraction moves to stage 3.** Its value types (`Decision`,
+  `ExecutionCorrelation`, `CorrectionFeedback`, run/node results) are only
+  separable together with `ExecutionObservation`, which depends on
+  `gitstate.Baseline`; that needs the `WorkspaceObserver` port introduced in
+  stage 3, where `agent`, `gate` and `api` are rewired.
+- **Clock/rand removal from `domain/events` moves to stage 3** with the
+  Clock/IDGenerator ports and the `app/trace` split.
+- Parse/validation tests that need a YAML source moved to the adapter as
+  external tests (`yamlgraph_test`); domain-only tests stay in `domain/graph`.
+
+Remaining baseline after stage 2 (`internal/archtest/baseline.txt`): 8 entries.
