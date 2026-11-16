@@ -68,8 +68,11 @@ before changing a document, operation or save flow.
   through `applyOps`; an invalid value is saved as typed and the engine's
   diagnostic is shown by path. Port renames, retypes and removals are
   previewed with `previewOps` (an edit whose answer is not adopted) and
-  confirmed when they touch anything besides the port. Loop binding choices
-  are the engine's answers to previewed `set_loop` batches. Inspector
+  confirmed when they touch anything besides the port. `set_loop` only
+  creates a loop; every later loop change is one targeted operation
+  (`set_loop_attempts`, `set_loop_config`, `set_loop_gate_input`,
+  `set_loop_bindings`, ...). Loop binding choices are the engine's answers to
+  previewed `set_loop_bindings` batches. Inspector
   fixtures are recorded and pinned by `cmd/agentplane/inspector_fixtures_test.go`;
   `test/fixtures/node-types.json` by `cmd/agentplane/catalogue_test.go`.
 

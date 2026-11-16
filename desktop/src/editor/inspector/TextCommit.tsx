@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 
 // A text control that commits, not types (F2.2 requirement 8): the draft is
 // local until blur or Enter (Ctrl/Cmd+Enter in a text area); Escape restores
-// the file's value. A commit of unchanged text sends nothing.
+// the file's value. A commit of unchanged text sends nothing. When onCommit
+// answers false (at once or through its promise: refused, or cancelled in a
+// preview), the draft returns to the file's value instead of showing text the
+// file does not hold.
 
 interface Props {
   value: string
-  onCommit: (text: string) => void
+  onCommit: (text: string) => unknown
   id?: string
   multiline?: boolean
   /** A new-entry row: after a commit the draft returns to `value` for the next entry. */
@@ -27,13 +30,22 @@ interface Props {
 export function TextCommit({ value, onCommit, id, multiline = false, keepDraft = false, disabled, readOnly, label, describedBy, invalid, required, numeric, placeholder, autoFocus, className = '', testId }: Props) {
   const [draft, setDraft] = useState(value)
   const committed = useRef(value)
+  const latest = useRef(value)
+  latest.current = value
   useEffect(() => {
     committed.current = value
     setDraft(value)
   }, [value])
+  const restore = (ok: unknown) => {
+    if (ok !== false) return
+    committed.current = latest.current
+    setDraft(latest.current)
+  }
   const commit = () => {
     if (draft === committed.current) return
-    onCommit(draft)
+    const r = onCommit(draft)
+    if (r instanceof Promise) void r.then(restore, () => restore(false))
+    else restore(r)
     if (keepDraft) {
       committed.current = value
       setDraft(value)

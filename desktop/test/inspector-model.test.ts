@@ -4,7 +4,7 @@ import shell from './fixtures/inspector-open-shell.json'
 import types from './fixtures/inspector-open-types.json'
 import removePort from './fixtures/inspector-edit-remove-port.json'
 import nodeTypes from './fixtures/node-types.json'
-import { activeFields, configOp, describeChange, diagnosticsAt, diagnosticsExactly, holds, inputSources, loopOp, loopStarter, nodeDiagnostics, parseLoose, withKey } from '../src/editor/inspector/model'
+import { activeFields, configOp, describeChange, diagnosticsAt, diagnosticsExactly, holds, inputSources, keyTaken, loopAttemptsOp, loopConfigOp, loopStarter, nodeDiagnostics, parseInteger, parseLoose, unshown } from '../src/editor/inspector/model'
 import type { Definition, NodeTypeDescriptor, OpenResponse } from '../src/editor/types'
 
 // F2.2 renderer unit tests: field-to-operation mapping, diagnostic-to-field
@@ -38,17 +38,41 @@ describe('field to operation', () => {
     expect(configOp('a', 'command', '')).toEqual({ op: 'set_config', node: 'a', path: ['command'], value: '' })
     expect(configOp('a', 'args', undefined)).toEqual({ op: 'unset_config', node: 'a', path: ['args'] })
   })
-  it('a loop change resends the whole block with one part changed, keeping key order', () => {
-    const n = def(loops).nodes.status!
-    const op = loopOp('status', n, { config: withKey(n.loop!.gate.config, 'operator', 'ne') })
-    expect(op).toMatchObject({ op: 'set_loop', node: 'status', max_attempts: 5, bindings: n.loop!.bindings })
-    expect(Object.keys((op as { gate: { config: object } }).gate.config)).toEqual(Object.keys(n.loop!.gate.config!))
-    expect(loopOp('status', n, { maxAttempts: null })).not.toHaveProperty('max_attempts')
+  it('a loop field change is one targeted operation, never the whole block again', () => {
+    expect(loopConfigOp('status', 'operator', 'ne')).toEqual({ op: 'set_loop_config', node: 'status', path: ['operator'], value: 'ne' })
+    expect(loopConfigOp('status', 'expected', undefined)).toEqual({ op: 'unset_loop_config', node: 'status', path: ['expected'] })
+    expect(loopAttemptsOp('status', 4)).toEqual({ op: 'set_loop_attempts', node: 'status', max_attempts: 4 })
+    expect(loopAttemptsOp('status', undefined)).toEqual({ op: 'set_loop_attempts', node: 'status' })
+  })
+  it('an integer field takes only a plain decimal integer; anything else is a local parse error, never unset', () => {
+    expect(parseInteger(' 7 ')).toBe(7)
+    expect(parseInteger('0')).toBe(0)
+    expect(parseInteger('-3')).toBe(-3)
+    expect(parseInteger('')).toBe('')
+    for (const bad of ['abc', '1.5', '0x10', 'Infinity', '1e3', '99999999999999999999']) expect(parseInteger(bad), bad).toBeNull()
+  })
+  it('a map key another row already has is caught before it can replace that entry', () => {
+    const rows: [string, string][] = [['A', '1'], ['B', '2']]
+    expect(keyTaken(rows, 'B', 0)).toBe(true)
+    expect(keyTaken(rows, 'A', 0)).toBe(false)
+    expect(keyTaken(rows, 'A', -1)).toBe(true)
+    expect(keyTaken(rows, 'C', -1)).toBe(false)
   })
   it('parses typed Advanced text as JSON when it is JSON, else keeps the text', () => {
     expect(parseLoose('{"a": [1]}')).toEqual({ a: [1] })
     expect(parseLoose('{a: 1}')).toBe('{a: 1}')
     expect(parseLoose('7')).toBe(7)
+  })
+})
+
+describe('section-level diagnostics', () => {
+  it('a loop diagnostic no field shows (a gate input) is left for the section', () => {
+    const at = (path: string) => ({ severity: 'error' as const, code: 'E', message: path, location: { path } })
+    const field = at('nodes.s.loop.gate.config.operator')
+    const input = at('nodes.s.loop.gate.inputs.doc')
+    const gate = at('nodes.s.loop.gate')
+    const rest = unshown([field, input, gate, at('nodes.other.loop')], 'nodes.s.loop', [[field], [gate]])
+    expect(rest).toEqual([input])
   })
 })
 

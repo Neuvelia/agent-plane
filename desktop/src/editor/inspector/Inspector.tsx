@@ -164,7 +164,7 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
             <Section title={t('inspector.section.execution')} testId="section-execution">
               <DiagList diags={diagnosticsExactly(a.diagnostics, `nodes.${nodeId}.config`)} />
               {activeFields(desc.config, config).map((f) => (
-                <FieldControl key={f.id} field={f} value={config[f.key!]} present={f.key! in config} inputs={node.inputs ?? {}} diags={diagnosticsAt(a.diagnostics, configPath(nodeId, f.key!))} refusal={edits.refusal(`config.${f.key}`)} shape={shapes.has(f.key!)} readOnly={ro} onCommit={(v) => void edits.apply([configOp(nodeId, f.key!, v)], `config.${f.key}`)} />
+                <FieldControl key={f.id} field={f} value={config[f.key!]} present={f.key! in config} inputs={node.inputs ?? {}} diags={diagnosticsAt(a.diagnostics, configPath(nodeId, f.key!))} refusal={edits.refusal(`config.${f.key}`)} shape={shapes.has(f.key!)} readOnly={ro} onCommit={(v) => edits.apply([configOp(nodeId, f.key!, v)], `config.${f.key}`)} />
               ))}
             </Section>
             {desc.loop && (

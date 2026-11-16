@@ -1,10 +1,10 @@
-import { useId, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useI18n } from '../../i18n/context'
 import type { Diagnostic } from '../../types'
 import { Button } from '../../ui/primitives'
 import type { FieldDescriptor, JsonValue, PortDef, Rule } from '../types'
 import { fieldText } from './fieldText'
-import { parseLoose } from './model'
+import { keyTaken, parseInteger, parseLoose } from './model'
 import { TextCommit } from './TextCommit'
 
 // One descriptor, one native control (F2.2 requirement 7). The control shows the
@@ -24,7 +24,8 @@ export interface FieldProps {
   /** The value does not fit this control; it is shown and edited under Advanced. */
   shape?: boolean
   readOnly: boolean
-  onCommit: (value: JsonValue | undefined) => void
+  /** May return the edit's promise: false (refused) puts the file's value back into a text control. */
+  onCommit: (value: JsonValue | undefined) => unknown
 }
 
 const asText = (v: unknown): string => (v === undefined || v === null ? '' : typeof v === 'string' ? v : JSON.stringify(v))
@@ -47,15 +48,17 @@ export function FieldControl(p: FieldProps) {
   const id = `${uid}-control`
   const helpId = `${uid}-help`
   const diagId = `${uid}-diag`
-  const describedBy = [text.help || f.requires || f.excludes ? helpId : '', p.diags.length || p.refusal ? diagId : ''].filter(Boolean).join(' ')
-  const invalid = p.diags.some((d) => d.severity === 'error') || !!p.refusal
+  // Text the control cannot turn into a value (an integer field holding `abc`, a map key typed twice) is refused here, never sent as something else.
+  const [local, setLocal] = useState<string | undefined>()
+  const describedBy = [text.help || f.requires || f.excludes ? helpId : '', p.diags.length || p.refusal || local ? diagId : ''].filter(Boolean).join(' ')
+  const invalid = p.diags.some((d) => d.severity === 'error') || !!p.refusal || !!local
   const common = { id, describedBy, invalid, required: f.required, disabled: p.readOnly }
   const canClear = p.present && !f.required && f.kind !== 'bool' && !f.locked && !p.readOnly
 
   let control: ReactNode
   if (p.shape) control = <p className="mu" data-testid="field-shape">{t('inspector.field.shape')}</p>
   else if (f.locked) control = <Locked {...p} id={id} describedBy={describedBy} />
-  else control = <Control {...p} common={common} label={text.label} />
+  else control = <Control {...p} common={common} label={text.label} setLocal={setLocal} />
 
   return (
     <div className="ins-field" data-testid={`field-${f.id}`} data-field-key={f.key}>
@@ -84,8 +87,9 @@ export function FieldControl(p: FieldProps) {
           {f.excludes && <> {t(f.required ? 'inspector.rule.exactlyOne' : 'inspector.rule.excludes', { rules: rulesText(f.excludes, t) })}</>}
         </p>
       )}
-      {(p.diags.length > 0 || p.refusal) && (
+      {(p.diags.length > 0 || p.refusal || local) && (
         <ul className="ins-diags" id={diagId} data-testid="field-diagnostics">
+          {local && <li className="err" data-testid="field-local-error">{local}</li>}
           {p.refusal && <li className="err">{t('inspector.refused', { message: p.refusal })}</li>}
           {p.diags.map((d, i) => (
             <li key={i} className={d.severity === 'error' ? 'err' : 'warn'}>
@@ -122,7 +126,9 @@ function Locked(p: FieldProps & { id: string; describedBy: string }) {
 
 type Common = { id: string; describedBy: string; invalid: boolean; required?: boolean; disabled: boolean }
 
-function Control(p: FieldProps & { common: Common; label: string }) {
+type SetLocal = (message: string | undefined) => void
+
+function Control(p: FieldProps & { common: Common; label: string; setLocal: SetLocal }) {
   const { t } = useI18n()
   const f = p.field
   const c = p.common
@@ -146,7 +152,19 @@ function Control(p: FieldProps & { common: Common; label: string }) {
       )
     }
     case 'int':
-      return <TextCommit {...c} numeric value={asText(p.value)} onCommit={(s) => p.onCommit(s.trim() === '' ? undefined : Number.isNaN(Number(s)) ? s : Number(s))} />
+      return (
+        <TextCommit
+          {...c}
+          numeric
+          value={asText(p.value)}
+          onCommit={(s) => {
+            const n = parseInteger(s)
+            if (n === null) return p.setLocal(t('inspector.field.notInteger', { text: s.trim() }))
+            p.setLocal(undefined)
+            return p.onCommit(n === '' ? undefined : n)
+          }}
+        />
+      )
     case 'scalar':
       return <TextCommit {...c} className="mono" value={asText(p.value)} onCommit={(s) => p.onCommit(/^(true|false|null|-?\d+)$/.test(s.trim()) ? parseLoose(s.trim()) : s)} />
     case 'text':
@@ -155,7 +173,7 @@ function Control(p: FieldProps & { common: Common; label: string }) {
     case 'path_list':
       return <ListEditor {...p} label={p.label} />
     case 'map':
-      return <MapEditor {...p} label={p.label} />
+      return <MapEditor {...p} label={p.label} setLocal={p.setLocal} />
     case 'group':
       // No schema-v0 descriptor is a keyed group; should one appear, its value is edited under Advanced.
       return <p className="mu">{t('inspector.field.shape')}</p>
@@ -200,10 +218,16 @@ function ListEditor(p: FieldProps & { label: string }) {
   )
 }
 
-function MapEditor(p: FieldProps & { label: string }) {
+function MapEditor(p: FieldProps & { label: string; setLocal: SetLocal }) {
   const { t } = useI18n()
   const rows = entries(p.value)
   const obj = (list: [string, string][]): JsonValue => Object.fromEntries(list)
+  // A key another row already has would silently replace that entry; it is refused with a message instead.
+  const taken = (key: string, except: number) => keyTaken(rows, key, except)
+  const refuseTaken = (key: string) => {
+    p.setLocal(t('inspector.map.keyTaken', { key }))
+    return false
+  }
   const keyPicker = !!p.field.input_types
   const freeKeys = keyPicker ? inputChoices(p.field, p.inputs).filter((n) => !rows.some(([k]) => k === n)) : []
   return (
@@ -211,7 +235,12 @@ function MapEditor(p: FieldProps & { label: string }) {
       {rows.length === 0 && <p className="mu">{t('inspector.list.empty')}</p>}
       {rows.map(([k, v], i) => (
         <div className="row ins-row" key={i}>
-          <TextCommit value={k} className="mono" label={t('inspector.map.key', { label: p.label, n: i + 1 })} disabled={p.readOnly || keyPicker} onCommit={(s) => p.onCommit(obj(rows.map((r, j) => (j === i ? [s, r[1]] : r))))} />
+          <TextCommit value={k} className="mono" label={t('inspector.map.key', { label: p.label, n: i + 1 })} disabled={p.readOnly || keyPicker} onCommit={(s) => {
+              if (taken(s, i)) return refuseTaken(s)
+              p.setLocal(undefined)
+              return p.onCommit(obj(rows.map((r, j) => (j === i ? [s, r[1]] : r))))
+            }}
+          />
           <span aria-hidden="true">=</span>
           <TextCommit value={v} className="mono" label={t('inspector.map.value', { label: p.label, key: k })} disabled={p.readOnly} onCommit={(s) => p.onCommit(obj(rows.map((r, j) => (j === i ? [r[0], s] : r))))} />
           <Button size="sm" disabled={p.readOnly} onClick={() => p.onCommit(obj(rows.filter((_, j) => j !== i)))} aria-label={t('inspector.map.removeLabel', { label: p.label, key: k })}>
@@ -227,6 +256,8 @@ function MapEditor(p: FieldProps & { label: string }) {
             const data = new FormData(e.currentTarget)
             const key = String(data.get('key') ?? '').trim()
             if (!key) return
+            if (taken(key, -1)) return void refuseTaken(key)
+            p.setLocal(undefined)
             p.onCommit(obj([...rows, [key, String(data.get('value') ?? '')]]))
             e.currentTarget.reset()
           }}
