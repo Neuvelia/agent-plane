@@ -1,4 +1,4 @@
-.PHONY: fmt test vet check verify-changes build clean desktop-check desktop-e2e desktop-stories
+.PHONY: fmt test vet check verify-changes lint metrics build clean desktop-check desktop-e2e desktop-stories
 
 fmt:
 	gofmt -w ./cmd ./internal ./scripts/verifychanges
@@ -15,6 +15,15 @@ check:
 # Inventories staged, unstaged and untracked paths; does not run checks.
 verify-changes:
 	go run ./scripts/verifychanges
+
+# Needs golangci-lint v2 (development-only; not in go.mod). `make check` does not
+# require it. Findings on code that a change touches fail; legacy findings are
+# tolerated until stage 6 of the clean-architecture refactor plan.
+lint:
+	golangci-lint run ./cmd/... ./internal/...
+
+metrics:
+	./scripts/metrics.sh
 
 build:
 	mkdir -p bin

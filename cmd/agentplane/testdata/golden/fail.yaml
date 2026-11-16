@@ -1,0 +1,20 @@
+schema_version: 0
+id: golden-fail
+inputs: {}
+nodes:
+  a:
+    type: shell
+    config: {command: /usr/bin/false}
+    outputs:
+      stdout: {type: string}
+  b:
+    type: shell
+    inputs:
+      m: {type: string, required: true}
+    config: {command: /usr/bin/printf, args: [beta], input_env: {m: M}}
+    outputs:
+      stdout: {type: string}
+edges:
+  - {from: a.outputs.stdout, to: b.inputs.m}
+outputs:
+  result: {from: b.outputs.stdout}
