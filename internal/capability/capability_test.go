@@ -84,6 +84,70 @@ func TestGitProbeOutcomes(t *testing.T) {
 	}
 }
 
+// fakeStat answers for the macOS developer-tools paths and defers to os.Stat
+// for everything else, so the darwin decision is tested without a Mac.
+func fakeStat(present map[string]bool) func(string) (os.FileInfo, error) {
+	return func(p string) (os.FileInfo, error) {
+		if strings.HasPrefix(p, "/Library/") || strings.HasPrefix(p, "/Applications/") || strings.HasPrefix(p, "/Xcode-beta/") {
+			if present[p] {
+				return os.Stat("/bin/sh") // any regular executable file
+			}
+			return nil, os.ErrNotExist
+		}
+		return os.Stat(p)
+	}
+}
+
+func TestDarwinGitWithoutDeveloperToolsIsNotExecuted(t *testing.T) {
+	requirePOSIX(t)
+	ran := filepath.Join(t.TempDir(), "ran")
+	bin := fakeBinary(t, `printf x > `+ran+`; printf 'git version 2.39.5\n'`)
+	noLink := func(string) (string, error) { return "", os.ErrNotExist }
+	got := gitRow(t, Detector{GOOS: "darwin", GitPath: bin, Stat: fakeStat(nil), Readlink: noLink})
+	if got.Status != StatusMissing || got.Reason != ReasonDeveloperToolsMissing {
+		t.Fatalf("got %+v", got)
+	}
+	if _, err := os.Stat(ran); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the shim was executed without developer tools")
+	}
+}
+
+func TestDarwinGitWithDeveloperToolsIsProbed(t *testing.T) {
+	requirePOSIX(t)
+	bin := fakeBinary(t, `printf 'git version 2.39.5\n'`)
+	cases := map[string]struct {
+		present  map[string]bool
+		readlink func(string) (string, error)
+	}{
+		"command line tools": {map[string]bool{darwinCLTGit: true}, func(string) (string, error) { return "", os.ErrNotExist }},
+		"xcode-select target": {map[string]bool{"/Xcode-beta/Contents/Developer/usr/bin/git": true}, func(p string) (string, error) {
+			if p != darwinSelectLink {
+				t.Errorf("readlink %q", p)
+			}
+			return "/Xcode-beta/Contents/Developer", nil
+		}},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := gitRow(t, Detector{GOOS: "darwin", GitPath: bin, Stat: fakeStat(c.present), Readlink: c.readlink})
+			if got.Status != StatusAvailable || got.Version != "2.39.5" {
+				t.Fatalf("got %+v", got)
+			}
+		})
+	}
+}
+
+func TestGitProbeStoppedByTheCallerIsNotATimeout(t *testing.T) {
+	requirePOSIX(t)
+	bin := fakeBinary(t, `exec /bin/sleep 30`)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	r := Detector{GOOS: "linux", GitPath: bin, Timeout: time.Minute}.Detect(ctx)
+	if got := r.Tools[0]; got.Status != StatusError || got.Reason != ReasonProbeFailed {
+		t.Fatalf("got %+v", got)
+	}
+}
+
 func TestGitProbeTimesOutAndTerminatesTheProcess(t *testing.T) {
 	requirePOSIX(t)
 	pidFile := filepath.Join(t.TempDir(), "pid")
@@ -319,6 +383,26 @@ func TestServiceWaitEndsWithTheCallerContext(t *testing.T) {
 	cancel()
 	if _, err := s.Check(context.Background(), wait); !errors.Is(err, context.Canceled) {
 		t.Fatalf("err %v", err)
+	}
+}
+
+func TestServiceSurvivesAPanickingDetector(t *testing.T) {
+	var calls atomic.Int32
+	s := &Service{Detect: func(context.Context) Report {
+		if calls.Add(1) == 1 {
+			panic("boom")
+		}
+		return Report{Version: ReportVersion, Tools: []Tool{{ID: "git", Status: StatusAvailable}}}
+	}}
+	ctx := context.Background()
+	r, err := s.Check(ctx, ctx)
+	if err != nil || len(r.Tools) != 1 || r.Tools[0].Status != StatusError || r.Tools[0].Reason != ReasonProbeFailed || r.CheckedAt.IsZero() {
+		t.Fatalf("after panic: %+v, %v", r, err)
+	}
+	// A later check is not wedged by the panicked one.
+	r, err = s.Check(ctx, ctx)
+	if err != nil || calls.Load() != 2 || r.Tools[0].Status != StatusAvailable {
+		t.Fatalf("second check: %+v, %v (calls %d)", r, err, calls.Load())
 	}
 }
 

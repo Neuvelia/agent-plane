@@ -40,19 +40,20 @@ const (
 
 // Reason codes are a closed set; a new one needs a spec change.
 const (
-	ReasonNone                 = ""
-	ReasonNoBinaryConfigured   = "no_binary_configured"
-	ReasonNotExecutable        = "not_executable"
-	ReasonProbeFailed          = "probe_failed"
-	ReasonProbeTimeout         = "probe_timeout"
-	ReasonOutputTooLarge       = "output_too_large"
-	ReasonUnrecognizedVersion  = "unrecognized_version"
-	ReasonMissingRequiredFlags = "missing_required_flags"
-	ReasonPlatformNotSupported = "platform_not_supported"
+	ReasonNone                  = ""
+	ReasonNoBinaryConfigured    = "no_binary_configured"
+	ReasonNotExecutable         = "not_executable"
+	ReasonProbeFailed           = "probe_failed"
+	ReasonProbeTimeout          = "probe_timeout"
+	ReasonOutputTooLarge        = "output_too_large"
+	ReasonUnrecognizedVersion   = "unrecognized_version"
+	ReasonMissingRequiredFlags  = "missing_required_flags"
+	ReasonPlatformNotSupported  = "platform_not_supported"
+	ReasonDeveloperToolsMissing = "developer_tools_missing"
 )
 
 // Reasons lists every reason code, for tests and clients.
-var Reasons = []string{ReasonNone, ReasonNoBinaryConfigured, ReasonNotExecutable, ReasonProbeFailed, ReasonProbeTimeout, ReasonOutputTooLarge, ReasonUnrecognizedVersion, ReasonMissingRequiredFlags, ReasonPlatformNotSupported}
+var Reasons = []string{ReasonNone, ReasonNoBinaryConfigured, ReasonNotExecutable, ReasonProbeFailed, ReasonProbeTimeout, ReasonOutputTooLarge, ReasonUnrecognizedVersion, ReasonMissingRequiredFlags, ReasonPlatformNotSupported, ReasonDeveloperToolsMissing}
 
 type Engine struct {
 	Version string `json:"version"`
@@ -90,6 +91,45 @@ type Detector struct {
 	Agents        []Agent
 	Timeout       time.Duration // per Git probe; default 10s
 	Now           func() time.Time
+	// Stat and Readlink inspect the filesystem without executing anything, so
+	// the macOS developer-tools decision is testable on any OS. Defaults:
+	// os.Stat and os.Readlink.
+	Stat     func(string) (os.FileInfo, error)
+	Readlink func(string) (string, error)
+}
+
+// On macOS /usr/bin/git is an xcrun shim. Without Command Line Tools or Xcode,
+// running it opens the "install developer tools" dialog, a side effect a
+// read-only check must not cause. These paths locate a real Git without
+// executing anything.
+const (
+	darwinCLTGit       = "/Library/Developer/CommandLineTools/usr/bin/git"
+	darwinSelectLink   = "/var/db/xcode_select_link"
+	darwinXcodeDevel   = "/Applications/Xcode.app/Contents/Developer"
+	darwinDevelGitPath = "usr/bin/git"
+)
+
+// darwinDeveloperGit reports whether the developer tools behind the shim
+// contain an executable Git: the Command Line Tools, the xcode-select target,
+// or the default Xcode location.
+func (d Detector) darwinDeveloperGit() bool {
+	stat, readlink := d.Stat, d.Readlink
+	if stat == nil {
+		stat = os.Stat
+	}
+	if readlink == nil {
+		readlink = os.Readlink
+	}
+	candidates := []string{darwinCLTGit, darwinXcodeDevel + "/" + darwinDevelGitPath}
+	if target, err := readlink(darwinSelectLink); err == nil && strings.HasPrefix(target, "/") {
+		candidates = append(candidates, strings.TrimSuffix(target, "/")+"/"+darwinDevelGitPath)
+	}
+	for _, c := range candidates {
+		if info, err := stat(c); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 const maxProbeOutput = 4 << 10
@@ -160,13 +200,21 @@ func (d Detector) git(ctx context.Context, goos string) Tool {
 	if path == "" {
 		path = GitPath
 	}
-	info, err := os.Stat(path)
+	stat := d.Stat
+	if stat == nil {
+		stat = os.Stat
+	}
+	info, err := stat(path)
 	if errors.Is(err, os.ErrNotExist) {
 		t.Status = StatusMissing
 		return t
 	}
 	if err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0 {
 		t.Status, t.Reason = StatusError, ReasonNotExecutable
+		return t
+	}
+	if goos == "darwin" && !d.darwinDeveloperGit() {
+		t.Status, t.Reason = StatusMissing, ReasonDeveloperToolsMissing
 		return t
 	}
 	timeout := d.Timeout
@@ -202,6 +250,9 @@ func probe(ctx context.Context, timeout time.Duration, path string, args ...stri
 	cmd.WaitDelay = time.Second
 	err := cmd.Run()
 	switch {
+	case ctx.Err() != nil:
+		// The caller (the server) stopped the probe; it did not time out.
+		return "", ReasonProbeFailed
 	case pctx.Err() != nil:
 		return "", ReasonProbeTimeout
 	case out.overflow:
@@ -307,12 +358,21 @@ func (s *Service) Check(detectCtx, waitCtx context.Context) (Report, error) {
 		done = make(chan struct{})
 		s.running = done
 		go func() {
-			r := s.Detect(detectCtx)
-			s.mu.Lock()
-			s.last = &r
-			s.running = nil
-			s.mu.Unlock()
-			close(done)
+			// If Detect panics, r keeps this error report, and the deferred
+			// cleanup still clears running and closes done, so neither the
+			// process nor later checks are affected.
+			r := Report{Version: ReportVersion, Tools: []Tool{{ID: "detection", Kind: "tool", Status: StatusError, Reason: ReasonProbeFailed}}}
+			defer func() {
+				if recover() != nil {
+					r.CheckedAt = time.Now().UTC().Truncate(time.Millisecond)
+				}
+				s.mu.Lock()
+				s.last = &r
+				s.running = nil
+				s.mu.Unlock()
+				close(done)
+			}()
+			r = s.Detect(detectCtx)
 		}()
 	}
 	s.mu.Unlock()

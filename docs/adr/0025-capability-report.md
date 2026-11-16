@@ -37,7 +37,12 @@ Verified facts that bound the decision:
    `GIT_CONFIG_GLOBAL=/dev/null`, `LC_ALL=C` and nothing else, stdin closed, the temp directory as working
    directory, output capped at 4 KiB, a 10 second timeout with termination. Adapters: the existing
    `Detect`, with the error kind (never its text) selecting the status. On other operating systems no probe
-   process starts and every row is `unsupported_platform`. There is no `PATH` lookup.
+   process starts and every row is `unsupported_platform`. There is no `PATH` lookup. On Darwin,
+   `/usr/bin/git` is an `xcrun` shim that opens the "install developer tools" dialog when no developer
+   tools exist, so it is executed only after a stat (no execution) finds a real Git under the Command Line
+   Tools, the `xcode_select_link` target or the default Xcode location; otherwise the row is `missing`
+   with `developer_tools_missing`. This is unit-tested with injected stat/readlink and still needs a
+   native macOS check.
 4. **Codex binary.** `serve` accepts an optional `--codex-bin ABSOLUTE_PATH` used only to compose detection;
    agent execution in `serve` is unchanged. Without it Codex is `not_configured` and `Detect` is not called.
    Electron main passes it only from an absolute `AGENTPLANE_CODEX_BIN`.
