@@ -1,5 +1,5 @@
 name: Roadmap feature
-about: Track one feature spec through planning, implementation, and review
+description: Track one feature spec through planning, implementation, and review
 title: "[FEATURE] "
 labels: ["feature"]
 body:
