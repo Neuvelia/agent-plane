@@ -37,10 +37,29 @@ remote service implicitly.
 5. **Sidecar trust.** A packaged app runs only the sidecar from its own resources and
    only when versions match. Environment overrides apply to unpackaged development
    runs only.
-6. **Platforms.** Linux and macOS only until Windows process-tree termination for
+6. **License.** PolyForm Noncommercial 1.0.0 with a commercial license and a CLA
+   (owner decision). Rationale: the landing terms already sell per-person work
+   licenses; a published Apache-2.0 release could never be tightened afterwards,
+   while a restrictive license can be relaxed later. The project is called
+   "source-available", not "open source".
+7. **Release safety.** Signing and notarization are a follow-up (release secrets in
+   a tag-only protected environment, all platforms green before publishing), after
+   which an opt-in updater can be reconsidered.
+8. **Platforms.** Linux and macOS only until Windows process-tree termination for
    Agent and Gate nodes is specified and tested.
 
 ## Alternatives considered
+
+### Apache-2.0 (rejected)
+
+Pros:
+
+- Recognized open-source license; widest adoption and contribution.
+
+Cons:
+
+- Contradicts the per-person work license on the landing; irrevocable for every
+  published version.
 
 ### Tauri (rejected)
 

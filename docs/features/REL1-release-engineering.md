@@ -91,11 +91,17 @@ installer is published, and public copy must not claim Windows support.
 
 ## Functional requirements
 
-1. **License.** The repository is licensed under Apache-2.0 (`LICENSE`, plus a
-   `NOTICE` naming NEUVELIA sp. z o.o.; owner decision, 2026-11-16). Release archives
-   and installers include both files. Dependency licenses are checked for
-   compatibility before the first tag, and the product name and logo are reserved
-   (not licensed by Apache-2.0).
+1. **License.** The repository is source-available under the PolyForm Noncommercial
+   License 1.0.0 (`LICENSE`, with `Required Notice:` lines naming NEUVELIA sp. z o.o.
+   and the commercial-license contact, plus `NOTICE`); owner decision, 2026-11-16.
+   It is not an open-source license, and no public text may call Tarmind "open
+   source" (use "source-available"). Commercial use needs a work license, as the
+   landing terms and pricing already state. Release archives and installers include
+   `LICENSE`, `NOTICE` and a generated `THIRD_PARTY_NOTICES`; the packaged desktop
+   app also includes Electron's `LICENSE`, `LICENSES.chromium.html` and the Geist
+   font licenses. A CI check fails when a dependency has a license that cannot be
+   redistributed with this one. Because a published version cannot be re-licensed,
+   no artifact and no public repository may exist before this requirement is met.
 2. **Version stamping.** `tarmind version` prints the semantic version from the
    release tag, the commit and the build date. Builds without stamping print
    `0.0.0-dev` as today. The value is injected at build time (`-ldflags -X`), not
@@ -129,6 +135,24 @@ installer is published, and public copy must not claim Windows support.
     current limits: shared workspace without isolation, no resume after a restart,
     unsigned builds, supported platforms.
 
+12. **Contributions.** Outside contributions are accepted only after the author
+    signs a Contributor License Agreement that lets the owner license the
+    contribution commercially (a DCO does not). A workflow checks every pull
+    request and never checks out or runs the pull request's code. Until the CLA
+    exists, outside pull requests are not merged.
+13. **Release environment.** Release secrets (signing keys, notarization and
+    signing-service credentials, once signing is added) live only in a protected
+    CI environment that admits tags only. Every platform job must pass before the
+    release is published; no partially published release.
+14. **Provider terms.** A document (`docs/provider-terms.md`) states how Tarmind
+    starts third-party agent CLIs, that it does not bundle or resell them, that the
+    user's own account and terms apply, and what each provider publishes about
+    automated use. Vendor CLIs are never included in the installer.
+15. **Electron hardening.** The packaged app turns off `runAsNode` and the
+    `NODE_OPTIONS` and inspector switches, loads only from its ASAR with integrity
+    validation, and keeps the existing context-isolation, sandbox and CSP rules.
+    A test reads the package's fuse configuration.
+
 ## Data / API contracts affected
 
 - CLI: `tarmind version` output gains commit and build date (output format
@@ -151,7 +175,13 @@ installer is published, and public copy must not claim Windows support.
 
 ## Acceptance criteria
 
-- [ ] `LICENSE` (Apache-2.0, unmodified text) and `NOTICE` exist and are present in every CLI archive and desktop package.
+- [ ] `LICENSE` (PolyForm Noncommercial 1.0.0, official text plus `Required Notice:`
+      lines), `NOTICE` and `THIRD_PARTY_NOTICES` exist and are present in every CLI
+      archive and desktop package; the desktop package also contains Electron's
+      `LICENSE` and `LICENSES.chromium.html` (test lists the package contents).
+- [ ] A dependency with a non-redistributable license fails the license check (test
+      with a fixture); a text search of README, docs and landing copy finds no claim
+      that Tarmind is "open source".
 - [ ] Building the same tag twice produces byte-identical CLI binaries (compare
       SHA-256 in CI).
 - [ ] `tarmind version` from a release archive prints the tag's version; the
@@ -203,9 +233,11 @@ SHA-256, and the attestation reference, as its audit trail.
 
 ## Open questions
 
-1. Resolved: Apache-2.0. Still open: DCO or CLA for outside contributions; whether
-   the landing terms of use (which cover the software) are consistent with an
-   open-source license.
+1. Resolved: PolyForm Noncommercial 1.0.0 (see requirement 1). Open: the exact
+   commercial-license contact address (`hello@neuvelia.com` is used from the landing
+   terms); who prepares the CLA text (a lawyer should; do not copy another project's
+   agreement); click-through bot or signed PDF; whether PolyForm Small Business is
+   preferable (free for small companies) once pricing is final.
 2. Resolved: the public repository is this one, renamed from `agent-plane` to
    `tarmind`. The landing repository stays private. Before the visibility change:
    review the history and docs (audits, plans, prompts, thesis experiment data) and
