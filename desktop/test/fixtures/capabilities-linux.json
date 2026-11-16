@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "checked_at": "2026-11-16T19:01:53.458Z",
+  "engine": {
+    "version": "0.0.0-dev",
+    "os": "linux",
+    "arch": "amd64"
+  },
+  "tools": [
+    {
+      "id": "git",
+      "kind": "tool",
+      "status": "available",
+      "version": "2.43.0",
+      "reason": ""
+    },
+    {
+      "id": "codex",
+      "kind": "agent_adapter",
+      "status": "not_configured",
+      "version": "",
+      "reason": "no_binary_configured"
+    },
+    {
+      "id": "claude",
+      "kind": "agent_cli",
+      "status": "missing",
+      "version": "",
+      "reason": ""
+    },
+    {
+      "id": "cursor-agent",
+      "kind": "agent_cli",
+      "status": "missing",
+      "version": "",
+      "reason": ""
+    },
+    {
+      "id": "gemini",
+      "kind": "agent_cli",
+      "status": "missing",
+      "version": "",
+      "reason": ""
+    }
+  ]
+}

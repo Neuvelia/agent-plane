@@ -85,6 +85,16 @@ a dev dependency and is never part of the packaged app.
   variable keeps recording off for that session. The renderer reaches it only
   through `recordingSettings`/`setRecordingSettings` and never sees environment
   values.
+- **Welcome and capability list (F2.11, ADR-0025).** On first launch (no
+  `agentplane.welcome.v1` in renderer `localStorage`) the app opens "Welcome and
+  setup", also reachable from the sidebar. It lists the engine (with the engine
+  and app versions; preload exposes the read-only `appVersion`), Git, Codex and
+  the agent CLIs without an adapter (Claude Code, Cursor Agent, Gemini CLI), as
+  reported by `GET /capabilities`; "Check again" calls `POST /capabilities/check`.
+  The CLIs are only looked up on the engine's `PATH`, never run. Main passes
+  `--codex-bin` only when `AGENTPLANE_CODEX_BIN` is an absolute path
+  (`electron/capabilities.cjs`). "Start from a template" opens the blank New
+  graph flow until the F2.12 picker lands.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 

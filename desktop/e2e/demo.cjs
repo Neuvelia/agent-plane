@@ -14,6 +14,7 @@ const shots = process.argv[2]
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ap-e2e-'))
 const env = { ...process.env, AGENTPLANE_BIN: path.join(root, 'bin', 'agentplane'), AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
 delete env.NODE_OPTIONS
+delete env.AGENTPLANE_CODEX_BIN
 
 async function launch() {
   const app = await _electron.launch({
@@ -50,13 +51,31 @@ async function startDemo(page) {
     const leaked = await page.evaluate(() => ({ require: typeof require, process: typeof process, token: JSON.stringify(window.agentplane).includes('token') }))
     assert.deepEqual(leaked, { require: 'undefined', process: 'undefined', token: false })
 
-    // R3 keyboard: the first Tab stop is the skip link; Enter moves focus into the content.
+    // F2.11: a first launch opens the welcome screen with the engine's capability report, keyboard only.
+    await page.waitForSelector('[data-testid="cap-engine"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H1')
+    const engineVersion = require('node:child_process').execFileSync(env.AGENTPLANE_BIN, ['version'], { encoding: 'utf8' }).trim()
+    assert.ok((await page.textContent('[data-testid="cap-engine-version"]')).includes(engineVersion.split(/\s+/).pop()), 'Engine row shows the sidecar version')
+    const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="cap-list"] > li')].map((li) => [li.dataset.testid, li.dataset.status]))
+    assert.deepEqual(rows.map((r) => r[0]), ['cap-engine', 'cap-git', 'cap-codex', 'cap-claude', 'cap-cursor-agent', 'cap-gemini'])
+    assert.ok(['available', 'missing', 'error', 'unsupported_platform'].includes(rows[1][1]), `git status ${rows[1][1]}`)
+    assert.equal(rows[2][1], 'not_configured')
+    for (const [, st] of rows.slice(3)) assert.ok(['missing', 'detected_no_adapter'].includes(st), st)
+    const firstCheck = await page.textContent('[data-testid="cap-announce"]')
+    assert.match(firstCheck, /Check finished/)
     await page.keyboard.press('Tab')
-    assert.equal(await page.evaluate(() => document.activeElement?.className), 'skip-link')
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), 'check-again')
     await page.keyboard.press('Enter')
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'content')
-    // Disabled entries are not tab stops; enabled navigation entries are real buttons.
-    assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
+    await page.waitForFunction(() => /Check finished/.test(document.querySelector('[data-testid="cap-announce"]')?.textContent || '') && !document.querySelector('[data-testid="check-again"]')?.disabled)
+    assert.equal(await page.getAttribute('[data-testid="cap-announce"]', 'aria-live'), 'polite')
+    for (const id of ['welcome-template', 'welcome-open', 'welcome-skip']) {
+      await page.keyboard.press('Tab')
+      assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), id)
+    }
+    await shot(page, '0-welcome')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="dashboard"]')
+    assert.equal(await page.evaluate(() => localStorage.getItem('agentplane.welcome.v1')), 'done')
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
     const refused = await page.evaluate(async () => ({
@@ -580,7 +599,16 @@ async function startDemo(page) {
 
     // 4. History survives an application restart and the map is rebuilt from events.
     ;({ app, page } = await launch())
+    // After Skip, a relaunch opens the dashboard, not the welcome screen.
     await page.waitForSelector('[data-testid="dashboard"]')
+    assert.equal(await page.isVisible('[data-testid="welcome"]'), false)
+    // R3 keyboard: the first Tab stop is the skip link; Enter moves focus into the content.
+    await page.keyboard.press('Tab')
+    assert.equal(await page.evaluate(() => document.activeElement?.className), 'skip-link')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'content')
+    // Disabled entries are not tab stops; enabled navigation entries are real buttons.
+    assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
     await page.click('[data-testid="nav-runs"]')
     await page.waitForSelector('[data-testid="run-row"]')
     assert.equal(await page.locator('[data-testid="run-row"]').count(), 2, "the demo run and the run started from the editor")

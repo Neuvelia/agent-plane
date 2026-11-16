@@ -53,14 +53,23 @@ export interface BridgeData {
   recording?: RecordingSettings
   /** Saving the recording preference fails as when user data cannot be written. */
   recordingSaveFails?: boolean
+  /** F2.11 capability routes: the report both routes answer, an HTTP failure, or a check that never answers. */
+  capabilities?: { report?: unknown; status?: number; checkHangs?: boolean; getHangs?: boolean }
 }
 
 export function createBridge(data: BridgeData): Window['agentplane'] {
   const respond = <T,>(status: number, body: T): ApiResponse<T> => ({ status, body })
   return {
+    appVersion: '0.0.0-story',
     request: async <T,>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown): Promise<ApiResponse<T>> => {
       if (data.hang) return new Promise<ApiResponse<T>>(() => undefined)
       if (data.unreachable) throw new Error('the agentplane sidecar is not running')
+      const caps = data.capabilities
+      if (caps && ((method === 'GET' && path === '/capabilities') || (method === 'POST' && path === '/capabilities/check'))) {
+        if ((method === 'GET' && caps.getHangs) || (method === 'POST' && caps.checkHangs)) return new Promise<ApiResponse<T>>(() => undefined)
+        if (caps.status && caps.status !== 200) return respond(caps.status, { error: { code: 'capabilities_unavailable', message: 'capability detection did not finish' } }) as ApiResponse<T>
+        return respond(200, structuredClone(caps.report)) as ApiResponse<T>
+      }
       const run = /^\/runs\/([^/]+)$/.exec(path)
       const g = data.graph
       if (method === 'POST' && path === '/graphs/open' && g?.opened) return respond(200, g.opened) as ApiResponse<T>

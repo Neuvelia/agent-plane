@@ -9,8 +9,10 @@ import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
+import { markWelcomeDone, welcomeDone } from './capabilities'
+import { Welcome } from './welcome'
 
-type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; path?: string } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string }
+type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; path?: string } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
 
 export default function App() {
   // Every screen that cannot reach the engine reports here; the global bar says so while any does.
@@ -33,7 +35,8 @@ export default function App() {
 
 function Shell({ lost }: { lost: boolean }) {
   const { t, locale } = useI18n()
-  const [route, setRoute] = useState<Route>({ name: 'dashboard' })
+  // First run (F2.11 requirement 10): the welcome screen until one of its actions is chosen.
+  const [route, setRoute] = useState<Route>(() => (welcomeDone() ? { name: 'dashboard' } : { name: 'welcome' }))
   const polled = usePoll(listApprovals, 1500)
   const pending = polled.data?.length ?? 0
   // The open graph lives here so it survives moving to another screen and back.
@@ -52,6 +55,8 @@ function Shell({ lost }: { lost: boolean }) {
       first.current = false
       return
     }
+    // The welcome screen moves focus to its own heading.
+    if (routeKey === 'welcome') return
     mainRef.current?.focus({ preventScroll: true })
   }, [routeKey])
 
@@ -63,14 +68,19 @@ function Shell({ lost }: { lost: boolean }) {
     { id: 'new', icon: 'new', label: 'nav.new', active: route.name === 'new', onSelect: go('new') },
     { id: 'editor', icon: 'editor', label: 'nav.editor', active: route.name === 'editor', onSelect: go('editor') },
   ]
-  const footer: NavEntry[] = [{ id: 'settings', icon: 'settings', label: 'nav.settings', active: route.name === 'settings', onSelect: go('settings') }]
+  const footer: NavEntry[] = [{ id: 'welcome', icon: 'welcome', label: 'nav.welcome', active: route.name === 'welcome', onSelect: go('welcome') }, { id: 'settings', icon: 'settings', label: 'nav.settings', active: route.name === 'settings', onSelect: go('settings') }]
   // Surfaces deferred by F2.5a: greyed out, never navigable.
   const deferred: NavEntry[] = [
     { id: 'projects', icon: 'projects', label: 'nav.projects' },
     { id: 'runners', icon: 'runners', label: 'nav.runners' },
     { id: 'docs', icon: 'docs', label: 'nav.docs' },
   ]
-  const crumb = route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
+  const leaveWelcome = (next: Route, then?: () => void) => () => {
+    markWelcomeDone()
+    setRoute(next)
+    then?.()
+  }
+  const crumb = route.name === 'welcome' ? t('nav.welcome') : route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
   return (
     <div className="app">
       <a
@@ -101,6 +111,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
+          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor' }, editor.create)} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.path ?? ''} initialPath={route.path} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

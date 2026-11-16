@@ -32,6 +32,7 @@ const REQUIRED = [
   'screens-inspector--loop-edits-are-targeted', 'screens-inspector--refused-rename-restores-name', 'screens-inspector--cancelled-rename-restores-name', 'screens-inspector--invalid-max-attempts', 'screens-inspector--map-key-collision', 'screens-inspector--gate-input-and-port-diagnostics', 'screens-inspector--output-rename-carries-type',
   'screens--runs-list-loading', 'screens--runs-list-error', 'screens--dashboard-loading', 'screens--dashboard-error', 'screens--approvals-loading', 'screens--approvals-error', 'screens--new-run-validating', 'screens--full-app-shell-engine-down',
   'screens--new-run-no-file', 'screens--new-run-ready', 'screens--new-run-warnings', 'screens--new-run-blocked',
+  'screens-welcome--all-available', 'screens-welcome--git-missing', 'screens-welcome--codex-not-configured', 'screens-welcome--codex-found-on-path', 'screens-welcome--agent-clis-found', 'screens-welcome--codex-unsupported-version', 'screens-welcome--windows', 'screens-welcome--detection-error', 'screens-welcome--checking', 'screens-welcome--rechecking', 'screens-welcome--request-failed', 'screens-welcome--engine-disconnected',
 ]
 
 const server = http.createServer((req, res) => {
