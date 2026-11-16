@@ -291,7 +291,9 @@ missing-HEAD, old-Git and unsafe-root preflight; retention table; cancellation;
 source guard; schema round-trip with old fixtures; `go test -race ./...` and
 `make check`.
 
-**Acceptance gate for this ADR (not yet done):** a short authorized spike with a
+**Acceptance gate for this ADR (not yet done; prepared in
+`docs/validation/F3.1-codex-worktree-spike.md` with
+`scripts/spike-f3-1-codex-worktree.sh`):** a short authorized spike with a
 real installed Codex CLI in a disposable repository, recorded under
 `docs/validation/`, must show that Codex's workspace-write sandbox can run in a
 linked worktree whose gitdir lives in the source's `.git`, and in particular
