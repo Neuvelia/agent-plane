@@ -59,6 +59,7 @@ export const pl: Record<MessageKey, string> = {
   'issues.noneInFilter': 'Żaden problem nie pasuje do filtra.',
   'issues.graphLevel': 'Graf',
   'issues.line': 'linia {line}',
+  'issues.lineColumn': 'linia {line}, kolumna {column}',
   'issues.unreachable': 'Utracono połączenie: silnik nie mógł sprawdzić najnowszego tekstu. Lista poniżej jest nieaktualna.',
   'issues.retry': 'Sprawdź ponownie',
   'issues.selected': 'Wybrano: {name}',

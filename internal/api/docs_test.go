@@ -263,6 +263,30 @@ func TestDiagnosticsCarryTheSourceLine(t *testing.T) {
 	}
 }
 
+func TestParseErrorColumnIsReportedOnlyWhereTheLibraryLocatesIt(t *testing.T) {
+	_, ts, dir := docServer(t)
+	syntax := "schema_version: 0\nid: g\nnodes: [\n"
+	unknown := "schema_version: 0\nid: g\nnodes:\n  a:\n    type: shell\n    colour: red\n"
+	path := writeGraph(t, dir, "unknown.yaml", unknown)
+	g := grantFor(t, ts, path, "open")
+
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": syntax})
+	if out["parse_line"] == nil {
+		t.Errorf("syntax error: no line: %v", out)
+	}
+	if _, has := out["parse_column"]; has {
+		t.Errorf("syntax error: the library reports no column, so none may be invented: %v", out)
+	}
+	_, out = call(t, ts, "POST", "/graphs/validate", map[string]any{"text": unknown})
+	if out["parse_line"] != float64(6) || out["parse_column"] != float64(5) {
+		t.Errorf("unknown field: line %v column %v, want 6 and 5", out["parse_line"], out["parse_column"])
+	}
+	_, out = call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g})
+	if out["parse_line"] != float64(6) || out["parse_column"] != float64(5) {
+		t.Errorf("open: line %v column %v, want 6 and 5", out["parse_line"], out["parse_column"])
+	}
+}
+
 func TestValidateTakesTextOrGrantOrPathExactlyOnce(t *testing.T) {
 	_, ts, dir := docServer(t)
 	path := writeGraph(t, dir, "pair.yaml", pairGraph)

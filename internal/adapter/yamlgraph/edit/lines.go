@@ -97,7 +97,6 @@ func indexed(top *yaml.Node, key string, n int) *yaml.Node {
 var parseLine = regexp.MustCompile(`line (\d+)`)
 
 // ParseErrorLine extracts the 1-based line a YAML or decoding error names, or 0.
-// The YAML library reports lines only, so there is no column.
 func ParseErrorLine(message string) int {
 	m := parseLine.FindStringSubmatch(message)
 	if m == nil {
@@ -105,4 +104,78 @@ func ParseErrorLine(message string) int {
 	}
 	n, _ := strconv.Atoi(m[1])
 	return n
+}
+
+var (
+	parseEntry      = regexp.MustCompile(`line (\d+): ([^\n]*)`)
+	unknownField    = regexp.MustCompile(`^field (.+) not found in type `)
+	cannotUnmarshal = regexp.MustCompile("^cannot unmarshal (!!\\w+)(?: (`.*`))? into ")
+)
+
+// ParseErrorColumn returns the 1-based column (in characters) of the node a
+// decoding error names, or 0 when the library does not allow it. yaml.v3 gives a
+// column for no error: syntax errors name a line only, and decoding errors carry
+// the line in text. For the decoding errors that name the failing node (unknown
+// field, value of the wrong kind or type) the column is read from that node in
+// the YAML tree; it is reported only when exactly one node on the named line
+// fits the message, never guessed.
+func ParseErrorColumn(text []byte, message string) int {
+	m := parseEntry.FindStringSubmatch(message)
+	if m == nil {
+		return 0
+	}
+	line, _ := strconv.Atoi(m[1])
+	fits := fitter(line, m[2])
+	if fits == nil {
+		return 0
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal(text, &doc); err != nil {
+		return 0
+	}
+	var found []*yaml.Node
+	var walk func(n *yaml.Node, isKey bool)
+	walk = func(n *yaml.Node, isKey bool) {
+		if fits(n, isKey) {
+			found = append(found, n)
+		}
+		for i, c := range n.Content {
+			walk(c, n.Kind == yaml.MappingNode && i%2 == 0)
+		}
+	}
+	walk(&doc, false)
+	if len(found) != 1 {
+		return 0
+	}
+	return found[0].Column
+}
+
+// fitter builds the predicate for the node a decoding error entry names, or nil
+// for entries (syntax errors, duplicate keys) whose node cannot be identified.
+func fitter(line int, entry string) func(n *yaml.Node, isKey bool) bool {
+	if m := unknownField.FindStringSubmatch(entry); m != nil {
+		return func(n *yaml.Node, isKey bool) bool {
+			return isKey && n.Line == line && n.Value == m[1]
+		}
+	}
+	if m := cannotUnmarshal.FindStringSubmatch(entry); m != nil {
+		return func(n *yaml.Node, _ bool) bool {
+			if n.Kind == yaml.DocumentNode || n.Line != line || n.ShortTag() != m[1] {
+				return false
+			}
+			if n.Kind != yaml.ScalarNode {
+				return m[2] == ""
+			}
+			return m[2] == shortValue(n.Value)
+		}
+	}
+	return nil
+}
+
+// shortValue renders a scalar the way yaml.v3 quotes it in a decoding error.
+func shortValue(v string) string {
+	if len(v) > 10 {
+		return "`" + v[:7] + "...`"
+	}
+	return "`" + v + "`"
 }
