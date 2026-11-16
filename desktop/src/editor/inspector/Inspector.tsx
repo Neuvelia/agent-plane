@@ -145,7 +145,7 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
               <Button size="sm" variant="primary" onClick={() => void edits.confirm()} data-testid="port-preview-apply">
                 {t('inspector.preview.apply')}
               </Button>
-              <Button size="sm" onClick={edits.cancel}>
+              <Button size="sm" onClick={edits.cancel} data-testid="port-preview-cancel">
                 {t('editor.cancel')}
               </Button>
             </span>
