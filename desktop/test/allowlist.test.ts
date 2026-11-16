@@ -14,6 +14,8 @@ describe('renderer route allowlist (ADR-0021)', () => {
       ['POST', '/graphs/stat'],
       ['POST', '/graphs/edit'],
       ['PUT', '/graphs/save'],
+      ['GET', '/capabilities'],
+      ['POST', '/capabilities/check'],
     ]
     for (const [m, p] of allowed) expect(isAllowed(m, p), `${m} ${p}`).toBe(true)
   })
@@ -62,6 +64,25 @@ describe('renderer route allowlist (ADR-0021)', () => {
       '/',
       '',
     ]) expect(isAllowed('POST', p) || isAllowed('GET', p) || isAllowed('PUT', p), JSON.stringify(p)).toBe(false)
+  })
+
+  it('allows the capability routes only with their exact method and path (F2.11)', () => {
+    for (const [m, p] of [
+      ['GET', '/capabilities/check'],
+      ['POST', '/capabilities'],
+      ['PUT', '/capabilities'],
+      ['DELETE', '/capabilities'],
+      ['GET', '/capabilities/'],
+      ['POST', '/capabilities/check/'],
+      ['GET', '/capabilities/../runs'],
+      ['POST', '/capabilities/../runs'],
+      ['GET', '/capabilitiesx'],
+      ['POST', '/capabilities/checkx'],
+      ['GET', '/capabilities?x=1'],
+      ['POST', '/capabilities/check?x=1'],
+      ['GET', '/capabilities/%2e%2e'],
+      ['GET', '//capabilities'],
+    ] as [string, string][]) expect(isAllowed(m, p), `${m} ${p}`).toBe(false)
   })
 
   it('refuses anything that is not a method and a path string', () => {

@@ -6,6 +6,7 @@ const { isAllowed } = require('./allowlist.cjs')
 const { createGraphHandlers } = require('./graphs.cjs')
 const { createRecents } = require('./recents.cjs')
 const { createRecordingSettings, serveFlags } = require('./recording.cjs')
+const { codexBinFlags } = require('./capabilities.cjs')
 
 // The sidecar is the Go engine. The renderer is only a client of its API.
 const repoRoot = path.resolve(__dirname, '..', '..')
@@ -25,7 +26,9 @@ function startSidecar() {
   return new Promise((resolve, reject) => {
     const flags = serveFlags(recordingSettings.load(), process.env)
     session = { recording: flags.recording, missing: flags.missing }
-    const child = spawn(binary, ['serve', '--store-dir', storeDir, ...flags.args], { stdio: ['pipe', 'pipe', 'pipe'] })
+    // --codex-bin only for an absolute AGENTPLANE_CODEX_BIN, used by capability
+    // detection alone (F2.11); the value is never logged.
+    const child = spawn(binary, ['serve', '--store-dir', storeDir, ...flags.args, ...codexBinFlags(process.env)], { stdio: ['pipe', 'pipe', 'pipe'] })
     sidecar = child
     let buffer = ''
     let settled = false
@@ -167,6 +170,9 @@ function createWindow() {
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 18 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
+      // The sandboxed preload cannot call app.getVersion(); it reads this one
+      // argument and exposes it as a read-only string (F2.11 requirement 7).
+      additionalArguments: [`--agentplane-app-version=${app.getVersion()}`],
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

@@ -3,6 +3,11 @@
 // port or token, and has no filesystem, process or network access of its own.
 const { contextBridge, ipcRenderer } = require('electron')
 
+// The desktop app version (Electron app.getVersion(), passed by main as one
+// argument). Shown beside the engine version; no compatibility check is made.
+const VERSION_ARG = '--agentplane-app-version='
+const appVersion = (process.argv.find((a) => a.startsWith(VERSION_ARG)) ?? '').slice(VERSION_ARG.length).slice(0, 64)
+
 let nextSub = 0
 const subs = new Map()
 
@@ -13,6 +18,7 @@ ipcRenderer.on('ap:end', (_e, subId, reason) => {
 })
 
 contextBridge.exposeInMainWorld('agentplane', {
+  appVersion,
   request: (method, path, body) => ipcRenderer.invoke('ap:request', method, path, body),
   subscribe: (runId, onEvent, onEnd) => {
     const subId = ++nextSub
