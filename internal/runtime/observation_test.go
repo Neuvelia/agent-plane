@@ -1,14 +1,15 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 type observedProbe struct {
@@ -30,7 +31,7 @@ func TestObservedPrecedenceCorrelationEvidenceAndRedaction(t *testing.T) {
 	p := &observedProbe{combinedProbe: &combinedProbe{correlationProbe: &correlationProbe{received: map[string]ExecutionCorrelation{}}}}
 	for _, failed := range []bool{false, true} {
 		p.fail = failed
-		r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{LogRedactions: []string{"SECRET"}})
+		r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -64,7 +65,7 @@ func TestExecutorFailureCarriesOnlySafeDiagnosticCode(t *testing.T) {
 	e := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, safeCodeError{}
 	})
-	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, e, Options{})
+	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, e, Options{GraphVersion: yamlgraph.Marshal})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,18 +1,19 @@
 package edit
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // repoGraphs are the example graphs the engine ships.
 func repoGraphs(t *testing.T) map[string][]byte {
 	t.Helper()
-	return readAll(t, "../../../.agents/graphs/*.yaml")
+	return readAll(t, "../../../../.agents/graphs/*.yaml")
 }
 
 // fixtures are the E0 spike fixtures (hostile, CRLF, BOM, long lines, comments).
@@ -98,7 +99,7 @@ func lineDiff(a, b string) (removed, added []string) {
 
 func parse(t *testing.T, src string) *graph.Definition {
 	t.Helper()
-	def, err := graph.Parse([]byte(src))
+	def, err := yamlgraph.Parse([]byte(src))
 	if err != nil {
 		t.Fatalf("parse: %v\n%s", err, src)
 	}
@@ -107,7 +108,7 @@ func parse(t *testing.T, src string) *graph.Definition {
 
 func version(t *testing.T, src string) string {
 	t.Helper()
-	v, err := graph.SemanticVersion(parse(t, src))
+	v, err := yamlgraph.SemanticVersion(parse(t, src))
 	if err != nil {
 		t.Fatal(err)
 	}

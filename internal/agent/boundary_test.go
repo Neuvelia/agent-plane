@@ -8,7 +8,7 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/agent/adaptertest"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 func TestAgentExecutorConfigBoundary(t *testing.T) {

@@ -2,7 +2,7 @@ package codex
 
 import (
 	"agentplane/internal/agent"
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"context"
 	"strings"
 	"testing"

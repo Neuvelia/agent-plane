@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/testenv"
 )
 

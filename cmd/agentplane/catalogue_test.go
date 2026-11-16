@@ -9,9 +9,9 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/api"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
 	"agentplane/internal/gate"
-	"agentplane/internal/graph"
 	"agentplane/internal/shell"
 )
 

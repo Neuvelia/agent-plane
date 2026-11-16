@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/testenv"
 )
 

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // runPreparation contains only values established before a run starts.
@@ -93,7 +93,7 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 // initializeRun starts the event stream after preflight has accepted all
 // inputs and capabilities. Its setup order matches the former Run body.
 func initializeRun(ctx context.Context, definition *graph.Definition, options Options, prepared runPreparation) (*runMachine, map[string][]string, error) {
-	machine, err := newRunMachine(ctx, definition, options.LiveEvents, options.Persist)
+	machine, err := newRunMachine(ctx, definition, options)
 	if err != nil {
 		return nil, nil, err
 	}

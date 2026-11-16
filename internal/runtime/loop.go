@@ -9,9 +9,9 @@ import (
 	"sort"
 	"strings"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/gitstate"
-	"agentplane/internal/graph"
 )
 
 // CorrectionFeedback preserves the retained sanitized result and the original

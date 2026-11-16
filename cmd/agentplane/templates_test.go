@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,8 +16,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // F2.12: the graph templates offered by "New graph" are ordinary graph files.
@@ -77,7 +78,7 @@ func loadTemplates(t *testing.T) []loadedTemplate {
 		if err != nil {
 			t.Fatal(err)
 		}
-		def, err := graph.Parse(text)
+		def, err := yamlgraph.Parse(text)
 		if err != nil {
 			t.Fatalf("%s: %v", e.File, err)
 		}
@@ -541,7 +542,7 @@ func TestSafetyRulesRejectUnsafeFixtures(t *testing.T) {
 		{"S7", agent("  b:\n    type: agent\n    config:\n      adapter: codex\n      workspace: /tmp\n      task: t\n")},
 	}
 	for _, c := range cases {
-		def, err := graph.Parse([]byte(c.text))
+		def, err := yamlgraph.Parse([]byte(c.text))
 		if err != nil {
 			t.Fatalf("fixture for %s does not parse: %v\n%s", c.rule, err, c.text)
 		}
@@ -597,7 +598,7 @@ func TestRunnableTemplatesRunUnedited(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		def, err := graph.Parse(src)
+		def, err := yamlgraph.Parse(src)
 		if err != nil {
 			t.Fatalf("%s: %v", c.id, err)
 		}

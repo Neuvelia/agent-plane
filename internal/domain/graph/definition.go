@@ -31,72 +31,72 @@ type GraphInputReference string
 
 // Definition is the typed representation of a graph definition document.
 type Definition struct {
-	Units              []string                      `yaml:"units,omitempty"`
-	SchemaVersion      SchemaVersion                 `yaml:"schema_version"`
-	ID                 string                        `yaml:"id"`
-	Name               string                        `yaml:"name,omitempty"`
-	Metadata           Metadata                      `yaml:"metadata,omitempty"`
-	Inputs             map[string]InputDefinition    `yaml:"inputs"`
-	Nodes              map[string]NodeDefinition     `yaml:"nodes"`
-	Edges              []EdgeDefinition              `yaml:"edges"`
-	GraphInputBindings []GraphInputBindingDefinition `yaml:"graph_input_bindings,omitempty"`
-	Outputs            map[string]OutputDefinition   `yaml:"outputs"`
+	Units              []string
+	SchemaVersion      SchemaVersion
+	ID                 string
+	Name               string
+	Metadata           Metadata
+	Inputs             map[string]InputDefinition
+	Nodes              map[string]NodeDefinition
+	Edges              []EdgeDefinition
+	GraphInputBindings []GraphInputBindingDefinition
+	Outputs            map[string]OutputDefinition
 }
 
 // InputDefinition declares one input accepted by the graph.
 type InputDefinition struct {
-	Type     ValueType `yaml:"type"`
-	Required bool      `yaml:"required,omitempty"`
+	Type     ValueType
+	Required bool
 }
 
 // NodeDefinition declares one bounded unit of work. Its stable ID is the key
 // under Definition.Nodes.
 type NodeDefinition struct {
-	Type    string                    `yaml:"type"`
-	Loop    *LoopDefinition           `yaml:"loop,omitempty"`
-	Inputs  map[string]PortDefinition `yaml:"inputs,omitempty"`
-	Config  NodeConfig                `yaml:"config,omitempty"`
-	Outputs map[string]PortDefinition `yaml:"outputs,omitempty"`
+	Type    string
+	Loop    *LoopDefinition
+	Inputs  map[string]PortDefinition
+	Config  NodeConfig
+	Outputs map[string]PortDefinition
 }
 
 // PortDefinition declares a typed node input or output.
 type PortDefinition struct {
-	Type     ValueType `yaml:"type"`
-	Required bool      `yaml:"required,omitempty"`
+	Type     ValueType
+	Required bool
 }
 
 // EdgeDefinition maps a node output to a node input. Reference validation is
 // deliberately deferred to F0.2.
 type EdgeDefinition struct {
-	From NodeOutputReference `yaml:"from"`
-	To   NodeInputReference  `yaml:"to"`
+	From NodeOutputReference
+	To   NodeInputReference
 }
 
 // GraphInputBindingDefinition maps a graph input to a node input. Reference
 // validation is deliberately deferred to F0.2.
 type GraphInputBindingDefinition struct {
-	From GraphInputReference `yaml:"from"`
-	To   NodeInputReference  `yaml:"to"`
+	From GraphInputReference
+	To   NodeInputReference
 }
 
 // OutputDefinition exposes a node output as a graph output.
 type OutputDefinition struct {
-	From NodeOutputReference `yaml:"from"`
+	From NodeOutputReference
 }
 
 // LoopDefinition checks each candidate before publishing any producer outputs.
 type LoopDefinition struct {
-	MaxAttempts int                `yaml:"max_attempts,omitempty"`
-	Gate        LoopGateDefinition `yaml:"gate"`
-	Bindings    []LoopBinding      `yaml:"bindings"`
+	MaxAttempts int
+	Gate        LoopGateDefinition
+	Bindings    []LoopBinding
 }
 type LoopGateDefinition struct {
-	Inputs map[string]PortDefinition `yaml:"inputs,omitempty"`
-	Config NodeConfig                `yaml:"config,omitempty"`
+	Inputs map[string]PortDefinition
+	Config NodeConfig
 }
 type LoopBinding struct {
-	From string `yaml:"from"`
-	To   string `yaml:"to"`
+	From string
+	To   string
 }
 
 func (l *LoopDefinition) Attempts() int {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,8 +12,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/testenv"
 )
 
@@ -135,7 +136,7 @@ func TestCLILocalGateWorksWithoutAdapter(t *testing.T) {
 			os.WriteFile(filepath.Join(cwd, "right"), []byte(right), 0400)
 			n := graph.NodeDefinition{Type: "gate", Config: graph.NodeConfig{"check_id": "diff-check", "kind": "command", "cwd": cwd, "command": "/usr/bin/diff", "left_input": "left", "right_input": "right"}, Inputs: map[string]graph.PortDefinition{"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"verdict": {Type: graph.ValueTypeString, Required: true}}}
 			d := &graph.Definition{ID: "local-diff", Nodes: map[string]graph.NodeDefinition{"gate": n, "shell": {Type: "shell", Config: graph.NodeConfig{"command": "/usr/bin/printf", "args": []string{"downstream"}}, Inputs: map[string]graph.PortDefinition{"accepted": {Type: graph.ValueTypeString, Required: true}}}}, Inputs: map[string]graph.InputDefinition{"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true}}, GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.left", To: "gate.inputs.left"}, {From: "inputs.right", To: "gate.inputs.right"}}, Edges: []graph.EdgeDefinition{{From: "gate.outputs.verdict", To: "shell.inputs.accepted"}}}
-			b, e := graph.Marshal(d)
+			b, e := yamlgraph.Marshal(d)
 			if e != nil {
 				t.Fatal(e)
 			}

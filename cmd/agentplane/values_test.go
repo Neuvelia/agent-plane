@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/testenv"
 )
 

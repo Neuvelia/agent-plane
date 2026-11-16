@@ -1,4 +1,4 @@
-package graph_test
+package yamlgraph_test
 
 import (
 	"errors"
@@ -6,10 +6,11 @@ import (
 	"strings"
 	"testing"
 
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
 	"agentplane/internal/fields/fieldstest"
 	"agentplane/internal/gate"
-	"agentplane/internal/graph"
 )
 
 // validateOne runs graph.Validate on a graph holding n and returns the
@@ -80,7 +81,7 @@ nodes:
 edges: []
 outputs: {}
 `, n)
-		_, err := graph.Parse([]byte(src))
+		_, err := yamlgraph.Parse([]byte(src))
 		return err
 	}
 	for _, n := range []int{*f.Min, *f.Max} {

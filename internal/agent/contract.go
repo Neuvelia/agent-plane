@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/runtime"
 )
 

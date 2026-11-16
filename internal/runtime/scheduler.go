@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/gitstate"
-	"agentplane/internal/graph"
 )
 
 // Executor runs one node with resolved inputs. Implementations must respect
@@ -87,6 +87,10 @@ type Options struct {
 	// graph input and per accepted output port (ADR-0023). Off by default;
 	// LogRedactions apply and must be valid UTF-8 when it is on.
 	RecordValues bool
+	// GraphVersion is the canonical encoding hashed into the run's graph
+	// version (graph.Encoder). It is required: the runtime has no serialization
+	// format of its own, and the composition root supplies the YAML adapter.
+	GraphVersion graph.Encoder
 }
 
 type completedNode struct {
@@ -224,8 +228,12 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	}
 }
 
-func newRunMachine(ctx context.Context, definition *graph.Definition, live chan<- events.Event, persist func(events.Event) error) (*runMachine, error) {
-	version, err := graph.SemanticVersion(definition)
+func newRunMachine(ctx context.Context, definition *graph.Definition, options Options) (*runMachine, error) {
+	live, persist := options.LiveEvents, options.Persist
+	if options.GraphVersion == nil {
+		return nil, errors.New("runtime options: GraphVersion is required")
+	}
+	version, err := graph.SemanticVersion(definition, options.GraphVersion)
 	if err != nil {
 		return nil, err
 	}

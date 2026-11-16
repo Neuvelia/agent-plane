@@ -1,6 +1,8 @@
-package graph
+package yamlgraph_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/graph"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -12,7 +14,7 @@ import (
 // referenceIndependence is a deliberately different computation: the
 // transitive closure of the edge relation by Warshall's algorithm, with node
 // ids read from the reference text by splitting on dots.
-func referenceIndependence(def *Definition) map[string][]string {
+func referenceIndependence(def *graph.Definition) map[string][]string {
 	ids := make([]string, 0, len(def.Nodes))
 	for id := range def.Nodes {
 		ids = append(ids, id)
@@ -62,7 +64,7 @@ func referenceIndependence(def *Definition) map[string][]string {
 }
 
 func TestIndependenceEqualsTheReferenceForTheCorpusGraphs(t *testing.T) {
-	files, err := filepath.Glob("../../.agents/graphs/*.yaml")
+	files, err := filepath.Glob("../../../.agents/graphs/*.yaml")
 	if err != nil || len(files) == 0 {
 		t.Fatalf("no corpus graphs: %v", err)
 	}
@@ -71,44 +73,44 @@ func TestIndependenceEqualsTheReferenceForTheCorpusGraphs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		def, err := Parse(data)
+		def, err := yamlgraph.Parse(data)
 		if err != nil {
 			t.Fatalf("%s: %v", f, err)
 		}
-		if got, want := IndependentNodes(def), referenceIndependence(def); !reflect.DeepEqual(got, want) {
+		if got, want := graph.IndependentNodes(def), referenceIndependence(def); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s: IndependentNodes = %v, reference = %v", filepath.Base(f), got, want)
 		}
 	}
 }
 
 func TestIndependenceOfSmallShapes(t *testing.T) {
-	node := func() NodeDefinition { return NodeDefinition{Type: "shell"} }
-	edge := func(from, to string) EdgeDefinition {
-		return EdgeDefinition{From: NodeOutputReference(from + ".outputs.o"), To: NodeInputReference(to + ".inputs.i")}
+	node := func() graph.NodeDefinition { return graph.NodeDefinition{Type: "shell"} }
+	edge := func(from, to string) graph.EdgeDefinition {
+		return graph.EdgeDefinition{From: graph.NodeOutputReference(from + ".outputs.o"), To: graph.NodeInputReference(to + ".inputs.i")}
 	}
 	cases := map[string]struct {
-		def  *Definition
+		def  *graph.Definition
 		want map[string][]string
 	}{
 		"parallel branches join": {
-			&Definition{Nodes: map[string]NodeDefinition{"left": node(), "right": node(), "merge": node()},
-				Edges: []EdgeDefinition{edge("left", "merge"), edge("right", "merge")}},
+			&graph.Definition{Nodes: map[string]graph.NodeDefinition{"left": node(), "right": node(), "merge": node()},
+				Edges: []graph.EdgeDefinition{edge("left", "merge"), edge("right", "merge")}},
 			map[string][]string{"left": {"right"}, "right": {"left"}, "merge": {}},
 		},
 		"chain and an island": {
-			&Definition{Nodes: map[string]NodeDefinition{"a": node(), "b": node(), "c": node(), "z": node()},
-				Edges: []EdgeDefinition{edge("a", "b"), edge("b", "c")}},
+			&graph.Definition{Nodes: map[string]graph.NodeDefinition{"a": node(), "b": node(), "c": node(), "z": node()},
+				Edges: []graph.EdgeDefinition{edge("a", "b"), edge("b", "c")}},
 			map[string][]string{"a": {"z"}, "b": {"z"}, "c": {"z"}, "z": {"a", "b", "c"}},
 		},
 		"cycle and broken references": {
-			&Definition{Nodes: map[string]NodeDefinition{"a": node(), "b": node(), "c": node()},
-				Edges: []EdgeDefinition{edge("a", "b"), edge("b", "a"), {From: "nope", To: "c.inputs.i"}, edge("ghost", "c")}},
+			&graph.Definition{Nodes: map[string]graph.NodeDefinition{"a": node(), "b": node(), "c": node()},
+				Edges: []graph.EdgeDefinition{edge("a", "b"), edge("b", "a"), {From: "nope", To: "c.inputs.i"}, edge("ghost", "c")}},
 			map[string][]string{"a": {"c"}, "b": {"c"}, "c": {"a", "b"}},
 		},
-		"no nodes": {&Definition{}, map[string][]string{}},
+		"no nodes": {&graph.Definition{}, map[string][]string{}},
 	}
 	for name, c := range cases {
-		got := IndependentNodes(c.def)
+		got := graph.IndependentNodes(c.def)
 		if !reflect.DeepEqual(got, c.want) {
 			t.Errorf("%s: %v, want %v", name, got, c.want)
 		}
@@ -116,7 +118,7 @@ func TestIndependenceOfSmallShapes(t *testing.T) {
 			t.Errorf("%s: differs from the reference", name)
 		}
 	}
-	if got := IndependentNodes(nil); len(got) != 0 {
+	if got := graph.IndependentNodes(nil); len(got) != 0 {
 		t.Errorf("nil definition: %v", got)
 	}
 }

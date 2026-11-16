@@ -1,13 +1,14 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // F2.2: every Gate kind can be configured with inspector operations alone into
@@ -83,7 +84,7 @@ outputs: {}
 		if err != nil {
 			t.Fatalf("%s: operations refused: %v", kind, err)
 		}
-		def, err := graph.Parse(res.Text)
+		def, err := yamlgraph.Parse(res.Text)
 		if err != nil {
 			t.Fatalf("%s: result does not parse: %v", kind, err)
 		}

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 type providerFunc func(context.Context, ApprovalRequest) (Decision, error)
@@ -83,7 +84,7 @@ func TestHumanApprovePublishesDecisionAndRequestPrecedesDecision(t *testing.T) {
 		}
 		return map[string]graph.Value{}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2, Decisions: provider, LiveEvents: ch})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2, Decisions: provider, LiveEvents: ch})
 	close(ch)
 	<-done
 	if err != nil || result.State != RunSucceeded || ran != 1 {
@@ -110,7 +111,7 @@ func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 		}
 		return map[string]graph.Value{}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
 		return Decision{Approve: false, Comment: "no"}, nil
 	})})
 	if err != nil || result.State != RunFailed || result.Failure == nil || result.Failure.Kind != FailureRejected {
@@ -141,7 +142,7 @@ func TestHumanWaitSharesBatchWithIndependentNode(t *testing.T) {
 		}
 		return map[string]graph.Value{}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{MaxConcurrency: 2, Decisions: providerFunc(func(ctx context.Context, _ ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2, Decisions: providerFunc(func(ctx context.Context, _ ApprovalRequest) (Decision, error) {
 		select {
 		case <-siblingDone:
 			return Decision{Approve: true}, nil
@@ -163,7 +164,7 @@ func TestHumanCancellationWhileWaitingEndsRunWithoutDecisionEvent(t *testing.T) 
 		return Decision{}, ctx.Err()
 	})
 	go func() { <-waiting; cancel() }()
-	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{Decisions: provider})
+	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: provider})
 	if err != nil || result.State != RunCancelled {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
@@ -177,7 +178,7 @@ func TestHumanCancellationWhileWaitingEndsRunWithoutDecisionEvent(t *testing.T) 
 }
 
 func TestHumanWithoutProviderFailsPreflightNamingNode(t *testing.T) {
-	_, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{})
+	_, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal})
 	var pre *PreflightError
 	if !errors.As(err, &pre) || len(pre.Diagnostics.Diagnostics) != 1 || pre.Diagnostics.Diagnostics[0].Location.NodeID != "gate" || pre.Diagnostics.Diagnostics[0].Code != "E_HUMAN_NO_PROVIDER" {
 		t.Fatalf("err=%v", err)
@@ -185,7 +186,7 @@ func TestHumanWithoutProviderFailsPreflightNamingNode(t *testing.T) {
 }
 
 func TestHumanProviderFailureIsFatalAndRedactsNothingRaw(t *testing.T) {
-	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
 		return Decision{}, errors.New("secret-token leaked in provider error")
 	})})
 	if err != nil || result.State != RunFailed {
@@ -203,7 +204,7 @@ func TestHumanPromptContextAndCommentAreRedactedAndBounded(t *testing.T) {
 	n := def.Nodes["gate"]
 	n.Config = map[string]any{"prompt": "token=SUPERSECRET " + strings.Repeat("p", 900)}
 	def.Nodes["gate"] = n
-	result, err := Run(context.Background(), def, nil, noopExecutor(), Options{LogRedactions: []string{"SUPERSECRET"}, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), def, nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SUPERSECRET"}, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
 		return Decision{Approve: true, Comment: "SUPERSECRET " + strings.Repeat("c", 5000)}, nil
 	})})
 	if err != nil || result.State != RunSucceeded {
@@ -261,7 +262,7 @@ func TestHumanRedactionHappensBeforeTruncation(t *testing.T) {
 	def.Nodes["gate"] = n
 	context1 := strings.Repeat("c", events.MaxApprovalContextValue-4) + secret // and in a context value
 	comment := strings.Repeat("m", events.MaxApprovalComment-4) + secret       // and in the comment
-	result, err := Run(context.Background(), def, nil, srcExecutor(context1), Options{LogRedactions: []string{secret}, Decisions: providerFunc(func(_ context.Context, r ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), def, nil, srcExecutor(context1), Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{secret}, Decisions: providerFunc(func(_ context.Context, r ApprovalRequest) (Decision, error) {
 		for _, c := range r.Context {
 			if strings.Contains(c.Value, "QZ") {
 				t.Errorf("provider saw a secret prefix in context: %q", c.Value[len(c.Value)-12:])
@@ -287,7 +288,7 @@ func TestHumanRedactionHappensBeforeTruncation(t *testing.T) {
 }
 
 func TestHumanProviderFailureFailsNodeWithSafeCodeAndNoDecisionEvent(t *testing.T) {
-	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
 		return Decision{}, errors.New("boom")
 	})})
 	if err != nil || result.State != RunFailed {
@@ -316,7 +317,7 @@ func TestHumanProviderIsAskedOncePerNodeRun(t *testing.T) {
 	for _, approve := range []bool{true, false} {
 		var calls int
 		var mu sync.Mutex
-		result, _ := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+		result, _ := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
 			mu.Lock()
 			calls++
 			mu.Unlock()
@@ -333,7 +334,7 @@ func TestHumanProviderIsAskedOncePerNodeRun(t *testing.T) {
 // the person acted on: it is recorded and the node ends cancelled.
 func TestHumanDecisionReturnedDuringCancellationIsRecorded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
 		cancel()
 		return Decision{Approve: true, Comment: "late"}, nil
 	})})

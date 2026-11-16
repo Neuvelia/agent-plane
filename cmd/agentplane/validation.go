@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // nodeConfigCode is the diagnostic for a node whose static configuration the

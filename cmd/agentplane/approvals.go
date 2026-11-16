@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/term"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 )
 

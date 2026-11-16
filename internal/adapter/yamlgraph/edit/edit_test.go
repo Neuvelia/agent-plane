@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"fmt"
 	"math/rand"
@@ -9,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -679,7 +680,7 @@ func TestRandomWalks(t *testing.T) {
 				continue // a legitimate refusal
 			}
 			src = string(res.Text)
-			if _, err := graph.Parse(res.Text); err != nil {
+			if _, err := yamlgraph.Parse(res.Text); err != nil {
 				t.Fatalf("%s step %d: result does not parse: %v", name, step, err)
 			}
 		}

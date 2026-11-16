@@ -1,6 +1,8 @@
-package graph
+package yamlgraph_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/graph"
 	"strings"
 	"testing"
 )
@@ -27,11 +29,11 @@ func TestHumanNodeValidation(t *testing.T) {
 		{"context input ok", "    config: {context_inputs: [note]}\n    inputs: {note: {type: string}}\n    outputs: {decision: {type: string}}\n", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := Parse([]byte(humanDoc(tt.body)))
+			d, err := yamlgraph.Parse([]byte(humanDoc(tt.body)))
 			if err != nil {
 				t.Fatal(err)
 			}
-			result := Validate(d)
+			result := graph.Validate(d)
 			hasHumanError := false
 			for _, diag := range result.Diagnostics {
 				if diag.Code == "E_HUMAN_INVALID" {
@@ -47,11 +49,11 @@ func TestHumanNodeValidation(t *testing.T) {
 
 func TestHumanNodeCannotLoop(t *testing.T) {
 	body := "    outputs: {decision: {type: string}}\n    loop:\n      gate:\n        inputs: {v: {type: string, required: true}}\n        config: {check_id: c, kind: json_predicate}\n      bindings: [{from: candidate.outputs.decision, to: gate.inputs.v}]\n"
-	d, err := Parse([]byte(humanDoc(body)))
+	d, err := yamlgraph.Parse([]byte(humanDoc(body)))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if Validate(d).Valid() {
+	if graph.Validate(d).Valid() {
 		t.Fatal("a human node with a loop must be invalid")
 	}
 }

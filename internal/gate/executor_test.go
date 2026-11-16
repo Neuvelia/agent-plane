@@ -1,6 +1,7 @@
 package gate
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/testenv"
 )
@@ -368,7 +369,7 @@ nodes:
     inputs:
       data: {type: json, required: true}
 `)
-	d, e := graph.Parse(source)
+	d, e := yamlgraph.Parse(source)
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -376,19 +377,19 @@ nodes:
 	if p, e := evaluate(t, n, map[string]graph.Value{"data": jsonValue(t, `{"result":1.00000000000000000001}`)}); e != nil || p == nil {
 		t.Fatalf("exact authored literal: %v", e)
 	}
-	version, e := graph.SemanticVersion(d)
+	version, e := yamlgraph.SemanticVersion(d)
 	if e != nil {
 		t.Fatal(e)
 	}
-	b, e := graph.Marshal(d)
+	b, e := yamlgraph.Marshal(d)
 	if e != nil {
 		t.Fatal(e)
 	}
-	again, e := graph.Parse(b)
+	again, e := yamlgraph.Parse(b)
 	if e != nil {
 		t.Fatal(e)
 	}
-	v, e := graph.SemanticVersion(again)
+	v, e := yamlgraph.SemanticVersion(again)
 	if e != nil || v != version {
 		t.Fatal("opaque exact literal roundtrip changed hash")
 	}
@@ -462,7 +463,7 @@ func TestEveryGateKindTypedTraceAndDownstream(t *testing.T) {
 					d.GraphInputBindings = append(d.GraphInputBindings, graph.GraphInputBindingDefinition{From: graph.GraphInputReference("inputs." + name), To: graph.NodeInputReference("gate.inputs." + name)})
 				}
 				exec := &gatedSink{}
-				r, err := runtime.Run(context.Background(), d, in, exec, runtime.Options{})
+				r, err := runtime.Run(context.Background(), d, in, exec, runtime.Options{GraphVersion: yamlgraph.Marshal})
 				if err != nil || (r.State == runtime.RunSucceeded) != green || exec.started != green {
 					t.Fatalf("state/downstream: %+v %v", r, err)
 				}

@@ -3,9 +3,9 @@ package shell
 import (
 	"testing"
 
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
 	"agentplane/internal/fields/fieldstest"
-	"agentplane/internal/graph"
 )
 
 func shellBase() graph.NodeDefinition {

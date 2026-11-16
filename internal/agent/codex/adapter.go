@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 const maxRecord = 1 << 20

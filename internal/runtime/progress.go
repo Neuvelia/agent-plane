@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"encoding/json"
 	"sort"
 	"unicode/utf8"

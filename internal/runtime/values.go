@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 // valueRecorder is coordinator-owned state for opt-in value recording

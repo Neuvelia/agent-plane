@@ -1,6 +1,7 @@
 package runtime_test
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,7 +10,7 @@ import (
 	"testing"
 
 	"agentplane/internal/agent"
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 	"agentplane/internal/runtime"
 )
 
@@ -23,7 +24,7 @@ func TestValueRecordingRecordsOnlyTheAcceptedAttempt(t *testing.T) {
 		}
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{"ok":true,"try":"second"}`), ChangedFiles: []agent.ChangedFile{}}, nil
 	}
-	r, err := runtime.Run(context.Background(), loopDefinition(3), nil, compose(a), runtime.Options{RecordValues: true, LogRedactions: []string{"SECRET"}})
+	r, err := runtime.Run(context.Background(), loopDefinition(3), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, RecordValues: true, LogRedactions: []string{"SECRET"}})
 	if err != nil || r.State != runtime.RunSucceeded {
 		t.Fatalf("%+v %v", r.Failure, err)
 	}
@@ -64,7 +65,7 @@ func TestValueRecordingMatchesUnitProvenance(t *testing.T) {
 		mu.Unlock()
 		return agent.AgentExecutionOutput{RawMetadata: json.RawMessage(fmt.Sprintf(`{"ok":%t,"unit":%q,"attempt":%d}`, in.Task != "b" || n == 2, in.Task, n))}, nil
 	}
-	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{MaxConcurrency: 4, RecordValues: true})
+	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 4, RecordValues: true})
 	if err != nil || r.State != runtime.RunSucceeded {
 		t.Fatal(r.Failure, err)
 	}

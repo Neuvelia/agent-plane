@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -9,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // randomInspectorOp returns an inspector operation on inspectorGraph's nodes.
@@ -119,7 +120,7 @@ func TestRandomInspectorWalksOnRepoGraphs(t *testing.T) {
 				continue
 			}
 			src = string(res.Text)
-			if _, err := graph.Parse(res.Text); err != nil {
+			if _, err := yamlgraph.Parse(res.Text); err != nil {
 				t.Fatalf("%s step %d: result does not parse: %v", name, step, err)
 			}
 		}

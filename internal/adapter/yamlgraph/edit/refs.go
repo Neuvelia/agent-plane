@@ -1,7 +1,7 @@
 package edit
 
 import (
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 
 	"go.yaml.in/yaml/v3"
 )

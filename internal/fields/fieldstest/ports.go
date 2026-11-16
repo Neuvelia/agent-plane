@@ -3,8 +3,8 @@ package fieldstest
 import (
 	"testing"
 
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
-	"agentplane/internal/graph"
 )
 
 // PortSpec is a validator of declared outputs and the ports it allows.
