@@ -4,7 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,7 +15,6 @@ import (
 	"agentplane/internal/agent/adaptertest"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
-	"agentplane/internal/testenv"
 )
 
 type compositeExecutor struct {
@@ -136,6 +138,8 @@ func TestAgentFailureRetainsIndependentSiblingAndSafeEvents(t *testing.T) {
 }
 
 func TestAgentYAMLRoundTripExecutionAndSemanticVersion(t *testing.T) {
+	// An absolute path on every OS (/tmp/agent-workspace on Linux CI).
+	workspace := filepath.Join(os.TempDir(), "agent-workspace")
 	source := `schema_version: 0
 id: parsed-agent
 inputs: {}
@@ -145,7 +149,7 @@ nodes:
     config:
       adapter: test-adapter
       task: explicit task
-      workspace: /tmp/agent-workspace
+      workspace: ` + strconv.Quote(workspace) + `
       allowed_paths: [src/]
       context_refs: [docs/spec.md]
       environment_refs: [TOOL_HOME]
@@ -189,15 +193,13 @@ outputs:
 	if err != nil || hash != base {
 		t.Fatalf("metadata hash=%s %v", hash, err)
 	}
-	// runtime.Run resolves the agent workspace with /usr/bin/git.
-	testenv.RequireExecutable(t, "/usr/bin/git")
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, Output: agent.AgentExecutionOutput{Summary: "parsed fixture done"}}
 	result, err := runtime.Run(context.Background(), decoded, nil, agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}}, runtime.Options{})
 	if err != nil || result.State != runtime.RunSucceeded {
 		t.Fatalf("parsed Run=%+v %v", result, err)
 	}
 	input, _ := m.LastInput()
-	if input.Task != "explicit task" || input.Workspace != "/tmp/agent-workspace" || !reflect.DeepEqual(input.AllowedPaths, []string{"src/"}) || !reflect.DeepEqual(input.ContextRefs, []string{"docs/spec.md"}) || !reflect.DeepEqual(input.EnvironmentRefs, []string{"TOOL_HOME"}) {
+	if input.Task != "explicit task" || input.Workspace != workspace || !reflect.DeepEqual(input.AllowedPaths, []string{"src/"}) || !reflect.DeepEqual(input.ContextRefs, []string{"docs/spec.md"}) || !reflect.DeepEqual(input.EnvironmentRefs, []string{"TOOL_HOME"}) {
 		t.Fatalf("parsed input=%+v", input)
 	}
 }

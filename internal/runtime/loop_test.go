@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"sync"
@@ -14,7 +15,6 @@ import (
 	"agentplane/internal/gate"
 	"agentplane/internal/graph"
 	"agentplane/internal/runtime"
-	"agentplane/internal/testenv"
 )
 
 type loopAdapter struct {
@@ -76,16 +76,9 @@ func (e composition) PreflightNode(ctx context.Context, id string, n graph.NodeD
 }
 func loopDefinition(budget int) *graph.Definition {
 	return &graph.Definition{SchemaVersion: 0, ID: "loop", Inputs: map[string]graph.InputDefinition{}, Edges: []graph.EdgeDefinition{{From: "work.outputs.raw_metadata", To: "down.inputs.result"}}, Outputs: map[string]graph.OutputDefinition{}, Nodes: map[string]graph.NodeDefinition{
-		"work": {Type: "agent", Config: graph.NodeConfig{"adapter": "fake", "task": "original SECRET task", "workspace": "/tmp", "allowed_paths": []string{"src/SECRET"}}, Outputs: map[string]graph.PortDefinition{"raw_metadata": {Type: graph.ValueTypeJSON, Required: true}}, Loop: &graph.LoopDefinition{MaxAttempts: budget, Gate: graph.LoopGateDefinition{Inputs: map[string]graph.PortDefinition{"candidate": {Type: graph.ValueTypeJSON, Required: true}}, Config: graph.NodeConfig{"check_id": "quality", "kind": "json_predicate", "input": "candidate", "field": []string{"ok"}, "operator": "eq", "expected": true}}, Bindings: []graph.LoopBinding{{From: "candidate.outputs.raw_metadata", To: "gate.inputs.candidate"}}}},
+		"work": {Type: "agent", Config: graph.NodeConfig{"adapter": "fake", "task": "original SECRET task", "workspace": os.TempDir(), "allowed_paths": []string{"src/SECRET"}}, Outputs: map[string]graph.PortDefinition{"raw_metadata": {Type: graph.ValueTypeJSON, Required: true}}, Loop: &graph.LoopDefinition{MaxAttempts: budget, Gate: graph.LoopGateDefinition{Inputs: map[string]graph.PortDefinition{"candidate": {Type: graph.ValueTypeJSON, Required: true}}, Config: graph.NodeConfig{"check_id": "quality", "kind": "json_predicate", "input": "candidate", "field": []string{"ok"}, "operator": "eq", "expected": true}}, Bindings: []graph.LoopBinding{{From: "candidate.outputs.raw_metadata", To: "gate.inputs.candidate"}}}},
 		"down": {Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}},
 	}}
-}
-
-// requireAgentWorkspaceTools skips where the scheduler cannot resolve an agent
-// workspace: it starts /usr/bin/git before any agent attempt runs.
-func requireAgentWorkspaceTools(t *testing.T) {
-	t.Helper()
-	testenv.RequireExecutable(t, "/usr/bin/git")
 }
 
 func newLoopAdapter() *loopAdapter {
@@ -98,7 +91,6 @@ func compose(a *loopAdapter) composition {
 	return composition{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"fake": a}}}
 }
 func TestLoopBudgetsAndTrace(t *testing.T) {
-	requireAgentWorkspaceTools(t)
 	for _, b := range []int{0, 1, 2, 10} {
 		t.Run(string(rune('a'+b)), func(t *testing.T) {
 			a := newLoopAdapter()
@@ -148,7 +140,6 @@ func TestLoopBudgetsAndTrace(t *testing.T) {
 	}
 }
 func TestLoopRedGreenPublicationAndFeedback(t *testing.T) {
-	requireAgentWorkspaceTools(t)
 	a := newLoopAdapter()
 	a.produce = func(_ context.Context, in agent.AgentExecutionInput, n int) (agent.AgentExecutionOutput, error) {
 		if n == 1 && in.Feedback != nil {
@@ -219,7 +210,6 @@ func TestLoopPreflightBeforeDetection(t *testing.T) {
 	}
 }
 func TestLoopFatalNeverRetries(t *testing.T) {
-	requireAgentWorkspaceTools(t)
 	for _, mode := range []string{"provider", "output", "gate-error", "missing", "duplicate", "inconsistent", "producer-check"} {
 		t.Run(mode, func(t *testing.T) {
 			a := newLoopAdapter()
@@ -267,7 +257,6 @@ func TestLoopFatalNeverRetries(t *testing.T) {
 }
 
 func TestLoopCancellationBoundaries(t *testing.T) {
-	requireAgentWorkspaceTools(t)
 	for _, stage := range []string{"before", "produce", "before-check", "check", "between"} {
 		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
