@@ -11,8 +11,8 @@ Prompt: `prompts/refactor-clean-architecture.md`. Rules: `AGENTS.md`
   gitstate 66.7, graph 92.4, edit 89.7, runtime 90.6, store 87.3.
 - `golangci-lint` 2.5.0 is installed locally (not in go.mod). Measured with
   the AGENTS.md thresholds on production + test code:
-  gocyclo>10: 22 (25 prod funcs listed below), gocognit>15: 63, nestif: 24,
-  funlen>50: 0 (funlen>30: 10 prod), revive: 146 (mostly missing doc
+  gocyclo>10: 22 (listed below), gocognit>15: 63, nestif: 24,
+  funlen>50: 46 production functions (funlen>30: 83), revive: 146 (mostly missing doc
   comments / package comments / unused receivers), errorlint: 13,
   forbidigo (`time.Now`): 4.
 - Files over limits: >500 lines: `runtime/scheduler.go` 677, `graph/validation.go`
@@ -167,3 +167,13 @@ import paths and package names change; `desktop/` is unaffected and
 3. One PR per stage (recommended) vs one long-lived branch.
 4. Should the lint step be blocking in CI from stage 1 (with a baseline) or only from stage 6?
 5. `docs/audits` vs ADR: confirm one ADR (layering) covers the whole move, or one per stage.
+
+## 9. Decisions (approved 2026-11-16)
+
+1. YAML moves out of `domain/graph` into an adapter: yes.
+2. Layout `domain/app/adapter/delivery` as proposed: yes.
+3. One PR per stage, as a stack (each PR targets the previous stage's branch);
+   nothing is merged until the parallel work on `main` settles, to limit conflicts.
+4. Lint is blocking in CI from stage 1, scoped to code a change touches
+   (`new-from-merge-base: origin/main`), so legacy findings do not block.
+5. A single ADR covers the layering decision.
