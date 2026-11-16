@@ -226,7 +226,7 @@ var inspectorEdits = []struct {
 }{
 	{"loop-starter", "loops", `[{"op":"clear_loop","node":"status"},{"op":"set_loop","node":"status","max_attempts":3,"gate":{"inputs":{"candidate":{"type":"json","required":true}},"config":{"check_id":"status-check","kind":"json_predicate","input":"candidate","field":["ok"],"operator":"eq","expected":true}},"bindings":[{"from":"candidate.outputs.json","to":"gate.inputs.candidate"}]}]`},
 	{"rename-input", "shell", `[{"op":"update_port","node":"report","direction":"input","port":"text","new_port":"renamed"}]`},
-	{"remove-port", "shell",`[{"op":"remove_port","node":"build","direction":"output","port":"stdout"}]`},
+	{"remove-port", "shell", `[{"op":"remove_port","node":"build","direction":"output","port":"stdout"}]`},
 	{"set-command", "shell", `[{"op":"set_config","node":"build","path":["command"],"value":"/usr/bin/gmake"}]`},
 }
 
