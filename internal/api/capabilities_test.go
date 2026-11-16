@@ -41,6 +41,68 @@ func TestCapabilityRoutesRequireTheBearerToken(t *testing.T) {
 	}
 }
 
+func TestCapabilityRoutesRejectAMismatchedHost(t *testing.T) {
+	s, ts := newServer(t, nil)
+	s.ExpectHost(ts.Listener.Addr().String())
+	var calls atomic.Int32
+	s.Capabilities = &capability.Service{Detect: func(context.Context) capability.Report { return fixedReport(calls.Add(1)) }}
+	for _, c := range [][2]string{{"GET", "/capabilities"}, {"POST", "/capabilities/check"}} {
+		req, err := http.NewRequest(c[0], ts.URL+c[1], nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Host = "attacker.example:80"
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusMisdirectedRequest {
+			t.Fatalf("%s %s with a foreign Host: %d", c[0], c[1], resp.StatusCode)
+		}
+		// The same request with the expected Host is served.
+		if resp, _ := do(t, ts, c[0], c[1], "", true); resp.StatusCode != http.StatusOK {
+			t.Fatalf("%s %s with the loopback Host: %d", c[0], c[1], resp.StatusCode)
+		}
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("%d detections, want 2 (only the matching-Host requests)", calls.Load())
+	}
+}
+
+// A real check leaves the sidecar's temporary directory (the probe's working
+// directory) exactly as it was.
+func TestCapabilityCheckLeavesTheTempDirUnchanged(t *testing.T) {
+	if goruntime.GOOS != "linux" && goruntime.GOOS != "darwin" {
+		t.Skip("Git detection runs only on Linux and macOS")
+	}
+	s, ts := newServer(t, nil)
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp) // os.TempDir() now returns tmp
+	if os.TempDir() != tmp {
+		t.Fatalf("os.TempDir() = %q, want %q", os.TempDir(), tmp)
+	}
+	// The production Git path; where it is absent, detection starts no
+	// process, which still satisfies the assertion.
+	s.Capabilities = &capability.Service{Detect: capability.Detector{GitPath: capability.GitPath}.Detect}
+	resp, body := do(t, ts, "POST", "/capabilities/check", "", true)
+	var r capability.Report
+	if err := json.Unmarshal([]byte(body), &r); resp.StatusCode != http.StatusOK || err != nil || len(r.Tools) == 0 {
+		t.Fatalf("check: %d %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(capability.GitPath); err == nil && goruntime.GOOS == "linux" && r.Tools[0].Status != capability.StatusAvailable {
+		t.Fatalf("expected a real Git probe, got %+v", r.Tools[0])
+	}
+	entries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		t.Errorf("check created %q in the temp dir", e.Name())
+	}
+}
+
 func TestCapabilitiesAreDetectedOnceThenServedFromMemory(t *testing.T) {
 	s, ts := newServer(t, nil)
 	var calls atomic.Int32
