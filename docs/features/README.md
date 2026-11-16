@@ -52,6 +52,13 @@ feature contract.
 | `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (proposed, one open decision) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
 
+## Release engineering - drafts (not roadmap F-IDs)
+
+| Feature | Spec status |
+| --- | --- |
+| `REL1-release-engineering.md` | Draft; ADR-0026 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
+| `REL2-public-roadmap-status.md` | Draft; ADR-0027 (proposed) |
+
 ## Later phases
 
 F2-F6 remain roadmap scope. Their IDs and priorities are tracked in
