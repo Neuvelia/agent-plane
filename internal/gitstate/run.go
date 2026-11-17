@@ -58,8 +58,8 @@ type RunResult struct {
 	ExitCode int
 }
 
-// Run is the single hardened way this repository starts Git: /usr/bin/git,
-// structured argv, a minimal fixed environment (no system or global config, no
+// Run is the single hardened way this repository starts Git: the git
+// found on PATH (ResolveGit), structured argv, a minimal fixed environment (no system or global config, no
 // inherited GIT_* variables), hooks and fsmonitor disabled, bounded time and
 // stdout, stderr discarded. Callers pass any `-c key=value` they need (for
 // example a commit identity) as leading arguments. It does not make the
@@ -78,16 +78,20 @@ func Run(ctx context.Context, dir string, opts RunOptions, args ...string) (RunR
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	argv := append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"}, args...)
-	cmd := exec.CommandContext(ctx, "/usr/bin/git", argv...)
+	gitPath, err := ResolveGit()
+	if err != nil {
+		return RunResult{ExitCode: -1}, &RunError{Class: RunStart, ExitCode: -1, cause: err}
+	}
+	cmd := exec.CommandContext(ctx, gitPath, argv...)
 	cmd.Dir = dir
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C"}
+	cmd.Env = Environment(gitPath)
 	var out limitedBuffer
 	out.limit = limit
 	// limitedBuffer embeds bytes.Buffer, whose promoted ReadFrom would let
 	// io.Copy bypass the limit; expose only Write to the process.
 	cmd.Stdout = writeOnly{&out}
 	cmd.Stderr = io.Discard
-	err := cmd.Run()
+	err = cmd.Run()
 	result := RunResult{Stdout: out.Bytes(), ExitCode: -1}
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()

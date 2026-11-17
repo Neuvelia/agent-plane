@@ -22,7 +22,7 @@ state; it does not run a graph, decide a Gate verdict or isolate a workspace.
 - Require an absolute workspace that resolves to the exact root of an
   initialized, non-bare Git worktree with a committed HEAD. `git()` delegates
   to the exported `Run`, the only way this repository starts Git: it calls
-  `/usr/bin/git` with structured arguments, a controlled environment,
+  the `git` found on PATH (`ResolveGit`, `ErrGitNotFound` when absent) with structured arguments, a controlled environment (`Environment`),
   disabled optional locks/fsmonitor and no configured hooks or global/system
   config. By default each Git subprocess has a five-second context bound and a
   16 MiB stdout bound (callers such as `internal/worktree` pass larger
