@@ -108,6 +108,7 @@ export const pl: Record<MessageKey, string> = {
   'editor.connect.checking': 'Pytam silnik, które wejścia pasują…',
   'editor.connect.noTargets': 'Żaden węzeł nie ma wejścia, z którym można połączyć.',
   'editor.cannotConnect': 'Nie można połączyć: {message}',
+  'editor.connectTargetsFailed': 'Nie udało się zapytać silnika, które wejścia pasują: {message}',
   'editor.rename.label': 'Nowy identyfikator dla {node}',
   'editor.rename.apply': 'Zmień nazwę',
   'editor.delete.confirm': 'Usunąć {node}? Razem z nim zniknie: połączenia: {edges}, powiązania wejść grafu: {bindings}, wyjścia grafu: {outputs}.',
