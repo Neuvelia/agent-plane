@@ -24,7 +24,7 @@ F3.4 adds time limits and a uniform cancel. Two durable contracts change:
    `user_cancel`, `run_timeout`, `sibling_failed`, `node_timeout`. A run deadline
    ends the run `cancelled`/`run_timeout`. A node deadline ends the attempt
    `failed` with `failure_kind: timeout` and consumes one loop attempt.
-2. **New events** `cancel_requested` and `process_terminated` (schema 12,
+2. **New events** `cancel_requested` and `process_terminated` (schema N+1 (the next free event schema number at merge; 12 is currently reserved by F2.8b),
    additive). The reason is derived from the `context.Cause` of a typed cause,
    never from error text or exit code.
 3. **One termination contract** for every owned child: own the tree, request,
@@ -94,20 +94,20 @@ Cons:
 
 ### Negative / trade-offs
 
-- Event schema 12 and a new payload field; readers must ignore unknown fields.
+- Event schema N+1 (the next free event schema number at merge; 12 is currently reserved by F2.8b) and a new payload field; readers must ignore unknown fields.
 - Windows graceful stop is best effort; only forced termination is guaranteed.
 - A Job Object is lifetime control, not confinement; escaped Unix `setsid`
   descendants remain out of scope.
 
 ## Compatibility and migration
 
-Graph fields are additive and optional; no graph schema version bump. Schema 12
-readers accept 0-11; older readers ignore `reason`. Existing graphs and logs
+Graph fields are additive and optional; no graph schema version bump. Schema N+1
+readers accept every earlier schema; older readers ignore `reason`. Existing graphs and logs
 behave unchanged. The CLI keeps exit 130 for interrupt and user cancel and adds
 one code for a run deadline.
 
 ## Validation
 
 The F3.4 and F3.4a acceptance criteria: reason tests with a fake clock,
-process-tree tests on all three OSes, Windows W1-W7, and removal of
+process-tree tests on all three OSes, Windows W1-W7 (W8 is a manual check recorded in the PR and does not gate CI), and removal of
 `experimental` from `check (windows-x64)` only after the F3.4a conditions hold.

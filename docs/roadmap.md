@@ -80,7 +80,7 @@ Goal: make long-running local execution durable and safer.
 | F3.1 | Workspace Isolation / Git Worktrees | P0 | F1.7; closes file-state gap |
 | F3.2 | Durable Run State / Append-only Event Store | P0 | F0.6, F1.3 |
 | F3.3 | Resume / Recovery | P0 | F3.1, F3.2 |
-| F3.4 | Cancellation and Timeouts | P0 | F1.2, F1.6, F3.2 |
+| F3.4 | Cancellation and Timeouts | P0 | F1.2, F1.6; F3.2 only for the durable-store criteria |
 | F3.5 | Artifact Store Local | P0 | F1.2, F3.2 |
 | F3.6 | Graph Versioning and Run Reproducibility | P0 | F0.6, F3.2 |
 | F3.7 | Export JSON/CSV | P0 | F3.2, F3.5 |
