@@ -36,10 +36,21 @@ export function TemplatePicker({ onChoose, onCancel }: { onChoose: (make: DraftM
     }
   }, [])
 
+  // Closing the dialog before the parent unmounts it is what returns focus to the trigger.
+  const cancel = () => {
+    ref.current?.close()
+    onCancel()
+  }
   const submit = () => {
-    if (choice === BLANK) return onChoose(undefined)
+    if (choice === BLANK) {
+      ref.current?.close()
+      return onChoose(undefined)
+    }
     const e = TEMPLATES.find((x) => x.id === choice)
-    if (e && usable(e)) onChoose((label) => templateDraft(e, label))
+    if (e && usable(e)) {
+      ref.current?.close()
+      onChoose((label) => templateDraft(e, label))
+    }
   }
   return (
     <dialog
@@ -50,10 +61,10 @@ export function TemplatePicker({ onChoose, onCancel }: { onChoose: (make: DraftM
       data-testid="template-picker"
       onCancel={(e) => {
         e.preventDefault()
-        onCancel()
+        cancel()
       }}
     >
-      <PickerForm report={report} choice={choice} onChoice={setChoice} onSubmit={submit} onCancel={onCancel} />
+      <PickerForm report={report} choice={choice} onChoice={setChoice} onSubmit={submit} onCancel={cancel} />
     </dialog>
   )
 }

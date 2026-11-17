@@ -379,7 +379,7 @@ async function startDemo(page) {
 
     // Keyboard only: arrow to a template, Enter, save, Save and run. The saved file is the template with only the id line changed.
     await stubSave(path.join(graphDir, 'from-template'))
-    await page.focus('[data-testid="editor-new"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'editor-new', 'Escape returns focus to the New graph trigger')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid="template-picker"]')
     await page.keyboard.press('ArrowDown')
