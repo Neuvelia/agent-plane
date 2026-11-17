@@ -714,3 +714,13 @@ Retention (`never|failed|always`, default `failed`) is described in ADR-0024 and
 `internal/runtime/AGENTS.md`. Untracked and ignored source files are not present
 in a worktree. Isolation is not available for Shell, standalone Gate or Human
 nodes, and downstream isolated nodes do not see upstream file changes.
+
+Limitations that remain: isolation is not a sandbox and the agent can still write
+to the source by absolute path. When an isolated node exists, the runtime
+observes the source checkout before `run_started` and again before
+`run_finished` and emits `source_workspace_changed` (sorted, bounded paths, or
+`indeterminate: true` if the inspection could not complete); it is a diagnostic
+and never fails the run. Agent task text must not ask the agent to stage or
+commit, because the worktree index lives outside the sandbox's writable root. A
+command Gate's `cwd` and a changed-files Gate's `workspace` are both pointed at
+the node's worktree. Linux and macOS only.

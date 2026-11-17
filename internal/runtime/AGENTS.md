@@ -62,7 +62,9 @@ The root `AGENTS.md` still applies. This file adds rules for
   changes run status. Isolated
   nodes get a synthetic, never-conflicting scheduling identity. Production
   `runtime` reaches Git only through `WorkspaceManager`; it must not import
-  `internal/worktree`.
+  `internal/worktree`. The source guard (`captureSourceGuard` in preflight,
+  `reportSourceChanges` in `finish`) uses `gitstate` directly, is bounded,
+  emits `source_workspace_changed` (or `indeterminate`) and never fails the run.
 - Production `runtime` imports `graph`, `events` and `gitstate` and defines
   small consumer-owned executor interfaces. Put concrete Agent, Gate, Shell,
   API and store behavior in their owning packages; do not import them into
