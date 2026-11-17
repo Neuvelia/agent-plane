@@ -300,6 +300,9 @@ func TestIsolationOptionsComposeAManagerOnlyForIsolatedGraphs(t *testing.T) {
 	if _, err := (isolationFlags{root: "rel"}).policy(); err == nil {
 		t.Fatal("a relative root must be rejected")
 	}
+	if _, err := (isolationFlags{root: "/tmp/a\nb"}).policy(); err == nil || !strings.Contains(err.Error(), "control characters") {
+		t.Fatalf("control characters must get their own message: %v", err)
+	}
 }
 
 func TestServeRejectsInvalidIsolationFlags(t *testing.T) {

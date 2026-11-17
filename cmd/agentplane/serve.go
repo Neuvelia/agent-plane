@@ -178,7 +178,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 		}
 		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
 		if err := config.isolation.configure(def, &opts); err != nil {
-			return &api.StartError{Status: http.StatusBadRequest, Message: err.Error()}
+			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 		}
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {

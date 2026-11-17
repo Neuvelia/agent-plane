@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"agentplane/internal/agent"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/worktree"
@@ -38,7 +39,10 @@ func (f isolationFlags) policy() (runtime.RetainPolicy, error) {
 	default:
 		return "", fmt.Errorf("--retain-worktrees must be never, failed or always, got %q", f.retain)
 	}
-	if f.root != "" && (!filepath.IsAbs(f.root) || strings.ContainsAny(f.root, "\x00\n\r")) {
+	if strings.ContainsAny(f.root, "\x00\n\r") {
+		return "", errors.New("--worktree-root contains control characters")
+	}
+	if f.root != "" && !filepath.IsAbs(f.root) {
 		return "", errors.New("--worktree-root must be an absolute path")
 	}
 	return policy, nil
@@ -61,7 +65,7 @@ func (f isolationFlags) configure(def *graph.Definition, options *runtime.Option
 
 func usesIsolation(def *graph.Definition) bool {
 	for _, n := range def.Nodes {
-		if n.Config["isolation"] == "worktree" {
+		if agent.RequestsWorktreeIsolation(n) {
 			return true
 		}
 	}
