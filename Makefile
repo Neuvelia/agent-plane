@@ -39,10 +39,12 @@ desktop-check: build
 # A virtual display is needed (and available) only on Linux; macOS and Windows
 # open a real window. Override with `make desktop-e2e XVFB=` to force none.
 XVFB ?= $(if $(shell command -v xvfb-run 2>/dev/null),xvfb-run -a,)
+# Directory (relative to desktop/) for e2e screenshots; empty saves none.
+E2E_SHOTS ?=
 
 # Drives the real Electron app against bin/agentplane under a virtual display.
 desktop-e2e: build
-	cd desktop && npm ci && npm run build && $(XVFB) node e2e/demo.cjs
+	cd desktop && npm ci && npm run build && $(XVFB) node e2e/demo.cjs $(E2E_SHOTS)
 
 # Opens every Storybook story in a real browser (EN and PL): a11y, no network.
 desktop-stories:
