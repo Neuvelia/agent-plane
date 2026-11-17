@@ -16,6 +16,7 @@ graph semantics, scheduler transitions or event schemas.
 | Human and watch rendering | `output.go` |
 | CLI JSON schema and typed output conversion | `json.go` |
 | Concrete Shell, Gate and Agent executor composition | `adapters.go`, `cli.go`, `serve.go` |
+| `--worktree-root`/`--retain-worktrees` and the Git `WorkspaceManager` adapter (F3.1) | `workspaces.go` |
 | Local or interactive human decisions | `approvals.go` |
 | `runs list/show` and stored-run replay | `runs.go` |
 | Loopback server setup, persistence and start callback | `serve.go` |
@@ -67,6 +68,17 @@ graph semantics, scheduler transitions or event schemas.
   the server. Preserve the narrow Electron/API boundary in the owning
   packages when changing this composition.
 
+- Workspace isolation (F3.1) is composed only here: `workspaces.go` adapts
+  `internal/worktree` to the runtime port and builds it only for a graph that
+  sets `isolation: worktree`, so other graphs do no Git or directory work. The
+  worktree root defaults to the user cache directory, must be absolute and is
+  created only after source preflight passes. `--json` gains an optional
+  `workspace_isolation` object (absent without isolation; envelope version
+  stays 1); human output states the base commit, refs, retained paths and that
+  a worktree is not a sandbox. `serve` accepts the same flags, adds no endpoint,
+  and cannot run Agent nodes in this slice, so an isolated graph stops at the
+  Agent preflight there.
+
 Read `docs/features/F0.7-cli-runner.md`,
 `docs/adr/0007-cli-runner-contract.md`,
 `docs/features/F1.3-unified-streaming.md`,
@@ -90,6 +102,8 @@ needs a feature spec and, where required by root policy, an ADR.
 - Watch ordering, progress omission, broken pipes and cancellation:
   `output_test.go`, `progress_test.go`, `integration_test.go`.
 - Store opt-in, replay, secrets and failure precedence: `store_test.go`.
+- Worktree isolation flags, JSON/human result, exit codes and the
+  no-isolation golden guard: `isolation_test.go`.
 - Server handshake, persistence, invalid graphs and shutdown:
   `serve_test.go`.
 - Executor selection and human prompts: `adapter_test.go`,
