@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -193,8 +194,11 @@ func sortedKeys(m map[string]bool) []string {
 // isolatedWorkspace is the coordinator-owned lifecycle state of one node's
 // worktree. No worker goroutine reads or writes it.
 type isolatedWorkspace struct {
-	handle Workspace
-	path   string
+	handle     Workspace
+	path       string
+	unitRef    string
+	unitCommit string
+	integrated bool
 }
 
 // isolationError carries a fixed, safe diagnostic code; the wrapped manager
@@ -265,4 +269,55 @@ func cloneConfigValue(value any) any {
 		return copied
 	}
 	return value
+}
+
+// integrateIsolated snapshots an accepted unit and merges it onto the run's
+// integration ref. It runs on the coordinator, in the sorted acceptance order,
+// after the unit's values are frozen. It reports whether the node may succeed;
+// on false the node has already been moved to its terminal state. Accepted
+// values are never rewritten and no unit is rerun.
+func (m *runMachine) integrateIsolated(ctx context.Context, id string, attempt events.AttemptID) bool {
+	state := m.worktrees[id]
+	fail := func(code, step string, err error) bool {
+		if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+			m.transitionNode(id, run.NodeCancelled)
+			return false
+		}
+		m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureExecutor, Err: &isolationError{code: code, err: fmt.Errorf("%s for node %q: %w", step, id, err)}}
+		m.transitionNode(id, run.NodeFailed)
+		return false
+	}
+	runID := string(m.result.RunID)
+	unitRef, err := m.isolation.manager.UnitRef(runID, id)
+	if err != nil {
+		return fail("E_WORKSPACE_SNAPSHOT", "naming the unit ref", err)
+	}
+	tipRef, err := m.isolation.manager.IntegratedRef(runID)
+	if err != nil {
+		return fail("E_WORKSPACE_INTEGRATE", "naming the integration ref", err)
+	}
+	snapshot, err := m.isolation.manager.Snapshot(ctx, state.handle, unitRef)
+	if err != nil {
+		return fail("E_WORKSPACE_SNAPSHOT", "snapshotting the isolated workspace", err)
+	}
+	state.unitRef, state.unitCommit = unitRef, snapshot.Commit
+	result, err := m.isolation.manager.Integrate(ctx, m.isolation.source, tipRef, snapshot.Commit)
+	if err != nil {
+		return fail("E_WORKSPACE_INTEGRATE", "integrating the unit", err)
+	}
+	if result.Conflict {
+		return fail("E_WORKSPACE_INTEGRATE", "integrating the unit", errors.New("unexpected conflict"))
+	}
+	state.integrated = true
+	m.appendEvent(events.Event{Type: events.WorkspaceIntegrated, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, AttemptID: attempt, Payload: events.WorkspaceIntegratedPayload{
+		UnitRef: unitRef, UnitCommit: snapshot.Commit, IntegratedRef: tipRef, IntegratedCommit: result.TipCommit, ChangedPaths: nonNegative(result.ChangedPaths),
+	}})
+	return true
+}
+
+func nonNegative(n int) uint64 {
+	if n < 0 {
+		return 0
+	}
+	return uint64(n)
 }

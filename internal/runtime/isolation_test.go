@@ -359,3 +359,146 @@ func TestIsolationCreateFailureIsAnOperationalErrorAndSiblingsContinue(t *testin
 		}
 	}
 }
+
+func okAdapter() *loopAdapter {
+	a := newLoopAdapter()
+	a.produce = func(context.Context, agent.AgentExecutionInput, int) (agent.AgentExecutionOutput, error) {
+		return agent.AgentExecutionOutput{RawMetadata: []byte(`{"ok":true}`)}, nil
+	}
+	return a
+}
+
+func TestIsolationEventOrder(t *testing.T) {
+	w := &fakeWorkspaces{root: t.TempDir()}
+	result, err := runtime.Run(context.Background(), isolatedLoop(t.TempDir()), nil, compose(okAdapter()), isolationOptions(w))
+	if err != nil || result.State != run.RunSucceeded {
+		t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+	}
+	var order []events.Type
+	for _, e := range result.Events {
+		if e.NodeID == "work" {
+			order = append(order, e.Type)
+		}
+	}
+	want := []events.Type{events.NodeReady, events.NodeStarted, events.WorkspacePrepared, events.AttemptStarted, events.AttemptInput,
+		events.GateCheck, events.ReturnEnvelope, events.AttemptFinished, events.WorkspaceIntegrated, events.NodeFinished}
+	var got []events.Type
+	for _, kind := range order {
+		for _, w := range want {
+			if kind == w {
+				got = append(got, kind)
+			}
+		}
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("order: got %v, want %v", got, want)
+	}
+	integrated := eventsOf(result, events.WorkspaceIntegrated)[0]
+	finished := eventsOf(result, events.AttemptFinished)[0]
+	payload := integrated.Payload.(events.WorkspaceIntegratedPayload)
+	if integrated.AttemptID != finished.AttemptID || integrated.AttemptID != nodeResult(result, "work").AcceptedAttemptID {
+		t.Fatalf("workspace_integrated must carry the accepted attempt: %+v", integrated)
+	}
+	if payload.UnitRef != "refs/agentplane/fake/units/work" || payload.IntegratedRef != "refs/agentplane/fake/integrated" ||
+		payload.UnitCommit != fakeCommit(1) || payload.IntegratedCommit != fakeCommit(101) || payload.ChangedPaths != 1 {
+		t.Fatalf("payload %+v", payload)
+	}
+}
+
+func TestIsolationIntegratesInSortedNodeOrderWhateverFinishesFirst(t *testing.T) {
+	source := t.TempDir()
+	d := unitGraph(source, []string{"a", "b"}, "a", "b")
+	bDone := make(chan struct{})
+	a := newLoopAdapter()
+	a.produce = func(ctx context.Context, in agent.AgentExecutionInput, _ int) (agent.AgentExecutionOutput, error) {
+		if in.Task == "a" {
+			select {
+			case <-bDone:
+			case <-ctx.Done():
+			case <-time.After(10 * time.Second):
+			}
+		} else {
+			close(bDone)
+		}
+		return agent.AgentExecutionOutput{RawMetadata: []byte(`{"ok":true}`)}, nil
+	}
+	w := &fakeWorkspaces{root: t.TempDir()}
+	options := isolationOptions(w)
+	options.MaxConcurrency = 2
+	result, err := runtime.Run(context.Background(), d, nil, compose(a), options)
+	if err != nil || result.State != run.RunSucceeded {
+		t.Fatalf("err=%v state=%s", err, result.State)
+	}
+	if fmt.Sprint(w.snapshots) != "[refs/agentplane/fake/units/a refs/agentplane/fake/units/b]" {
+		t.Fatalf("snapshot order %v", w.snapshots)
+	}
+	if fmt.Sprint(w.integrated) != fmt.Sprint([]string{fakeCommit(1), fakeCommit(2)}) {
+		t.Fatalf("integration order %v", w.integrated)
+	}
+}
+
+func TestIsolationExhaustedUnitProducesNoRef(t *testing.T) {
+	d := isolatedLoop(t.TempDir())
+	d.Nodes["work"].Loop.MaxAttempts = 2
+	w := &fakeWorkspaces{root: t.TempDir()}
+	result, err := runtime.Run(context.Background(), d, nil, compose(newLoopAdapter()), isolationOptions(w))
+	if err != nil || result.Failure == nil || result.Failure.Kind != run.FailureNeedsIntervention {
+		t.Fatalf("err=%v failure=%+v", err, result.Failure)
+	}
+	if len(w.snapshots)+len(w.integrated) != 0 || countEvents(result, events.WorkspaceIntegrated) != 0 {
+		t.Fatalf("a rejected unit was snapshotted or integrated: %v %v", w.snapshots, w.integrated)
+	}
+}
+
+func TestIsolationOperationalFailureDoesNotRewriteAcceptedValues(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		set  func(*fakeWorkspaces)
+	}{
+		{"snapshot", func(w *fakeWorkspaces) { w.snapshotErr = errors.New("git: object database is corrupt") }},
+		{"integrate", func(w *fakeWorkspaces) { w.integrateErr = errors.New("git: cannot advance ref") }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := unitGraph(t.TempDir(), []string{"a", "b"}, "a")
+			a := okAdapter()
+			w := &fakeWorkspaces{root: t.TempDir()}
+			tc.set(w)
+			options := isolationOptions(w)
+			options.MaxConcurrency = 2
+			result, err := runtime.Run(context.Background(), d, nil, compose(a), options)
+			if err != nil || result.State != run.RunFailed || result.Failure.Kind != run.FailureExecutor || result.Failure.NodeID != "a" {
+				t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+			}
+			if len(a.calls) != 2 {
+				t.Fatalf("an accepted unit was rerun: %d invocations", len(a.calls))
+			}
+			node := result.Nodes[0]
+			if node.State != run.NodeFailed || len(node.Outputs) == 0 || node.AcceptedAttemptID == "" {
+				t.Fatalf("accepted values must stay recorded on the failed node: %+v", node)
+			}
+			if result.Nodes[1].State != run.NodeSucceeded {
+				t.Fatalf("the shared-checkout sibling must be unaffected: %+v", result.Nodes[1])
+			}
+			if countEvents(result, events.WorkspaceIntegrated) != 0 {
+				t.Fatal("an integration was reported")
+			}
+			finished := eventsOf(result, events.NodeFinished)
+			for _, e := range finished {
+				for _, code := range e.Payload.(events.NodeFinishedPayload).DiagnosticCodes {
+					if strings.Contains(code, "git:") {
+						t.Fatalf("raw error text in an event: %q", code)
+					}
+				}
+			}
+		})
+	}
+}
+
+func nodeResult(result run.Result, id string) run.NodeResult {
+	for _, n := range result.Nodes {
+		if n.NodeID == id {
+			return n
+		}
+	}
+	return run.NodeResult{}
+}
