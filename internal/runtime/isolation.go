@@ -172,22 +172,36 @@ func (m *runMachine) reportSourceChanges(ctx context.Context) {
 	if !m.isolation.active() {
 		return
 	}
-	payload := events.SourceWorkspaceChangedPayload{Paths: []string{}, Indeterminate: true}
-	if baseline := m.isolation.guard.baseline; baseline != nil {
-		bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), sourceGuardTimeout)
-		defer cancel()
-		if changed, err := gitstate.Changed(bounded, *baseline); err == nil {
-			if len(changed) == 0 {
-				return
-			}
-			payload = events.SourceWorkspaceChangedPayload{}
-			payload.Paths, payload.Omitted = events.BoundWorkspacePaths(changed)
-		}
+	payload, changed := sourceObservation(ctx, m.isolation.guard.baseline, gitstate.Changed, sourceGuardTimeout)
+	if changed {
+		m.appendEvent(events.Event{Type: events.SourceWorkspaceChanged, Payload: payload})
 	}
+}
+
+// sourceObservation inspects detached from cancellation (a cancelled run is
+// still observed) but bounded by timeout. Any failure, including an invalid
+// payload, degrades to indeterminate; it reports false only for an unchanged
+// source.
+func sourceObservation(ctx context.Context, baseline *gitstate.Baseline, inspect func(context.Context, gitstate.Baseline) ([]string, error), timeout time.Duration) (events.SourceWorkspaceChangedPayload, bool) {
+	indeterminate := events.SourceWorkspaceChangedPayload{Paths: []string{}, Indeterminate: true}
+	if baseline == nil {
+		return indeterminate, true
+	}
+	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), timeout)
+	defer cancel()
+	changed, err := inspect(bounded, *baseline)
+	if err != nil {
+		return indeterminate, true
+	}
+	if len(changed) == 0 {
+		return events.SourceWorkspaceChangedPayload{}, false
+	}
+	payload := events.SourceWorkspaceChangedPayload{}
+	payload.Paths, payload.Omitted = events.BoundWorkspacePaths(changed)
 	if payload.Validate() != nil {
-		return
+		return indeterminate, true
 	}
-	m.appendEvent(events.Event{Type: events.SourceWorkspaceChanged, Payload: payload})
+	return payload, true
 }
 
 // isolatedNodes returns the nodes that ask for a worktree and rejects any
