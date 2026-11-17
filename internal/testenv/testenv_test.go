@@ -47,12 +47,3 @@ func writeFile(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 }
-
-func TestOnSharedRunnerFollowsTheCIVariable(t *testing.T) {
-	for value, want := range map[string]bool{"": false, "true": true} {
-		t.Setenv("CI", value)
-		if got := OnSharedRunner(); got != want {
-			t.Errorf("CI=%q: OnSharedRunner() = %v, want %v", value, got, want)
-		}
-	}
-}

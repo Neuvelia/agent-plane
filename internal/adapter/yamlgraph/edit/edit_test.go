@@ -5,13 +5,13 @@ import (
 	"bytes"
 	"fmt"
 	"math/rand"
+	"os"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"agentplane/internal/domain/graph"
-	"agentplane/internal/testenv"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -728,7 +728,7 @@ func TestLargeGraphIsFast(t *testing.T) {
 	if raceDetector {
 		limit *= 10 // the race detector slows this down by an order of magnitude
 	}
-	if testenv.OnSharedRunner() {
+	if os.Getenv("CI") != "" { // set by GitHub Actions and most CI systems
 		// A shared runner executes other test packages in parallel, so even the
 		// best of several samples can exceed the criterion without a regression
 		// (274 ms was seen on CI). The relaxed limit still fails a real slowdown.

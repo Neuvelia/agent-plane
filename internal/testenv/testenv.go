@@ -54,11 +54,3 @@ func RequireUnixPermissions(t testing.TB) {
 		t.Skip("Windows does not report Unix permission bits")
 	}
 }
-
-// OnSharedRunner reports whether the tests run on a shared CI runner. GitHub
-// Actions and most CI systems set CI. Wall-clock bounds use it to stay strict on
-// a developer machine and tolerate the load of a runner that executes other
-// test packages in parallel.
-func OnSharedRunner() bool {
-	return os.Getenv("CI") != ""
-}
