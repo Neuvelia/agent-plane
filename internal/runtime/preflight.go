@@ -17,6 +17,7 @@ type runPreparation struct {
 	redactionTemplate *logRedactor
 	scopes            map[string][]string
 	scopeRedacted     map[string]bool
+	isolation         isolationPlan
 	limit             int
 }
 
@@ -78,6 +79,10 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 	if err := preflightLoops(ctx, definition, executor); err != nil {
 		return runPreparation{}, err
 	}
+	isolation, err := preflightIsolation(ctx, definition, options)
+	if err != nil {
+		return runPreparation{}, err
+	}
 	if err := preflightHuman(definition, options.Decisions); err != nil {
 		return runPreparation{}, err
 	}
@@ -87,6 +92,7 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		redactionTemplate: redactionTemplate,
 		scopes:            scopes,
 		scopeRedacted:     scopeRedacted,
+		isolation:         isolation,
 		limit:             limit,
 	}, nil
 }

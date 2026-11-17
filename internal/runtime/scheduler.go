@@ -81,6 +81,13 @@ type Options struct {
 	// graph input and per accepted output port (ADR-0023). Off by default;
 	// LogRedactions apply and must be valid UTF-8 when it is on.
 	RecordValues bool
+	// Workspaces serves nodes with isolation: worktree (ADR-0024). A graph that
+	// asks for isolation and has no manager fails preflight; a graph that does
+	// not ask never touches it.
+	Workspaces WorkspaceManager
+	// RetainWorktrees selects which isolated worktrees outlive their node run.
+	// The zero value means RetainFailed.
+	RetainWorktrees RetainPolicy
 	// GraphVersion is the canonical encoding hashed into the run's graph
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.
