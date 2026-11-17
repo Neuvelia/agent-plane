@@ -83,5 +83,5 @@ for `events.jsonl`); it still lists runs correctly, minus liveness.
 ## Validation
 
 `kill -9` crash test on Linux and Windows; fault-injected sync/write failures;
-schema fixtures 1-12; snapshot-staleness and listing benchmark at 5,000 runs;
+schema fixtures 1-11 plus a schema-12 fixture marked unsupported; snapshot-staleness and listing benchmark at 5,000 runs;
 prune behaviour; `make check` and `go test -race ./internal/store/...`.
