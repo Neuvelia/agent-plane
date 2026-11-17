@@ -10,6 +10,7 @@ import (
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/gitlocate"
 	"agentplane/internal/gitstate"
 )
 
@@ -43,7 +44,7 @@ func inspectWorkspace(ctx context.Context, workspace string) workspaceIdentity {
 	result := workspaceIdentity{root: root}
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	gitPath, err := gitstate.ResolveGit()
+	gitPath, err := gitlocate.ResolveGit()
 	if err != nil {
 		return result
 	}

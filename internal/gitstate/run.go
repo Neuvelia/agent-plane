@@ -8,6 +8,8 @@ import (
 	"io"
 	"os/exec"
 	"time"
+
+	"agentplane/internal/gitlocate"
 )
 
 // RunClass classifies why a controlled Git invocation failed. It never carries
@@ -78,7 +80,7 @@ func Run(ctx context.Context, dir string, opts RunOptions, args ...string) (RunR
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	argv := append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"}, args...)
-	gitPath, err := ResolveGit()
+	gitPath, err := gitlocate.ResolveGit()
 	if err != nil {
 		return RunResult{ExitCode: -1}, &RunError{Class: RunStart, ExitCode: -1, cause: err}
 	}

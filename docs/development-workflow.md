@@ -145,9 +145,8 @@ design, and `RequireUnixPermissions` for permission-bit assertions. On Linux
 and macOS nothing is skipped. Skips on Windows mark product work that waits
 for an owner decision on native Windows support:
 
-- Production code starts `/usr/bin/git` (`internal/gitstate/snapshot.go:64`,
-  `internal/runtime/workspace.go:45`), so git-evidence and changed-files tests
-  skip.
+- Production code resolves Git from `PATH` (`gitlocate.ResolveGit`), but test helpers still start
+  `/usr/bin/git`, so git-evidence and changed-files tests skip.
 - The Codex adapter accepts only Darwin and Linux
   (`internal/agent/codex/adapter.go:75`).
 - The command Gate requires `/usr/bin/diff` and `/dev/fd/3`

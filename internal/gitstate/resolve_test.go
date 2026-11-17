@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"agentplane/internal/gitlocate"
 )
 
 func TestRunStartsGitFoundOnPath(t *testing.T) {
@@ -42,8 +44,8 @@ func TestRunReportsMissingGit(t *testing.T) {
 	if !errors.As(err, &re) || re.Class != RunStart {
 		t.Fatalf("want RunStart error, got %T %v", err, err)
 	}
-	if !errors.Is(err, ErrGitNotFound) {
-		t.Fatalf("want ErrGitNotFound in chain: %v", err)
+	if !errors.Is(err, gitlocate.ErrGitNotFound) {
+		t.Fatalf("want gitlocate.ErrGitNotFound in chain: %v", err)
 	}
 	if msg := errors.Unwrap(err).Error(); !strings.Contains(msg, "PATH") || !strings.Contains(msg, "git") {
 		t.Fatalf("error must name what was tried: %q", msg)

@@ -27,8 +27,8 @@ Constraints:
   run hooks, filters or monitors (ADR-0010).
 - Edits persist across attempts; there is no isolation until F3.1 (ADR-0014, ADR-0015). Concurrent writers
   in the shared workspace can be attributed to the attempt (ADR-0016).
-- `gitstate` calls `/usr/bin/git` with `/dev/null` config paths: it works on Linux, macOS (Command Line
-  Tools shim) and WSL, not on a native Windows engine.
+- `gitstate` calls the Git found on `PATH` (ADR-0025 amendment) with `/dev/null` config paths: it works on
+  Linux, macOS and WSL; native Windows is unverified.
 
 ## Options
 
