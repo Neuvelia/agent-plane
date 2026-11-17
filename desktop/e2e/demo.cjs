@@ -188,6 +188,7 @@ async function startDemo(page) {
     // A new graph is create-only and starts from a valid skeleton.
     await stubSave(path.join(graphDir, 'brand-new'))
     await page.click('[data-testid="editor-new"]')
+    await page.click('[data-testid="picker-create"]') // F2.12: "Blank graph" is the default choice
     await page.waitForSelector('[data-testid="yaml-content"]')
     assert.equal(fs.existsSync(path.join(graphDir, 'brand-new.yaml')), false, 'nothing is written before the first save')
     await page.keyboard.press(`${mod}+s`)
@@ -333,6 +334,7 @@ async function startDemo(page) {
     const made2 = path.join(graphDir, 'roundtrip')
     await stubSave(made2)
     await page.click('[data-testid="editor-new"]')
+    await page.click('[data-testid="picker-create"]')
     await page.waitForSelector('[data-testid="yaml-content"]')
     await page.click('[data-testid="add-shell"]')
     await page.waitForSelector('[data-testid="node-shell_1"]')
@@ -351,6 +353,68 @@ async function startDemo(page) {
     exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
     await page.click('[data-testid="nav-editor"]')
     await page.click('[data-testid="editor-close"]').catch(() => {})
+    await page.click('[data-testid="nav-dashboard"]')
+
+    // F2.12: New graph offers templates; the welcome screen opens the same picker.
+    const readTemplate = (id) => fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', `${id}.yaml`), 'utf8')
+    const activeTestId = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid'))
+    await page.click('[data-testid="nav-welcome"]')
+    await page.click('[data-testid="welcome-template"]')
+    await page.waitForSelector('[data-testid="template-picker"]')
+    assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
+    assert.deepEqual(
+      await page.$$eval('[data-testid^="picker-entry-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('picker-entry-', ''))),
+      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'],
+    )
+    // Without Codex configured the agent entry says so; the report is the engine's, so this is Linux only.
+    assert.match(await page.textContent('[data-testid="picker-entry-agent-scoped-approval"]'), /Needs Codex: Not configured\./)
+    // Tab stays inside the dialog; Escape closes it and creates nothing.
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press('Tab')
+      assert.equal(await page.evaluate(() => !!document.activeElement?.closest('[data-testid="template-picker"]')), true, 'focus is trapped in the dialog')
+    }
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="template-picker"]'))
+    assert.equal(await page.isVisible('[data-testid="editor-empty"]'), true, 'cancel creates nothing')
+
+    // Keyboard only: arrow to a template, Enter, save, Save and run. The saved file is the template with only the id line changed.
+    await stubSave(path.join(graphDir, 'from-template'))
+    await page.focus('[data-testid="editor-new"]')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="template-picker"]')
+    await page.keyboard.press('ArrowDown')
+    assert.equal(await page.isChecked('[data-testid="template-parallel-shell"]'), true)
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="yaml-content"]')
+    assert.equal(fs.existsSync(path.join(graphDir, 'from-template.yaml')), false, 'nothing is written before the first save')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
+    await page.focus('[data-testid="editor-save-run"]')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="run-status"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
+    assert.equal(fs.readFileSync(path.join(graphDir, 'from-template.yaml'), 'utf8'), readTemplate('parallel-shell').replace(/^id: parallel-shell$/m, 'id: from-template'))
+    exec(bin, ['graph', 'validate', path.join(graphDir, 'from-template.yaml')])
+    // The desktop does not show output values; the same saved file run through the CLI yields the template's result.
+    const cliRun = JSON.parse(exec(bin, ['run', path.join(graphDir, 'from-template.yaml'), '--store-dir', path.join(work, 'cli-runs'), '--json'], { encoding: 'utf8' }))
+    assert.equal(cliRun.outputs[0].value, 'left branch done + right branch done\n')
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-close"]').catch(() => {})
+
+    // The agent template has one placeholder: one blocking issue on "implement", and Run stays disabled with the reason.
+    await stubSave(path.join(graphDir, 'agent-draft'))
+    await page.click('[data-testid="editor-new"]')
+    await page.check('[data-testid="template-agent-scoped-approval"]')
+    await page.click('[data-testid="picker-create"]')
+    await page.waitForSelector('[data-testid="issue"]')
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid="issue"][data-severity="error"]').length === 1)
+    assert.equal(await page.locator('[data-testid="issue"]').count(), 1)
+    assert.equal(await page.getAttribute('[data-testid="issue"]', 'data-code'), 'E_NODE_CONFIG_INVALID')
+    assert.match(await page.textContent('[data-testid="issue"]'), /implement/)
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    assert.match(await page.textContent('[data-testid="run-blocked"]'), /Cannot run: 1 error\./)
+    assert.equal(await page.locator('[data-testid="canvas-readonly"]').count(), 0, 'a template opens with an editable canvas')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-dashboard"]')
 
     // F2.4: the Issues panel. Config errors show before any run; issues take you to their element and line.
@@ -611,7 +675,7 @@ async function startDemo(page) {
     assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
     await page.click('[data-testid="nav-runs"]')
     await page.waitForSelector('[data-testid="run-row"]')
-    assert.equal(await page.locator('[data-testid="run-row"]').count(), 2, "the demo run and the run started from the editor")
+    assert.equal(await page.locator('[data-testid="run-row"]').count(), 3, "the demo run and the two runs started from the editor")
     assert.match(await page.textContent('[data-testid="run-row"]'), /Succeeded/)
     await page.click('[data-testid="run-row"]')
     await waitStatus(page, 'apply', 'succeeded')
