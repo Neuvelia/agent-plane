@@ -55,8 +55,8 @@ Goal: move graph authoring and execution debugging from terminal to a local IDE.
 | F2.3 | Edge/Data Mapping Editor | P0 | F2.1, F0.3 |
 | F2.4 | Graph Validation UI | P0 | F2.1-F2.3, F0.2 |
 | F2.5 | Live Execution Map | P0 | F1.3, F2.1 |
-| F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: draft, remaining gap only) |
-| F2.7 | Run Inspector - Node Detail | P0 | F2.6, F1.6 (spec: draft, remaining gap only) |
+| F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: accepted for implementation, remaining gap only) |
+| F2.7 | Run Inspector - Node Detail | P0 | F2.6, F1.6 (spec: accepted for implementation, remaining gap only) |
 | F2.8 | Attempt Compare | P1 | F2.7, F1.6 |
 | F2.9 | Local Run History + SQLite | P0 | F0.6, F2.6 |
 | F2.10 | Human Gate UI | P0 | F2.5, F2.6; local pause/approval contract |
