@@ -230,3 +230,42 @@ export const OutputRenameCarriesType: S = story(
     if (op.op !== 'update_port' || op.new_port !== 'exit_code' || op.type !== 'number') throw new Error('the rename sent ' + JSON.stringify(op))
   },
 )
+
+// The loop's binding choices are the engine's previewed answers (F2.2 loop and gate
+// criterion): the target list offers exactly the targets whose preview the engine
+// accepted, a source nothing accepts offers none, and a choice the engine then
+// refuses shows its message where the binding was made.
+const bindingAsked: { op: string; bindings?: { from: string; to: string }[] }[] = []
+const bindingAnswer = (ops: { op: string }[]) => {
+  const asked = ops[0] as (typeof bindingAsked)[number]
+  bindingAsked.push(asked)
+  const added = asked.bindings?.[asked.bindings.length - 1]
+  const previews = bindingAsked.filter((a) => a.bindings?.at(-1)?.to === added?.to && a.bindings?.at(-1)?.from === added?.from).length
+  if (added?.from !== 'candidate.outputs.stdout' || added.to !== 'gate.inputs.left') return refused()
+  return previews <= 2 ? (setCommand as unknown as { status: number; body: unknown }) : refused()
+}
+export const LoopBindingChoicesAreTheEnginesAnswers: S = story(graph(loopsOpen, { edit: bindingAnswer }), async (root) => {
+  await inspect(root, 'diffed')
+  const choose = (select: HTMLElement, value: string) => {
+    const el = select as HTMLSelectElement
+    el.value = value
+    el.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+  const offered = (select: Element | null) => (select ? [...(select as HTMLSelectElement).options].map((o) => o.value).filter(Boolean) : undefined)
+  // Every source is previewed against every target; the engine accepts one pair.
+  choose(await until(root, '[data-testid="binding-from"]'), 'candidate.outputs.stdout')
+  const to = await until(root, '[data-testid="binding-to"]')
+  const targets = offered(to)!
+  if (targets.join() !== 'gate.inputs.left') throw new Error('the choices are not the engine answers: ' + targets)
+  const asked = bindingAsked.filter((a) => a.bindings?.at(-1)?.from === 'candidate.outputs.stdout').map((a) => a.bindings!.at(-1)!.to)
+  if (asked.sort().join() !== 'gate.inputs.left,gate.inputs.right') throw new Error('not every target was previewed: ' + asked)
+  // A source no preview accepts offers no target.
+  choose(await until(root, '[data-testid="binding-from"]'), 'node.inputs.expected')
+  if (!(await waitFor(() => offered(document.querySelector('[data-testid="binding-to"]'))?.length === 0))) throw new Error('a refused source still offers targets')
+  // The engine accepted the preview and refuses the change itself: its message is shown, nothing is silently dropped.
+  choose(await until(root, '[data-testid="binding-from"]'), 'candidate.outputs.stdout')
+  await waitFor(() => offered(document.querySelector('[data-testid="binding-to"]'))?.length === 1)
+  choose(document.querySelector('[data-testid="binding-to"]') as HTMLElement, 'gate.inputs.left')
+  const message = (editRefused as unknown as { body: { error: { message: string } } }).body.error.message
+  if (!(await waitFor(() => !!document.querySelector('[data-testid="loop-bindings"] [data-testid="inspector-diagnostics"]')?.textContent?.includes(message)))) throw new Error('the refusal is not shown')
+})
