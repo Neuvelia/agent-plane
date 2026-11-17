@@ -199,6 +199,7 @@ type isolatedWorkspace struct {
 	unitRef    string
 	unitCommit string
 	integrated bool
+	conflict   bool
 }
 
 // isolationError carries a fixed, safe diagnostic code; the wrapped manager
@@ -219,10 +220,16 @@ func (m *runMachine) prepareIsolated(ctx context.Context, id string) error {
 	if err != nil {
 		return &isolationError{code: "E_WORKSPACE_CREATE", err: fmt.Errorf("creating isolated workspace for node %q: %w", id, err)}
 	}
+	prepared := events.WorkspacePreparedPayload{BaseSHA: m.isolation.source.BaseSHA, Mode: events.WorkspaceModeWorktree, Path: handle.Path(), SourceRoot: m.isolation.source.Root}
+	if err := prepared.Validate(); err != nil {
+		// A handle the trace cannot describe is unusable; give it back.
+		if removeErr := m.isolation.manager.Remove(context.WithoutCancel(ctx), handle); removeErr != nil {
+			err = errors.Join(err, removeErr)
+		}
+		return &isolationError{code: "E_WORKSPACE_CREATE", err: fmt.Errorf("creating isolated workspace for node %q: %w", id, err)}
+	}
 	m.worktrees[id] = &isolatedWorkspace{handle: handle, path: handle.Path()}
-	m.appendEvent(events.Event{Type: events.WorkspacePrepared, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: events.WorkspacePreparedPayload{
-		BaseSHA: m.isolation.source.BaseSHA, Mode: events.WorkspaceModeWorktree, Path: handle.Path(), SourceRoot: m.isolation.source.Root,
-	}})
+	m.appendEvent(events.Event{Type: events.WorkspacePrepared, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: prepared})
 	return nil
 }
 
@@ -306,14 +313,40 @@ func (m *runMachine) integrateIsolated(ctx context.Context, id string, attempt e
 		return fail("E_WORKSPACE_INTEGRATE", "integrating the unit", err)
 	}
 	if result.Conflict {
-		return fail("E_WORKSPACE_INTEGRATE", "integrating the unit", errors.New("unexpected conflict"))
+		return m.recordConflict(id, attempt, unitRef, snapshot.Commit, result, fail)
+	}
+	integrated := events.WorkspaceIntegratedPayload{UnitRef: unitRef, UnitCommit: snapshot.Commit, IntegratedRef: tipRef, IntegratedCommit: result.TipCommit, ChangedPaths: nonNegative(result.ChangedPaths)}
+	if err := integrated.Validate(); err != nil {
+		return fail("E_WORKSPACE_INTEGRATE", "validating the integration result", err)
 	}
 	state.integrated = true
-	m.appendEvent(events.Event{Type: events.WorkspaceIntegrated, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, AttemptID: attempt, Payload: events.WorkspaceIntegratedPayload{
-		UnitRef: unitRef, UnitCommit: snapshot.Commit, IntegratedRef: tipRef, IntegratedCommit: result.TipCommit, ChangedPaths: nonNegative(result.ChangedPaths),
-	}})
+	m.appendEvent(events.Event{Type: events.WorkspaceIntegrated, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, AttemptID: attempt, Payload: integrated})
 	return true
 }
+
+// recordConflict reports a merge conflict as evidence and ends the node as
+// needing intervention, like an exhausted budget: the integration ref keeps its
+// last clean tip, nothing is resolved, and accepted values stay recorded.
+func (m *runMachine) recordConflict(id string, attempt events.AttemptID, unitRef, unitCommit string, result WorkspaceIntegration, fail func(code, step string, err error) bool) bool {
+	paths, omitted := events.BoundWorkspacePaths(result.ConflictPaths)
+	conflict := events.WorkspaceConflictPayload{UnitRef: unitRef, UnitCommit: unitCommit, TipCommit: result.TipCommit, Paths: paths, Omitted: omitted + nonNegative(result.Omitted)}
+	if err := conflict.Validate(); err != nil {
+		return fail("E_WORKSPACE_INTEGRATE", "validating the conflict report", err)
+	}
+	node := m.nodes[id]
+	m.worktrees[id].conflict = true
+	m.appendEvent(events.Event{Type: events.WorkspaceConflict, NodeID: id, NodeRunID: node.NodeRunID, AttemptID: attempt, Payload: conflict})
+	node.Failure = &run.Failure{NodeID: id, Kind: run.FailureNeedsIntervention, Err: conflictError{}}
+	m.transitionNode(id, run.NodeFailed)
+	return false
+}
+
+type conflictError struct{}
+
+func (conflictError) Error() string {
+	return "accepted unit conflicts with the integrated result; resolve it manually"
+}
+func (conflictError) DiagnosticCode() string { return "E_WORKSPACE_CONFLICT" }
 
 func nonNegative(n int) uint64 {
 	if n < 0 {

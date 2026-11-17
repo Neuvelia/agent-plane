@@ -502,3 +502,64 @@ func nodeResult(result run.Result, id string) run.NodeResult {
 	}
 	return run.NodeResult{}
 }
+
+func TestIsolationConflictNeedsInterventionKeepsAcceptedValues(t *testing.T) {
+	d := unitGraph(t.TempDir(), []string{"a", "b"}, "a", "b")
+	d.Nodes["tail"] = graph.NodeDefinition{Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}}
+	d.Edges = []graph.EdgeDefinition{{From: "b.outputs.raw_metadata", To: "tail.inputs.result"}}
+	a := okAdapter()
+	w := &fakeWorkspaces{root: t.TempDir(), conflict: map[string][]string{"b": {"shared.txt", "docs/x.md"}}}
+	options := isolationOptions(w)
+	options.MaxConcurrency = 2
+	result, err := runtime.Run(context.Background(), d, nil, compose(a), options)
+	if err != nil || result.State != run.RunFailed || result.Failure == nil || result.Failure.Kind != run.FailureNeedsIntervention || result.Failure.NodeID != "b" {
+		t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+	}
+	if len(a.calls) != 2 {
+		t.Fatalf("a conflict reran a unit: %d invocations", len(a.calls))
+	}
+	nodeA, nodeB, tail := nodeResult(result, "a"), nodeResult(result, "b"), nodeResult(result, "tail")
+	if nodeA.State != run.NodeSucceeded || len(nodeA.Outputs) == 0 {
+		t.Fatalf("the accepted sibling changed: %+v", nodeA)
+	}
+	if nodeB.State != run.NodeFailed || len(nodeB.Outputs) == 0 || nodeB.AcceptedAttemptID == "" {
+		t.Fatalf("recorded outputs and accepted attempt must stay on the conflicting node: %+v", nodeB)
+	}
+	if tail.State != run.NodeSkipped {
+		t.Fatalf("a dependent of the conflicting unit ran: %+v", tail)
+	}
+	conflicts := eventsOf(result, events.WorkspaceConflict)
+	if len(conflicts) != 1 || conflicts[0].NodeID != "b" || conflicts[0].AttemptID != nodeB.AcceptedAttemptID {
+		t.Fatalf("conflict events %+v", conflicts)
+	}
+	payload := conflicts[0].Payload.(events.WorkspaceConflictPayload)
+	integratedA := eventsOf(result, events.WorkspaceIntegrated)
+	if len(integratedA) != 1 || integratedA[0].NodeID != "a" {
+		t.Fatalf("only the clean unit is integrated: %+v", integratedA)
+	}
+	if payload.TipCommit != integratedA[0].Payload.(events.WorkspaceIntegratedPayload).IntegratedCommit || fmt.Sprint(payload.Paths) != "[docs/x.md shared.txt]" || payload.Omitted != 0 || payload.UnitCommit != fakeCommit(2) {
+		t.Fatalf("payload %+v", payload)
+	}
+	for _, e := range eventsOf(result, events.NodeFinished) {
+		finished := e.Payload.(events.NodeFinishedPayload)
+		if e.NodeID == "b" && (finished.FailureKind != "needs_intervention" || strings.Join(finished.DiagnosticCodes, ",") != "E_WORKSPACE_CONFLICT") {
+			t.Fatalf("node_finished %+v", finished)
+		}
+	}
+}
+
+func TestIsolationConflictWithoutPathsIsAnOperationalError(t *testing.T) {
+	w := &fakeWorkspaces{root: t.TempDir(), conflict: map[string][]string{"work": {}}}
+	result, err := runtime.Run(context.Background(), isolatedLoop(t.TempDir()), nil, compose(okAdapter()), isolationOptions(w))
+	if err != nil || result.Failure == nil || result.Failure.Kind != run.FailureExecutor || countEvents(result, events.WorkspaceConflict) != 0 {
+		t.Fatalf("err=%v failure=%+v", err, result.Failure)
+	}
+}
+
+func TestIsolationMalformedManagerResultFailsTheNodeInsteadOfPanicking(t *testing.T) {
+	w := &fakeWorkspaces{root: t.TempDir(), malformedTip: true}
+	result, err := runtime.Run(context.Background(), isolatedLoop(t.TempDir()), nil, compose(okAdapter()), isolationOptions(w))
+	if err != nil || result.Failure == nil || result.Failure.Kind != run.FailureExecutor || countEvents(result, events.WorkspaceIntegrated) != 0 {
+		t.Fatalf("err=%v failure=%+v", err, result.Failure)
+	}
+}

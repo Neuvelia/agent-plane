@@ -26,6 +26,7 @@ type fakeWorkspaces struct {
 	snapshotErr  error
 	integrateErr error
 	removeErr    error
+	malformedTip bool
 	conflict     map[string][]string // node ID -> conflicting paths
 
 	preflights []string
@@ -96,6 +97,9 @@ func (f *fakeWorkspaces) Integrate(_ context.Context, _ runtime.WorkspaceSource,
 		}
 	}
 	f.tip = fakeCommit(100 + len(f.integrated))
+	if f.malformedTip {
+		return runtime.WorkspaceIntegration{TipCommit: "not-a-commit"}, nil
+	}
 	return runtime.WorkspaceIntegration{TipCommit: f.tip, ChangedPaths: 1}, nil
 }
 
