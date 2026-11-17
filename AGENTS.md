@@ -148,7 +148,8 @@ internal/events/         event contracts and event emission
 internal/agent/          provider-neutral Agent contract and adapters
 internal/shell/          Shell execution
 internal/gate/           deterministic checks
-internal/gitstate/       Git-observed workspace state
+internal/gitstate/       Git-observed workspace state, hardened Git runner
+internal/worktree/       linked Git worktrees for workspace isolation (F3.1)
 internal/store/          local run history
 internal/api/            loopback API for local clients
 internal/version/        build/runtime version metadata

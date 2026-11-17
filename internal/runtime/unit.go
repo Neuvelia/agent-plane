@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"errors"
 	"fmt"
 	"reflect"
@@ -9,13 +10,6 @@ import (
 	"agentplane/internal/domain/graph"
 )
 
-// AcceptedProvenance identifies the immutable runtime value, not a file snapshot.
-type AcceptedProvenance struct {
-	RunID     events.RunID     `json:"run_id"`
-	NodeRunID events.NodeRunID `json:"node_run_id"`
-	AttemptID events.AttemptID `json:"accepted_attempt_id"`
-	Port      string           `json:"port"`
-}
 type unitRecord struct {
 	run       events.RunID
 	node      events.NodeRunID
@@ -84,7 +78,7 @@ func (r unitRegistry) publish(p events.ReturnEnvelopePayload, check events.Check
 	}
 	return nil
 }
-func (r unitRegistry) acceptedValues(id string) (map[string]graph.Value, []PortValue, error) {
+func (r unitRegistry) acceptedValues(id string) (map[string]graph.Value, []run.PortValue, error) {
 	u := r[id]
 	if u == nil || u.accepted == "" {
 		return nil, nil, fmt.Errorf("unit %q has no accepted attempt", id)
@@ -92,7 +86,7 @@ func (r unitRegistry) acceptedValues(id string) (map[string]graph.Value, []PortV
 	values := copyValues(u.values)
 	ports := sortedPortValues(values)
 	for i := range ports {
-		ports[i].Provenance = &AcceptedProvenance{RunID: u.run, NodeRunID: u.node, AttemptID: u.accepted, Port: ports[i].Name}
+		ports[i].Provenance = &run.AcceptedProvenance{RunID: u.run, NodeRunID: u.node, AttemptID: u.accepted, Port: ports[i].Name}
 	}
 	return values, ports, nil
 }
@@ -120,5 +114,5 @@ func unitScopes(d *graph.Definition, r *logRedactor) (map[string][]string, map[s
 }
 
 func unitScopeError(d *graph.Definition, id string, cause error) error {
-	return &PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{Severity: graph.SeverityError, Code: "E_UNIT_SCOPE", GraphID: d.ID, Location: graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".config.allowed_paths"}, Message: fmt.Sprintf("unit %q intended scope is invalid: %v", id, cause), Suggestion: "use complete portable relative paths within the enrolled-unit scope bounds, including after configured redaction"}}}}
+	return &run.PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{Severity: graph.SeverityError, Code: "E_UNIT_SCOPE", GraphID: d.ID, Location: graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".config.allowed_paths"}, Message: fmt.Sprintf("unit %q intended scope is invalid: %v", id, cause), Suggestion: "use complete portable relative paths within the enrolled-unit scope bounds, including after configured redaction"}}}}
 }

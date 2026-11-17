@@ -1,4 +1,4 @@
-package runtime
+package run
 
 import (
 	"fmt"
@@ -10,6 +10,7 @@ import (
 // FailureKind identifies which in-memory execution contract failed.
 type FailureKind string
 
+// Failure kinds, from user-actionable to internal.
 const (
 	FailureNeedsIntervention FailureKind = "needs_intervention"
 	FailureExecutor          FailureKind = "executor"
@@ -56,15 +57,15 @@ type StateTransition struct {
 	To       string
 }
 
-// RunResult is ordered by node ID and graph output name. A started run has
+// Result is ordered by node ID and graph output name. A started run has
 // exactly one terminal State when Run returns.
-type RunResult struct {
+type Result struct {
 	// PersistError is the first Options.Persist failure, if any.
 	PersistError  error
 	GraphID       string
 	GraphVersion  string
 	RunID         events.RunID
-	State         RunState
+	State         State
 	Nodes         []NodeResult
 	Outputs       []PortValue
 	Failure       *Failure

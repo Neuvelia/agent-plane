@@ -2,40 +2,21 @@ package events
 
 import (
 	"bytes"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 )
 
-const SchemaVersion = 10
+// SchemaVersion is the event schema new events are stamped with. Readers
+// accept every earlier schema with its historical shape.
+const SchemaVersion = 11
 
 type RunID string
 type NodeRunID string
 
 // AttemptID identifies one scheduler-owned produce/check cycle.
 type AttemptID string
-
-func NewRunID() (RunID, error) {
-	id, err := newUUID()
-	return RunID(id), err
-}
-
-func NewNodeRunID() (NodeRunID, error) {
-	id, err := newUUID()
-	return NodeRunID(id), err
-}
-
-func newUUID() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("generate UUID: %w", err)
-	}
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
-}
 
 type Type string
 
@@ -190,6 +171,46 @@ func (e Event) Validate() error {
 			return err
 		}
 
+	case WorkspacePreparedPayload:
+		payloadType = WorkspacePrepared
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceIntegratedPayload:
+		payloadType = WorkspaceIntegrated
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceConflictPayload:
+		payloadType = WorkspaceConflict
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceReleasedPayload:
+		payloadType = WorkspaceReleased
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case SourceWorkspaceChangedPayload:
+		payloadType = SourceWorkspaceChanged
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
 	case AttemptStartedPayload:
 		payloadType = AttemptStarted
 		if err := validateAttempt(e); err != nil {
@@ -320,6 +341,16 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = ApprovalRequestedPayload{}
 	case ApprovalDecided:
 		payload = ApprovalDecidedPayload{}
+	case WorkspacePrepared:
+		payload = WorkspacePreparedPayload{}
+	case WorkspaceIntegrated:
+		payload = WorkspaceIntegratedPayload{}
+	case WorkspaceConflict:
+		payload = WorkspaceConflictPayload{}
+	case WorkspaceReleased:
+		payload = WorkspaceReleasedPayload{}
+	case SourceWorkspaceChanged:
+		payload = SourceWorkspaceChangedPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -385,6 +416,31 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		payload = p
 	case ApprovalDecidedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspacePreparedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceIntegratedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceConflictPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceReleasedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case SourceWorkspaceChangedPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}

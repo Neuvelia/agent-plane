@@ -1,7 +1,9 @@
 package main
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"bytes"
 	"context"
 	"errors"
@@ -188,7 +190,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
 	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}
@@ -218,16 +220,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		finishWatch = func(retained []events.Event) error {
 			close(live)
 			replay <- retained
-			if ctx.Err() == nil {
-				return <-done
-			}
-			select {
-			case err := <-done:
-				return err
-			case <-time.After(100 * time.Millisecond):
-				// An unresponsive terminal must not prevent cancellation.
-				return nil
-			}
+			return awaitWatchOutput(ctx, done, watchOutputGrace)
 		}
 	}
 	var executor runtime.Executor = shell.Executor{}
@@ -258,17 +251,17 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 	}
 	if err != nil {
-		var preflight *runtime.PreflightError
+		var preflight *run.PreflightError
 		if errors.As(err, &preflight) {
 			return commandError("run", "invalid", "input", nil, preflight.Diagnostics.Diagnostics, *jsonMode, stdout, stderr, exitGraph)
 		}
 		return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 	}
 	code := exitRun
-	if result.State == runtime.RunSucceeded {
+	if result.State == run.RunSucceeded {
 		code = exitOK
 	}
-	if result.State == runtime.RunCancelled {
+	if result.State == run.RunCancelled {
 		code = exitInterrupted
 	}
 	if persistFailure != nil {
@@ -408,4 +401,23 @@ func commandError(command, status, kind string, err error, diagnostics []graph.D
 func presentationError(err error, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stderr, "write human output: %v\n", err)
 	return exitInternal
+}
+
+const watchOutputGrace = 100 * time.Millisecond
+
+// awaitWatchOutput waits for the renderer to drain. Cancellation at any point,
+// including after the run finished, bounds the wait so an unresponsive terminal
+// cannot keep the command alive.
+func awaitWatchOutput(ctx context.Context, done <-chan error, grace time.Duration) error {
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(grace):
+		return nil
+	}
 }

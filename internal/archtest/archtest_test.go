@@ -51,6 +51,7 @@ var legacyLayers = map[string]layer{
 	"internal/fields/fieldstest": layerNeutral,
 	"internal/testenv":           layerNeutral, // test-only helpers
 	"internal/capability":        layerAdapter, // probes Git and agent adapters (F2.11)
+	"internal/worktree":          layerAdapter, // Git worktree isolation (ADR-0024, F3.1)
 	"cmd/agentplane":             layerRoot,
 	"internal/agent/adaptertest": layerAdapter,
 }

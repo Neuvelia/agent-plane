@@ -1,6 +1,7 @@
 package api
 
 import (
+	"agentplane/internal/domain/run"
 	"bufio"
 	"context"
 	"crypto/sha256"
@@ -271,9 +272,9 @@ func TestDecisionsAreIdempotentScopedToTheRunAndValidated(t *testing.T) {
 	s2 := &Server{Token: token, Store: store.Store{Dir: t.TempDir()}, Hub: NewHub()}
 	ts2 := httptest.NewServer(s2.Handler())
 	defer ts2.Close()
-	decided := make(chan runtime.Decision, 1)
+	decided := make(chan run.Decision, 1)
 	go func() {
-		d, _ := s2.Hub.Decide(context.Background(), runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-1", Prompt: "ship?"})
+		d, _ := s2.Hub.Decide(context.Background(), run.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-1", Prompt: "ship?"})
 		decided <- d
 	}()
 	waitPending(t, s2.Hub, 1)
@@ -312,7 +313,7 @@ func TestCancelledWaitRemovesThePendingApproval(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := h.Decide(ctx, runtime.ApprovalRequest{RunID: runID, NodeRunID: "nr"}); err == nil {
+		if _, err := h.Decide(ctx, run.ApprovalRequest{RunID: runID, NodeRunID: "nr"}); err == nil {
 			t.Error("cancelled wait returned no error")
 		}
 	}()
@@ -373,7 +374,7 @@ func TestDecisionAcceptedDuringCancellationIsNotLost(t *testing.T) {
 			}
 			cancel() // both the decision and the cancellation are now ready
 		}
-		d, err := h.Decide(ctx, runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr"})
+		d, err := h.Decide(ctx, run.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr"})
 		if err != nil || !d.Approve || d.Comment != "yes" {
 			t.Fatalf("iteration %d: decision lost: %+v %v", i, d, err)
 		}
@@ -382,7 +383,7 @@ func TestDecisionAcceptedDuringCancellationIsNotLost(t *testing.T) {
 
 func TestDecisionForAnotherRunNeverRevealsAnEarlierDecision(t *testing.T) {
 	h := NewHub()
-	go h.Decide(context.Background(), runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-9"})
+	go h.Decide(context.Background(), run.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-9"})
 	waitPending(t, h, 1)
 	if _, already, err := h.Submit(runID, "nr-9", true, "secret comment"); err != nil || already {
 		t.Fatalf("%v %v", err, already)

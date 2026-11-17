@@ -124,6 +124,19 @@ because main does not pass there yet; the job checks out with LF line endings
 so `gofmt -l` means the same on every OS. Remove `experimental` for Windows once
 it is green. The desktop shell stays outside this gate (`make desktop-check`).
 
+Two desktop jobs run beside it. `desktop` runs `npm ci --ignore-scripts` and
+`npm run check` (typecheck, reducer tests, build, Storybook build, bundle scan).
+`desktop-e2e` first runs `npm ci` and installs the Playwright Chromium system
+dependencies (which also provide xvfb), then `make desktop-e2e` (real Electron
+against `bin/agentplane` under `xvfb-run`) and `make desktop-stories`
+(Storybook smoke in Playwright Chromium). Both pin Node 24 and
+use `npm ci`; `desktop-e2e` caches the npm cache, `~/.cache/electron` and
+`~/.cache/ms-playwright`, and uploads `desktop/e2e-shots` as the
+`desktop-e2e-screenshots` artifact on failure. They have no path filter, so a
+sidecar or graph change is also exercised, and they are not required checks:
+Go-only work does not wait on them unless branch protection says otherwise. If
+the e2e flakes, capture a Playwright trace rather than retrying silently.
+
 The Go tests compile on every OS. A test that needs something Windows lacks
 skips with a reason, using the test-only `internal/testenv` guards:
 `RequireExecutable` for absolute Unix tool paths (`/usr/bin/git`, `/bin/sh`,

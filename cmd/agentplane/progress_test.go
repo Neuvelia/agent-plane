@@ -1,11 +1,14 @@
 package main
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/app/trace"
 	"agentplane/internal/domain/events"
-	"agentplane/internal/runtime"
+	"agentplane/internal/domain/run"
 	"agentplane/internal/testenv"
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -92,17 +95,17 @@ printf '{"summary":"done","artifacts":[]}' >"$result"
 }
 
 func TestNormalizedHumanAndJSONOmissionRendering(t *testing.T) {
-	c := events.NewCollector("r", "g", "v")
+	c := trace.NewCollector(system.Clock{}, "r", "g", "v")
 	for range 5000 {
 		c.Append(events.Event{Type: events.Status, Payload: events.StatusPayload{Code: "working"}})
 	}
 	c.Append(events.Event{Type: events.RunFinished, Payload: events.RunFinishedPayload{Status: "succeeded"}})
-	result := runtime.RunResult{RunID: "r", State: runtime.RunSucceeded, Events: c.Snapshot()}
+	result := run.Result{RunID: "r", State: run.RunSucceeded, Events: c.Snapshot()}
 	var out, errout bytes.Buffer
 	if code := writeJSON(&out, &errout, documentForRun(result, nil), 0); code != 0 {
 		t.Fatal(code)
 	}
-	if !strings.Contains(out.String(), `"type":"progress_omitted"`) || !strings.Contains(out.String(), `"retained_events":904`) || !strings.Contains(out.String(), `"event_schema_version":10`) {
+	if !strings.Contains(out.String(), `"type":"progress_omitted"`) || !strings.Contains(out.String(), `"retained_events":904`) || !strings.Contains(out.String(), fmt.Sprintf(`"event_schema_version":%d`, events.SchemaVersion)) {
 		t.Fatal("JSON omission missing")
 	}
 	out.Reset()

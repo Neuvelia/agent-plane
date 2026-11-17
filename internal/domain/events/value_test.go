@@ -93,7 +93,7 @@ func TestValueRecordedRejectsInvalidPayloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, mutation := range []struct{ from, to string }{
-		{`"event_schema_version":10`, `"event_schema_version":9`},
+		{fmt.Sprintf(`"event_schema_version":%d`, SchemaVersion), `"event_schema_version":9`},
 		{`"redacted":false`, `"redacted":false,"extra":1`},
 		{`"size_bytes":5`, `"size_bytes":"5"`},
 	} {
@@ -111,19 +111,5 @@ func TestOlderSchemaStreamsStayReadable(t *testing.T) {
 		if err := json.Unmarshal([]byte(line), &decoded); err != nil || decoded.SchemaVersion != version {
 			t.Fatalf("schema %d: %v", version, err)
 		}
-	}
-}
-
-func TestCollectorCopiesRecordedValue(t *testing.T) {
-	c := NewCollector("run", "g", "v")
-	p := outputValue("hello")
-	recorded, err := c.Append(Event{Type: ValueRecorded, NodeID: "work", NodeRunID: "nr", AttemptID: "a", Payload: p})
-	if err != nil {
-		t.Fatal(err)
-	}
-	*p.Value = "HELLO"
-	*recorded.Payload.(ValueRecordedPayload).Value = "mutated"
-	if got := *c.Snapshot()[0].Payload.(ValueRecordedPayload).Value; got != "hello" {
-		t.Fatalf("retained value = %q", got)
 	}
 }

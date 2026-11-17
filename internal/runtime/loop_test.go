@@ -1,7 +1,9 @@
 package runtime_test
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -95,12 +97,12 @@ func TestLoopBudgetsAndTrace(t *testing.T) {
 	for _, b := range []int{0, 1, 2, 10} {
 		t.Run(string(rune('a'+b)), func(t *testing.T) {
 			a := newLoopAdapter()
-			r, err := runtime.Run(context.Background(), loopDefinition(b), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
+			r, err := runtime.Run(context.Background(), loopDefinition(b), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
 			want := b
 			if want == 0 {
 				want = 3
 			}
-			if err != nil || r.State != runtime.RunFailed || r.Failure.Kind != runtime.FailureNeedsIntervention || len(a.calls) != want {
+			if err != nil || r.State != run.RunFailed || r.Failure.Kind != run.FailureNeedsIntervention || len(a.calls) != want {
 				t.Fatalf("%+v %v calls=%d", r, err, len(a.calls))
 			}
 			var inputs, checks, finishes int
@@ -134,7 +136,7 @@ func TestLoopBudgetsAndTrace(t *testing.T) {
 			if strings.Contains(string(encoded), "SECRET") || strings.Contains(string(encoded), "original ") {
 				t.Fatal(string(encoded))
 			}
-			if len(r.Nodes[1].Outputs) != 0 || r.Nodes[0].State != runtime.NodeSkipped {
+			if len(r.Nodes[1].Outputs) != 0 || r.Nodes[0].State != run.NodeSkipped {
 				t.Fatal(r.Nodes)
 			}
 		})
@@ -166,8 +168,8 @@ func TestLoopRedGreenPublicationAndFeedback(t *testing.T) {
 			t.Fatal(string(b))
 		}
 	}
-	r, err := runtime.Run(context.Background(), loopDefinition(0), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
-	if err != nil || r.State != runtime.RunSucceeded || len(a.calls) != 2 || down != 1 {
+	r, err := runtime.Run(context.Background(), loopDefinition(0), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
+	if err != nil || r.State != run.RunSucceeded || len(a.calls) != 2 || down != 1 {
 		t.Fatalf("%+v %v calls=%d down=%d", r, err, len(a.calls), down)
 	}
 	var red events.CheckResult
@@ -196,7 +198,7 @@ func TestLoopPreflightBeforeDetection(t *testing.T) {
 		d := loopDefinition(3)
 		mutate(d)
 		a := newLoopAdapter()
-		_, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
+		_, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 		if err == nil || len(a.calls) != 0 || a.detect != 0 {
 			t.Fatal(err, a.calls, a.detect)
 		}
@@ -204,7 +206,7 @@ func TestLoopPreflightBeforeDetection(t *testing.T) {
 	for _, capable := range []*bool{nil, new(bool)} {
 		a := newLoopAdapter()
 		a.capable = capable
-		_, err := runtime.Run(context.Background(), loopDefinition(3), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
+		_, err := runtime.Run(context.Background(), loopDefinition(3), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 		if err == nil || len(a.calls) != 0 {
 			t.Fatal(err)
 		}
@@ -249,8 +251,8 @@ func TestLoopFatalNeverRetries(t *testing.T) {
 				}
 				return base.ExecuteNodeObserved(ctx, id, n, in, o)
 			}
-			r, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
-			if err != nil || r.State != runtime.RunFailed || len(a.calls) != 1 || r.Failure.Kind == runtime.FailureNeedsIntervention {
+			r, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+			if err != nil || r.State != run.RunFailed || len(a.calls) != 1 || r.Failure.Kind == run.FailureNeedsIntervention {
 				t.Fatalf("%+v %v calls=%d", r, err, len(a.calls))
 			}
 		})
@@ -323,12 +325,12 @@ func TestLoopCancellationBoundaries(t *testing.T) {
 				}
 			}
 			type outcome struct {
-				r   runtime.RunResult
+				r   run.Result
 				err error
 			}
 			done := make(chan outcome, 1)
 			go func() {
-				r, err := runtime.Run(ctx, d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
+				r, err := runtime.Run(ctx, d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})
 				done <- outcome{r, err}
 			}()
 			if stage == "produce" || stage == "check" || stage == "between" {
@@ -339,7 +341,7 @@ func TestLoopCancellationBoundaries(t *testing.T) {
 				}
 			}
 			result := <-done
-			if result.err != nil || result.r.State != runtime.RunCancelled {
+			if result.err != nil || result.r.State != run.RunCancelled {
 				t.Fatalf("%+v %v", result.r, result.err)
 			}
 			want := 1
@@ -350,7 +352,7 @@ func TestLoopCancellationBoundaries(t *testing.T) {
 				t.Fatal("calls", len(a.calls))
 			}
 			for _, n := range result.r.Nodes {
-				if n.State == runtime.NodeRunning {
+				if n.State == run.NodeRunning {
 					t.Fatal("running after cancellation")
 				}
 			}
@@ -374,7 +376,7 @@ func TestLoopLateCallbacksAndCurrentAttemptCorrelation(t *testing.T) {
 		}
 		return base.ExecuteNodeObserved(ctx, id, n, in, o)
 	}
-	r, err := runtime.Run(context.Background(), loopDefinition(2), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
+	r, err := runtime.Run(context.Background(), loopDefinition(2), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +407,7 @@ func TestLoopStaticValidationAllNodesBeforeDetect(t *testing.T) {
 	n := d.Nodes["work"]
 	n.Config = graph.NodeConfig{"adapter": "fake", "task": "task", "workspace": "relative", "allowed_paths": []string{}}
 	d.Nodes["zbad"] = n
-	_, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
+	_, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err == nil || a.detect != 0 {
 		t.Fatal(err, a.detect)
 	}
@@ -446,9 +448,9 @@ func TestLoopCompletedPeerNeverRerunsAndBarrier(t *testing.T) {
 	}
 	d := loopDefinition(3)
 	d.Nodes["peer"] = graph.NodeDefinition{Type: "test"}
-	done := make(chan runtime.RunResult, 1)
+	done := make(chan run.Result, 1)
 	go func() {
-		r, err := runtime.Run(context.Background(), d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2})
+		r, err := runtime.Run(context.Background(), d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})
 		if err != nil {
 			t.Error(err)
 		}
@@ -457,7 +459,7 @@ func TestLoopCompletedPeerNeverRerunsAndBarrier(t *testing.T) {
 	<-redDone
 	close(release)
 	r := <-done
-	if r.State != runtime.RunSucceeded || count != 1 || len(a.calls) != 2 {
+	if r.State != run.RunSucceeded || count != 1 || len(a.calls) != 2 {
 		t.Fatal(r.State, count, len(a.calls))
 	}
 }
@@ -479,7 +481,7 @@ func TestLoopSanitizedFeedbackIsDetachedRetainedResult(t *testing.T) {
 		}
 		return base.ExecuteNodeObserved(ctx, id, n, in, o)
 	}
-	r, err := runtime.Run(context.Background(), loopDefinition(2), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SECRET"}})
+	r, err := runtime.Run(context.Background(), loopDefinition(2), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
 	if err != nil || len(a.calls) != 2 {
 		t.Fatal(err, r)
 	}
@@ -504,8 +506,8 @@ func TestLoopCancellationDoesNotHideRacingProviderFailure(t *testing.T) {
 		cancel()
 		return agent.AgentExecutionOutput{}, errors.New("unrelated provider failure")
 	}
-	r, err := runtime.Run(ctx, loopDefinition(3), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunFailed || r.Failure.Kind != runtime.FailureExecutor || !strings.Contains(r.Failure.Err.Error(), "unrelated") {
+	r, err := runtime.Run(ctx, loopDefinition(3), nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	if err != nil || r.State != run.RunFailed || r.Failure.Kind != run.FailureExecutor || !strings.Contains(r.Failure.Err.Error(), "unrelated") {
 		t.Fatal(r, err)
 	}
 }
@@ -520,8 +522,8 @@ func TestLoopRejectsWrongCheckedScope(t *testing.T) {
 		}
 		return base.ExecuteNodeObserved(ctx, id, n, in, o)
 	}
-	r, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunFailed || len(a.calls) != 1 {
+	r, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	if err != nil || r.State != run.RunFailed || len(a.calls) != 1 {
 		t.Fatal(r, err)
 	}
 }
@@ -538,8 +540,8 @@ func TestLoopCancellationAfterFinalRedIsCancelled(t *testing.T) {
 		}
 		return v, p, err
 	}
-	r, err := runtime.Run(ctx, loopDefinition(1), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunCancelled || len(a.calls) != 1 {
+	r, err := runtime.Run(ctx, loopDefinition(1), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	if err != nil || r.State != run.RunCancelled || len(a.calls) != 1 {
 		t.Fatal(r, err)
 	}
 	for _, ev := range r.Events {
@@ -560,7 +562,7 @@ func TestLoopAttemptInputBoundsAndReferenceOmission(t *testing.T) {
 	n.Config["context_refs"] = []string{"PRIVATE_CONTEXT"}
 	n.Config["environment_refs"] = []string{"PRIVATE_ENV"}
 	d.Nodes["work"] = n
-	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal})
+	r, err := runtime.Run(context.Background(), d, nil, compose(a), runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -587,8 +589,8 @@ func TestLoopInitialGreenAcceptsOnce(t *testing.T) {
 	e := compose(a)
 	down := 0
 	e.downstream = func(map[string]graph.Value) { down++ }
-	r, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
-	if err != nil || r.State != runtime.RunSucceeded || len(a.calls) != 1 || down != 1 || a.calls[0].Feedback != nil {
+	r, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	if err != nil || r.State != run.RunSucceeded || len(a.calls) != 1 || down != 1 || a.calls[0].Feedback != nil {
 		t.Fatal(r, err)
 	}
 }
@@ -601,7 +603,7 @@ func (e *legacyLoopExecutor) ExecuteNode(context.Context, string, graph.NodeDefi
 }
 func TestLoopRequiresPreflightCompositionBeforeProduce(t *testing.T) {
 	e := &legacyLoopExecutor{}
-	_, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal})
+	_, err := runtime.Run(context.Background(), loopDefinition(3), nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err == nil || e.calls != 0 {
 		t.Fatal(err, e.calls)
 	}

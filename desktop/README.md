@@ -67,6 +67,12 @@ installs Playwright's Chromium once (`npx playwright install chromium`); set
 `AP_CHROMIUM=/path/to/chrome` to use a browser you already have. Playwright is a
 pinned dev dependency used only by these two checks.
 
+CI (`.github/workflows/ci.yml`): job `desktop` runs `npm run check`; job
+`desktop-e2e` runs both commands above under xvfb with Node 24, caches the npm
+cache, `~/.cache/electron` and `~/.cache/ms-playwright`, and uploads the e2e
+screenshots (`make desktop-e2e E2E_SHOTS=e2e-shots`, git-ignored) as an artifact
+on failure. Locally, pass `E2E_SHOTS=<dir>` to save them.
+
 ## Storybook (development only, F2.5a)
 
 ```bash

@@ -472,6 +472,9 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 		if line := edit.ParseErrorLine(err.Error()); line > 0 {
 			out["parse_line"] = line
 		}
+		if column := edit.ParseErrorColumn(text, err.Error()); column > 0 {
+			out["parse_column"] = column
+		}
 		writeJSON(w, http.StatusOK, out)
 		return
 	}

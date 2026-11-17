@@ -27,6 +27,17 @@ async function launch() {
   page.external = []
   page.on('request', (r) => { if (!/^(file|data|blob):/.test(r.url())) page.external.push(r.url()) })
   await page.setViewportSize({ width: 1440, height: 900 })
+  // Under xvfb without a window manager nothing focuses the window, and key events
+  // are dropped until it has focus: wait for the UI, focus the window, then wait for proof.
+  await page.waitForSelector('.skip-link', { state: 'attached' })
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    win.show()
+    win.focus()
+    win.webContents.focus()
+  })
+  await page.bringToFront()
+  await page.waitForFunction(() => document.hasFocus(), null, { timeout: 15000 })
   return { app, page }
 }
 const shot = async (page, name) => shots && (fs.mkdirSync(shots, { recursive: true }), page.screenshot({ path: path.join(shots, name + '.png') }))
@@ -219,7 +230,7 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-close"]')
     // A file with anchors opens with a read-only canvas and an editable YAML view.
     const anchored = path.join(graphDir, 'anchors.yaml')
-    fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'graph', 'edit', 'testdata', 'hostile.yaml'), anchored)
+    fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'adapter', 'yamlgraph', 'edit', 'testdata', 'hostile.yaml'), anchored)
     await stubOpen(anchored)
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="canvas-readonly"]')
