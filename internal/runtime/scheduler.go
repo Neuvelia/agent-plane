@@ -123,6 +123,7 @@ const maxEventLogChunk = 16 * 1024
 type runMachine struct {
 	units       unitRegistry
 	workspaces  map[string]workspaceIdentity
+	isolation   isolationPlan
 	definition  *graph.Definition
 	ids         []string
 	nodes       map[string]*run.NodeResult

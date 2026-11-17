@@ -116,6 +116,10 @@ func initializeRun(ctx context.Context, definition *graph.Definition, options Op
 	}
 	if definition.Units != nil {
 		machine.workspaces = inspectWorkspaces(ctx, definition)
+		machine.isolation = prepared.isolation
+		for id := range prepared.isolation.nodes {
+			machine.workspaces[id] = isolatedIdentity(machine.nodes[id].NodeRunID)
+		}
 		machine.reportScopeConflicts(definition)
 	}
 	dependencies := make(map[string][]string, len(machine.ids))

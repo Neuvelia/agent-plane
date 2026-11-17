@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/agent"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/domain/run"
@@ -155,5 +158,110 @@ func TestIsolationAbsentPreservesTheSemanticHash(t *testing.T) {
 	again, err := graph.SemanticVersion(d, yamlgraph.Marshal)
 	if err != nil || again != before {
 		t.Fatalf("hash of a graph without isolation is not stable: %v %q %q", err, before, again)
+	}
+}
+
+// unitGraph builds independent enrolled loop Agents sharing one workspace
+// string. isolated lists the node IDs that opt in to a worktree.
+func unitGraph(source string, ids []string, isolated ...string) *graph.Definition {
+	d := loopDefinition(1)
+	delete(d.Nodes, "work")
+	delete(d.Nodes, "down")
+	d.Edges = []graph.EdgeDefinition{}
+	for _, id := range ids {
+		n := loopDefinition(1).Nodes["work"]
+		n.Config["task"] = id
+		n.Config["workspace"] = source
+		n.Config["allowed_paths"] = []string{id + ".txt"}
+		for _, want := range isolated {
+			if want == id {
+				n.Config["isolation"] = "worktree"
+			}
+		}
+		d.Nodes[id] = n
+		d.Units = append(d.Units, id)
+	}
+	return d
+}
+
+// barrierAdapter makes every first attempt wait until n attempts are running.
+// It reports whether the barrier opened before the guard deadline.
+func barrierAdapter(n int, opened *sync.Map) *loopAdapter {
+	a := newLoopAdapter()
+	var mu sync.Mutex
+	arrived := 0
+	release := make(chan struct{})
+	a.produce = func(ctx context.Context, in agent.AgentExecutionInput, _ int) (agent.AgentExecutionOutput, error) {
+		mu.Lock()
+		arrived++
+		if arrived == n {
+			close(release)
+		}
+		mu.Unlock()
+		select {
+		case <-release:
+			opened.Store(in.Task, true)
+		case <-ctx.Done():
+			return agent.AgentExecutionOutput{}, ctx.Err()
+		case <-time.After(10 * time.Second):
+		}
+		return agent.AgentExecutionOutput{RawMetadata: []byte(`{"ok":true}`)}, nil
+	}
+	return a
+}
+
+func countEvents(result run.Result, kind events.Type) int {
+	n := 0
+	for _, e := range result.Events {
+		if e.Type == kind {
+			n++
+		}
+	}
+	return n
+}
+
+func TestIsolationSchedulesIsolatedNodesConcurrently(t *testing.T) {
+	source := t.TempDir()
+	for _, tc := range []struct {
+		name     string
+		isolated []string
+	}{
+		{"both isolated", []string{"a", "b"}},
+		{"isolated beside a shared-checkout agent", []string{"a"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var opened sync.Map
+			a := barrierAdapter(2, &opened)
+			options := isolationOptions(&fakeWorkspaces{root: t.TempDir()})
+			options.MaxConcurrency = 2
+			result, err := runtime.Run(context.Background(), unitGraph(source, []string{"a", "b"}, tc.isolated...), nil, compose(a), options)
+			if err != nil || result.State != run.RunSucceeded {
+				t.Fatalf("state=%s err=%v failure=%+v", result.State, err, result.Failure)
+			}
+			_, a1 := opened.Load("a")
+			_, b1 := opened.Load("b")
+			if !a1 || !b1 {
+				t.Fatal("the two attempts never ran at the same time")
+			}
+		})
+	}
+}
+
+func TestIsolationReportsNoScopeConflictBetweenIsolatedNodes(t *testing.T) {
+	source := t.TempDir()
+	run2 := func(isolated ...string) run.Result {
+		options := isolationOptions(&fakeWorkspaces{root: t.TempDir()})
+		options.MaxConcurrency = 2
+		result, err := runtime.Run(context.Background(), unitGraph(source, []string{"a", "b"}, isolated...), nil, compose(newLoopAdapter()), options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	if countEvents(run2(), events.DeclaredScopeConflicts) == 0 {
+		t.Fatal("control: unknown shared checkouts must still be reported")
+	}
+	if n := countEvents(run2("a", "b"), events.DeclaredScopeConflicts); n != 0 {
+		t.Fatalf("%d declared_scope_conflicts for isolated nodes", n)
 	}
 }

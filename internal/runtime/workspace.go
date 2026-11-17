@@ -17,6 +17,7 @@ type workspaceIdentity struct {
 	worktree string
 	gitDir   string
 	known    bool
+	isolated bool
 }
 type identityOutput struct{ data []byte }
 
@@ -81,10 +82,21 @@ func inspectWorkspaces(ctx context.Context, d *graph.Definition) map[string]work
 	}
 	return out
 }
+
+// isolatedIdentity gives an isolated node a known, unique root that no real
+// path can equal or contain (it holds a NUL), so scheduling never serializes it
+// against another node.
+func isolatedIdentity(nodeRunID events.NodeRunID) workspaceIdentity {
+	root := "\x00isolated" + string(filepath.Separator) + string(nodeRunID)
+	return workspaceIdentity{root: root, worktree: root, gitDir: root, known: true, isolated: true}
+}
 func nestedRoot(parent, child string) bool {
 	return parent == child || strings.HasPrefix(child, parent+string(filepath.Separator)) || parent == string(filepath.Separator)
 }
 func workspaceConflict(a, b workspaceIdentity) bool {
+	if a.isolated || b.isolated {
+		return false
+	}
 	return !a.known || !b.known || a.worktree == b.worktree || a.gitDir == b.gitDir || nestedRoot(a.root, b.root) || nestedRoot(b.root, a.root)
 }
 func declaredScope(n graph.NodeDefinition) ([]string, bool) {
@@ -132,11 +144,11 @@ func (m *runMachine) reportScopeConflicts(d *graph.Definition) {
 		}
 	}
 	for i, a := range m.ids {
-		if d.Nodes[a].Type != "agent" {
+		if d.Nodes[a].Type != "agent" || m.isolation.nodes[a] {
 			continue
 		}
 		for _, b := range m.ids[i+1:] {
-			if d.Nodes[b].Type != "agent" {
+			if d.Nodes[b].Type != "agent" || m.isolation.nodes[b] {
 				continue
 			}
 			ai, bi := m.workspaces[a], m.workspaces[b]
