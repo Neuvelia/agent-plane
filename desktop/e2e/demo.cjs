@@ -26,6 +26,17 @@ async function launch() {
   page.external = []
   page.on('request', (r) => { if (!/^(file|data|blob):/.test(r.url())) page.external.push(r.url()) })
   await page.setViewportSize({ width: 1440, height: 900 })
+  // Under xvfb without a window manager nothing focuses the window, and key events
+  // are dropped until it has focus: wait for the UI, focus the window, then wait for proof.
+  await page.waitForSelector('.skip-link', { state: 'attached' })
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    win.show()
+    win.focus()
+    win.webContents.focus()
+  })
+  await page.bringToFront()
+  await page.waitForFunction(() => document.hasFocus(), null, { timeout: 15000 })
   return { app, page }
 }
 const shot = async (page, name) => shots && (fs.mkdirSync(shots, { recursive: true }), page.screenshot({ path: path.join(shots, name + '.png') }))
