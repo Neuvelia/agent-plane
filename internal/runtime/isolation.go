@@ -387,14 +387,7 @@ func (m *runMachine) releaseIsolated(ctx context.Context) {
 		remove, reason := m.retention(id, w)
 		released := events.WorkspaceReleasedPayload{Action: events.WorkspaceRetained, Reason: reason, Path: w.path}
 		if remove {
-			if err := m.removeBounded(ctx, w.handle); err != nil {
-				released.Reason, released.CleanupError = events.ReleaseCleanupError, "remove_failed"
-				if errors.Is(err, context.DeadlineExceeded) {
-					released.CleanupError = "remove_timeout"
-				}
-			} else {
-				released.Action = events.WorkspaceRemoved
-			}
+			m.removeInto(ctx, w, &released)
 		}
 		w.retained, w.reason = released.Action == events.WorkspaceRetained, released.Reason
 		m.appendEvent(events.Event{Type: events.WorkspaceReleased, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: released})
@@ -420,6 +413,19 @@ func (m *runMachine) isolationResult() *run.IsolationResult {
 		}
 	}
 	return result
+}
+
+// removeInto removes the worktree and records the outcome in the release fact.
+func (m *runMachine) removeInto(ctx context.Context, w *isolatedWorkspace, released *events.WorkspaceReleasedPayload) {
+	err := m.removeBounded(ctx, w.handle)
+	switch {
+	case err == nil:
+		released.Action = events.WorkspaceRemoved
+	case errors.Is(err, context.DeadlineExceeded):
+		released.Reason, released.CleanupError = events.ReleaseCleanupError, "remove_timeout"
+	default:
+		released.Reason, released.CleanupError = events.ReleaseCleanupError, "remove_failed"
+	}
 }
 
 // removeBounded removes a worktree under a context detached from cancellation
