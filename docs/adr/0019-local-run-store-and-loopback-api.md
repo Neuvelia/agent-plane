@@ -103,3 +103,30 @@ F2.9 and F2.5 acceptance tests: roundtrip read in a fresh process, killed-run
 `interrupted`, truncated tail, path traversal rejection, secret absence in
 stored files, token/Host/401/421 behavior, mid-run stream no-gap/no-duplicate
 test, `make check` and race run.
+
+## Amendment (proposed, 2026-11-17): additive `graph_summary` fields
+
+**Status:** proposed amendment; becomes accepted when the F2.7 implementation PR is merged. Proposed by the lead
+on the product owner's delegation (decision 3 of `docs/features/F2.7-run-inspector-node-detail.md`); the team may
+revisit.
+
+**Why.** The Run Inspector node detail (F2.7) must show which recorded value belongs to which node input. Today
+`GET /runs/{id}` returns `graph_summary` with node IDs, types and node-level edges only, and the renderer must not
+parse YAML (ADR-0021). Adding declared ports and port-level bindings server-side keeps one parser and needs no new
+route, event or schema version.
+
+**Change.** `graph_summary` on `GET /runs/{id}` gains, additively and derived from the run's stored `graph.yaml`:
+
+- per node, `inputs` and `outputs`: arrays of `{name, type, required}`, sorted by name;
+- top-level `bindings`: array of `{source, target}`, where `source` is `{node, port}` (a node output) or
+  `{input}` (a graph input name) and `target` is `{node, input}`. Sorted by target node, target input, then
+  source, so the order is deterministic.
+
+Existing fields (`nodes[].id/type/max_attempts`, `edges`) and their order are unchanged. For a graph that does not
+parse the new collections are empty, as `nodes` and `edges` are today. They carry names and types only, never
+values, paths or secrets. A client that does not know the fields ignores them; a client that finds them absent
+(older engine) reports bindings as unavailable.
+
+**Compatibility.** No event schema, route, auth, CORS, bridge or store change; stored runs gain the fields because
+the summary is computed on read. Validation is the F2.7 acceptance criterion on `summarizeGraph` (`go test
+./internal/api/...`) plus the older-engine parse test in the renderer.
