@@ -37,18 +37,22 @@ Verified platforms:
 | Platform | Status |
 | --- | --- |
 | Linux (xvfb) | `npm run check` and `make desktop-e2e` |
-| Windows 11 | engine build, `npm run check`, and the first half of `e2e/demo.cjs` (see below); not the full e2e |
+| Windows 11 | engine build, `npm run check`, and the full `e2e/demo.cjs` (with the Windows variant described below) |
 | macOS | not verified |
 
-Windows notes (Windows 11, Go 1.27, Node 24, real window, unattended):
-`go build` wrote `bin/agentplane.exe`; `npm run check` passed; the app started the
-sidecar and the demo flow, approve/reject, graph open/save through grants and the
-editor round trip ran against it. Not verified: the full e2e (a drag in the canvas
-timed out when run without interaction), the "engine dies mid-run" step and the
-missing-binary dialog in a real window (covered only by the unit test). Known
-Linux assumptions in `e2e/demo.cjs` that still need a Windows variant: `pkill` in
-the connection-lost step, `/usr/bin/printf` in the editor round trip,
-`bin/agentplane` in the CLI round trip, `/tmp/never.yaml`, and `xvfb-run`.
+Windows notes (Windows 11, Go 1.27, Node 24, real window, unattended): `go build`
+wrote `bin/agentplane.exe`, `npm ci` and `npm run check` passed, and `node e2e/demo.cjs`
+ran to the end (two consecutive runs). `e2e/demo.cjs` is platform-aware: the engine
+binary comes from `binaryName`, temporary paths from `os.tmpdir()`, and the
+connection-lost step kills only the sidecar process that is a descendant of the
+launched app, by PID (`ps` on Linux, a process table query on Windows). The demo
+graph and the editor round trip name POSIX tools (`/usr/bin/printf`, `/bin/sh`) by
+absolute path, which Windows does not have, so on win32 the script derives the same
+graph in its temp directory with the shell commands replaced by the running `node`
+binary; the structure, loop, Gate and human node are unchanged. Steps that need
+Agent or command Gate processes (codex adapter, `/usr/bin/diff`) are not part of this
+scenario. Not verified on Windows: the missing-binary dialog in a real window (covered
+by the unit test). The Linux e2e still passes under `xvfb-run` after these changes.
 Shutdown itself is portable: closing the sidecar's stdin ends it, and the 1.5 s
 `kill()` fallback maps to `TerminateProcess`.
 
