@@ -65,6 +65,10 @@ feature contract.
 | `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
 | `F3.2-durable-run-state.md` | Draft; ADR-0027 proposed (JSONL, no SQLite) |
 | `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | Draft; ADR-0028 proposed; criteria split by dependency on F3.2 |
+| `F3.2-durable-run-state.md` | Draft; ADR-00XX proposed (JSONL, no SQLite) |
+| `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | Draft; ADR-00XX proposed; criteria split by dependency on F3.2 |
+| `F3.8-secrets-references.md` | Draft; ADR-00XX proposed (shared with F3.9) |
+| `F3.9-execution-policy-v0.md` | Draft; ADR-00XX proposed (shared with F3.8) |
 
 ## Later phases
 
