@@ -35,7 +35,9 @@ kernel and the OS.
    `environment_refs`, `env` or `input_env` of a node not assigned it is a preflight error in every mode, including the default audit mode: a
    correctness rule, not an enforcement level.
 6. **Closed enforcement vocabulary:** `prevented`, `contained`, `delegated`, `detected`, `unobserved`,
-   `unenforceable`. Docs, CLI and UI must never collapse them into "sandboxed".
+   `unenforceable`. Docs, CLI and UI must never collapse them into "sandboxed". Each permission records `state`
+   (what the machine can do) and `applied` (whether the mode enforces it), so an audit run never shows
+   "prevented" for something that was not prevented. Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit.
 7. **Modes.** `audit` blocks nothing and records; `enforce` fails closed: a request that is not `prevented`,
    `contained` or `delegated` is a preflight error, and a node is never run less confined than reported. The
    runner may strengthen the mode (`--policy-mode`), a graph can never weaken it.
@@ -50,8 +52,8 @@ kernel and the OS.
 9. **Violation handling.** Blocked node fails with kind `policy_blocked`, a typed `policy_violation` fact and a
    red `execution_policy` Check Result; not retried by a correction loop; accepted siblings untouched. New
    facts `policy_evaluated` (carrying secret assignment names only) and `policy_violation` ride one event
-   schema bump: next free event schema number at merge (schema 12 is reserved for F2.8b, F3.4 also proposes a
-   change).
+   schema bump: event schema 14 (proposed; next free number confirmed at merge; F2.8b = 12,
+   F3.4 = 13, Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit).
 10. **Ports.** Consumer-owned `runtime.SecretResolver` and `runtime.PolicyEnforcer`, composed by the CLI like
     `WorkspaceManager`. Policy evaluation and the path matcher are domain code shared with the F1.8 scope Gate.
 
