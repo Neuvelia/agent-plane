@@ -147,7 +147,9 @@ programmable keymap without reimplementing an editor.
 
 F2.5a R0 provides the shell, design tokens, primitives, Storybook and PL/EN
 localisation. R1 redesigns Run Inspector (live graph card with Map / YAML / Split,
-node detail with one attempt shown at a time), Approvals (inbox and review panes)
+node detail with one attempt shown at a time; a standalone Gate node has no attempts,
+so its single `gate_check`, which carries no attempt ID, is kept on the node and shown
+there), Approvals (inbox and review panes)
 and New run (graph, inputs, preflight steps). R2 adds the Dashboard (needs attention,
 active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 (wall clock, node time, saved, retries, tokens always unknown), a per-second

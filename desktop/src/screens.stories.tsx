@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
-import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
 import { Dashboard } from './dashboardView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
@@ -59,6 +59,16 @@ export const InspectorCompareScopeIndeterminate: S = {
   parameters: { bridge: { runs: [{ summary: summaryOf(agentScopeIndeterminate, 'succeeded'), graph: agentScopeGraph, yaml: agentScopeYaml, events: agentScopeIndeterminate, ending: 'end' }] } satisfies BridgeData },
   render: () => <RunInspector runId={rid(agentScopeIndeterminate)} onBack={noop} />,
   play: openCompare('work'),
+}
+// A standalone Gate has no attempts: its red verdict, reason and evidence show in node detail.
+export const InspectorStandaloneGateRed: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(standaloneGateRed, 'failed'), graph: standaloneGateGraph, yaml: standaloneGateYaml, events: standaloneGateRed, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(standaloneGateRed)} onBack={noop} />,
+  play: async (ctx) => {
+    await new Promise((r) => setTimeout(r, 300))
+    ctx.canvasElement.querySelector<HTMLButtonElement>('[data-testid="node-accept"]')?.click()
+    await new Promise((r) => setTimeout(r, 100))
+  },
 }
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
