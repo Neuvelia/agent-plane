@@ -3,6 +3,7 @@ package runtime_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -263,5 +264,98 @@ func TestIsolationReportsNoScopeConflictBetweenIsolatedNodes(t *testing.T) {
 	}
 	if n := countEvents(run2("a", "b"), events.DeclaredScopeConflicts); n != 0 {
 		t.Fatalf("%d declared_scope_conflicts for isolated nodes", n)
+	}
+}
+
+func eventsOf(result run.Result, kind events.Type) []events.Event {
+	var out []events.Event
+	for _, e := range result.Events {
+		if e.Type == kind {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func indexOfEvent(result run.Result, kind events.Type, node string) int {
+	for i, e := range result.Events {
+		if e.Type == kind && e.NodeID == node {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestIsolationWorktreePersistsAcrossAttempts(t *testing.T) {
+	source := t.TempDir()
+	d := isolatedLoop(source)
+	d.Nodes["work"].Loop.MaxAttempts = 3
+	a := newLoopAdapter()
+	a.produce = func(_ context.Context, _ agent.AgentExecutionInput, n int) (agent.AgentExecutionOutput, error) {
+		return agent.AgentExecutionOutput{RawMetadata: []byte(fmt.Sprintf(`{"ok":%t}`, n == 3))}, nil
+	}
+	w := &fakeWorkspaces{root: t.TempDir()}
+	result, err := runtime.Run(context.Background(), d, nil, compose(a), isolationOptions(w))
+	if err != nil || len(a.calls) != 3 || len(w.created) != 1 {
+		t.Fatalf("err=%v attempts=%d created=%v state=%s failure=%+v", err, len(a.calls), w.created, result.State, result.Failure)
+	}
+	for i, call := range a.calls {
+		if call.Workspace != w.created[0] {
+			t.Fatalf("attempt %d ran in %q, want the single worktree %q", i+1, call.Workspace, w.created[0])
+		}
+	}
+	prepared := eventsOf(result, events.WorkspacePrepared)
+	if len(prepared) != 1 {
+		t.Fatalf("%d workspace_prepared events", len(prepared))
+	}
+	payload := prepared[0].Payload.(events.WorkspacePreparedPayload)
+	if payload.BaseSHA != fakeBaseSHA || payload.Mode != events.WorkspaceModeWorktree || payload.Path != w.created[0] || payload.SourceRoot != source {
+		t.Fatalf("payload %+v", payload)
+	}
+	if prepared[0].NodeID != "work" || prepared[0].NodeRunID == "" || prepared[0].AttemptID != "" {
+		t.Fatalf("correlation %+v", prepared[0])
+	}
+	if indexOfEvent(result, events.WorkspacePrepared, "work") > indexOfEvent(result, events.AttemptStarted, "work") {
+		t.Fatal("workspace_prepared must precede the first attempt")
+	}
+	if got := d.Nodes["work"].Config["workspace"]; got != source {
+		t.Fatalf("the graph definition was mutated: workspace %v", got)
+	}
+}
+
+func TestIsolationCreateFailureIsAnOperationalErrorAndSiblingsContinue(t *testing.T) {
+	source := t.TempDir()
+	d := unitGraph(source, []string{"a", "b"}, "a")
+	a := newLoopAdapter()
+	a.produce = func(context.Context, agent.AgentExecutionInput, int) (agent.AgentExecutionOutput, error) {
+		return agent.AgentExecutionOutput{RawMetadata: []byte(`{"ok":true}`)}, nil
+	}
+	w := &fakeWorkspaces{root: t.TempDir(), createErr: errors.New("disk full")}
+	options := isolationOptions(w)
+	options.MaxConcurrency = 2
+	result, err := runtime.Run(context.Background(), d, nil, compose(a), options)
+	if err != nil || result.State != run.RunFailed || result.Failure == nil || result.Failure.NodeID != "a" || result.Failure.Kind != run.FailureExecutor {
+		t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+	}
+	states := map[string]run.NodeState{}
+	for _, n := range result.Nodes {
+		states[n.NodeID] = n.State
+	}
+	if states["a"] != run.NodeFailed || states["b"] != run.NodeSucceeded {
+		t.Fatalf("states %v", states)
+	}
+	for _, e := range result.Events {
+		if e.NodeID != "a" {
+			continue
+		}
+		switch e.Type {
+		case events.AttemptStarted, events.GateCheck, events.ReturnEnvelope, events.WorkspacePrepared:
+			t.Fatalf("node a emitted %s after a failed worktree creation", e.Type)
+		}
+	}
+	for _, e := range eventsOf(result, events.NodeFinished) {
+		if payload := e.Payload.(events.NodeFinishedPayload); e.NodeID == "a" && strings.Contains(strings.Join(payload.DiagnosticCodes, ","), "disk") {
+			t.Fatalf("raw error text reached an event: %+v", payload)
+		}
 	}
 }

@@ -124,6 +124,7 @@ type runMachine struct {
 	units       unitRegistry
 	workspaces  map[string]workspaceIdentity
 	isolation   isolationPlan
+	worktrees   map[string]*isolatedWorkspace
 	definition  *graph.Definition
 	ids         []string
 	nodes       map[string]*run.NodeResult
@@ -274,6 +275,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 		nodeStarted: make(map[string]time.Time, len(ids)),
 		attemptIDs:  options.IDs,
 		clock:       options.Clock,
+		worktrees:   map[string]*isolatedWorkspace{},
 	}
 	for _, id := range ids {
 		nodeRunID, err := options.IDs.NewNodeRunID()

@@ -29,6 +29,15 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 		if m.nodes[id].State == run.NodeReady {
 			m.transitionNode(id, run.NodeRunning)
 		}
+		if m.isolation.nodes[id] && m.worktrees[id] == nil {
+			if e := m.prepareIsolated(ctx, id); e != nil {
+				if ctx.Err() == nil {
+					m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureExecutor, Err: e}
+					m.transitionNode(id, run.NodeFailed)
+				}
+				continue
+			}
+		}
 		if l := m.definition.Nodes[id].Loop; l != nil {
 			aid, e := m.attemptIDs.NewAttemptID()
 			if e != nil {
@@ -49,6 +58,9 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 			m.appendEvent(events.Event{Type: events.AttemptInput, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, AttemptID: aid, Payload: attemptInput(m.definition.Nodes[id], m.resolved[id], state.feedbacks[id], redactor)})
 		}
 		node := m.definition.Nodes[id]
+		if w := m.worktrees[id]; w != nil {
+			node = isolatedNode(node, w.path)
+		}
 		resolved := m.resolved[id]
 		aid, feedback, baseline, number := state.attempts[id], state.feedbacks[id], state.baselines[id], state.numbers[id]
 		go func(id string) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/domain/run"
 )
@@ -187,4 +188,81 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// isolatedWorkspace is the coordinator-owned lifecycle state of one node's
+// worktree. No worker goroutine reads or writes it.
+type isolatedWorkspace struct {
+	handle Workspace
+	path   string
+}
+
+// isolationError carries a fixed, safe diagnostic code; the wrapped manager
+// error stays local to the run result and never reaches an event.
+type isolationError struct {
+	code string
+	err  error
+}
+
+func (e *isolationError) Error() string          { return e.err.Error() }
+func (e *isolationError) Unwrap() error          { return e.err }
+func (e *isolationError) DiagnosticCode() string { return e.code }
+
+// prepareIsolated creates the node's worktree and records it. It runs on the
+// coordinator, serially, so event order is deterministic.
+func (m *runMachine) prepareIsolated(ctx context.Context, id string) error {
+	handle, err := m.isolation.manager.Create(ctx, m.isolation.source, string(m.result.RunID), string(m.nodes[id].NodeRunID))
+	if err != nil {
+		return &isolationError{code: "E_WORKSPACE_CREATE", err: fmt.Errorf("creating isolated workspace for node %q: %w", id, err)}
+	}
+	m.worktrees[id] = &isolatedWorkspace{handle: handle, path: handle.Path()}
+	m.appendEvent(events.Event{Type: events.WorkspacePrepared, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: events.WorkspacePreparedPayload{
+		BaseSHA: m.isolation.source.BaseSHA, Mode: events.WorkspaceModeWorktree, Path: handle.Path(), SourceRoot: m.isolation.source.Root,
+	}})
+	return nil
+}
+
+// isolatedNode is the node a worker executes: the same definition with the
+// Agent and its embedded Gate pointed at the worktree. The graph and its
+// semantic version are never modified.
+func isolatedNode(n graph.NodeDefinition, path string) graph.NodeDefinition {
+	n.Config = cloneConfig(n.Config)
+	n.Config["workspace"] = path
+	if n.Loop != nil {
+		loop := *n.Loop
+		loop.Gate.Config = cloneConfig(loop.Gate.Config)
+		if _, ok := loop.Gate.Config["workspace"]; ok {
+			loop.Gate.Config["workspace"] = path
+		}
+		n.Loop = &loop
+	}
+	return n
+}
+
+func cloneConfig(config graph.NodeConfig) graph.NodeConfig {
+	copied := make(graph.NodeConfig, len(config)+1)
+	for key, value := range config {
+		copied[key] = cloneConfigValue(value)
+	}
+	return copied
+}
+
+func cloneConfigValue(value any) any {
+	switch v := value.(type) {
+	case []string:
+		return append([]string(nil), v...)
+	case []any:
+		copied := make([]any, len(v))
+		for i, item := range v {
+			copied[i] = cloneConfigValue(item)
+		}
+		return copied
+	case map[string]any:
+		copied := make(map[string]any, len(v))
+		for key, item := range v {
+			copied[key] = cloneConfigValue(item)
+		}
+		return copied
+	}
+	return value
 }
