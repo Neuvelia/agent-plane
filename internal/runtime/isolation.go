@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
@@ -12,6 +13,8 @@ import (
 )
 
 const nodeTypeAgent = "agent"
+
+const defaultCleanupTimeout = 30 * time.Second
 
 // RetainPolicy selects which isolated worktrees outlive their node run
 // (ADR-0024). Run-scoped refs are always kept; they are the deliverable.
@@ -71,6 +74,7 @@ type WorkspaceManager interface {
 type isolationPlan struct {
 	manager WorkspaceManager
 	policy  RetainPolicy
+	timeout time.Duration
 	source  WorkspaceSource
 	nodes   map[string]bool
 }
@@ -121,7 +125,11 @@ func preflightIsolation(ctx context.Context, d *graph.Definition, options Option
 	if err != nil {
 		return isolationPlan{}, err
 	}
-	plan := isolationPlan{manager: options.Workspaces, policy: policy, nodes: nodes}
+	timeout := options.CleanupTimeout
+	if timeout <= 0 {
+		timeout = defaultCleanupTimeout
+	}
+	plan := isolationPlan{manager: options.Workspaces, policy: policy, timeout: timeout, nodes: nodes}
 	if !plan.active() {
 		return plan, nil
 	}
@@ -226,7 +234,7 @@ func (m *runMachine) prepareIsolated(ctx context.Context, id string) error {
 	prepared := events.WorkspacePreparedPayload{BaseSHA: m.isolation.source.BaseSHA, Mode: events.WorkspaceModeWorktree, Path: handle.Path(), SourceRoot: m.isolation.source.Root}
 	if err := prepared.Validate(); err != nil {
 		// A handle the trace cannot describe is unusable; give it back.
-		if removeErr := m.isolation.manager.Remove(context.WithoutCancel(ctx), handle); removeErr != nil {
+		if removeErr := m.removeBounded(ctx, handle); removeErr != nil {
 			err = errors.Join(err, removeErr)
 		}
 		return &isolationError{code: "E_WORKSPACE_CREATE", err: fmt.Errorf("creating isolated workspace for node %q: %w", id, err)}
@@ -365,7 +373,6 @@ func nonNegative(n int) uint64 {
 // of a released node is alive. It uses a context detached from cancellation:
 // a cancelled run must still clean up. Cleanup failure never changes status.
 func (m *runMachine) releaseIsolated(ctx context.Context) {
-	cleanup := context.WithoutCancel(ctx)
 	for _, id := range m.ids {
 		w := m.worktrees[id]
 		if w == nil || w.released {
@@ -380,8 +387,11 @@ func (m *runMachine) releaseIsolated(ctx context.Context) {
 		remove, reason := m.retention(id, w)
 		released := events.WorkspaceReleasedPayload{Action: events.WorkspaceRetained, Reason: reason, Path: w.path}
 		if remove {
-			if err := m.isolation.manager.Remove(cleanup, w.handle); err != nil {
+			if err := m.removeBounded(ctx, w.handle); err != nil {
 				released.Reason, released.CleanupError = events.ReleaseCleanupError, "remove_failed"
+				if errors.Is(err, context.DeadlineExceeded) {
+					released.CleanupError = "remove_timeout"
+				}
 			} else {
 				released.Action = events.WorkspaceRemoved
 			}
@@ -410,6 +420,14 @@ func (m *runMachine) isolationResult() *run.IsolationResult {
 		}
 	}
 	return result
+}
+
+// removeBounded removes a worktree under a context detached from cancellation
+// (a cancelled run must still clean up) but bounded in time.
+func (m *runMachine) removeBounded(ctx context.Context, w Workspace) error {
+	bounded, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.isolation.timeout)
+	defer cancel()
+	return m.isolation.manager.Remove(bounded, w)
 }
 
 // retention decides whether a terminal node run's worktree is removed and why.

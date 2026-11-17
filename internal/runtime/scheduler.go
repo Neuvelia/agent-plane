@@ -88,6 +88,9 @@ type Options struct {
 	// RetainWorktrees selects which isolated worktrees outlive their node run.
 	// The zero value means RetainFailed.
 	RetainWorktrees RetainPolicy
+	// CleanupTimeout bounds each worktree removal so a hung Git cannot block
+	// run_finished. Zero means 30 seconds.
+	CleanupTimeout time.Duration
 	// GraphVersion is the canonical encoding hashed into the run's graph
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.

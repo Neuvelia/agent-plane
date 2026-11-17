@@ -49,13 +49,17 @@ The root `AGENTS.md` still applies. This file adds rules for
   single source repository per run. The coordinator alone creates worktrees
   (before the first attempt, serially), snapshots and integrates accepted units
   in sorted node order after the unit's values are frozen and before the
-  succeeded transition, and releases worktrees when a node run ends and before
-  `run_finished`. Workers receive a deep-copied node whose Agent and Gate
+  succeeded transition, and releases worktrees of terminal nodes after every
+  batch's acceptance (`releaseIsolated` in `Run`), with a final sweep in
+  `finish` before `run_finished` for the rest (plan: terminal states plus a
+  sweep). Workers receive a deep-copied node whose Agent and Gate
   workspace is the worktree; the graph and semantic version are never changed.
   A conflict fails the node as `needs_intervention` (outputs stay recorded,
   nothing is rerun); snapshot, integrate and create failures are `executor`
   failures with fixed diagnostic codes and no raw Git text. Release uses a
-  context detached from cancellation and never changes run status. Isolated
+  context detached from cancellation but bounded by `Options.CleanupTimeout`
+  (default 30s; a timeout reports `cleanup_failed` / `remove_timeout`) and never
+  changes run status. Isolated
   nodes get a synthetic, never-conflicting scheduling identity. Production
   `runtime` reaches Git only through `WorkspaceManager`; it must not import
   `internal/worktree`.
