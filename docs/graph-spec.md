@@ -279,7 +279,8 @@ The `adapter` ID and absolute local `workspace` path are required. Exactly one
 task source is required: a nonempty literal `config.task` or a declared string
 `task` input resolved by a graph binding. Both sources or neither source fail
 before adapter invocation. `allowed_paths`, `context_refs`, and
-`environment_refs` are optional lists of nonempty strings. They identify
+`environment_refs` are optional lists of nonempty strings; `isolation` is an
+optional `none|worktree` (see Workspace isolation, F3.1). They identify
 intent and references only; F1.1 does not expand them, read referenced files,
 resolve secrets, or copy named environment variables into a child process.
 Unknown Agent configuration fields and wrong types fail at the Agent executor
@@ -681,3 +682,35 @@ make inspection fail: deny remains operationally blocked and warn records an
 indeterminate result. Scope checking detects writes after they occur; it neither
 prevents nor rolls them back. External concurrent writers remain indistinguishable before
 worktree isolation. See ADR-0016.
+
+### Workspace isolation (F3.1)
+
+An Agent that is a loop producer and is listed in top-level `units` may set
+`config.isolation: worktree`. `none` and an absent value keep the shared-checkout
+behavior above, byte for byte, including the semantic hash of every graph that
+does not use the key. `isolation` is semantic content, so the semantic version
+changes when it is present. Any other value, or `worktree` on a node that is not
+a loop Agent enrolled in `units`, fails preflight before `run_started` and names
+the node. `graph.workspace` stays the source repository and the only workspace
+path in the graph; the runtime derives each node's worktree and points the
+Agent and its embedded Gate at it. The graph never contains a worktree path.
+
+At run start the source must be a clean Git checkout (tracked files), resolved
+to one base commit that every isolated node of the run starts from. All isolated
+nodes of a run must resolve to one source repository. The runtime needs a
+workspace manager (the CLI supplies one); without it a graph that asks for
+isolation fails preflight. One worktree per node run is created before its first
+attempt and persists across correction attempts. Only an accepted attempt is
+integrated: its worktree is snapshotted as a commit under
+`refs/agentplane/<run>/units/` and three-way merged onto
+`refs/agentplane/<run>/integrated`, serially in sorted node-ID order. A merge
+conflict never auto-resolves: the run ends `needs_intervention` with the unit's
+outputs still recorded, dependents are skipped, and the conflicting unit's
+worktree is retained under the default policy. The user's branch, index and
+working tree are never written. A worktree is a separate directory, not a
+sandbox. Isolated nodes schedule concurrently with each other and with
+shared-checkout Agents, and `declared_scope_conflicts` is not reported for them.
+Retention (`never|failed|always`, default `failed`) is described in ADR-0024 and
+`internal/runtime/AGENTS.md`. Untracked and ignored source files are not present
+in a worktree. Isolation is not available for Shell, standalone Gate or Human
+nodes, and downstream isolated nodes do not see upstream file changes.
