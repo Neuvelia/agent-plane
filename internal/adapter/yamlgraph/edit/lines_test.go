@@ -3,6 +3,7 @@ package edit
 import (
 	"testing"
 
+	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/graph"
 )
 
@@ -71,5 +72,53 @@ func TestParseErrorLine(t *testing.T) {
 		if got := ParseErrorLine(msg); got != want {
 			t.Errorf("%q: %d, want %d", msg, got, want)
 		}
+	}
+}
+
+func TestParseErrorColumnComesFromTheFailingNodeNotFromTheMessage(t *testing.T) {
+	for name, tc := range map[string]struct {
+		text string
+		line int
+		col  int
+	}{
+		"syntax error: the library names no column":    {"schema_version: 0\nid: [\nnodes: {}\n", 1, 0},
+		"unknown top-level field":                      {"schema_version: 0\nid: g\nnodes: {}\nbogus: 1\n", 4, 1},
+		"unknown nested field":                         {"schema_version: 0\nid: g\nnodes:\n  a:\n    type: shell\n    colour: red\n", 6, 5},
+		"wrong kind (sequence for a string)":           {"schema_version: 0\nid: [a]\n", 2, 5},
+		"wrong type (int for a mapping)":               {"schema_version: 0\nid: g\ninputs: 5\n", 3, 9},
+		"long scalar is matched by its shortened text": {"schema_version: 0\nid: g\ninputs: 1234567890123\n", 3, 9},
+		"two candidates on one line stay unlocated":    {"schema_version: 0\nid: g\nnodes: {a: {colour: 1}, b: {colour: 2}}\n", 3, 0},
+		"column counts characters, not bytes":          {"schema_version: 0\nid: g\nnodes:\n  zażółć: {colour: 1}\n", 4, 12},
+	} {
+		_, err := yamlgraph.Parse([]byte(tc.text))
+		if err == nil {
+			t.Fatalf("%s: text unexpectedly parses", name)
+		}
+		if got := ParseErrorLine(err.Error()); got != tc.line {
+			t.Errorf("%s: line %d, want %d (%v)", name, got, tc.line, err)
+		}
+		if got := ParseErrorColumn([]byte(tc.text), err.Error()); got != tc.col {
+			t.Errorf("%s: column %d, want %d (%v)", name, got, tc.col, err)
+		}
+	}
+}
+
+func TestParseErrorLineAndColumnComeFromTheFirstEntry(t *testing.T) {
+	text := []byte("schema_version: 0\nid: g\nnodes:\n  a:\n    type: shell\n    first: 1\nsecond: 2\n")
+	message := "yaml: unmarshal errors:\n  line 6: field first not found in type graph.Definition\n  line 7: field second not found in type graph.Definition"
+	if got := ParseErrorLine(message); got != 6 {
+		t.Errorf("line %d, want 6", got)
+	}
+	if got := ParseErrorColumn(text, message); got != 5 {
+		t.Errorf("column %d, want 5 (the line 6 entry; the line 7 entry is at column 1)", got)
+	}
+}
+
+func TestParseErrorColumnIsZeroWhenThereIsNothingToLocate(t *testing.T) {
+	if got := ParseErrorColumn([]byte("a: 1"), "parse graph definition: schema_version is required"); got != 0 {
+		t.Errorf("a message without a line has no column: %d", got)
+	}
+	if got := ParseErrorColumn([]byte("id: ["), "yaml: line 1: field id not found in type x"); got != 0 {
+		t.Errorf("text that does not parse has no tree: %d", got)
 	}
 }

@@ -59,6 +59,7 @@ export const en = {
   'issues.noneInFilter': 'No issues match this filter.',
   'issues.graphLevel': 'Graph',
   'issues.line': 'line {line}',
+  'issues.lineColumn': 'line {line}, column {column}',
   'issues.unreachable': 'Connection lost: the engine could not check the latest text. The list below is out of date.',
   'issues.retry': 'Check again',
   'issues.selected': 'Selected: {name}',

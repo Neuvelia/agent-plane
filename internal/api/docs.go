@@ -231,6 +231,7 @@ type docResponse struct {
 	Diagnostics     []diagnosticDTO `json:"diagnostics"`
 	ParseError      string          `json:"parse_error,omitempty"`
 	ParseLine       int             `json:"parse_line,omitempty"`
+	ParseColumn     int             `json:"parse_column,omitempty"`
 	ReadonlyCanvas  bool            `json:"readonly_canvas"`
 	ReadonlyReasons []string        `json:"readonly_reasons,omitempty"`
 	LineEnding      string          `json:"line_ending"`
@@ -271,6 +272,7 @@ func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	if err != nil {
 		res.ParseError = err.Error()
 		res.ParseLine = edit.ParseErrorLine(res.ParseError)
+		res.ParseColumn = edit.ParseErrorColumn(text, res.ParseError)
 		return res
 	}
 	res.Definition = toDefinitionDTO(def)
