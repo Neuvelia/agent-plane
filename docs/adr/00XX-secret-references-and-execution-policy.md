@@ -29,10 +29,11 @@ kernel and the OS.
    prompt, event, store or API. First provider `env` (`env/NAME`); `local` is reserved for the OS keychain
    (F3.8b via fixed OS tools, no Go dependency).
 4. **Redaction set is derived from resolved values**, in addition to `--redact-env`, including Base64 and
-   percent-encoded forms as defense in depth. Empty or unredactable values fail preflight instead of being
+   hex and percent-encoded forms (Base64 for all three byte alignments) as defense in depth. Empty or unredactable values fail preflight instead of being
    skipped. Redaction is described as best effort, never a guarantee.
 5. **Ambient-bypass closure.** A variable backing a secret reference named through `env_allowlist`,
-   `environment_refs`, `env` or `input_env` of a node not assigned it is a preflight error in enforce mode.
+   `environment_refs`, `env` or `input_env` of a node not assigned it is a preflight error in every mode, including the default audit mode: a
+   correctness rule, not an enforcement level.
 6. **Closed enforcement vocabulary:** `prevented`, `contained`, `delegated`, `detected`, `unobserved`,
    `unenforceable`. Docs, CLI and UI must never collapse them into "sandboxed".
 7. **Modes.** `audit` blocks nothing and records; `enforce` fails closed: a request that is not `prevented`,
