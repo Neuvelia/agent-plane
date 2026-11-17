@@ -641,8 +641,12 @@ nothing. Never follows symlinks; never touches Git worktrees or refs.
   and `interrupted` derivation. No code overlap; F3.4 should land after T1-T4.
 - **F3.8/F3.9** (`claude/f3-8-f3-9-plan`): `00XX` ADR collision only; resolved by
   renaming at merge.
-- Recommended merge order: F3.1 stack, F2.8b, then F3.2 T1-T9 (T1-T4 and T6 may
-  merge earlier because they do not depend on either).
+- Merge order. Decided 2026-11-17 (lead, delegated by the product owner); the team
+  may revisit: F3.1 stack -> F2.8b -> F3.2 -> F3.4 T1-T9 -> F3.8/F3.9 -> F3.4
+  T10-T13. Event schemas (proposed, confirmed against `events.SchemaVersion` at
+  merge): F2.8b = 12, F3.4 = 13, F3.8/F3.9 = 14. F3.2 and F3.4 may proceed in
+  parallel (no file overlap). T1-T4 and T6 may merge earlier because they do not
+  depend on either.
 
 ## Risks and edge cases
 
@@ -673,11 +677,9 @@ nothing. Never follows symlinks; never touches Git worktrees or refs.
 3. Snapshot at `run_started` is never trusted; default: terminal only.
 4. "Go reducer" does not exist; default: event-sequence equality plus the desktop
    reducer on a golden log.
-5. The spec places `attempt_diff` in schema 11; it is schema 12 (F2.8b). Default:
-   fixtures follow `events.SchemaVersion`.
-6. No command writes `retention`; default: hand-edit `store.json`, validated at
+5. No command writes `retention`; default: hand-edit `store.json`, validated at
    read; `max_total_bytes` counts run directories only.
-7. `store.json` lazily created by concurrent first writers; default: temp file,
+6. `store.json` lazily created by concurrent first writers; default: temp file,
    sync, rename, tolerate existing.
 
 ## Definition of done for F3.2
