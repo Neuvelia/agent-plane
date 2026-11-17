@@ -19,7 +19,6 @@ ALLOW_PATHS=(
 # Individual lines: "path regex<TAB>line regex". A line must match both.
 ALLOW_LINES=(
   # persisted event data and git refs: durable contract, not renamed
-  $'.*\trefs/agentplane'
   # the deprecated AGENTPLANE_ATTEMPT alias (code, tests, docs)
   $'^(internal/shell/executor\\.go|internal/shell/attempt_alias_test\\.go|internal/fields/fieldstest/fieldstest\\.go|cmd/tarmind/templates_test\\.go)$\t(?i:agentplane_attempt)'
   $'^docs/features/F1\\.6a-shell-loop\\.md$\tAGENTPLANE_ATTEMPT'
@@ -28,6 +27,9 @@ ALLOW_LINES=(
   # rename note lines
   $'.*\t^> Rename note:'
 )
+
+command -v go >/dev/null || { [ -f "$HOME/.profile" ] && . "$HOME/.profile"; } || true
+command -v go >/dev/null || { echo "go not found in PATH (tried ~/.profile)" >&2; exit 2; }
 
 pcre() { grep -qP "$1" <<<"$2"; }
 
@@ -39,6 +41,7 @@ while IFS= read -r hit; do
   for re in "${ALLOW_PATHS[@]}"; do
     if grep -qE "$re" <<<"$path"; then ok=1; break; fi
   done
+  if [ "$ok" = 0 ] && ! grep -qiE "agentplane|[a]gentplane" <<<"$(sed -E 's#refs/agentplane[A-Za-z0-9/_<>.-]*##g' <<<"$text")"; then ok=1; fi
   if [ "$ok" = 0 ]; then
     for entry in "${ALLOW_LINES[@]}"; do
       pathre="${entry%%$'\t'*}"; linere="${entry#*$'\t'}"
@@ -56,6 +59,10 @@ done < <(git grep -n -I -i --untracked -e agentplane -e '\[a\]gentplane' -e 'age
 while IFS= read -r adr; do
   grep -q '^> Rename note:' "$adr" || { echo "MISSING rename note: $adr"; fail=$((fail + 1)); }
 done < <(git grep -l -I -i --untracked -e agentplane -- 'docs/adr/0[0-9][0-9][0-9]-*.md' || true)
+
+# The desktop step only edits package.json, so grep cannot see it being skipped.
+grep -q '"appId": "run.tarmind.desktop"' desktop/package.json || { echo "desktop appId run.tarmind.desktop missing"; fail=$((fail + 1)); }
+grep -q '"productName": "Tarmind"' desktop/package.json || { echo "desktop productName Tarmind missing"; fail=$((fail + 1)); }
 
 # Structural checks that grep for the old name cannot see.
 [ ! -e cmd/agentplane ] || { echo "cmd/agentplane still exists"; fail=$((fail + 1)); }

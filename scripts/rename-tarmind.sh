@@ -8,7 +8,12 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
-command -v go >/dev/null || { echo "go not found in PATH" >&2; exit 2; }
+# Non-login shells often lack Go on PATH.
+command -v go >/dev/null || { [ -f "$HOME/.profile" ] && . "$HOME/.profile"; } || true
+command -v go >/dev/null || { echo "go not found in PATH (tried ~/.profile)" >&2; exit 2; }
+if [ -z "${RENAME_ALLOW_DIRTY:-}" ] && ! { git diff --quiet && git diff --cached --quiet; }; then
+  echo "refusing to run on a dirty tree: commit or stash first (RENAME_ALLOW_DIRTY=1 overrides)" >&2; exit 2
+fi
 command -v perl >/dev/null || { echo "perl not found in PATH" >&2; exit 2; }
 
 # Text files rewritten by the allow-listed sed pass. Everything else is left alone.
@@ -170,7 +175,9 @@ if [ -f "$DOC" ] && ! grep -q 'Deprecated alias' "$DOC"; then
 fi
 
 # 7. Desktop identity: product name (drives the userData directory name) and bundle id.
-if [ -f desktop/package.json ] && command -v node >/dev/null; then
+if [ -f desktop/package.json ]; then
+  command -v node >/dev/null || { [ -f "$HOME/.profile" ] && . "$HOME/.profile"; } || true
+  command -v node >/dev/null || { echo "node not found: needed to update desktop/package.json" >&2; exit 2; }
   node -e '
     const fs = require("fs"), p = "desktop/package.json"
     const j = JSON.parse(fs.readFileSync(p, "utf8")), before = JSON.stringify(j)
