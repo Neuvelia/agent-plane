@@ -31,10 +31,7 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 		}
 		if m.isolation.nodes[id] && m.worktrees[id] == nil {
 			if e := m.prepareIsolated(ctx, id); e != nil {
-				if ctx.Err() == nil {
-					m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureExecutor, Err: e}
-					m.transitionNode(id, run.NodeFailed)
-				}
+				m.endUnprepared(ctx, id, e)
 				continue
 			}
 		}

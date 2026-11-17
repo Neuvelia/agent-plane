@@ -437,3 +437,14 @@ func (m *runMachine) retention(id string, w *isolatedWorkspace) (remove bool, re
 	}
 	return why == events.ReleaseIntegrated, why
 }
+
+// endUnprepared ends a node whose worktree could not be created: cancelled when
+// the run is being cancelled, an executor failure otherwise.
+func (m *runMachine) endUnprepared(ctx context.Context, id string, err error) {
+	if ctx.Err() != nil {
+		m.transitionNode(id, run.NodeCancelled)
+		return
+	}
+	m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureExecutor, Err: err}
+	m.transitionNode(id, run.NodeFailed)
+}

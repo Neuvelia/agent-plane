@@ -28,6 +28,8 @@ type fakeWorkspaces struct {
 	removeErr    error
 	malformedTip bool
 	onRemove     func()
+	onCreate     func()
+	removeBlocks bool
 	conflict     map[string][]string // node ID -> conflicting paths
 
 	preflights []string
@@ -58,6 +60,12 @@ func (f *fakeWorkspaces) Preflight(_ context.Context, source string) (runtime.Wo
 func (f *fakeWorkspaces) Create(ctx context.Context, _ runtime.WorkspaceSource, _, nodeRunID string) (runtime.Workspace, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
+	}
+	if f.onCreate != nil {
+		f.onCreate()
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 	}
 	if f.createErr != nil {
 		return nil, f.createErr
@@ -114,7 +122,11 @@ func (f *fakeWorkspaces) nodeCommit(node string) string {
 	return ""
 }
 
-func (f *fakeWorkspaces) Remove(_ context.Context, w runtime.Workspace) error {
+func (f *fakeWorkspaces) Remove(ctx context.Context, w runtime.Workspace) error {
+	if f.removeBlocks {
+		<-ctx.Done()
+		return ctx.Err()
+	}
 	if f.onRemove != nil {
 		f.onRemove()
 	}

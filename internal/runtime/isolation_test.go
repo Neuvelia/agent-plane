@@ -750,3 +750,24 @@ func TestIsolationResultAbsentWithoutIsolation(t *testing.T) {
 		t.Fatalf("err=%v isolation=%+v", err, result.Isolation)
 	}
 }
+
+func TestIsolationCancelledDuringCreateLeavesNoRunningNode(t *testing.T) {
+	d := unitGraph(t.TempDir(), []string{"a", "b"}, "a", "b")
+	ctx, cancel := context.WithCancel(context.Background())
+	w := &fakeWorkspaces{root: t.TempDir(), onCreate: cancel}
+	options := isolationOptions(w)
+	options.MaxConcurrency = 2
+	result, err := runtime.Run(ctx, d, nil, compose(okAdapter()), options)
+	if err != nil || result.State != run.RunCancelled {
+		t.Fatalf("err=%v state=%s", err, result.State)
+	}
+	for _, n := range result.Nodes {
+		if n.State != run.NodeCancelled {
+			t.Fatalf("node %s ended %s", n.NodeID, n.State)
+		}
+	}
+	started, terminated := countEvents(result, events.NodeStarted), countEvents(result, events.NodeFinished)+countEvents(result, events.NodeTerminated)
+	if terminated != 2 || started > terminated {
+		t.Fatalf("started=%d terminal=%d", started, terminated)
+	}
+}
