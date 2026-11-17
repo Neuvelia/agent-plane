@@ -18,6 +18,12 @@ the coordinator turns that into `process_terminated` in a deterministic order.
 
 **Tech Stack:** Go (standard library on Unix; `golang.org/x/sys/windows` becomes
 a direct dependency, Windows build only), existing event/runtime/CLI packages.
+`golang.org/x/sys v0.28.0` is already in `go.mod` as an indirect requirement, so
+T10 only moves it to the direct block (`go mod tidy`, no new module download, no
+new supply-chain surface). Dependency-policy justification: Job Objects and
+`CREATE_SUSPENDED` assignment have no standard-library API (`syscall` lacks
+`CreateJobObject`, `AssignProcessToJobObject` and thread resume); the dependency
+is build-tagged to Windows, runtime-only, and maintained by the Go project.
 
 **Spec:** `docs/features/F3.4-cancellation-and-timeouts.md` and
 `docs/features/F3.4a-windows-process-tree-termination.md`.
@@ -138,9 +144,14 @@ would end the node instead of consuming one attempt.
    grace (5 s) and no second-interrupt channel, so existing literals
    (`shell.Executor{}`) keep compiling and behaving.
 5. **`proctree.Start` must not clobber a caller-prepared `SysProcAttr`.** It
-   merges `Setpgid` into whatever is set. F3.9 will add `Cloneflags` for a
-   network namespace and wraps the command in a re-exec helper; the group
-   ownership must survive that.
+   merges `Setpgid` into whatever is set. Decided 2026-11-17 (lead, delegated by
+   the product owner); the team may revisit: F3.9 launches processes on top of
+   proctree unconditionally, so proctree exposes a `Prepare(cmd)` hook that it
+   calls before `Start`. F3.9 uses it for `Cloneflags` and the re-exec helper
+   wrapper; proctree's own fields (`Setpgid` on Unix, `CreationFlags` on Windows)
+   are set after the hook and merged, never overwritten, and the hook must not
+   overwrite fields proctree set. `TestStartKeepsCallerSysProcAttr` and a Prepare
+   composition test guard it.
 
 ## Contracts (indicative)
 
@@ -184,14 +195,20 @@ The residual window (group empties, id is recycled and becomes a new group
 leader between the check and the signal) is microseconds wide and is recorded in
 the ADR.
 
-## Event contract (N = next free schema at merge)
+## Event contract (schema 13, proposed)
 
-Schema 12 is reserved by F2.8b (`attempt_diff`). Implement against a named
-constant in `internal/domain/events` (`schemaCancelTimeout`) and take the next
-free number when T5 is cut: 13 if F2.8b is not on `main` yet, 12 if the F2.8b
-owners release it. Whichever PR merges second renumbers in one isolated commit
-(the constant, fixtures, `docs/architecture.md`, ADR text). No test hard-codes
-the literal; they use `events.SchemaVersion` and `schemaCancelTimeout`.
+Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit:
+event schema order is F2.8b = 12, F3.4 = 13, F3.8/F3.9 = 14. This plan uses
+**13 (proposed; next free number confirmed at merge)**. Implement against a named
+constant in `internal/domain/events` (`schemaCancelTimeout`) and confirm it
+against `events.SchemaVersion` when T5 is cut. If the order changes, the renumber
+is one isolated commit (the constant, fixtures, `docs/architecture.md`, ADR
+text). No test hard-codes the literal; they use `events.SchemaVersion` and
+`schemaCancelTimeout`.
+
+Merge order (same decision): F3.1 stack -> F2.8b -> F3.2 -> F3.4 T1-T9 ->
+F3.8/F3.9 -> F3.4 T10-T13 (Windows Job Objects and making windows-x64 blocking).
+F3.2 and F3.4 may proceed in parallel (no file overlap).
 
 | Change | Shape |
 | --- | --- |
@@ -426,9 +443,9 @@ is `node`; `process_terminated` requires node correlation and bounded integers
 timeout-failed terminal; new types and fields rejected below the new schema;
 payloads detached on clone.
 
-- [ ] **Schema number.** Check `origin/main` and the F2.8b branch for the highest
-  `SchemaVersion`; take the next free number (see "Event contract"); amend the
-  ADR and spec text in the same PR.
+- [ ] **Schema number.** 13 (proposed; next free number confirmed at merge).
+  Check `origin/main` for the highest `SchemaVersion` (expected 12 from F2.8b);
+  amend the ADR and spec text in the same PR if it differs.
 - [ ] Failing tests first, then the types.
 - [ ] Verify `desktop/src/reducer.ts` ignores unknown types and tolerates the new
   optional fields; add a reducer test with `cancel_requested` and
@@ -861,7 +878,7 @@ its store lands; they are listed so the seams in T5 and T7 do not need rework.
   soon as the coordinator observes them; "persisted before acted on" for a loopback
   API cancel needs a runtime-owned cancel entry point (a method on a run handle or
   a request channel in `Options`), a decision for the F3.2/F4.6 owners.
-- Reconstructing reason and leaked count from the store needs only the schema N
+- Reconstructing reason and leaked count from the store needs only the schema 13
   payloads from T5.
 - Crash records of owned processes (pid plus start time), orphan sweep on start,
   and the run deadline after restart (spec Q8) belong to F3.3 and F3.2.
@@ -871,7 +888,7 @@ its store lands; they are listed so the seams in T5 and T7 do not need rework.
 | Branch | Overlap | Rule |
 | --- | --- | --- |
 | F3.1 stack: `claude/f3-1-runtime` -> `claude/f3-1-cli` -> `claude/f3-1-guard-and-docs` (not merged) | `scheduler.go` (`finish(ctx, to)` signature, new `Options` and `runMachine` fields), `batch.go` (`prepareIsolated`), `accept.go` (`integrateIsolated`), `preflight.go` (`preflightIsolation`), `domain/run/result.go` (`Isolation`), `workspace.go`, `cmd/agentplane/{cli,serve,json,output}.go` | T1 to T6 touch none of these (T4 touches `workspace.go` only at the one `git rev-parse` call). **Do not start T7 until F3.1 T3 (`claude/f3-1-runtime`) is on `main`**; T8 waits for F3.1 T4 (`claude/f3-1-cli`). If they slip, branch T7 from `claude/f3-1-guard-and-docs` and retarget. Rebase work: `finish` already takes `ctx`, so the run reason is read from machine state, not a new parameter; add the abandoned-node retention rule to `releaseIsolated`; merge `Result.Isolation` and `Result.Reason` side by side |
-| F2.8b: `claude/f2-8b-plan` (schema 12, `attempt_diff`) | `internal/domain/events/event.go` (`SchemaVersion`, `Validate` switch), `runtime/{scheduler,preflight,loop,batch,accept}.go`, `cmd` flags | T5 uses the next-free rule above; first PR to merge keeps its number, the second renumbers in one commit. In `accept.go`, F2.8b captures an attempt diff at attempt boundaries: the capture must be skipped when the attempt ended `timeout` or `cancelled` (add the check when whichever lands second rebases, and tell the F2.8b owners now) |
+| F2.8b: `claude/f2-8b-plan` (schema 12, `attempt_diff`) | `internal/domain/events/event.go` (`SchemaVersion`, `Validate` switch), `runtime/{scheduler,preflight,loop,batch,accept}.go`, `cmd` flags | T5 takes 13 (proposed; confirmed at merge) per the decided order above. In `accept.go`, F2.8b captures an attempt diff at attempt boundaries: the capture must be skipped when the attempt ended `timeout` or `cancelled` (add the check when whichever lands second rebases, and tell the F2.8b owners now) |
 | F3.2: `claude/f3-2-plan`, PR #108 (spec only) | later: `Collector`/`Persist`, `internal/store`, `serve.go` | no code overlap today; the Durable criteria section lists the hand-off |
 | F3.8/F3.9: `claude/f3-8-f3-9-plan` | later: process start path (Landlock re-exec, network namespace `Cloneflags`) | design decision 5: `proctree.Start` merges into a caller-prepared `SysProcAttr`; `TestStartKeepsCallerSysProcAttr` guards it |
 | Issue #87 and the `git` `LookPath` issue | Windows test failures, `internal/gitstate/snapshot.go`, `runtime/workspace.go` | gating prerequisites for T12 only; this plan does not fix them |
