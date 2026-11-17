@@ -57,8 +57,10 @@ Tarmind.
 - One branch and one PR per task, in order, each stacked as stated. Each task
   ends with `make check`, `go test -race` for touched packages and a review of
   `git diff --stat`. Never merge without an explicit request.
-- Event schema number is never a literal in this plan: "next free at merge"
-  (T1 states the procedure).
+- Event schema: 14 (proposed; next free number confirmed at merge). Order: F2.8b = 12,
+  F3.4 = 13, F3.8/F3.9 = 14. Merge order: F3.1 stack -> F2.8b -> F3.2 -> F3.4 T1-T9 ->
+  F3.8/F3.9 -> F3.4 T10-T13. Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit. Code names the constant (`SchemaPolicy`)
+  and tests never hard-code the literal.
 
 ## Review Focus
 
@@ -82,7 +84,7 @@ is `main` at `e55af36` (event schema 11, no F3.1 runtime yet).
 | Branch (state) | Touches that overlap this plan | What we do |
 | --- | --- | --- |
 | F3.1 stack: `claude/f3-1-runtime` -> `claude/f3-1-cli` -> `claude/f3-1-guard-and-docs` (implemented, PRs open) | `internal/runtime/{preflight,scheduler,batch,accept,workspace,isolation}.go`, `internal/agent/{config,fields}.go` (`isolation`), `cmd/agentplane/cli.go` flags and usage string, `run.Result.Isolation`, `isolatedNode()` deep copy, `prepareIsolated` (emits `workspace_prepared`) | T1, T2, T4a, T5 do not touch these files and start on `main`. **T3 starts after `claude/f3-1-runtime` merges** (it adds `preflightIsolation` in `preflightRun` between `preflightLoops` and `preflightHuman`; our pipeline goes immediately after it, in a new file with one call line). **T10 starts after `claude/f3-1-cli` merges** (usage string, flag block). **T12 (Agent states) starts after F3.1 runtime merges**: it needs `isolation` accepted by the Agent config and the effective-worktree seam. |
-| F3.4 plan (`claude/f3-4-plan`; spec only, no code) | Will change `internal/shell/executor.go` (process ownership, `Cancel`, Job Object, `SysProcAttr`), `internal/agent/codex` process files, adds `node_finished` reason, `timeout_seconds`, one event schema bump | Launcher (T9) is `Prepare(cmd)` over an already built `exec.Cmd`, mutating `SysProcAttr` field by field (we set `Cloneflags`, `UidMappings`; F3.4 sets `Setpgid` or Job attributes). If F3.4 lands first, rebase T9-T11 onto its process helper and call `Prepare` before the helper starts the command. Whoever merges second takes the next event schema number. |
+| F3.4 plan (`claude/f3-4-plan`; spec only, no code) | Changes `internal/shell/executor.go` (process ownership, `Cancel`, `SysProcAttr`), `internal/agent/codex` process files, adds `node_finished` reason, `timeout_seconds`, event schema 13 (proposed) | Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit: F3.9 process launching is built on F3.4 `proctree` unconditionally. **F3.9 T9-T11 depend on F3.4 T1-T3** (proctree, Shell and Codex adoption). The launcher is the `Prepare(cmd)` hook that `proctree.Start` calls before starting the command; it sets `Cloneflags`, `UidMappings` and the re-exec wrapper and must not overwrite any `SysProcAttr` field proctree set (`Setpgid`, Windows creation flags). A red composition test in T10 proves it. F3.4 T10-T13 (Windows Job Objects, windows-x64 blocking) merge after F3.8/F3.9. |
 | F3.2 plan (`claude/f3-2-plan`; spec only) | `internal/store` summary, lock and snapshot files; its tests read fixtures for schemas 1-11 and a "higher schema is unsupported" fixture | Our store scan helper walks the whole store directory recursively, so F3.2's new files are covered with no change. F3.2's "newer schema" fixture must derive its number from `events.SchemaVersion + 1`, not a literal: tell its owner when T1 merges. Resume (F3.3) must re-run this pipeline and never read secrets from the store (F3.8 requirement 7). |
 | F2.8b (reserves event schema 12) | `internal/domain/events` | Re-read `events.SchemaVersion` on `origin/main` at the start of T1 and again just before merge. |
 | Spike branch `claude/spikes-landlock-jobobject` | build-tagged code under `experiments/spikes` only | Read for syscall numbers and flag values; nothing imports it. Product code is written fresh under `internal/adapter/sandbox`. |
@@ -109,28 +111,30 @@ T4b delivery to Shell/Agent ─────────────────�
                                            T13 CI job, docs closure, ADR number
 ```
 
+F3.9 T9-T11 additionally wait for F3.4 T1-T3 (proctree) on `main`; T10 and T11
+launch only through `proctree.Start` with the `Prepare` hook.
+
 T1, T2, T4a and T6 are independent of each other and can run in parallel.
 F3.8 (T1-T5) is complete and shippable before F3.9 starts: the policy seam it
 needs is a no-op admit function that T8 fills in.
 
 ## Spec ambiguities and decisions to confirm before T3
 
-1. **Mid-glob patterns.** F3.9 shows `src/**/*.go`, but the F1.8 grammar this
-   spec says to reuse (`normalizeScopeRules` in `internal/gate/changed_files.go`)
-   accepts only exact paths and a trailing `/**`; any other `*?[]` is rejected.
-   Plan: policy v0 accepts exactly the F1.8 grammar, so Landlock granularity
-   equals pattern granularity and the "file-level part stays detective" sentence
-   is dropped from the docs. Amend the spec in T6.
+1. **Mid-glob patterns.** Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit (D2): path globs follow the F1.8
+   grammar (`normalizeScopeRules` in `internal/gate/changed_files.go`): exact
+   paths and a trailing `/**` only; any other `*?[]` is rejected. No grammar
+   widening. The spec's `src/**/*.go` example is replaced, so Landlock
+   granularity equals pattern granularity.
 2. **`commands` semantics.** Plan: a name entry matches when the node's
    `command` string equals it and resolves; an absolute entry matches the
    resolved absolute path after `EvalSymlinks` (case-insensitive on Windows).
    Both launch the resolved absolute path. Report prints which `go` was
    resolved. Recommend absolute entries for strictness; confirm.
-3. **`applied` flag.** The spec records per-permission "state" in audit. In
-   audit nothing is applied, so `prevented` would mislead. Plan: each
-   permission carries `state` (what this machine can do) and `applied`
-   (true only in enforce and only for prevented, contained, delegated). Report
-   and docs say "would be prevented" in audit. Spec amendment in T1.
+3. **`applied` flag.** Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit (D3): accepted. Each permission carries `state`
+   (what this machine can do) and `applied` (true only in enforce and only for
+   prevented, contained, delegated), so an audit run never shows "prevented".
+   Report and docs say "would be prevented" in audit. Spec amended; test
+   `TestAuditPermissionsAreNeverApplied` (T8).
 4. **Shell `paths.write` without Landlock.** The platform matrix says "F1.8
    detects when Git evidence works", but F1.8 baselines exist only for Agent
    nodes. Plan: no Shell baselines in v0; Shell `paths.write` without Landlock
@@ -147,15 +151,19 @@ needs is a no-op admit function that T8 fills in.
    fact with the node's attempt correlation; verify in `cycle()` (loop.go) that
    an attempt exists for a refused non-loop node, otherwise a minimal attempt is
    recorded first. Decide while reading `cycle()`; do not invent an envelope.
-7. **`serve` and secrets.** The spec recommends `serve` resolves from its own
-   environment. A hostile local writer of graphs (ADR-0021 write trust) could
-   then assign `env/ANYTHING` to a Shell node. Plan follows the spec and ships
-   `TestServeNeverReturnsSecretValues`; the permissions report for `serve` and
-   an explicit opt-in flag are a recorded follow-up, not built here. Confirm.
-8. **Redaction cost bound.** Plan adds a hard bound: at most 64 resolved
-   secrets, each at most 16 KiB, at most 16 forms per secret; beyond it
-   `secret_invalid_value`. The redactor scans every position against every
-   form, so unbounded values would stall log delivery. Confirm numbers.
+7. **`serve` and secrets.** Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit (D4): the local UI server is read-only for
+   secret declarations and bindings; values never cross HTTP (`serve` resolves
+   from its own environment at run start and reports names and
+   resolved/unresolved only). Authoring them through `serve` later needs its own
+   ADR. `TestServeNeverReturnsSecretValues` (T5); the `serve` permissions report
+   is a recorded follow-up.
+8. **Redaction cost bound.** Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit (D5): at most 64 resolved secrets, each at
+   most 16 KiB, at most 16 forms per secret. Exceeding it fails at preflight with
+   the structured error `secret_redaction_bound_exceeded` (secret name and bound,
+   never the value), never a silent skip. Red test
+   `TestPreflightRedactionBoundFailsLoudly` (T5) alongside
+   `TestRedactorBoundsRejectOversizedSet` (T4a), both written before the
+   implementation.
 9. **Collision vocabulary.** "Collision" is used for three distinct mode
    independent errors, each its own code: `E_SECRET_ENV_COLLISION` (validation,
    `secret_env` name vs `env`, `env_allowlist`, `input_env`,
@@ -214,9 +222,9 @@ amendment, decision 3), `desktop/src/reducer.ts` test (unknown types tolerated).
 
 **Schema number (procedure, not a literal):**
 
-- [ ] Read `events.SchemaVersion` on `origin/main`, the F2.8b reservation (12)
-  and the F3.4 proposal. Take the next free number. Name it
-  `SchemaPolicy` in the `Validate` gate so a later rebase changes one line.
+- [ ] Schema 14 (proposed; next free number confirmed at merge). Read
+  `events.SchemaVersion` on `origin/main` (expected 13 after F3.4 T1-T9). Name it
+  `SchemaPolicy` in the `Validate` gate so a later renumber changes one line.
   Record the final number in the ADR in the same PR.
 
 **Contract:**
@@ -492,7 +500,8 @@ detection), `docs/security-model.md`, `docs/graph-spec.md`,
 (built-binary `agentplane run --store-dir` with a Shell node that echoes its
 secret to stdout, stderr, a JSON output and, through a fake Codex, a progress
 event; scan the whole store plus captured stdout and stderr),
-`TestServeNeverReturnsSecretValues` (every response body, header and error of
+`TestPreflightRedactionBoundFailsLoudly` (65 secrets or one 16 KiB+1 value fails preflight with
+`secret_redaction_bound_exceeded`, no process starts), `TestServeNeverReturnsSecretValues` (every response body, header and error of
 a served run that echoed its secret), `TestRecordValuesRedactsResolvedSecret`,
 `TestSecretInWorkspaceRedCheckNamesPathNotValue`,
 `TestSecretScanBounds`, `TestProvidersAndPlatformImportedOnlyByRoot`.
@@ -658,13 +667,13 @@ three-node fixture (exit codes), `serve` test that responses stay secret-free.
 
 ### Task 10: Launcher core (shell, commands, blocked outcome) and Windows
 
-**Branch:** `claude/f3-9-launcher` (on T8; rebase on F3.4 helper if merged)
+**Branch:** `claude/f3-9-launcher` (on T8 and on F3.4 T1-T3; built on `proctree` unconditionally, no fallback path)
 
 **Files:** Create `internal/adapter/sandbox/{doc,launcher,resolve}.go`,
 `launcher_windows.go`, `launcher_other.go` with tests. Edit
 `internal/shell/executor.go` (`Executor.Launcher` optional field, consumer-owned
 `type Launcher interface{ Prepare(cmd *exec.Cmd, p policy.NodePlan) (func(), error) }`;
-zero value keeps today's behavior), `cmd/agentplane/adapters.go` and `cli.go`
+zero value keeps today's behavior; `proctree.Start` calls it as its `Prepare(cmd)` hook before starting and sets its own `SysProcAttr` fields afterwards, merged, never overwritten), `cmd/agentplane/adapters.go` and `cli.go`
 (compose `sandbox.Launcher`), `internal/archtest` (T5 rule now covers the
 package), `docs/security-model.md`.
 
@@ -688,7 +697,10 @@ package), `docs/security-model.md`.
   trees and the launcher stays compatible with either `CREATE_SUSPENDED` or
   `JOB_LIST` because it only sets `cmd.Path`.
 
-**Tests (red first):** `TestLauncherNeverStartsRefusedCommand` (marker file the
+**Tests (red first):** `TestLauncherComposesWithProctree` (the launcher's `Prepare` hook runs
+before `proctree.Start`, and the started command's `SysProcAttr` holds both the launcher's
+fields and proctree's `Setpgid`; a launcher that overwrites a proctree field fails it),
+`TestLauncherNeverStartsRefusedCommand` (marker file the
 command would create, asserted absent), `TestLauncherChecksAndLaunchesSameAbsolutePath`
 (a decoy earlier in the node's own `PATH`), `TestLauncherResolvesRelativeCommandAgainstCwd`,
 `TestWindowsLauncherPathForms` (UNC, `\\?\`, ADS, case, separators),
@@ -841,9 +853,9 @@ paragraph), `docs/validation/F3.8-F3.9-closure.md`.
 - **Absolute paths in events.** `scope_root` and the report print resolved
   absolute paths (as `workspace_prepared` already does); they are runtime
   output, not repo content.
-- **Event schema collision.** F2.8b reserves 12, F3.4 proposes one; T1 takes
-  the next free number at merge and F3.2's future-schema fixture must not use a
-  literal.
+- **Event schema collision.** Proposed order F2.8b = 12, F3.4 = 13, this plan = 14;
+  T1 confirms the number against `events.SchemaVersion` at merge and F3.2's
+  future-schema fixture must not use a literal.
 - **Rebase conflicts.** `preflight.go`, `scheduler.go` and `cli.go` are edited
   by F3.1, F3.4 and this plan; each task keeps its logic in a new file and a
   single call line in the shared one.
