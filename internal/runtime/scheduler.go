@@ -386,6 +386,7 @@ func (m *runMachine) transitionNode(id string, to run.NodeState) {
 
 func (m *runMachine) finish(ctx context.Context, to run.State) {
 	m.releaseIsolated(ctx)
+	m.reportSourceChanges(ctx)
 	if !run.ValidRunTransition(m.result.State, to) {
 		panic(fmt.Sprintf("invalid scheduler run transition: %s -> %s", m.result.State, to))
 	}
