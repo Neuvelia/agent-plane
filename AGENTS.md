@@ -38,7 +38,7 @@ shared-workspace Agent scheduling (ADR-0015). F1.8 adds opt-in Git-observed
 changed-files scope checking (ADR-0016; event schema 8). Shared files are not
 isolated; F1.8 detects out-of-scope changes after execution and neither prevents
 writes nor isolates the workspace (F3.1). Phase 1 features F1.1-F1.8 are
-implemented; the real-Codex F1.7 demo is prepared but not yet executed.
+implemented; the real-Codex F1.7 demo was executed on 2026-11-17 against Codex 0.169.0 (`docs/validation/F1.7-real-codex-demo.md`).
 A Phase 2 vertical slice is also active (event schema 10): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
