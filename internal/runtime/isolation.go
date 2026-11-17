@@ -302,8 +302,10 @@ func isolatedNode(n graph.NodeDefinition, path string) graph.NodeDefinition {
 	if n.Loop != nil {
 		loop := *n.Loop
 		loop.Gate.Config = cloneConfig(loop.Gate.Config)
-		if _, ok := loop.Gate.Config["workspace"]; ok {
-			loop.Gate.Config["workspace"] = path
+		for _, key := range []string{"workspace", "cwd"} {
+			if _, ok := loop.Gate.Config[key]; ok {
+				loop.Gate.Config[key] = path
+			}
 		}
 		n.Loop = &loop
 	}
