@@ -35,7 +35,7 @@ const (
 	StatusNotConfigured       Status = "not_configured"
 	StatusUnsupportedPlatform Status = "unsupported_platform"
 	StatusUnsupportedVersion  Status = "unsupported_version"
-	// StatusDetectedNoAdapter: an agent CLI was found on PATH, but the engine
+	// StatusDetectedNoAdapter means an agent CLI was found on PATH, but the engine
 	// has no adapter for it, so it cannot run it.
 	StatusDetectedNoAdapter Status = "detected_no_adapter"
 	StatusError             Status = "error"
@@ -53,7 +53,7 @@ const (
 	ReasonMissingRequiredFlags  = "missing_required_flags"
 	ReasonPlatformNotSupported  = "platform_not_supported"
 	ReasonDeveloperToolsMissing = "developer_tools_missing"
-	// ReasonFoundOnPath: an adapter has no configured binary, but its command
+	// ReasonFoundOnPath means an adapter has no configured binary, but its command
 	// name was found on PATH. The path itself is never reported.
 	ReasonFoundOnPath = "found_on_path"
 )
