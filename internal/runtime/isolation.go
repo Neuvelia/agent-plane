@@ -201,6 +201,8 @@ type isolatedWorkspace struct {
 	integrated bool
 	conflict   bool
 	released   bool
+	retained   bool
+	reason     string
 }
 
 // isolationError carries a fixed, safe diagnostic code; the wrapped manager
@@ -321,6 +323,7 @@ func (m *runMachine) integrateIsolated(ctx context.Context, id string, attempt e
 		return fail("E_WORKSPACE_INTEGRATE", "validating the integration result", err)
 	}
 	state.integrated = true
+	m.tipRef, m.tipCommit = tipRef, result.TipCommit
 	m.appendEvent(events.Event{Type: events.WorkspaceIntegrated, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, AttemptID: attempt, Payload: integrated})
 	return true
 }
@@ -383,8 +386,30 @@ func (m *runMachine) releaseIsolated(ctx context.Context) {
 				released.Action = events.WorkspaceRemoved
 			}
 		}
+		w.retained, w.reason = released.Action == events.WorkspaceRetained, released.Reason
 		m.appendEvent(events.Event{Type: events.WorkspaceReleased, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: released})
 	}
+}
+
+// isolationResult summarizes coordinator-owned state for the run result.
+func (m *runMachine) isolationResult() *run.IsolationResult {
+	if !m.isolation.active() {
+		return nil
+	}
+	result := &run.IsolationResult{BaseSHA: m.isolation.source.BaseSHA, IntegratedRef: m.tipRef, IntegratedCommit: m.tipCommit}
+	for _, id := range m.ids {
+		w := m.worktrees[id]
+		if w == nil {
+			continue
+		}
+		if w.unitCommit != "" {
+			result.Units = append(result.Units, run.IsolatedUnit{NodeID: id, Ref: w.unitRef, Commit: w.unitCommit, Integrated: w.integrated})
+		}
+		if w.retained {
+			result.Retained = append(result.Retained, run.RetainedWorkspace{NodeID: id, Path: w.path, Reason: w.reason})
+		}
+	}
+	return result
 }
 
 // retention decides whether a terminal node run's worktree is removed and why.

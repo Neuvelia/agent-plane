@@ -72,6 +72,37 @@ type Result struct {
 	Transitions   []StateTransition
 	Events        []events.Event
 	ProgressStats events.DeliveryStats
+	// Isolation is nil unless a node ran with isolation: worktree.
+	Isolation *IsolationResult
+}
+
+// IsolationResult is the observable outcome of workspace isolation (ADR-0024),
+// present only when at least one node ran in its own worktree. Integration
+// facts are populated from coordinator state, never from a worker.
+type IsolationResult struct {
+	BaseSHA string
+	// IntegratedRef and IntegratedCommit are empty until a unit was integrated.
+	IntegratedRef    string
+	IntegratedCommit string
+	Units            []IsolatedUnit
+	Retained         []RetainedWorkspace
+}
+
+// IsolatedUnit is the commit recorded for an accepted unit. Integrated is false
+// when the unit conflicted with the integrated result.
+type IsolatedUnit struct {
+	NodeID     string
+	Ref        string
+	Commit     string
+	Integrated bool
+}
+
+// RetainedWorkspace is a worktree that stays on disk, with the closed release
+// reason of the workspace_released fact.
+type RetainedWorkspace struct {
+	NodeID string
+	Path   string
+	Reason string
 }
 
 // PreflightError reports definition or graph-input diagnostics before any

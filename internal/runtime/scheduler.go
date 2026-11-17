@@ -125,6 +125,8 @@ type runMachine struct {
 	workspaces  map[string]workspaceIdentity
 	isolation   isolationPlan
 	worktrees   map[string]*isolatedWorkspace
+	tipRef      string
+	tipCommit   string
 	definition  *graph.Definition
 	ids         []string
 	nodes       map[string]*run.NodeResult
@@ -485,6 +487,7 @@ func (m *runMachine) snapshot() run.Result {
 	result.Events = m.emitter.Snapshot()
 	result.ProgressStats = m.emitter.Stats()
 	result.PersistError = m.emitter.PersistError()
+	result.Isolation = m.isolationResult()
 	result.Nodes = make([]run.NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -703,5 +704,49 @@ func TestIsolationCancellationReleasesAfterProcessEnds(t *testing.T) {
 	retained, err := runtime.Run(ctx, d, nil, compose(newLoopAdapter()), isolationOptions(&fakeWorkspaces{root: t.TempDir()}))
 	if err != nil || retained.State != run.RunCancelled {
 		t.Fatalf("pre-cancelled run: err=%v state=%s", err, retained.State)
+	}
+}
+
+func TestIsolationResultReportsRefsCommitsAndRetainedPaths(t *testing.T) {
+	ids := []string{"conflict", "err", "ok", "red"}
+	a := newLoopAdapter()
+	a.produce = func(_ context.Context, in agent.AgentExecutionInput, _ int) (agent.AgentExecutionOutput, error) {
+		if in.Task == "err" {
+			return agent.AgentExecutionOutput{}, errors.New("adapter failed")
+		}
+		return agent.AgentExecutionOutput{RawMetadata: []byte(fmt.Sprintf(`{"ok":%t}`, in.Task != "red"))}, nil
+	}
+	w := &fakeWorkspaces{root: t.TempDir(), conflict: map[string][]string{"conflict": {"shared.txt"}}}
+	options := isolationOptions(w)
+	options.MaxConcurrency = 4
+	result, err := runtime.Run(context.Background(), unitGraph(t.TempDir(), ids, ids...), nil, compose(a), options)
+	if err != nil || result.Isolation == nil {
+		t.Fatalf("err=%v isolation=%v", err, result.Isolation)
+	}
+	got := *result.Isolation
+	tip := eventsOf(result, events.WorkspaceIntegrated)[0].Payload.(events.WorkspaceIntegratedPayload).IntegratedCommit
+	want := run.IsolationResult{
+		BaseSHA: fakeBaseSHA, IntegratedRef: "refs/agentplane/fake/integrated", IntegratedCommit: tip,
+		Units: []run.IsolatedUnit{
+			{NodeID: "conflict", Ref: "refs/agentplane/fake/units/conflict", Commit: fakeCommit(1)},
+			{NodeID: "ok", Ref: "refs/agentplane/fake/units/ok", Commit: fakeCommit(2), Integrated: true},
+		},
+		Retained: []run.RetainedWorkspace{
+			{NodeID: "conflict", Path: w.created[indexOfCreated(t, w, result, "conflict")], Reason: "conflict"},
+			{NodeID: "err", Path: w.created[indexOfCreated(t, w, result, "err")], Reason: "error"},
+			{NodeID: "red", Path: w.created[indexOfCreated(t, w, result, "red")], Reason: "exhausted"},
+		},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("isolation result: got %+v, want %+v", got, want)
+	}
+}
+
+func TestIsolationResultAbsentWithoutIsolation(t *testing.T) {
+	d := loopDefinition(1)
+	d.Units = []string{"work"}
+	result, err := runtime.Run(context.Background(), d, nil, compose(okAdapter()), isolationOptions(nil))
+	if err != nil || result.Isolation != nil {
+		t.Fatalf("err=%v isolation=%+v", err, result.Isolation)
 	}
 }
