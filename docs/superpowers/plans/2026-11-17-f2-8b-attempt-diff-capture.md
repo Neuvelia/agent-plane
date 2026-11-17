@@ -52,7 +52,7 @@ answer; the plan assumes the recommendation.
    `--directory`, `Lstat` only, cap 20,000 entries; over the cap the summary
    carries `diagnostic_code: E_DIFF_IGNORED_LIMIT` and ignored detection is
    skipped. Edits that keep size, mtime and mode are not detected.*
-6. **Scratch copies.** Dirty/untracked before-content is copied to a private
+6. **Scratch copies (decision required before T3).** Dirty/untracked before-content is copied to a private
    directory. *Recommend: `os.MkdirTemp` under the OS temp dir (0700, files
    0600, keyed by SHA-256), removed when the run ends, total cap 64 MiB (beyond
    it a file is listed with hashes and `omitted_reason: budget`). A crash can
