@@ -27,6 +27,7 @@ type fakeWorkspaces struct {
 	integrateErr error
 	removeErr    error
 	malformedTip bool
+	onRemove     func()
 	conflict     map[string][]string // node ID -> conflicting paths
 
 	preflights []string
@@ -114,6 +115,9 @@ func (f *fakeWorkspaces) nodeCommit(node string) string {
 }
 
 func (f *fakeWorkspaces) Remove(_ context.Context, w runtime.Workspace) error {
+	if f.onRemove != nil {
+		f.onRemove()
+	}
 	if f.removeErr != nil {
 		return f.removeErr
 	}

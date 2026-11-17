@@ -200,6 +200,7 @@ type isolatedWorkspace struct {
 	unitCommit string
 	integrated bool
 	conflict   bool
+	released   bool
 }
 
 // isolationError carries a fixed, safe diagnostic code; the wrapped manager
@@ -353,4 +354,61 @@ func nonNegative(n int) uint64 {
 		return 0
 	}
 	return uint64(n)
+}
+
+// releaseIsolated applies the retention policy to every isolated node run that
+// has reached a terminal state and not been released yet, in sorted node order.
+// It runs on the coordinator after workers have returned, so no agent process
+// of a released node is alive. It uses a context detached from cancellation:
+// a cancelled run must still clean up. Cleanup failure never changes status.
+func (m *runMachine) releaseIsolated(ctx context.Context) {
+	cleanup := context.WithoutCancel(ctx)
+	for _, id := range m.ids {
+		w := m.worktrees[id]
+		if w == nil || w.released {
+			continue
+		}
+		switch m.nodes[id].State {
+		case run.NodeSucceeded, run.NodeFailed, run.NodeCancelled:
+		default:
+			continue
+		}
+		w.released = true
+		remove, reason := m.retention(id, w)
+		released := events.WorkspaceReleasedPayload{Action: events.WorkspaceRetained, Reason: reason, Path: w.path}
+		if remove {
+			if err := m.isolation.manager.Remove(cleanup, w.handle); err != nil {
+				released.Reason, released.CleanupError = events.ReleaseCleanupError, "remove_failed"
+			} else {
+				released.Action = events.WorkspaceRemoved
+			}
+		}
+		m.appendEvent(events.Event{Type: events.WorkspaceReleased, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: released})
+	}
+}
+
+// retention decides whether a terminal node run's worktree is removed and why.
+func (m *runMachine) retention(id string, w *isolatedWorkspace) (remove bool, reason string) {
+	node := m.nodes[id]
+	why := events.ReleaseError
+	switch {
+	case w.integrated && node.State == run.NodeSucceeded:
+		why = events.ReleaseIntegrated
+	case w.conflict:
+		why = events.ReleaseConflict
+	case node.State == run.NodeCancelled:
+		why = events.ReleaseCancelled
+	case node.Failure != nil && node.Failure.Kind == run.FailureNeedsIntervention:
+		why = events.ReleaseExhausted
+	}
+	switch m.isolation.policy {
+	case RetainNever:
+		if why != events.ReleaseIntegrated {
+			why = events.ReleasePolicyNever
+		}
+		return true, why
+	case RetainAlways:
+		return false, events.ReleasePolicyAlways
+	}
+	return why == events.ReleaseIntegrated, why
 }

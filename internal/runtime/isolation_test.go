@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -561,5 +563,145 @@ func TestIsolationMalformedManagerResultFailsTheNodeInsteadOfPanicking(t *testin
 	result, err := runtime.Run(context.Background(), isolatedLoop(t.TempDir()), nil, compose(okAdapter()), isolationOptions(w))
 	if err != nil || result.Failure == nil || result.Failure.Kind != run.FailureExecutor || countEvents(result, events.WorkspaceIntegrated) != 0 {
 		t.Fatalf("err=%v failure=%+v", err, result.Failure)
+	}
+}
+
+type releaseFact struct{ action, reason string }
+
+func releases(result run.Result) map[string]releaseFact {
+	out := map[string]releaseFact{}
+	for _, e := range eventsOf(result, events.WorkspaceReleased) {
+		p := e.Payload.(events.WorkspaceReleasedPayload)
+		out[e.NodeID] = releaseFact{p.Action, p.Reason}
+	}
+	return out
+}
+
+func TestIsolationRetentionTable(t *testing.T) {
+	ids := []string{"conflict", "err", "ok", "red"}
+	for _, tc := range []struct {
+		policy runtime.RetainPolicy
+		want   map[string]releaseFact
+	}{
+		{"", map[string]releaseFact{"ok": {"removed", "integrated"}, "conflict": {"retained", "conflict"}, "err": {"retained", "error"}, "red": {"retained", "exhausted"}}},
+		{runtime.RetainFailed, map[string]releaseFact{"ok": {"removed", "integrated"}, "conflict": {"retained", "conflict"}, "err": {"retained", "error"}, "red": {"retained", "exhausted"}}},
+		{runtime.RetainNever, map[string]releaseFact{"ok": {"removed", "integrated"}, "conflict": {"removed", "policy_never"}, "err": {"removed", "policy_never"}, "red": {"removed", "policy_never"}}},
+		{runtime.RetainAlways, map[string]releaseFact{"ok": {"retained", "policy_always"}, "conflict": {"retained", "policy_always"}, "err": {"retained", "policy_always"}, "red": {"retained", "policy_always"}}},
+	} {
+		t.Run(string(tc.policy), func(t *testing.T) {
+			a := newLoopAdapter()
+			a.produce = func(_ context.Context, in agent.AgentExecutionInput, _ int) (agent.AgentExecutionOutput, error) {
+				if in.Task == "err" {
+					return agent.AgentExecutionOutput{}, errors.New("adapter failed")
+				}
+				return agent.AgentExecutionOutput{RawMetadata: []byte(fmt.Sprintf(`{"ok":%t}`, in.Task != "red"))}, nil
+			}
+			w := &fakeWorkspaces{root: t.TempDir(), conflict: map[string][]string{"conflict": {"shared.txt"}}}
+			options := isolationOptions(w)
+			options.MaxConcurrency = 4
+			options.RetainWorktrees = tc.policy
+			result, err := runtime.Run(context.Background(), unitGraph(t.TempDir(), ids, ids...), nil, compose(a), options)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := releases(result)
+			if fmt.Sprint(got) != fmt.Sprint(tc.want) {
+				t.Fatalf("releases: got %v, want %v", got, tc.want)
+			}
+			var removed []string
+			for node, fact := range tc.want {
+				if fact.action == "removed" {
+					removed = append(removed, w.created[indexOfCreated(t, w, result, node)])
+				}
+			}
+			sort.Strings(removed)
+			sort.Strings(w.removed)
+			if fmt.Sprint(removed) != fmt.Sprint(w.removed) {
+				t.Fatalf("directories removed %v, want %v", w.removed, removed)
+			}
+			for _, e := range eventsOf(result, events.WorkspaceReleased) {
+				if p := e.Payload.(events.WorkspaceReleasedPayload); !strings.HasPrefix(p.Path, w.root) {
+					t.Fatalf("released path %q is not a created worktree", p.Path)
+				}
+			}
+		})
+	}
+}
+
+// indexOfCreated finds the position of node's worktree in w.created through its
+// workspace_prepared event.
+func indexOfCreated(t *testing.T, w *fakeWorkspaces, result run.Result, node string) int {
+	t.Helper()
+	for _, e := range eventsOf(result, events.WorkspacePrepared) {
+		if e.NodeID == node {
+			path := e.Payload.(events.WorkspacePreparedPayload).Path
+			for i, created := range w.created {
+				if created == path {
+					return i
+				}
+			}
+		}
+	}
+	t.Fatalf("no worktree for %s", node)
+	return -1
+}
+
+func TestIsolationCleanupFailureDoesNotChangeStatus(t *testing.T) {
+	w := &fakeWorkspaces{root: t.TempDir(), removeErr: errors.New("rm: device busy /secret/path")}
+	result, err := runtime.Run(context.Background(), isolatedLoop(t.TempDir()), nil, compose(okAdapter()), isolationOptions(w))
+	if err != nil || result.State != run.RunSucceeded {
+		t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+	}
+	released := eventsOf(result, events.WorkspaceReleased)
+	if len(released) != 1 {
+		t.Fatalf("%d released events", len(released))
+	}
+	p := released[0].Payload.(events.WorkspaceReleasedPayload)
+	if p.Action != events.WorkspaceRetained || p.Reason != events.ReleaseCleanupError || p.CleanupError == "" || strings.Contains(p.CleanupError, "busy") || p.Path != w.created[0] {
+		t.Fatalf("payload %+v", p)
+	}
+}
+
+func TestIsolationCancellationReleasesAfterProcessEnds(t *testing.T) {
+	d := unitGraph(t.TempDir(), []string{"a", "b"}, "a", "b")
+	ctx, cancel := context.WithCancel(context.Background())
+	var entered, returned atomic.Int32
+	both := make(chan struct{})
+	a := newLoopAdapter()
+	a.produce = func(ctx context.Context, _ agent.AgentExecutionInput, _ int) (agent.AgentExecutionOutput, error) {
+		if entered.Add(1) == 2 {
+			close(both)
+		}
+		<-ctx.Done()
+		returned.Add(1)
+		return agent.AgentExecutionOutput{}, ctx.Err()
+	}
+	var early atomic.Bool
+	w := &fakeWorkspaces{root: t.TempDir(), onRemove: func() {
+		if returned.Load() != 2 {
+			early.Store(true)
+		}
+	}}
+	go func() {
+		<-both
+		cancel()
+	}()
+	options := isolationOptions(w)
+	options.MaxConcurrency = 2
+	options.RetainWorktrees = runtime.RetainNever
+	result, err := runtime.Run(ctx, d, nil, compose(a), options)
+	if err != nil || result.State != run.RunCancelled {
+		t.Fatalf("err=%v state=%s", err, result.State)
+	}
+	if early.Load() || len(w.removed) != 2 {
+		t.Fatalf("removal began before the agent processes ended (early=%t) or was skipped: %v", early.Load(), w.removed)
+	}
+	got := releases(result)
+	if len(got) != 2 || got["a"].reason != "policy_never" || got["b"].action != "removed" {
+		t.Fatalf("releases %v", got)
+	}
+	retained, err := runtime.Run(ctx, d, nil, compose(newLoopAdapter()), isolationOptions(&fakeWorkspaces{root: t.TempDir()}))
+	if err != nil || retained.State != run.RunCancelled {
+		t.Fatalf("pre-cancelled run: err=%v state=%s", err, retained.State)
 	}
 }

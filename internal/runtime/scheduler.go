@@ -165,19 +165,19 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	for {
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(run.RunCancelled)
+			machine.finish(ctx, run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 		failures := machine.promoteReady(ctx, plan, graphInputs, dependencies)
 		if len(failures) > 0 {
 			machine.result.Failure = failures[0]
 			machine.skipUnstarted()
-			machine.finish(run.RunFailed)
+			machine.finish(ctx, run.RunFailed)
 			return machine.snapshot(), nil
 		}
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(run.RunCancelled)
+			machine.finish(ctx, run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 
@@ -187,15 +187,15 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				outputs, resolution := plan.ResolveGraphOutputs(machine.outputs)
 				if !resolution.Valid() {
 					machine.result.Failure = &run.Failure{Kind: run.FailureGraphOutput, Diagnostics: resolution.Diagnostics}
-					machine.finish(run.RunFailed)
+					machine.finish(ctx, run.RunFailed)
 				} else {
 					machine.result.Outputs = sortedPortValues(outputs)
-					machine.finish(run.RunSucceeded)
+					machine.finish(ctx, run.RunSucceeded)
 				}
 			} else {
 				machine.result.Failure = &run.Failure{Kind: run.FailureScheduler, Err: errors.New("no runnable nodes remain in validated graph")}
 				machine.skipUnstarted()
-				machine.finish(run.RunFailed)
+				machine.finish(ctx, run.RunFailed)
 			}
 			return machine.snapshot(), nil
 		}
@@ -209,6 +209,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		for len(batch) > 0 {
 			results := machine.runBatchWorkers(ctx, executor, batch, &state, redactionTemplate)
 			retry := machine.acceptBatchResults(ctx, definition, results, &state)
+			machine.releaseIsolated(ctx)
 			failed := false
 			for _, id := range machine.ids {
 				if machine.nodes[id].State == run.NodeFailed {
@@ -236,12 +237,12 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		}
 		if machine.result.Failure != nil {
 			machine.skipUnstarted()
-			machine.finish(run.RunFailed)
+			machine.finish(ctx, run.RunFailed)
 			return machine.snapshot(), nil
 		}
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(run.RunCancelled)
+			machine.finish(ctx, run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 	}
@@ -378,7 +379,8 @@ func (m *runMachine) transitionNode(id string, to run.NodeState) {
 	m.record(id, string(from), string(to))
 }
 
-func (m *runMachine) finish(to run.State) {
+func (m *runMachine) finish(ctx context.Context, to run.State) {
+	m.releaseIsolated(ctx)
 	if !run.ValidRunTransition(m.result.State, to) {
 		panic(fmt.Sprintf("invalid scheduler run transition: %s -> %s", m.result.State, to))
 	}
