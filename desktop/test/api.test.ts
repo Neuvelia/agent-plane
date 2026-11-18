@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { ApiError, listApprovals, listRuns, startRun, validateGraph } from '../src/api'
+import { ApiError, getRun, listApprovals, listRuns, lookupRun, startRun, validateGraph } from '../src/api'
 
 const w = globalThis as unknown as { window?: unknown }
 const sent: { method: string; path: string; body: unknown }[] = []
@@ -51,5 +51,26 @@ describe('New run addresses a graph by grant only', () => {
     const diagnostics = [{ severity: 'error', code: 'E_NODE_CONFIG_INVALID', message: 'shell node "work": config.command must not be empty' }]
     bridge({ status: 422, body: { error: { message: 'the graph file is not valid' }, diagnostics } })
     expect(await startRun('grant-1', [])).toEqual({ message: 'the graph file is not valid', diagnostics })
+  })
+})
+
+describe('looking a run up', () => {
+  const found = { run: { run_id: 'a', status: 'succeeded' }, graph: 'g', graph_summary: { nodes: [], edges: [] } }
+
+  it('returns the run on 200', async () => {
+    bridge({ status: 200, body: found })
+    expect(await lookupRun('a')).toMatchObject({ kind: 'found', graph: 'g' })
+    expect(await getRun('a')).toMatchObject({ graph: 'g' })
+  })
+
+  it('tells a run from a newer engine apart from a missing one by the typed error code', async () => {
+    bridge({ status: 422, body: { error: { code: 'unsupported_schema', message: 'upgrade' } } })
+    expect(await lookupRun('a')).toEqual({ kind: 'unsupported' })
+    expect(await getRun('a')).toBeNull()
+    bridge({ status: 404, body: { error: { code: 'not_found', message: 'unknown run' } } })
+    expect(await lookupRun('a')).toEqual({ kind: 'missing' })
+    // another 422 is not the unsupported case
+    bridge({ status: 422, body: { error: { code: 'something_else', message: 'x' } } })
+    expect(await lookupRun('a')).toEqual({ kind: 'missing' })
   })
 })

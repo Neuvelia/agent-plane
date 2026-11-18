@@ -170,6 +170,7 @@ export const pl: Record<MessageKey, string> = {
   'run.liveGraphHelp': 'Graf użyty w tym uruchomieniu, a nie bieżący plik. Stany węzłów są odtwarzane z dziennika zdarzeń, więc po odświeżeniu lub restarcie są identyczne.',
   'run.loadingGraph': 'Wczytywanie grafu…',
   'run.notFound': 'Tego uruchomienia nie ma w lokalnym magazynie.',
+  'run.unsupported': 'To uruchomienie zapisała nowsza wersja silnika, więc nie można go tu pokazać. Zaktualizuj, aby je odczytać.',
   'run.lostBanner': '{message} Stany węzłów poniżej to ostatnie odebrane zdarzenia, a nie stan bieżący.',
   'run.reconnect': 'Połącz ponownie',
   'run.lost.connection': 'Połączenie z silnikiem zakończyło się nieoczekiwanie.',
