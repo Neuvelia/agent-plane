@@ -18,16 +18,10 @@ import (
 // unsupported one. It does not touch Git worktrees or refs/agentplane/*, which
 // F3.1 owns.
 
-// PruneCandidate is one run a prune plan removes.
-type PruneCandidate struct {
-	RunID     string
-	StartedAt time.Time
-}
-
-// PrunePlan is the runs a prune would remove, oldest first. A dry run shows the
+// PrunePlan is the IDs of the runs a prune would remove, oldest first. A dry run shows the
 // plan and stops; Prune executes the same plan.
 type PrunePlan struct {
-	Remove []PruneCandidate
+	Remove []string
 }
 
 // PruneFailure is a run whose deletion failed. It is reported and skipped, never
@@ -70,15 +64,7 @@ func (s Store) PlanPrune(ctx context.Context, now time.Time) (PrunePlan, error) 
 	if err != nil {
 		return PrunePlan{}, err
 	}
-	byID := make(map[string]prunable, len(runs))
-	for _, r := range runs {
-		byID[r.runID] = r
-	}
-	var plan PrunePlan
-	for _, id := range selectForPrune(runs, *limits, now) {
-		plan.Remove = append(plan.Remove, PruneCandidate{RunID: id, StartedAt: byID[id].startedAt})
-	}
-	return plan, nil
+	return PrunePlan{Remove: selectForPrune(runs, *limits, now)}, nil
 }
 
 // pruneInventory lists every run directory prune may reason about, oldest
@@ -128,7 +114,7 @@ func (s Store) inspectForPrune(runID string, measure bool) (run prunable, ok boo
 	if statErr != nil || !info.Mode().IsRegular() {
 		return prunable{}, false, nil
 	}
-	summary, listed := s.summarize(runID)
+	summary, listed := s.listEntry(runID)
 	if !listed {
 		return prunable{}, false, nil
 	}
@@ -242,20 +228,20 @@ func markOverBytes(runs []prunable, limit int64, marked map[string]bool) {
 func (s Store) Prune(ctx context.Context, plan PrunePlan) (PruneResult, error) {
 	var result PruneResult
 	var failures []error
-	for _, candidate := range plan.Remove {
+	for _, runID := range plan.Remove {
 		if err := ctx.Err(); err != nil {
 			failures = append(failures, err)
 			break
 		}
-		err := s.removeRun(candidate.RunID)
+		err := s.removeRun(runID)
 		switch {
 		case err == nil:
-			result.Removed = append(result.Removed, candidate.RunID)
+			result.Removed = append(result.Removed, runID)
 		case errors.Is(err, ErrRunLocked):
-			result.Skipped = append(result.Skipped, candidate.RunID)
+			result.Skipped = append(result.Skipped, runID)
 		default:
-			result.Failed = append(result.Failed, PruneFailure{RunID: candidate.RunID, Err: err})
-			failures = append(failures, fmt.Errorf("remove run %s: %w", candidate.RunID, err))
+			result.Failed = append(result.Failed, PruneFailure{RunID: runID, Err: err})
+			failures = append(failures, fmt.Errorf("remove run %s: %w", runID, err))
 		}
 	}
 	return result, errors.Join(failures...)

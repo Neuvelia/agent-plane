@@ -14,11 +14,15 @@ import (
 // cliPrune is the optional `runs prune --json` result. Run directories are the
 // only thing prune removes; Git worktrees and refs/agentplane/* belong to the
 // workspace isolation feature (F3.1) and are never touched.
+//
+// A dry run lists the plan under `would_remove` and leaves `removed` empty, so a
+// script that reads only `removed` never believes a dry run deleted anything.
 type cliPrune struct {
-	DryRun  bool              `json:"dry_run"`
-	Removed []string          `json:"removed"`
-	Skipped []string          `json:"skipped"`
-	Failed  []cliPruneFailure `json:"failed"`
+	DryRun      bool              `json:"dry_run"`
+	WouldRemove []string          `json:"would_remove"`
+	Removed     []string          `json:"removed"`
+	Skipped     []string          `json:"skipped"`
+	Failed      []cliPruneFailure `json:"failed"`
 }
 
 type cliPruneFailure struct {
@@ -44,7 +48,8 @@ func runsPruneCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 	if err != nil {
 		return commandError(name, "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 	}
-	result, pruneErr := plannedResult(plan), error(nil)
+	var result store.PruneResult
+	var pruneErr error
 	if !*dryRun {
 		result, pruneErr = runStore.Prune(ctx, plan)
 	}
@@ -53,10 +58,10 @@ func runsPruneCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 		code = exitInternal
 	}
 	if *jsonMode {
-		doc := cliDocument{Command: name, Status: pruneStatus(pruneErr), Diagnostics: nonNilDiagnostics(nil), Prune: pruneForJSON(result, *dryRun)}
+		doc := cliDocument{Command: name, Status: pruneStatus(pruneErr), Diagnostics: nonNilDiagnostics(nil), Prune: pruneForJSON(result, plan, *dryRun)}
 		return writeJSON(stdout, stderr, doc, code)
 	}
-	if err := renderPrune(stdout, result, *dryRun, len(plan.Remove)); err != nil {
+	if err := renderPrune(stdout, result, plan, *dryRun); err != nil {
 		return presentationError(err, stderr)
 	}
 	if pruneErr != nil {
@@ -67,15 +72,6 @@ func runsPruneCommand(ctx context.Context, args []string, stdout, stderr io.Writ
 	return code
 }
 
-// plannedResult is what a dry run reports: the plan, as if every run were removed.
-func plannedResult(plan store.PrunePlan) store.PruneResult {
-	var result store.PruneResult
-	for _, c := range plan.Remove {
-		result.Removed = append(result.Removed, c.RunID)
-	}
-	return result
-}
-
 func pruneStatus(err error) string {
 	if err != nil {
 		return "error"
@@ -83,8 +79,11 @@ func pruneStatus(err error) string {
 	return "ok"
 }
 
-func pruneForJSON(result store.PruneResult, dryRun bool) *cliPrune {
-	out := &cliPrune{DryRun: dryRun, Removed: []string{}, Skipped: []string{}, Failed: []cliPruneFailure{}}
+func pruneForJSON(result store.PruneResult, plan store.PrunePlan, dryRun bool) *cliPrune {
+	out := &cliPrune{DryRun: dryRun, WouldRemove: []string{}, Removed: []string{}, Skipped: []string{}, Failed: []cliPruneFailure{}}
+	if dryRun {
+		out.WouldRemove = append(out.WouldRemove, plan.Remove...)
+	}
 	out.Removed = append(out.Removed, result.Removed...)
 	out.Skipped = append(out.Skipped, result.Skipped...)
 	for _, f := range result.Failed {
@@ -93,19 +92,19 @@ func pruneForJSON(result store.PruneResult, dryRun bool) *cliPrune {
 	return out
 }
 
-func renderPrune(w io.Writer, result store.PruneResult, dryRun bool, planned int) error {
-	verb := "Removed"
-	if dryRun {
-		verb = "Would remove"
-	}
-	if planned == 0 {
+func renderPrune(w io.Writer, result store.PruneResult, plan store.PrunePlan, dryRun bool) error {
+	if len(plan.Remove) == 0 {
 		_, err := fmt.Fprintln(w, "Nothing to prune (no retention is configured in store.json, or every run is within it).")
 		return err
 	}
-	if _, err := fmt.Fprintf(w, "%s %d run(s):\n", verb, len(result.Removed)); err != nil {
+	verb, listed := "Removed", result.Removed
+	if dryRun {
+		verb, listed = "Would remove", plan.Remove
+	}
+	if _, err := fmt.Fprintf(w, "%s %d run(s):\n", verb, len(listed)); err != nil {
 		return err
 	}
-	for _, id := range result.Removed {
+	for _, id := range listed {
 		if _, err := fmt.Fprintf(w, "  %s\n", id); err != nil {
 			return err
 		}
