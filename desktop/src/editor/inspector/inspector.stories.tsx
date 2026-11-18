@@ -236,13 +236,15 @@ export const OutputRenameCarriesType: S = story(
 // accepted, a source nothing accepts offers none, and a choice the engine then
 // refuses shows its message where the binding was made.
 const bindingAsked: { op: string; bindings?: { from: string; to: string }[] }[] = []
+// The mock engine accepts one pair, by identity: candidate stdout into the Gate's left input.
+// Once refuseChange is set it refuses that pair too, as when the file changed under the preview.
+let refuseChange = false
 const bindingAnswer = (ops: { op: string }[]) => {
   const asked = ops[0] as (typeof bindingAsked)[number]
   bindingAsked.push(asked)
-  const added = asked.bindings?.[asked.bindings.length - 1]
-  const previews = bindingAsked.filter((a) => a.bindings?.at(-1)?.to === added?.to && a.bindings?.at(-1)?.from === added?.from).length
-  if (added?.from !== 'candidate.outputs.stdout' || added.to !== 'gate.inputs.left') return refused()
-  return previews <= 2 ? (setCommand as unknown as { status: number; body: unknown }) : refused()
+  const added = asked.bindings?.at(-1)
+  const accepted = added?.from === 'candidate.outputs.stdout' && added.to === 'gate.inputs.left'
+  return accepted && !refuseChange ? (setCommand as unknown as { status: number; body: unknown }) : refused()
 }
 export const LoopBindingChoicesAreTheEnginesAnswers: S = story(graph(loopsOpen, { edit: bindingAnswer }), async (root) => {
   await inspect(root, 'diffed')
@@ -265,6 +267,7 @@ export const LoopBindingChoicesAreTheEnginesAnswers: S = story(graph(loopsOpen, 
   // The engine accepted the preview and refuses the change itself: its message is shown, nothing is silently dropped.
   choose(await until(root, '[data-testid="binding-from"]'), 'candidate.outputs.stdout')
   await waitFor(() => offered(document.querySelector('[data-testid="binding-to"]'))?.length === 1)
+  refuseChange = true
   choose(document.querySelector('[data-testid="binding-to"]') as HTMLElement, 'gate.inputs.left')
   const message = (editRefused as unknown as { body: { error: { message: string } } }).body.error.message
   if (!(await waitFor(() => !!document.querySelector('[data-testid="loop-bindings"] [data-testid="inspector-diagnostics"]')?.textContent?.includes(message)))) throw new Error('the refusal is not shown')

@@ -541,12 +541,8 @@ async function startDemo(page) {
     const chooseKind = async (scope, kind) => {
       await page.selectOption(`${scope} [data-field-key="kind"] select`, kind)
       await page.waitForFunction(([sc, k]) => document.querySelector(`${sc} [data-field-key="kind"] select`)?.value === k, [scope, kind])
-      // Keys of the previous kind stay in the file, shown under Advanced; they are removed there, as a person would.
-      for (const gone = page.locator('[data-testid^="advanced-remove-"]'); await gone.count(); ) {
-        const n = await gone.count()
-        await gone.first().click()
-        await page.waitForFunction((c) => document.querySelectorAll('[data-testid^="advanced-remove-"]').length < c, n)
-      }
+      // The engine drops the old kind's keys with the kind change: nothing is left under Advanced.
+      assert.equal(await page.locator('[data-testid^="advanced-entry-"]').count(), 0, `${kind}: keys of the previous kind were left behind`)
     }
     const saveAndValidate = async (file, what) => {
       await page.keyboard.press(`${mod}+s`)
