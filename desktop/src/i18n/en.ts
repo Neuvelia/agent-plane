@@ -109,6 +109,7 @@ export const en = {
   'editor.connect.checking': 'Asking the engine which inputs fit…',
   'editor.connect.noTargets': 'No node has an input to connect to.',
   'editor.cannotConnect': 'Cannot connect: {message}',
+  'editor.connectTargetsFailed': 'Could not ask the engine which inputs fit: {message}',
   'editor.rename.label': 'New id for {node}',
   'editor.rename.apply': 'Rename',
   'editor.delete.confirm': 'Delete {node}? This also removes {edges, plural, one {# connection} other {# connections}}, {bindings, plural, one {# graph input binding} other {# graph input bindings}} and {outputs, plural, one {# graph output} other {# graph outputs}}.',

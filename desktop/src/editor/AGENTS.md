@@ -44,7 +44,10 @@ before changing a document, operation or save flow.
   leaving with unsaved text.
 - Canvas controls send versioned operations to the Go API. `can_connect`
   answers whether a target is valid; the UI may display its reason but must
-  not duplicate port compatibility, cycle or binding rules. `layout.ts`
+  not duplicate port compatibility, cycle or binding rules. `connect.ts`
+  asks it for every candidate input in batches of at most `MAX_OPS_PER_BATCH`
+  (the engine's `MaxOps`, kept equal by a test); a refused batch is shown as a
+  notice, never as an empty target list. `layout.ts`
   computes drawing positions and tolerates malformed metadata; moving or
   arranging updates draft `metadata.layout` through `set_layout`, and Save
   persists it without changing the graph's semantic version. When the engine
