@@ -289,3 +289,90 @@ func TestWorkspaceFactsSurviveProgressLimitsAndStayDetached(t *testing.T) {
 		}
 	}
 }
+
+func TestLiveDeliveryStopsAfterPersistError(t *testing.T) {
+	const persistable = 3
+	live := make(chan events.Event, 16)
+	c := NewCollectorWithLiveEvents(context.Background(), system.Clock{}, "run", "g", "sha256-v0:x", live)
+	c.SetPersist(func(e events.Event) error {
+		if e.Sequence > persistable {
+			return errors.New("disk full")
+		}
+		return nil
+	})
+	if _, err := c.Append(events.Event{Type: events.RunStarted, Payload: events.RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < persistable; i++ {
+		if _, err := c.Append(events.Event{Type: events.NodeReady, Payload: events.NodeReadyPayload{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var got []uint64
+	for i := 0; i < persistable; i++ {
+		got = append(got, (<-live).Sequence)
+	}
+	for i := 0; i < 4; i++ {
+		if _, err := c.Append(events.Event{Type: events.NodeReady, Payload: events.NodeReadyPayload{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := c.Append(events.Event{Type: events.RunFinished, Payload: events.RunFinishedPayload{Status: "succeeded"}}); err != nil {
+		t.Fatal(err)
+	}
+	close(live)
+	for e := range live {
+		got = append(got, e.Sequence)
+	}
+	if len(got) != persistable || got[persistable-1] != persistable {
+		t.Fatalf("live delivered sequences %v, want exactly 1..%d", got, persistable)
+	}
+	if c.PersistError() == nil {
+		t.Fatal("persist error not reported")
+	}
+	if stats := c.Stats(); !stats.LiveStopped || stats.LiveOmittedEvents != 4 {
+		t.Fatalf("omissions must stay truthful: %+v", stats)
+	}
+}
+
+func TestCollectorDeliversOnlyPersistedEvents(t *testing.T) {
+	live := make(chan events.Event)
+	c := NewCollectorWithLiveEvents(context.Background(), system.Clock{}, "run", "g", "sha256-v0:x", live)
+	var mu sync.Mutex
+	persisted := map[uint64]bool{}
+	c.SetPersist(func(e events.Event) error {
+		mu.Lock()
+		persisted[e.Sequence] = true
+		mu.Unlock()
+		return nil
+	})
+	const total = 20
+	received := make(chan error, 1)
+	go func() {
+		for i := 0; i < total; i++ {
+			e := <-live
+			mu.Lock()
+			ok := persisted[e.Sequence]
+			mu.Unlock()
+			if !ok {
+				received <- fmt.Errorf("event %d delivered before it was persisted", e.Sequence)
+				return
+			}
+		}
+		received <- nil
+	}()
+	if _, err := c.Append(events.Event{Type: events.RunStarted, Payload: events.RunStartedPayload{}}); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i < total; i++ {
+		if _, err := c.Append(events.Event{Type: events.NodeReady, Payload: events.NodeReadyPayload{}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := <-received; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Append(events.Event{Type: events.RunFinished, Payload: events.RunFinishedPayload{Status: "succeeded"}}); err != nil {
+		t.Fatal(err)
+	}
+}

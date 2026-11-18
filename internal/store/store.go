@@ -4,8 +4,6 @@
 package store
 
 import (
-	"bufio"
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,16 +20,34 @@ import (
 const (
 	eventsFile = "events.jsonl"
 	graphFile  = "graph.yaml"
-	dirMode    = 0o700
-	fileMode   = 0o600
+	// creatingPrefix names a run directory under construction; it is not a
+	// valid run ID, so listing and reading ignore it.
+	creatingPrefix = ".creating-"
+	dirMode        = 0o700
+	fileMode       = 0o600
 )
 
 // Status values reported for a stored run. A log without a terminal event is
-// "interrupted" for a store reader; a live server overlays "running" itself.
+// "running" while a writer holds its run lock and "interrupted" otherwise.
 const (
+	StatusRunning     = "running"
 	StatusInterrupted = "interrupted"
 	StatusCorrupt     = "corrupt"
+	// StatusUnsupported marks a run written with a newer event schema than this
+	// build decodes; its files are never modified.
+	StatusUnsupported = "unsupported"
 )
+
+// ErrRunStarting means a live writer has created the run but has not yet made
+// its first event durable; the run cannot be shown yet and is not corrupt.
+var ErrRunStarting = errors.New("run is starting: no durable event yet")
+
+// UnsupportedSchemaError reports an event from a schema newer than this build.
+type UnsupportedSchemaError struct{ Version int }
+
+func (e *UnsupportedSchemaError) Error() string {
+	return fmt.Sprintf("unsupported event schema version %d (this build reads up to %d); upgrade agentplane to read this run", e.Version, events.SchemaVersion)
+}
 
 var runIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
@@ -40,7 +56,55 @@ var runIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 func ValidRunID(id string) bool { return runIDPattern.MatchString(id) }
 
 // Store is a directory of run directories.
-type Store struct{ Dir string }
+type Store struct {
+	Dir string
+	fs  fsOps
+}
+
+// fsOps is the set of filesystem operations a run creation performs, in the
+// order the writer issues them; a seam for fault injection and order tests.
+type fsOps interface {
+	MkdirAll(path string) error
+	Mkdir(path string) error
+	WriteFileSync(path string, data []byte) error
+	CreateLog(path string) (logFile, error)
+	SyncDir(path string) error
+	Rename(oldPath, newPath string) error
+}
+
+func (s Store) ops() fsOps {
+	if s.fs != nil {
+		return s.fs
+	}
+	return osFS{}
+}
+
+type osFS struct{}
+
+func (osFS) MkdirAll(path string) error { return os.MkdirAll(path, dirMode) }
+func (osFS) Mkdir(path string) error    { return os.Mkdir(path, dirMode) }
+func (osFS) SyncDir(path string) error  { return syncDir(path) }
+
+func (osFS) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+
+func (osFS) WriteFileSync(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+func (osFS) CreateLog(path string) (logFile, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, fileMode)
+}
 
 // Summary describes one stored run without loading its whole log.
 type Summary struct {
@@ -53,6 +117,14 @@ type Summary struct {
 	Status       string    `json:"status"`
 	EventCount   int       `json:"event_count"`
 	Truncated    bool      `json:"truncated,omitempty"`
+	// LastSequence is the sequence of the last durable event; MinSchema and
+	// MaxSchema bound the event schema versions present in the log.
+	LastSequence uint64 `json:"last_sequence,omitempty"`
+	MinSchema    int    `json:"min_schema,omitempty"`
+	MaxSchema    int    `json:"max_schema,omitempty"`
+	// InterruptedAtSequence is the last durable sequence of a run that has no
+	// terminal event and no live writer.
+	InterruptedAtSequence uint64 `json:"interrupted_at_sequence,omitempty"`
 	// Error explains a run that cannot be read or was stopped; Status is
 	// "corrupt" for an unreadable log.
 	Error string `json:"error,omitempty"`
@@ -71,6 +143,7 @@ type Writer struct {
 	store Store
 	graph []byte
 	file  logFile
+	lock  *runLock
 	err   error
 }
 
@@ -98,26 +171,37 @@ func (w *Writer) Append(e events.Event) error {
 	}
 	if w.file == nil {
 		if err := w.open(e); err != nil {
-			w.err = err
-			return err
+			return w.fail(err)
 		}
 	}
 	line, err := json.Marshal(e)
 	if err != nil {
-		w.err = fmt.Errorf("encode event: %w", err)
-		return w.err
+		return w.fail(fmt.Errorf("encode event: %w", err))
 	}
-	if _, err := w.file.Write(append(line, '\n')); err != nil {
-		w.err = fmt.Errorf("write event log: %w", err)
-		return w.err
+	line = append(line, '\n')
+	n, err := w.file.Write(line)
+	if err == nil && n != len(line) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
+		return w.fail(fmt.Errorf("write event log: %w", err))
 	}
 	if !events.IsProgress(e.Type) {
 		if err := w.file.Sync(); err != nil {
-			w.err = fmt.Errorf("sync event log: %w", err)
-			return w.err
+			return w.fail(fmt.Errorf("sync event log: %w", err))
 		}
 	}
 	return nil
+}
+
+// fail latches err and releases the run lock: a writer that can never append
+// again must not make its run look live.
+func (w *Writer) fail(err error) error {
+	w.err = err
+	if lerr := w.lock.release(); lerr != nil {
+		w.err = errors.Join(err, lerr)
+	}
+	return w.err
 }
 
 func (w *Writer) open(first events.Event) error {
@@ -125,28 +209,80 @@ func (w *Writer) open(first events.Event) error {
 	if !ValidRunID(id) {
 		return fmt.Errorf("refusing to store run with invalid ID %q", id)
 	}
-	if err := os.MkdirAll(w.store.Dir, dirMode); err != nil {
+	fs := w.store.ops()
+	if err := fs.MkdirAll(w.store.Dir); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
 	}
+	if err := w.store.ensureFormat(); err != nil {
+		return err
+	}
 	dir := filepath.Join(w.store.Dir, id)
-	if err := os.Mkdir(dir, dirMode); err != nil {
+	if _, err := os.Stat(dir); err == nil {
+		return fmt.Errorf("create run directory: %w", os.ErrExist)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat run directory: %w", err)
+	}
+	build := dir
+	if publishByRename {
+		build = filepath.Join(w.store.Dir, creatingPrefix+id)
+	}
+	if err := fs.Mkdir(build); err != nil {
 		return fmt.Errorf("create run directory: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, graphFile), w.graph, fileMode); err != nil {
-		return fmt.Errorf("write graph snapshot: %w", err)
+	f, err := w.populate(fs, build, id)
+	if err == nil && build != dir {
+		if err = fs.Rename(build, dir); err != nil {
+			err = fmt.Errorf("publish run directory: %w", err)
+		}
 	}
-	f, err := os.OpenFile(filepath.Join(dir, eventsFile), os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, fileMode)
+	if err == nil {
+		if err = fs.SyncDir(w.store.Dir); err != nil {
+			err = fmt.Errorf("sync store directory: %w", err)
+		}
+	}
 	if err != nil {
-		return fmt.Errorf("create event log: %w", err)
+		if f != nil {
+			err = errors.Join(err, f.Close())
+		}
+		if build != dir {
+			err = errors.Join(err, os.RemoveAll(build))
+		}
+		return err
 	}
 	w.file = f
 	return nil
 }
 
+// populate fills a run directory that no reader can list yet: the lock first, so
+// that nothing is ever visible without a holder, then graph.yaml and the log.
+func (w *Writer) populate(fs fsOps, dir, id string) (logFile, error) {
+	lock, err := acquireRunLock(filepath.Join(dir, lockFile), true)
+	if err != nil {
+		return nil, fmt.Errorf("lock run %s: %w", id, err)
+	}
+	w.lock = lock
+	if err := fs.WriteFileSync(filepath.Join(dir, graphFile), w.graph); err != nil {
+		return nil, fmt.Errorf("write graph snapshot: %w", err)
+	}
+	f, err := fs.CreateLog(filepath.Join(dir, eventsFile))
+	if err != nil {
+		return nil, fmt.Errorf("create event log: %w", err)
+	}
+	if err := fs.SyncDir(dir); err != nil {
+		return f, fmt.Errorf("sync run directory: %w", err)
+	}
+	return f, nil
+}
+
 // Durability scope: a lifecycle event is fsynced before Append returns, so it
-// survives the process being killed. The run directory entry and graph.yaml are
-// not fsynced, so after power loss a run directory or its graph snapshot can be
-// missing or empty; that is outside this store's guarantee (ADR-0019).
+// survives the process being killed. Creation is ordered graph.yaml (synced),
+// event log, run directory, then the store directory, so after power loss a run
+// directory is either absent or has its graph snapshot. Where a directory can be
+// renamed while files in it are open (not Windows) the run is built under a
+// hidden name and renamed into place, so a lister never sees a half-created
+// run; on Windows it is built in place and a locked run without a first event
+// is listed as starting, not corrupt. Directory sync is a no-op on Windows
+// (syncdir_windows.go); the log itself still is synced.
 
 // Close flushes and closes the log. It is safe to call without any Append.
 func (w *Writer) Close() error {
@@ -158,6 +294,9 @@ func (w *Writer) Close() error {
 		err = cerr
 	}
 	w.file = nil
+	if lerr := w.lock.release(); err == nil {
+		err = lerr
+	}
 	if w.err != nil {
 		return w.err
 	}
@@ -170,12 +309,17 @@ func (s Store) Check() error {
 	if err := os.MkdirAll(s.Dir, dirMode); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
 	}
+	if _, err := s.ReadFormat(); err != nil {
+		return err
+	}
 	probe, err := os.CreateTemp(s.Dir, ".probe-*")
 	if err != nil {
 		return fmt.Errorf("store directory is not writable: %w", err)
 	}
 	name := probe.Name()
-	probe.Close()
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close store probe: %w", err)
+	}
 	return os.Remove(name)
 }
 
@@ -196,6 +340,14 @@ func (s Store) List() ([]Summary, error) {
 		record, err := s.Read(entry.Name())
 		if err != nil {
 			// Never drop a run silently: an unreadable one is listed as corrupt.
+			if errors.Is(err, ErrRunStarting) {
+				continue
+			}
+			var unsupported *UnsupportedSchemaError
+			if errors.As(err, &unsupported) {
+				out = append(out, s.unsupportedSummary(entry.Name(), err))
+				continue
+			}
 			out = append(out, Summary{RunID: entry.Name(), Status: StatusCorrupt, Error: err.Error()})
 			continue
 		}
@@ -208,76 +360,4 @@ func (s Store) List() ([]Summary, error) {
 		return out[i].RunID < out[j].RunID
 	})
 	return out, nil
-}
-
-// Read loads one run. A corrupt or incomplete final line is reported through
-// Summary.Truncated while earlier events stay readable; corruption anywhere
-// else is an error because later events could not be trusted to follow it.
-func (s Store) Read(runID string) (Record, error) {
-	if !ValidRunID(runID) {
-		return Record{}, fmt.Errorf("invalid run ID %q", runID)
-	}
-	dir := filepath.Join(s.Dir, runID)
-	graph, err := os.ReadFile(filepath.Join(dir, graphFile))
-	if err != nil {
-		return Record{}, fmt.Errorf("read graph snapshot: %w", err)
-	}
-	f, err := os.Open(filepath.Join(dir, eventsFile))
-	if err != nil {
-		return Record{}, fmt.Errorf("read event log: %w", err)
-	}
-	defer f.Close()
-	rec := Record{Graph: graph, Summary: Summary{RunID: runID, Status: StatusInterrupted}}
-	reader := bufio.NewReader(f)
-	var lastSequence uint64
-	finished := false
-	for {
-		line, readErr := reader.ReadBytes('\n')
-		complete := len(line) > 0 && line[len(line)-1] == '\n'
-		line = bytes.TrimSpace(line)
-		if len(line) > 0 {
-			var e events.Event
-			// Unmarshal also validates the event envelope and payload, including
-			// the schema version, so an unsupported record is an error here.
-			if err := json.Unmarshal(line, &e); err != nil || string(e.RunID) != runID || e.Sequence <= lastSequence {
-				if readErr == io.EOF && !complete {
-					rec.Summary.Truncated = true
-					break
-				}
-				if err == nil {
-					err = errors.New("event out of order or from another run")
-				}
-				return Record{}, fmt.Errorf("corrupt event log %s: %w", runID, err)
-			}
-			if len(rec.Events) == 0 && e.Type != events.RunStarted {
-				return Record{}, fmt.Errorf("corrupt event log %s: first event is %q, not run_started", runID, e.Type)
-			}
-			if finished {
-				return Record{}, fmt.Errorf("corrupt event log %s: events after run_finished", runID)
-			}
-			lastSequence = e.Sequence
-			rec.Events = append(rec.Events, e)
-			if rec.Summary.GraphID == "" {
-				rec.Summary.GraphID = e.GraphID
-				rec.Summary.GraphVersion = e.GraphVersion
-				rec.Summary.StartedAt = e.Timestamp
-			}
-			if p, ok := e.Payload.(events.RunFinishedPayload); ok {
-				rec.Summary.Status = p.Status
-				finished = true
-			}
-		}
-		if readErr != nil {
-			if readErr != io.EOF {
-				return Record{}, fmt.Errorf("read event log: %w", readErr)
-			}
-			break
-		}
-	}
-	if len(rec.Events) == 0 {
-		// Nothing readable was ever recorded: not a run that can be shown.
-		return Record{}, fmt.Errorf("corrupt event log %s: no readable events", runID)
-	}
-	rec.Summary.EventCount = len(rec.Events)
-	return rec, nil
 }

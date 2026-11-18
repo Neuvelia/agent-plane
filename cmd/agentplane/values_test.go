@@ -275,8 +275,15 @@ func TestServeRecordsRedactedValuesAndReplaysThemAfterRestart(t *testing.T) {
 	if code, body := s.call(t, "POST", "/runs", `{"graph_path":`+quote(secretGraph)+`}`); code != http.StatusUnprocessableEntity || strings.Contains(body, valueSecret) {
 		t.Fatalf("secret graph: %d %s", code, body)
 	}
-	if entries, _ := os.ReadDir(s.dir); len(entries) != 1 {
-		t.Fatalf("store holds %d runs, want 1", len(entries))
+	entries, _ := os.ReadDir(s.dir)
+	runDirs := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			runDirs++
+		}
+	}
+	if runDirs != 1 {
+		t.Fatalf("store holds %d runs, want 1", runDirs)
 	}
 	s.closeStdin()
 	select {

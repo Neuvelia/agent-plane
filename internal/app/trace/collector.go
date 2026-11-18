@@ -157,7 +157,11 @@ func (c *Collector) Append(event events.Event) (events.Event, error) {
 	event = c.prepare(event)
 	encoded, _ := json.Marshal(event)
 	c.retain(event, len(encoded))
-	c.enqueueLive(event, len(encoded))
+	if c.persistErr != nil {
+		c.omitLive(len(encoded))
+	} else {
+		c.enqueueLive(event, len(encoded))
+	}
 	event.Payload = events.ClonePayload(event.Payload)
 	c.mu.Unlock()
 	return event, nil
@@ -222,16 +226,25 @@ func (c *Collector) retain(event events.Event, size int) {
 	c.stats.RetainedPeakItems = c.retainedItems
 }
 
+// omitLive stops live delivery and counts one event that will not be delivered.
+func (c *Collector) omitLive(size int) {
+	if c.live == nil {
+		return
+	}
+	c.stats.LiveStopped = true
+	c.stats.LiveOmittedEvents++
+	c.stats.LiveOmittedBytes += uint64(size)
+}
+
 // enqueueLive adds the event to the bounded live FIFO, or stops live delivery
-// and counts the omission once a bound is exceeded.
+// and counts the omission once a bound is exceeded. Callers never enqueue an
+// event whose persistence failed: subscribers only see durable events.
 func (c *Collector) enqueueLive(event events.Event, size int) {
 	if c.live == nil {
 		return
 	}
 	if c.stats.LiveStopped || len(c.queue) >= MaxLiveItems || c.queueBytes+size > MaxLiveBytes {
-		c.stats.LiveStopped = true
-		c.stats.LiveOmittedEvents++
-		c.stats.LiveOmittedBytes += uint64(size)
+		c.omitLive(size)
 		return
 	}
 	delivered := event

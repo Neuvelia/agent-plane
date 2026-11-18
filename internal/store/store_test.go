@@ -2,7 +2,9 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -293,8 +295,10 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	data, _ := os.ReadFile(path)
 	os.WriteFile(path, []byte(strings.Replace(string(data), fmt.Sprintf(`"event_schema_version":%d`, events.SchemaVersion), `"event_schema_version":99`, 1)), 0o600)
-	if _, err := s.Read(runA); err == nil {
-		t.Fatal("an event from a future schema was accepted")
+	_, err := s.Read(runA)
+	var unsupported *UnsupportedSchemaError
+	if !errors.As(err, &unsupported) || unsupported.Version != 99 {
+		t.Fatalf("an event from a future schema must be a typed error, got %v", err)
 	}
 }
 
@@ -371,5 +375,175 @@ func TestWorkspaceFactsRoundTripAndAreSynced(t *testing.T) {
 	}
 	if got := strings.Join(f.ops, ","); got != "write,sync,write,sync,write,sync" {
 		t.Fatalf("workspace facts must be fsynced like other lifecycle facts: %s", got)
+	}
+}
+
+// recFS records the creation sequence and can wrap the log with faults.
+type recFS struct {
+	osFS
+	dir      string
+	ops      []string
+	failSync int // fail the Nth Sync of the log (1-based); 0 never
+	short    bool
+}
+
+func (r *recFS) Mkdir(path string) error {
+	r.ops = append(r.ops, "mkdir-run")
+	return r.osFS.Mkdir(path)
+}
+
+func (r *recFS) WriteFileSync(path string, data []byte) error {
+	r.ops = append(r.ops, "write-sync-"+filepath.Base(path))
+	return r.osFS.WriteFileSync(path, data)
+}
+
+func (r *recFS) CreateLog(path string) (logFile, error) {
+	r.ops = append(r.ops, "create-log")
+	f, err := r.osFS.CreateLog(path)
+	if err != nil {
+		return nil, err
+	}
+	return &faultLog{File: f.(*os.File), failSync: r.failSync, short: r.short}, nil
+}
+
+func (r *recFS) Rename(oldPath, newPath string) error {
+	r.ops = append(r.ops, "rename-run")
+	return r.osFS.Rename(oldPath, newPath)
+}
+
+func (r *recFS) SyncDir(path string) error {
+	if path == r.dir {
+		r.ops = append(r.ops, "sync-store-dir")
+	} else {
+		r.ops = append(r.ops, "sync-run-dir")
+	}
+	return r.osFS.SyncDir(path)
+}
+
+// faultLog drops unsynced bytes when a sync fails, as a crash would.
+type faultLog struct {
+	*os.File
+	failSync, syncs int
+	short           bool
+	size, durable   int64
+}
+
+func (f *faultLog) Write(p []byte) (int, error) {
+	if f.short && len(p) > 1 {
+		n, err := f.File.Write(p[:len(p)/2])
+		f.size += int64(n)
+		return n, err
+	}
+	n, err := f.File.Write(p)
+	f.size += int64(n)
+	return n, err
+}
+
+func (f *faultLog) Sync() error {
+	f.syncs++
+	if f.failSync != 0 && f.syncs == f.failSync {
+		if err := f.Truncate(f.durable); err != nil {
+			return err
+		}
+		return os.ErrClosed
+	}
+	f.durable = f.size
+	return f.File.Sync()
+}
+
+func TestCreationOrderSyncsGraphBeforeLogThenDirectories(t *testing.T) {
+	dir := t.TempDir()
+	rec := &recFS{dir: dir}
+	s := Store{Dir: dir, fs: rec}
+	write(t, s, runA, started(runA, time.Now().UTC()))
+	want := "mkdir-run,write-sync-graph.yaml,create-log,sync-run-dir,rename-run,sync-store-dir"
+	if !publishByRename {
+		want = "mkdir-run,write-sync-graph.yaml,create-log,sync-run-dir,sync-store-dir"
+	}
+	if got := strings.Join(rec.ops, ","); got != want {
+		t.Fatalf("creation sequence = %s, want %s", got, want)
+	}
+}
+
+func TestRunDirectoryWithoutAValidFirstLineIsNeverHalfReadable(t *testing.T) {
+	for name, log := range map[string]*string{"graph only": nil, "empty log": ptr(""), "partial line": ptr(`{"event_schema_version":1,"type":"run_st`)} {
+		t.Run(name, func(t *testing.T) {
+			s := Store{Dir: t.TempDir()}
+			dir := filepath.Join(s.Dir, runA)
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, "graph.yaml"), []byte("x"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if log != nil {
+				if err := os.WriteFile(filepath.Join(dir, "events.jsonl"), []byte(*log), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if _, err := s.Read(runA); err == nil {
+				t.Fatal("Read accepted a run without a valid first line")
+			}
+			list, err := s.List()
+			if err != nil || len(list) != 1 || list[0].Status != StatusCorrupt {
+				t.Fatalf("%v %+v", err, list)
+			}
+		})
+	}
+}
+
+func ptr(s string) *string { return &s }
+
+func TestInjectedFsyncFailureStopsTheRunAndLeavesAReadablePrefix(t *testing.T) {
+	dir := t.TempDir()
+	s := Store{Dir: dir, fs: &recFS{dir: dir, failSync: 3}}
+	now := time.Now().UTC()
+	w := s.NewWriter([]byte("x"))
+	for _, e := range []events.Event{started(runA, now), ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now)} {
+		if err := w.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	third := ev(runA, 3, events.NodeReady, events.NodeReadyPayload{}, now)
+	err := w.Append(third)
+	if err == nil {
+		t.Fatal("a failed fsync was swallowed")
+	}
+	if again := w.Append(finished(runA, 4, "succeeded", now)); !errors.Is(again, err) {
+		t.Fatalf("later Append must return the latched error, got %v", again)
+	}
+	if cerr := w.Close(); cerr == nil {
+		t.Fatal("Close must keep reporting the latched error")
+	}
+	rec, rerr := s.Read(runA)
+	if rerr != nil || rec.Summary.EventCount != 2 || rec.Summary.Status != StatusInterrupted {
+		t.Fatalf("%v %+v", rerr, rec.Summary)
+	}
+}
+
+func TestShortWriteStopsTheRunAndLeavesAReadablePrefix(t *testing.T) {
+	dir := t.TempDir()
+	rec := &recFS{dir: dir}
+	s := Store{Dir: dir, fs: rec}
+	now := time.Now().UTC()
+	w := s.NewWriter([]byte("x"))
+	if err := w.Append(started(runA, now)); err != nil {
+		t.Fatal(err)
+	}
+	f := w.file.(*faultLog)
+	f.short = true
+	err := w.Append(ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now))
+	if !errors.Is(err, io.ErrShortWrite) {
+		t.Fatalf("short write must surface io.ErrShortWrite, got %v", err)
+	}
+	if again := w.Append(finished(runA, 3, "succeeded", now)); again == nil {
+		t.Fatal("the writer must stay failed after a short write")
+	}
+	if err := w.Close(); err == nil {
+		t.Fatal("Close must report the latched error")
+	}
+	got, rerr := s.Read(runA)
+	if rerr != nil || got.Summary.EventCount != 1 || !got.Summary.Truncated {
+		t.Fatalf("%v %+v", rerr, got.Summary)
 	}
 }

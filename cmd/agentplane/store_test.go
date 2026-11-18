@@ -30,10 +30,19 @@ func storedRun(t *testing.T, dir string, extra ...string) string {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, out, errout)
 	}
 	entries, err := os.ReadDir(dir)
-	if err != nil || len(entries) == 0 {
+	if err != nil {
 		t.Fatalf("no run stored: %v", err)
 	}
-	return entries[len(entries)-1].Name()
+	id := ""
+	for _, entry := range entries {
+		if entry.IsDir() {
+			id = entry.Name()
+		}
+	}
+	if id == "" {
+		t.Fatal("no run stored")
+	}
+	return id
 }
 
 func TestStoredRunListsAndShowsIdenticallyFromAFreshInvocation(t *testing.T) {
