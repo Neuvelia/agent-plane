@@ -355,7 +355,7 @@ Before adding a dependency, explain:
 
 Do not add frameworks preemptively for future features.
 
-Upgrading the YAML library (`gopkg.in/yaml.v3`) must include running the `ParseErrorColumn` tests in `internal/adapter/yamlgraph/edit` and `internal/api`: they pin error-message wording the parse-error column lookup depends on.
+Upgrading the YAML library (`go.yaml.in/yaml/v3`) must include running the `ParseErrorColumn` tests in `internal/adapter/yamlgraph/edit` and `internal/api`: they pin error-message wording the parse-error column lookup depends on.
 
 ## Code style
 
