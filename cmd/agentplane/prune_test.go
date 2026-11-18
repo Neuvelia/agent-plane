@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -78,10 +79,11 @@ func TestRunsPruneJSONListsTheRemovedRunIDs(t *testing.T) {
 	var doc struct {
 		Status string `json:"status"`
 		Prune  struct {
-			DryRun  bool     `json:"dry_run"`
-			Removed []string `json:"removed"`
-			Skipped []string `json:"skipped"`
-			Failed  []any    `json:"failed"`
+			DryRun      bool     `json:"dry_run"`
+			WouldRemove []string `json:"would_remove"`
+			Removed     []string `json:"removed"`
+			Skipped     []string `json:"skipped"`
+			Failed      []any    `json:"failed"`
 		} `json:"prune"`
 	}
 	for _, dry := range []bool{true, false} {
@@ -90,8 +92,16 @@ func TestRunsPruneJSONListsTheRemovedRunIDs(t *testing.T) {
 			args = append(args, "--dry-run")
 		}
 		code, out, _ := cli(t, args...)
-		if err := json.Unmarshal([]byte(out), &doc); err != nil || code != 0 || doc.Status != "ok" || doc.Prune.DryRun != dry || len(doc.Prune.Removed) != 1 || doc.Prune.Removed[0] != old || doc.Prune.Skipped == nil || doc.Prune.Failed == nil {
+		if err := json.Unmarshal([]byte(out), &doc); err != nil || code != 0 || doc.Status != "ok" || doc.Prune.DryRun != dry || doc.Prune.Skipped == nil || doc.Prune.Failed == nil || doc.Prune.WouldRemove == nil || doc.Prune.Removed == nil {
 			t.Fatalf("dry=%v code=%d out=%s err=%v", dry, code, out, err)
+		}
+		// a dry run reports the plan only under would_remove; a real prune only under removed
+		wantWould, wantRemoved := []string{old}, []string{}
+		if !dry {
+			wantWould, wantRemoved = []string{}, []string{old}
+		}
+		if !reflect.DeepEqual(doc.Prune.WouldRemove, wantWould) || !reflect.DeepEqual(doc.Prune.Removed, wantRemoved) {
+			t.Fatalf("dry=%v would_remove=%v removed=%v", dry, doc.Prune.WouldRemove, doc.Prune.Removed)
 		}
 	}
 	if runOnDisk(dir, old) {

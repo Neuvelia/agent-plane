@@ -44,11 +44,7 @@ func planIDs(t *testing.T, s Store) []string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var ids []string
-	for _, c := range plan.Remove {
-		ids = append(ids, c.RunID)
-	}
-	return ids
+	return plan.Remove
 }
 
 func exists(t *testing.T, path string) bool {
@@ -186,7 +182,7 @@ func TestPlanIsReadOnlyAndMatchesWhatPruneRemoves(t *testing.T) {
 	a, b := finishedAgo(t, s, 1, 90), finishedAgo(t, s, 2, 1)
 	setRetention(t, s, Retention{MaxAgeDays: 30})
 	plan, err := s.PlanPrune(context.Background(), pruneNow)
-	if err != nil || len(plan.Remove) != 1 || plan.Remove[0].RunID != a {
+	if err != nil || len(plan.Remove) != 1 || plan.Remove[0] != a {
 		t.Fatalf("%v %+v", err, plan)
 	}
 	if !exists(t, filepath.Join(s.Dir, a)) || !exists(t, snapshotPath(s, b)) {
@@ -224,8 +220,8 @@ func TestPruneNeverRemovesALockedCorruptOrUnsupportedRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, c := range plan.Remove {
-		if c.RunID == corrupt || c.RunID == unsupported {
+	for _, id := range plan.Remove {
+		if id == corrupt || id == unsupported {
 			t.Fatalf("a corrupt or unsupported run was planned: %v", plan.Remove)
 		}
 	}
@@ -260,7 +256,7 @@ func TestPruneSkipsForeignDirectoriesAndSymlinks(t *testing.T) {
 	}
 	setRetention(t, s, Retention{MaxAgeDays: 1})
 	plan, err := s.PlanPrune(context.Background(), pruneNow)
-	if err != nil || len(plan.Remove) != 1 || plan.Remove[0].RunID != real {
+	if err != nil || len(plan.Remove) != 1 || plan.Remove[0] != real {
 		t.Fatalf("%v %+v", err, plan)
 	}
 	if _, err := s.Prune(context.Background(), plan); err != nil {
@@ -395,5 +391,24 @@ func TestPlanAndPruneStopWhenTheContextIsCancelled(t *testing.T) {
 		if !exists(t, filepath.Join(s.Dir, id)) {
 			t.Fatalf("%s was removed after cancellation", id)
 		}
+	}
+}
+
+func TestPlanRebuildsMissingSnapshotsSoLaterPrunesParseNothing(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	id := finishedAgo(t, s, 1, 5)
+	setRetention(t, s, Retention{MaxRuns: 10})
+	if err := os.Remove(snapshotPath(s, id)); err != nil { // a store from before snapshots existed
+		t.Fatal(err)
+	}
+	parsed := parseCounter(&s)
+	if _, err := s.PlanPrune(context.Background(), pruneNow); err != nil || len(*parsed) != 1 {
+		t.Fatalf("the first plan parses the log once: %v parsed=%v", err, *parsed)
+	}
+	if rec := readSnapshot(t, s, id); rec.Status != "succeeded" {
+		t.Fatalf("planning must rebuild the snapshot best effort: %+v", rec)
+	}
+	if _, err := s.PlanPrune(context.Background(), pruneNow); err != nil || len(*parsed) != 1 {
+		t.Fatalf("a later plan must not parse the log again: %v parsed=%v", err, *parsed)
 	}
 }
