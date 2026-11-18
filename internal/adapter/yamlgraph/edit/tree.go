@@ -9,7 +9,7 @@ import (
 )
 
 // canonicalOrder is where a top-level key belongs when it has to be inserted.
-var canonicalOrder = []string{"schema_version", "id", "name", "metadata", "units", "inputs", "nodes", "edges", "graph_input_bindings", "outputs"}
+var canonicalOrder = []string{"schema_version", "id", "name", "metadata", "units", "secrets", "inputs", "nodes", "edges", "graph_input_bindings", "outputs"}
 
 func orderIndex(key string) int {
 	for i, k := range canonicalOrder {

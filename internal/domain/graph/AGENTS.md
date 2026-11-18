@@ -11,6 +11,7 @@ operations in the child package.
 | One-document YAML parse and normalized marshal | `yaml.go` |
 | Semantic diagnostics, references, cycles | `validation.go`, `loop.go`, `human.go` |
 | Human-node and loop field descriptors (F2.2) | `fields.go` |
+| Secret declarations by reference, `secret_env` and ambient-bypass validation (F3.8); grammar lives in `internal/domain/secrets` | `secrets.go` |
 | Compiled data dependencies and value resolution | `bindings.go`, `value.go` |
 | Nodes with no data-dependency path to or from a node (inspector, F2.2) | `independence.go` |
 | Execution-relevant graph fingerprint | `version.go` |

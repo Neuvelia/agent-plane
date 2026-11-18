@@ -6,6 +6,8 @@ package yamlgraph
 import (
 	"strings"
 
+	"go.yaml.in/yaml/v3"
+
 	"agentplane/internal/domain/graph"
 )
 
@@ -17,6 +19,7 @@ import (
 
 type definitionDTO struct {
 	Units              []string               `yaml:"units,omitempty"`
+	Secrets            map[string]secretDTO   `yaml:"secrets,omitempty"`
 	SchemaVersion      graph.SchemaVersion    `yaml:"schema_version"`
 	ID                 string                 `yaml:"id"`
 	Name               string                 `yaml:"name,omitempty"`
@@ -26,6 +29,44 @@ type definitionDTO struct {
 	Edges              []edgeDTO              `yaml:"edges"`
 	GraphInputBindings []graphInputBindingDTO `yaml:"graph_input_bindings,omitempty"`
 	Outputs            map[string]outputDTO   `yaml:"outputs"`
+}
+
+// secretDTO reads one secrets entry leniently on purpose: a strict decode
+// error would quote the offending scalar, which may be a secret pasted by
+// mistake. It keeps only key names and a shape flag; validation reports them.
+type secretDTO struct {
+	SecretRef  string `yaml:"secret_ref"`
+	unknown    []string
+	notMapping bool
+}
+
+func (s *secretDTO) UnmarshalYAML(node *yaml.Node) error {
+	for node.Kind == yaml.AliasNode && node.Alias != nil {
+		node = node.Alias
+	}
+	if node.Kind != yaml.MappingNode {
+		s.notMapping = true
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key, value := node.Content[i].Value, node.Content[i+1]
+		if key != "secret_ref" {
+			s.unknown = append(s.unknown, key)
+			continue
+		}
+		if value.Kind == yaml.ScalarNode {
+			s.SecretRef = value.Value
+		}
+	}
+	return nil
+}
+
+func (d secretDTO) toDomain() graph.SecretDefinition {
+	return graph.SecretDefinition{SecretRef: d.SecretRef, Unknown: d.unknown, NotMapping: d.notMapping}
+}
+
+func secretToDTO(s graph.SecretDefinition) secretDTO {
+	return secretDTO{SecretRef: s.SecretRef, unknown: s.Unknown, notMapping: s.NotMapping}
 }
 
 type inputDTO struct {
@@ -105,6 +146,7 @@ func mapSlice[A, B any](in []A, convert func(A) B) []B {
 func (d definitionDTO) toDomain() *graph.Definition {
 	return &graph.Definition{
 		Units:         d.Units,
+		Secrets:       mapValues(d.Secrets, secretDTO.toDomain),
 		SchemaVersion: d.SchemaVersion,
 		ID:            d.ID,
 		Name:          d.Name,
@@ -141,6 +183,7 @@ func portToDomain(p portDTO) graph.PortDefinition { return graph.PortDefinition(
 func definitionToDTO(d *graph.Definition) definitionDTO {
 	return definitionDTO{
 		Units:         d.Units,
+		Secrets:       mapValues(d.Secrets, secretToDTO),
 		SchemaVersion: d.SchemaVersion,
 		ID:            d.ID,
 		Name:          d.Name,
@@ -179,6 +222,7 @@ func portToDTO(p graph.PortDefinition) portDTO { return portDTO(p) }
 // part of the CLI/API contract (and the editor derives line numbers from it).
 var domainTypeNames = strings.NewReplacer(
 	"yamlgraph.definitionDTO", "graph.Definition",
+	"yamlgraph.secretDTO", "graph.SecretDefinition",
 	"yamlgraph.inputDTO", "graph.InputDefinition",
 	"yamlgraph.nodeDTO", "graph.NodeDefinition",
 	"yamlgraph.portDTO", "graph.PortDefinition",

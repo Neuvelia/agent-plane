@@ -466,21 +466,48 @@ version uses a `sha256-v0:` prefix so a future algorithm can be distinguished.
 
 ## Secrets
 
-Raw secrets are forbidden in graph files. Schema v0 has no generic `secret` or
-`secrets` field, and strict parsing rejects such undeclared top-level fields.
-Because node `config` is intentionally opaque, the parser cannot reliably
-identify whether an ordinary configuration string contains sensitive data;
-authors and later node implementations must not place raw secrets there.
+Raw secrets are forbidden in graph files. Because node `config` is
+intentionally opaque, the parser cannot reliably identify whether an ordinary
+configuration string contains sensitive data; authors and later node
+implementations must not place raw secrets there.
 
-Later graphs may reference named secrets:
+A graph may declare named secrets by reference only (F3.8, ADR-0029). The
+optional top-level `secrets` mapping is additive and needs no `schema_version`
+bump; it is semantic content, and a graph without it keeps its normalized bytes
+and semantic version exactly:
 
 ```yaml
 secrets:
-  github_token:
-    secret_ref: local/github-token
+  gh_token:
+    secret_ref: env/GITHUB_TOKEN
 ```
 
-This is outside Phase 0 unless required by a later activated feature.
+- A name matches `[a-z][a-z0-9_]{0,63}`. An entry has exactly one field,
+  `secret_ref`; any other field, a scalar entry or a missing `secret_ref` is a
+  blocking error that names the secret and never repeats its content
+  (`E_SECRET_ENTRY_INVALID`, `E_SECRET_REF_REQUIRED`, `E_SECRET_NAME_INVALID`).
+- `secret_ref` is `<provider>/<name>`: provider `[a-z][a-z0-9-]{0,31}`, name 1-128
+  printable ASCII characters without `/` or whitespace (`E_SECRET_REF_INVALID`).
+  `env` is the only provider; `local` is reserved for the OS keychain and
+  reported as not available (`E_SECRET_PROVIDER_UNAVAILABLE`); any other
+  provider is `E_SECRET_PROVIDER_UNKNOWN`.
+- A node assigns secrets with `config.secret_env`, a mapping from a child
+  environment variable to a declared secret name. Errors name the node:
+  `E_SECRET_ENV_UNDECLARED`, `E_SECRET_ENV_INVALID`, `E_SECRET_ENV_NAME_INVALID`
+  (empty, `=`, NUL or `AGENTPLANE_ATTEMPT`), `E_SECRET_ENV_DUPLICATE`
+  (case-insensitive), `E_SECRET_ENV_COLLISION` (the variable is also named by the
+  node's `env`, `env_allowlist`, `input_env` or `environment_refs`, compared
+  case-insensitively), `E_SECRET_ENV_NODE_TYPE` (Gate, Human or a loop's embedded
+  Gate) and `E_SECRET_ENV_AGENT_UNSUPPORTED` (Agent nodes cannot take
+  `secret_env` until the Codex spike reports).
+- `E_SECRET_AMBIENT_BYPASS` fails in every mode: a node that is not assigned an
+  `env`-provider secret must not name its backing variable in `env_allowlist`,
+  `environment_refs`, an `env` key or an `input_env` target.
+- This iteration defines the graph surface and validation only. The Shell
+  executor does not accept `secret_env` yet, so `agentplane run` and
+  `graph validate` reject it as an unknown config field until the runtime
+  pipeline delivers granted values (F3.8 T3/T4b); nothing is resolved or
+  delivered, and no field descriptor is published to the editor yet.
 
 ## Validation categories
 

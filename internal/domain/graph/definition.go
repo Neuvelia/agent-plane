@@ -31,7 +31,9 @@ type GraphInputReference string
 
 // Definition is the typed representation of a graph definition document.
 type Definition struct {
-	Units              []string
+	Units   []string
+	Secrets map[string]SecretDefinition
+
 	SchemaVersion      SchemaVersion
 	ID                 string
 	Name               string
