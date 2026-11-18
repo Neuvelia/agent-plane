@@ -20,7 +20,9 @@ changes; `internal/runtime` never imports it.
 
 - Only a tree this package created is signalled: the group id of the leader it
   started. Never look a process up by PID or name. Once the group is observed
-  empty it is never signalled again, which guards group-id reuse.
+  empty it is never signalled again, which guards group-id reuse. After the leader is reaped, a live process
+  with the leader's pid is a stranger and the group is treated as gone. A
+  microsecond window between that check and the signal remains on every Unix.
 - `Start` keeps a caller's `SysProcAttr` and merges `Setpgid`. A `Prepare` hook
   runs before proctree sets its fields, so the hook cannot overwrite them. A
   preset `Pgid` is rejected.

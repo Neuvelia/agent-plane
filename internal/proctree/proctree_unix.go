@@ -40,10 +40,25 @@ func (t *Tree) groupEmpty() bool {
 	if t.gone {
 		return true
 	}
+	if t.leaderReaped() && t.kill(t.pgid, 0) == nil {
+		// Our leader is reaped, so a live process with its pid is a stranger
+		// and a group with that id is not ours.
+		t.gone = true
+		return true
+	}
 	if errors.Is(t.kill(-t.pgid, 0), syscall.ESRCH) {
 		t.gone = true
 	}
 	return t.gone
+}
+
+func (t *Tree) leaderReaped() bool {
+	select {
+	case <-t.done:
+		return true
+	default:
+		return false
+	}
 }
 
 func (t *Tree) signal(sig syscall.Signal) error {

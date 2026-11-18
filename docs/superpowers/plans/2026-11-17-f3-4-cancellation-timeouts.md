@@ -279,9 +279,12 @@ processes are gone; pid liveness is checked with `kill(pid, 0)` on Unix),
 `TestTerminateBeforeWaitAndAfterWaitIsIdempotent`,
 `TestTerminateNeverStartedTreeIsSuccess` (nil receiver and failed `Start`),
 `TestEscalateSkipsRemainingGrace` (grace 30 s, `Escalate` closed, finishes under
-the verify bound), `TestLeakedDescendantYieldsLeakError` (helper `setsid-child`
-escapes the group, so the tree cannot be emptied; `errors.As(*LeakError)`,
-`Leaked >= 1`; the escaped process is killed by the test cleanup),
+the verify bound), `TestLeakedDescendantYieldsLeakError` (the injected `kill` drops
+SIGTERM and SIGKILL, since a member SIGKILL cannot remove is not constructible;
+`errors.As(*LeakError)`, `Leaked >= 1`), `TestEscapedSessionIsOutOfScopeAndNotSignalled`
+(helper `setsid-child` leaves the group; `Terminate` succeeds and the escapee
+survives, killed by test cleanup), `TestReapedLeaderWithEmptyGroupSendsNoSignal`
+and `TestReapedLeaderWhosePidWasReusedSendsNoSignal` (injected `kill`),
 `TestSignalsOnlyTheOwnedGroup` (a sibling process in a different group survives
 every termination), `TestStartKeepsCallerSysProcAttr` (a field the caller set, for example `Setsid` on Linux, survives the merge with `Setpgid`; guarded by build tag), `TestWaitDrainIsBoundedByWaitDelay` (a descendant holding the
 stdout pipe; `Wait` returns within `WaitDelay`), `TestLinuxCountsGroupMembers`.

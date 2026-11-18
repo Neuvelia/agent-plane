@@ -212,3 +212,36 @@ func TestStartRejectsForeignProcessGroup(t *testing.T) {
 		t.Fatal("Start accepted a preset Pgid")
 	}
 }
+
+func recordSignals(tree *Tree, probe func(pid int, sig syscall.Signal) error) *[]syscall.Signal {
+	var sent []syscall.Signal
+	tree.kill = func(pid int, sig syscall.Signal) error {
+		if sig != 0 {
+			sent = append(sent, sig)
+		}
+		return probe(pid, sig)
+	}
+	return &sent
+}
+
+func TestReapedLeaderWithEmptyGroupSendsNoSignal(t *testing.T) {
+	tree, _ := startHelper(t, "exit")
+	tree.Wait()
+	sent := recordSignals(tree, syscall.Kill)
+	out, err := tree.Terminate(context.Background(), Policy{Grace: testGrace})
+	if err != nil || out.Method != MethodAlreadyExited || len(*sent) != 0 {
+		t.Fatalf("Terminate = %+v, %v, signals %v; want already_exited and none", out, err, *sent)
+	}
+}
+
+func TestReapedLeaderWhosePidWasReusedSendsNoSignal(t *testing.T) {
+	tree, _ := startHelper(t, "exit")
+	tree.Wait()
+	// A live process now owns the leader's pid (and so a group with that id),
+	// which cannot be ours: the leader was reaped.
+	sent := recordSignals(tree, func(int, syscall.Signal) error { return nil })
+	out, err := tree.Terminate(context.Background(), Policy{Grace: testGrace})
+	if err != nil || out.Method != MethodAlreadyExited || len(*sent) != 0 {
+		t.Fatalf("Terminate = %+v, %v, signals %v; want already_exited and none", out, err, *sent)
+	}
+}
