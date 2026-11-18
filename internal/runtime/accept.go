@@ -136,6 +136,9 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 			nodeResult.Outputs = ports
 			nodeResult.AcceptedAttemptID = u.accepted
 		}
+		if machine.isolation.nodes[work.id] && !machine.integrateIsolated(ctx, work.id, nodeResult.AcceptedAttemptID) {
+			continue
+		}
 		if work.evidence != nil {
 			machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
 		}
