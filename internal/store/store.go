@@ -75,6 +75,7 @@ type fsOps interface {
 	CreateLog(path string) (logFile, error)
 	SyncDir(path string) error
 	Rename(oldPath, newPath string) error
+	RemoveAll(path string) error
 }
 
 func (s Store) ops() fsOps {
@@ -91,6 +92,8 @@ func (osFS) Mkdir(path string) error    { return os.Mkdir(path, dirMode) }
 func (osFS) SyncDir(path string) error  { return syncDir(path) }
 
 func (osFS) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+
+func (osFS) RemoveAll(path string) error { return os.RemoveAll(path) }
 
 func (osFS) WriteFileSync(path string, data []byte) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)

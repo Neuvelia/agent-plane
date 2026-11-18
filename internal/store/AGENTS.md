@@ -11,6 +11,7 @@ it does not execute graphs or define event payloads.
 | JSONL writer, directory layout, permissions and fsync | `store.go`: `Writer`, `Append`, `open`, `Close` |
 | Readback, summaries, corruption and run-ID validation | `read.go`: `Read`; `store.go`: `ValidRunID` |
 | Listing and the rebuildable per-run `summary.json` snapshot (F3.2) | `list.go`: `List`; `snapshot.go` |
+| Retention in `store.json` and the prune plan/execute pair (F3.2) | `format.go`: `Retention`; `prune.go`: `PlanPrune`, `Prune` |
 | Store preflight and CLI `run`/`runs list/show` behavior | `cmd/agentplane/cli.go`, `cmd/agentplane/runs.go` |
 | Served-run persistence and client-visible failure handling | `cmd/agentplane/serve.go`, `internal/api/server.go` |
 | Event schema, retention and sequence assignment | `internal/events/AGENTS.md`, `internal/events/emitter.go` |
@@ -78,7 +79,8 @@ the root policy.
   latching: `store_test.go`.
 - Round trip, incomplete/corrupt logs, ordering and list behavior:
   `store_test.go`. Snapshot trust, damage, rewrite and the 5,000-run budget:
-  `snapshot_test.go`, `list_bench_test.go`.
+  `snapshot_test.go`, `list_bench_test.go`. Retention selection, safety rules
+  and failure handling: `prune_test.go`.
 - Opt-in history, CLI replay, killed runs, secret refusal and persistence
   errors: `cmd/agentplane/store_test.go`.
 - Served-run persistence, corrupt lists and storage failure delivery:
