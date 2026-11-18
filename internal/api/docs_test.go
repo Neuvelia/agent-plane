@@ -3,12 +3,15 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
@@ -633,4 +636,46 @@ func TestRevokedGrantsStopWorkingAndFreeASlot(t *testing.T) {
 		}
 	}
 	grantFor(t, ts, p, "open") // the slot freed by the revoke is usable
+}
+
+func TestParseErrorMessageIsValidUTF8(t *testing.T) {
+	_, ts, dir := docServer(t)
+	text := "schema_version: 0\nid: g\ninputs: żółćżółćżółć\n"
+	path := writeGraph(t, dir, "utf8.yaml", text)
+	g := grantFor(t, ts, path, "open")
+
+	if got := parseErrorMessage(errors.New("cannot unmarshal into \xc5 value")); !utf8.ValidString(got) || !strings.Contains(got, "\uFFFD") {
+		t.Errorf("parseErrorMessage kept invalid UTF-8: %q", got)
+	}
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": text})
+	if msg, _ := out["parse_error"].(string); !utf8.ValidString(msg) || msg == "" {
+		t.Errorf("validate: parse_error %q", out["parse_error"])
+	}
+	_, out = call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g})
+	if msg, _ := out["parse_error"].(string); !utf8.ValidString(msg) || msg == "" {
+		t.Errorf("open: parse_error %q", out["parse_error"])
+	}
+}
+
+// graphValidateParseColumnFixture is the desktop story recording; it is engine
+// output, so this test fails when the file drifts from what the API returns.
+const graphValidateParseColumnFixture = "../../desktop/test/fixtures/graph-validate-parse-column.json"
+
+func TestParseColumnFixtureMatchesEngineOutput(t *testing.T) {
+	_, ts, _ := docServer(t)
+	text := "schema_version: 0\nid: g\nnodes:\n  a:\n    type: shell\n    colour: red\n"
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": text})
+	raw, err := os.ReadFile(graphValidateParseColumnFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture map[string]any
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"status", "parse_error", "parse_line", "parse_column", "diagnostics", "readonly_canvas", "readonly_reasons"} {
+		if !reflect.DeepEqual(fixture[k], out[k]) {
+			t.Errorf("fixture %s = %v, engine returns %v (re-record with desktop/scripts/record-graph-fixtures.cjs)", k, fixture[k], out[k])
+		}
+	}
 }
