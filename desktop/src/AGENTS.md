@@ -40,7 +40,9 @@ spec before changing a screen, API wrapper or event view. The sibling
   Only the server's explicit `end` completes a stream. If it is lost while
   the run is still active, keep the last reduced state and offer reconnect;
   a loss after `run_finished` does not reopen a completed run. A nonempty,
-  normally ended log without a terminal run event is interrupted. `usePoll`
+  normally ended log without a terminal run event is interrupted, and so is
+  every node that started and never finished, unless the store reports the run
+  as `running` (a writer in another process holds it). `usePoll`
   is for lists, and a failed list read is an error with Retry, never an empty
   list or stale data shown as current. Preflight displays the engine's
   diagnostics rather than validating graph semantics in TypeScript.

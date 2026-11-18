@@ -56,6 +56,7 @@ export function useRunStream(runId: string): RunStream {
   const [graph, setGraph] = useState<GraphSummary | null>(null)
   const [yaml, setYaml] = useState('')
   const [notFound, setNotFound] = useState(false)
+  const [storeStatus, setStoreStatus] = useState<string | undefined>(undefined)
   const [lost, setLost] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
 
@@ -65,6 +66,7 @@ export function useRunStream(runId: string): RunStream {
     setEnded(false)
     setLost(null)
     setNotFound(false)
+    setStoreStatus(undefined)
     let pending: ApEvent[] = []
     let timer: ReturnType<typeof setTimeout> | undefined
     // Coalesce bursts into one render; every event is still applied in order.
@@ -78,6 +80,7 @@ export function useRunStream(runId: string): RunStream {
       if (!d) return setNotFound(true)
       setGraph(d.summary)
       setYaml(d.graph)
+      setStoreStatus(d.run.status)
     })
     const stop = window.agentplane.subscribe(
       runId,
@@ -100,7 +103,7 @@ export function useRunStream(runId: string): RunStream {
   }, [runId, attempt])
 
   // Memoized so an unchanged stream keeps the same object and downstream memos hold.
-  const shown = useMemo(() => presentRun(run, ended, lost !== null), [run, ended, lost])
+  const shown = useMemo(() => presentRun(run, ended, lost !== null, storeStatus), [run, ended, lost, storeStatus])
   const activeLost = streamLost(shown, lost)
   return { run: shown, graph, yaml, following: !ended && !activeLost, notFound, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
 }
