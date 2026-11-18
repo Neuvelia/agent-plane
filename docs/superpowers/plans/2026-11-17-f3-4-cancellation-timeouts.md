@@ -312,7 +312,7 @@ classify cancel. Replace this:
   its outcome is read without a race.
 - Classification uses the record: `FailureCanceled` iff termination was requested
   by a done context and `Terminate` succeeded (any exit status, any OS exit code);
-  `FailureTimeout` iff `run.ReasonOf(context.Cause(ctx))` is `node_timeout`;
+  (`FailureTimeout` iff `run.ReasonOf(context.Cause(ctx))` is `node_timeout` moves to Task 7: the cause types arrive with Task 5, so B2 does not add it;)
   `FailureShutdown` iff `*proctree.LeakError`; otherwise existing kinds. The Unix
   `Signaled()` heuristic and the Windows special case are deleted.
 - `ExecutionError` gains `Termination *proctree.Outcome` and the method
@@ -327,16 +327,18 @@ classify cancel. Replace this:
 - [ ] Delete the Windows branch and the `runtime` import.
 
 **Tests:** `TestExecuteCancellationKillsGrandchild` (red today; helper `spawn`),
-`TestExecuteNodeDeadlineKillsTreeAndReportsTimeout` (a derived context with a
-typed `node_timeout` cause; `FailureTimeout`, no descendant),
 `TestExecuteCancelAfterExitIsNotAnExitFailure` (helper exits as cancel fires;
 `FailureCanceled` or success, never `FailureExit`; this is W3 on Windows),
 `TestExecuteForcedKillRecordsMethod` (helper `ignore-term` with a 200 ms policy
 grace; `Termination.Method == forced`), `TestExecuteLeakIsShutdownWithCount`,
 `TestExecuteExitCodeZeroAfterKillStillCanceled` (helper that traps TERM and exits
 0; classification from the record, not the code), existing
-`TestExecuteCancellationTerminatesChild` and
-`TestExecuteCancellationReturnsWithInheritedOutputPipes` unchanged.
+`TestExecuteCancellationTerminatesChild` unchanged. Deviation:
+`TestExecuteCancellationReturnsWithInheritedOutputPipes` only drops its wait for the
+holder (cancellation now kills it); `TestExecuteCancellationBoundsDrainForEscapedPipeHolder`
+(a `setsid` descendant outside the group) keeps the `WaitDelay` bound covered.
+`TestExecuteNodeDeadlineKillsTreeAndReportsTimeout` (typed `node_timeout` cause,
+`FailureTimeout`, no descendant) moves to Task 7 with `FailureTimeout`.
 
 ---
 
