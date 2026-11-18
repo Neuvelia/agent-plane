@@ -1,15 +1,18 @@
 'use strict'
 const { app, BrowserWindow, dialog, ipcMain } = require('electron')
 const { spawn } = require('node:child_process')
+const fs = require('node:fs')
 const path = require('node:path')
 const { isAllowed } = require('./allowlist.cjs')
 const { createGraphHandlers } = require('./graphs.cjs')
 const { createRecents } = require('./recents.cjs')
 const { createRecordingSettings, serveFlags } = require('./recording.cjs')
+const { resolveSidecar } = require('./sidecar.cjs')
 
 // The sidecar is the Go engine. The renderer is only a client of its API.
 const repoRoot = path.resolve(__dirname, '..', '..')
-const binary = process.env.AGENTPLANE_BIN || path.join(repoRoot, 'bin', 'agentplane')
+const sidecarBinary = resolveSidecar({ platform: process.platform, repoRoot, env: process.env, exists: fs.existsSync })
+const binary = sidecarBinary.path
 const storeDir = process.env.AGENTPLANE_STORE_DIR || path.join(app.getPath('userData'), 'runs')
 
 let sidecar = null
@@ -23,6 +26,10 @@ let session = { recording: false, missing: [] }
 
 function startSidecar() {
   return new Promise((resolve, reject) => {
+    if (sidecarBinary.error) {
+      reject(new Error(sidecarBinary.error))
+      return
+    }
     const flags = serveFlags(recordingSettings.load(), process.env)
     session = { recording: flags.recording, missing: flags.missing }
     const child = spawn(binary, ['serve', '--store-dir', storeDir, ...flags.args], { stdio: ['pipe', 'pipe', 'pipe'] })

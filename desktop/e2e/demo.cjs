@@ -1,19 +1,43 @@
 'use strict'
 // End-to-end check of the real Electron app against the real Go sidecar.
 //   xvfb-run -a node e2e/demo.cjs [screenshot-dir]
-// Requires `make build` (bin/agentplane) and `npm run build` (dist/).
+// Requires `make build` (bin/agentplane, bin/agentplane.exe on Windows) and `npm run build` (dist/).
 const { _electron } = require('playwright')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { binaryName } = require('../electron/sidecar.cjs')
 
 const root = path.resolve(__dirname, '..', '..')
-const graph = path.join(root, '.agents', 'graphs', 'demo-vertical.yaml')
 const shots = process.argv[2]
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ap-e2e-'))
-const env = { ...process.env, AGENTPLANE_BIN: path.join(root, 'bin', 'agentplane'), AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
+const engine = path.join(root, 'bin', binaryName(process.platform))
+const env = { ...process.env, AGENTPLANE_BIN: engine, AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
 delete env.NODE_OPTIONS
+const win = process.platform === 'win32'
+const q = JSON.stringify
+// The demo graph and the editor round trip run POSIX tools by absolute path. Windows has none,
+// so there the same graph structure runs the node binary that runs this script instead.
+const nodeBin = q(process.execPath)
+const nodeCmd = (script) => `command: ${nodeBin}\n      args: ["-e", ${q(script)}]`
+const shellConfig = win ? `{command: ${nodeBin}, args: ["-e", ${q("process.stdout.write('hello\\n')")}]}` : '{command: /usr/bin/printf, args: ["hello\\n"]}'
+function demoGraph() {
+  const file = path.join(root, '.agents', 'graphs', 'demo-vertical.yaml')
+  if (!win) return file
+  const swap = (text, pattern, script) => {
+    assert.match(text, pattern, 'the demo graph changed: update the Windows variant in demo.cjs')
+    return text.replace(pattern, nodeCmd(script))
+  }
+  let text = fs.readFileSync(file, 'utf8')
+  text = swap(text, /command: \/usr\/bin\/printf\n\s+args: \["fast branch done"\]/, "process.stdout.write('fast branch done')")
+  text = swap(text, /command: \/bin\/sh\n\s+args:\n\s+- -c\n\s+- '.*'/, "console.log(JSON.stringify({ready: process.env.AGENTPLANE_ATTEMPT !== '1'}))")
+  text = swap(text, /command: \/usr\/bin\/printf\n\s+args: \["applied\\n"\]/, "console.log('applied')")
+  const out = path.join(work, 'demo-vertical.yaml')
+  fs.writeFileSync(out, text)
+  return out
+}
+const graph = demoGraph()
 
 async function launch() {
   const app = await _electron.launch({
@@ -38,6 +62,36 @@ async function launch() {
   await page.bringToFront()
   await page.waitForFunction(() => document.hasFocus(), null, { timeout: 15000 })
   return { app, page }
+}
+// The engine processes started by this app: agentplane descendants of the launched Electron process.
+function sidecarPid(app) {
+  const root = app.process().pid
+  const run = require('node:child_process').execFileSync
+  const table = win
+    ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.Name)" }'], { encoding: 'utf8' })
+    : run('ps', ['-e', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' })
+  const rows = table.split(/\r?\n/).map((l) => l.trim().split(/\s+/)).filter((f) => /^\d+$/.test(f[0]))
+  const procs = new Map(rows.map(([pid, ppid, name]) => [Number(pid), { ppid: Number(ppid), name }]))
+  const below = (pid) => {
+    for (let p = procs.get(pid)?.ppid, hops = 0; p && hops < 64; p = procs.get(p)?.ppid, hops++) if (p === root) return true
+    return false
+  }
+  const pids = [...procs].filter(([pid, p]) => /^agentplane(\.exe)?$/.test(p.name) && below(pid)).map(([pid]) => pid)
+  assert.equal(pids.length, 1, `expected exactly one sidecar below the app, found ${JSON.stringify(pids)}`)
+  return pids[0]
+}
+// Pointer drags start only once the element has stopped moving (fit-view and layout animate in a real window).
+async function settledBox(page, selector) {
+  const handle = await page.locator(selector).elementHandle()
+  await page.waitForFunction(
+    (el) => new Promise((resolve) => {
+      const at = () => JSON.stringify(el.getBoundingClientRect())
+      const before = at()
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(at() === before)))
+    }),
+    handle,
+  )
+  return handle.boundingBox()
 }
 const shot = async (page, name) => shots && (fs.mkdirSync(shots, { recursive: true }), page.screenshot({ path: path.join(shots, name + '.png') }))
 const status = (page, id) => page.locator(`[data-testid="node-${id}"]`).getAttribute('data-status')
@@ -70,12 +124,12 @@ async function startDemo(page) {
     assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
-    const refused = await page.evaluate(async () => ({
-      grants: await window.agentplane.request('POST', '/graphs/grants', { path: '/tmp/never.yaml', mode: 'create' }),
+    const refused = await page.evaluate(async (never) => ({
+      grants: await window.agentplane.request('POST', '/graphs/grants', { path: never, mode: 'create' }),
       revoke: await window.agentplane.request('DELETE', '/graphs/grants/abc'),
       wrongMethod: await window.agentplane.request('PUT', '/runs', {}),
       climb: await window.agentplane.request('GET', '/runs/%2e%2e'),
-    }))
+    }), path.join(os.tmpdir(), 'never.yaml'))
     for (const [name, r] of Object.entries(refused)) {
       assert.equal(r.status, 400, `${name} must be refused by the main process`)
       assert.equal(r.body.error.message, 'path not allowed', name)
@@ -203,7 +257,7 @@ async function startDemo(page) {
     // Every edge of the demo is drawn (React Flow draws none when it loses handle measurements).
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 3)
     const versionBefore = await page.textContent('text=/Version [0-9a-f]{8}/')
-    const box = await page.locator('[data-testid="node-fast"]').boundingBox()
+    const box = await settledBox(page, '[data-testid="node-fast"]')
     await page.mouse.move(box.x + box.width / 2, box.y + 10)
     await page.mouse.down()
     await page.mouse.move(box.x + box.width / 2 + 70, box.y + 50, { steps: 8 })
@@ -278,8 +332,8 @@ async function startDemo(page) {
     await stubOpen(dragged)
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="node-a"]')
-    const from = await page.locator('[data-testid="handle-a.outputs.stdout"]').boundingBox()
-    const to = await page.locator('[data-testid="handle-b.inputs.text"]').boundingBox()
+    const from = await settledBox(page, '[data-testid="handle-a.outputs.stdout"]')
+    const to = await settledBox(page, '[data-testid="handle-b.inputs.text"]')
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
     await page.mouse.down()
     await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 })
@@ -332,13 +386,13 @@ async function startDemo(page) {
     await page.click('[data-testid="yaml-content"]')
     await page.keyboard.press(`${mod}+a`)
     // insertText keeps the text exactly; typing Enter in CodeMirror would auto-indent.
-    await page.evaluate((t) => document.execCommand('insertText', false, t), 'schema_version: 0\nid: roundtrip\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: {command: /usr/bin/printf, args: ["hello\\n"]}\nedges: []\noutputs: {}\n')
+    await page.evaluate((t) => document.execCommand('insertText', false, t), 'schema_version: 0\nid: roundtrip\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: ' + shellConfig + '\nedges: []\noutputs: {}\n')
     await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
     await page.click('[data-testid="editor-save-run"]')
     await page.waitForSelector('[data-testid="run-status"]')
     await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
     const exec = require('node:child_process').execFileSync
-    const bin = path.join(__dirname, '..', '..', 'bin', 'agentplane')
+    const bin = engine
     exec(bin, ['graph', 'validate', path.join(graphDir, 'roundtrip.yaml')])
     exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
     await page.click('[data-testid="nav-editor"]')
@@ -355,7 +409,7 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="issue"]')
     // Same diagnostics as the CLI, and the config error is there before any run.
-    const cliOut = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', issuesFile, '--json'], { encoding: 'utf8' }).stdout)
+    const cliOut = JSON.parse(require('node:child_process').spawnSync(engine, ['graph', 'validate', issuesFile, '--json'], { encoding: 'utf8' }).stdout)
     const panelCodes = await page.$$eval('[data-testid="issue"]', (els) => els.map((e) => e.getAttribute('data-code')).sort())
     assert.deepEqual(panelCodes, cliOut.diagnostics.map((d) => d.code).sort(), 'the panel shows exactly the CLI diagnostics')
     assert.ok(panelCodes.includes('E_NODE_CONFIG_INVALID'))
@@ -471,7 +525,7 @@ async function startDemo(page) {
       assert.ok(inspectedText.includes(want), `${want} in\n${inspectedText}`)
     }
     // The saved file is accepted by the CLI, apart from the Advanced key the Shell executor rejects.
-    const validated = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', inspected, '--json'], { encoding: 'utf8' }).stdout)
+    const validated = JSON.parse(require('node:child_process').spawnSync(engine, ['graph', 'validate', inspected, '--json'], { encoding: 'utf8' }).stdout)
     assert.deepEqual(validated.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message.includes('retries')), [true], JSON.stringify(validated.diagnostics))
     // The Advanced section shows the unknown key as it is in the file; removing it makes the graph valid.
     assert.match(await page.textContent('[data-testid="advanced-entry-retries"]'), /\{max: 2, on: \[timeout\]\}/)
@@ -726,8 +780,8 @@ async function startDemo(page) {
     await startDemo(page)
     await waitStatus(page, 'approve', 'waiting_human')
     // SIGKILL simulates a crash (SIGTERM would be a graceful, complete shutdown).
-    // "[a]gentplane" keeps the pattern from matching pkill's own shell.
-    require('node:child_process').execSync(`pkill -9 -f "bin/[a]gentplane serve" || true`)
+    // Only the sidecar this app started is killed: it is the engine child of the Electron main process.
+    process.kill(sidecarPid(app), 'SIGKILL')
     await page.waitForSelector('[data-testid="connection-lost"]', { timeout: 15000 })
     assert.equal(await page.textContent('[data-testid="run-status"]'), 'Connection lost')
     assert.equal(await status(page, 'approve'), 'waiting_human')
