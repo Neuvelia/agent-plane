@@ -102,6 +102,10 @@ needs a feature spec and, where required by root policy, an ADR.
 - Watch ordering, progress omission, broken pipes and cancellation:
   `output_test.go`, `progress_test.go`, `integration_test.go`.
 - Store opt-in, replay, secrets and failure precedence: `store_test.go`.
+- `kill -9` of a running CLI (durable prefix, live `running` then `interrupted`,
+  lock not inherited by node processes) and persist-before-deliver across
+  processes: `crash_test.go` (helper processes `TestCrashHelperProcess`,
+  `TestCrashEventsHelperProcess`).
 - Worktree isolation flags, JSON/human result, exit codes and the
   no-isolation golden guard: `isolation_test.go`.
 - Server handshake, persistence, invalid graphs and shutdown:
