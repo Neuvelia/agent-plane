@@ -3,6 +3,7 @@
 package gate
 
 import (
+	"agentplane/internal/testenv"
 	"context"
 	"errors"
 	"os"
@@ -85,7 +86,8 @@ func (g *blockingGate) wait(t *testing.T) error {
 	}
 }
 
-func alive(pid int) bool { return !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) }
+// alive ignores zombies: see testenv.ProcessAlive.
+func alive(pid int) bool { return testenv.ProcessAlive(pid) }
 
 func TestCommandGateKillsDiffTreeOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

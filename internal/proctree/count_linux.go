@@ -10,7 +10,24 @@ import (
 
 // countGroup counts processes (zombies included, as kill(-pgid, 0) does) whose
 // process group id is pgid.
-func countGroup(pgid int) int {
+func countGroup(pgid int) int { return countGroupMembers(pgid, true) }
+
+// countLiveGroup counts the members of the group that can still run: zombies are
+// not counted. An unreadable /proc counts as one live member.
+func countLiveGroup(pgid int) int {
+	n := countGroupMembers(pgid, false)
+	if n == 0 && !procReadable() {
+		return 1
+	}
+	return n
+}
+
+func procReadable() bool {
+	_, err := os.ReadDir("/proc")
+	return err == nil
+}
+
+func countGroupMembers(pgid int, zombies bool) int {
 	entries, err := os.ReadDir("/proc")
 	if err != nil {
 		return 0
@@ -24,7 +41,7 @@ func countGroup(pgid int) int {
 		if err != nil {
 			continue
 		}
-		if statGroup(string(data)) == pgid {
+		if statGroup(string(data)) == pgid && (zombies || !statZombie(string(data))) {
 			n++
 		}
 	}
@@ -48,4 +65,15 @@ func statGroup(stat string) int {
 		return -1
 	}
 	return pgrp
+}
+
+// statZombie reports whether /proc/<pid>/stat says the process is a zombie: the
+// state is the first field after the last ')'.
+func statZombie(stat string) bool {
+	i := strings.LastIndexByte(stat, ')')
+	if i < 0 {
+		return false
+	}
+	fields := strings.Fields(stat[i+1:])
+	return len(fields) > 0 && fields[0] == "Z"
 }

@@ -3,6 +3,7 @@
 package gitstate
 
 import (
+	"agentplane/internal/testenv"
 	"context"
 	"errors"
 	"os"
@@ -60,7 +61,8 @@ func readPID(t *testing.T, fifo string) int {
 	}
 }
 
-func alive(pid int) bool { return !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) }
+// alive ignores zombies: see testenv.ProcessAlive.
+func alive(pid int) bool { return testenv.ProcessAlive(pid) }
 
 func runFake(ctx context.Context, opts RunOptions) <-chan error {
 	done := make(chan error, 1)

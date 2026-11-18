@@ -4,6 +4,7 @@ package shell
 
 import (
 	"agentplane/internal/proctree"
+	"agentplane/internal/testenv"
 	"context"
 	"errors"
 	"os"
@@ -58,9 +59,8 @@ func init() {
 	}
 }
 
-func processAlive(pid int) bool {
-	return !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
-}
+// processAlive ignores zombies: see testenv.ProcessAlive.
+func processAlive(pid int) bool { return testenv.ProcessAlive(pid) }
 
 func TestExecuteCancellationKillsGrandchild(t *testing.T) {
 	dir := t.TempDir()

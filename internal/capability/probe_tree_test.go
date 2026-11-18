@@ -3,8 +3,8 @@
 package capability
 
 import (
+	"agentplane/internal/testenv"
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -57,7 +57,7 @@ func TestCapabilityProbeBoundedTree(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("probe did not return")
 	}
-	if !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+	if testenv.ProcessAlive(pid) { // a zombie awaiting reaping cannot run
 		t.Fatalf("grandchild %d survived the cancelled probe", pid)
 	}
 }

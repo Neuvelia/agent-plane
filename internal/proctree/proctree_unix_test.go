@@ -3,6 +3,7 @@
 package proctree
 
 import (
+	"agentplane/internal/testenv"
 	"bufio"
 	"context"
 	"errors"
@@ -14,9 +15,8 @@ import (
 	"time"
 )
 
-func alive(pid int) bool {
-	return !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
-}
+// alive ignores zombies: see testenv.ProcessAlive.
+func alive(pid int) bool { return testenv.ProcessAlive(pid) }
 
 func killPID(pid int) {
 	if p, err := os.FindProcess(pid); err == nil {
