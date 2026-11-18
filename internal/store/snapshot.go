@@ -50,8 +50,10 @@ func (w *Writer) SnapshotError() error { return w.snapshotErr }
 // writeSnapshot publishes the snapshot of the log written so far. It runs after
 // the terminal event's sync, while the writer still holds the run lock.
 func (w *Writer) writeSnapshot() error {
-	dir := filepath.Join(w.store.Dir, w.summary.RunID)
-	return writeSnapshotFile(w.store.ops(), dir, w.summary, w.logBytes)
+	if w.runDir == "" {
+		return nil // this writer created no run directory, so there is nothing to describe
+	}
+	return writeSnapshotFile(w.store.ops(), w.runDir, w.summary, w.logBytes)
 }
 
 // writeSnapshotFile writes the snapshot to a temporary file in the run

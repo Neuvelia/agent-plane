@@ -82,6 +82,34 @@ func TestNoSnapshotExistsBeforeTheTerminalEvent(t *testing.T) {
 	closeWriter(t, w)
 }
 
+func TestWriterThatNeverCreatedARunWritesNoSnapshot(t *testing.T) {
+	cwd := t.TempDir()
+	previous, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(cwd); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previous); err != nil {
+			t.Error(err)
+		}
+	})
+	w := (Store{}).NewWriter(nil)
+	w.file = &recordingFile{} // a writer whose log was injected, as the fault-seam tests do
+	now := time.Now().UTC()
+	if err := w.Append(finished(runA, 1, "succeeded", now)); err != nil {
+		t.Fatal(err)
+	}
+	if w.SnapshotError() != nil {
+		t.Fatalf("no run directory means no snapshot and no error: %v", w.SnapshotError())
+	}
+	if entries, err := os.ReadDir(cwd); err != nil || len(entries) != 0 {
+		t.Fatalf("a snapshot must never be written outside a run directory: %v %v", entries, err)
+	}
+}
+
 func TestListParsesNoLogWhenTheSnapshotIsValid(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	now := time.Now().UTC()

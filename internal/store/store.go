@@ -155,6 +155,9 @@ type Writer struct {
 	summary     Summary
 	logBytes    int64
 	snapshotErr error
+	// runDir is the run directory this writer created; empty until then. The
+	// snapshot belongs to that directory and to nothing else.
+	runDir string
 }
 
 // logFile is the part of *os.File the writer needs; a seam for fault injection.
@@ -226,6 +229,7 @@ func (w *Writer) open(first events.Event) error {
 		return fmt.Errorf("refusing to store run with invalid ID %q", id)
 	}
 	w.summary = Summary{RunID: id}
+	w.runDir = filepath.Join(w.store.Dir, id)
 	fs := w.store.ops()
 	if err := fs.MkdirAll(w.store.Dir); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
