@@ -80,7 +80,8 @@ the root policy.
 - Round trip, incomplete/corrupt logs, ordering and list behavior:
   `store_test.go`. Snapshot trust, damage, rewrite and the 5,000-run budget:
   `snapshot_test.go`, `list_bench_test.go`. Retention selection, safety rules
-  and failure handling: `prune_test.go`.
+  and failure handling: `prune_test.go`; a log held open on Windows (a real
+  sharing violation, `//go:build windows`): `prune_windows_test.go`.
 - Opt-in history, CLI replay, killed runs, secret refusal and persistence
   errors: `cmd/agentplane/store_test.go`. Real `kill -9` across processes and
   the run lock as seen by another process: `cmd/agentplane/crash_test.go`.
