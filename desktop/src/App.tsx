@@ -13,7 +13,7 @@ import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
 import { Welcome } from './welcome'
 
-type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
+type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor'; picker?: boolean } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
 
 export default function App() {
   // Every screen that cannot reach the engine reports here; the global bar says so while any does.
@@ -50,14 +50,14 @@ function Shell({ lost }: { lost: boolean }) {
   // After navigating, move focus to the content so keyboard and screen-reader users start there.
   const mainRef = useRef<HTMLElement>(null)
   const first = useRef(true)
-  const routeKey = route.name === 'run' ? `run:${route.id}` : route.name === 'new' ? `new:${route.graph?.grant ?? ''}` : route.name
+  const routeKey = route.name === 'run' ? `run:${route.id}` : route.name === 'new' ? `new:${route.graph?.grant ?? ''}` : route.name === 'editor' && route.picker ? 'editor:picker' : route.name
   useEffect(() => {
     if (first.current) {
       first.current = false
       return
     }
-    // The welcome screen moves focus to its own heading.
-    if (routeKey === 'welcome') return
+    // The welcome screen and the template picker move focus to their own content.
+    if (routeKey === 'welcome' || routeKey === 'editor:picker') return
     mainRef.current?.focus({ preventScroll: true })
   }, [routeKey])
 
@@ -111,8 +111,8 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
-          {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor' }, editor.create)} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
+          {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
+          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

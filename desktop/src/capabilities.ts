@@ -92,12 +92,17 @@ function meaningOf(t: CapabilityTool): { meaning: MessageKey; still?: MessageKey
   return { meaning: 'cap.meaning.unknown' }
 }
 
+/** The localized product name of a tool id, or the id as received. */
+export function toolName(id: string): RowText['name'] {
+  const key = `cap.tool.${id}`
+  return has(key) ? { key } : { raw: id }
+}
+
 export function rowText(t: CapabilityTool): RowText {
-  const nameKey = `cap.tool.${t.id}`
   const statusKey = `cap.status.${t.status}`
   const known = has(statusKey)
   return {
-    name: has(nameKey) ? { key: nameKey } : { raw: t.id },
+    name: toolName(t.id),
     status: known ? { key: statusKey } : { raw: t.status },
     glyph: GLYPHS[t.status] ?? '?',
     known,
@@ -111,7 +116,12 @@ export function reasonKey(reason: string): MessageKey | undefined {
   return has(k) ? k : undefined
 }
 
-export const WELCOME_KEY = 'agentplane.welcome.v1'
+/** The report row for a tool id; `undefined` means the report does not list it (or there is no report). */
+export function statusOf(report: CapabilityReport | null, id: string): CapabilityTool | undefined {
+  return report?.tools.find((t) => t.id === id)
+}
+
+export const WELCOME_KEY ='agentplane.welcome.v1'
 
 function safeStorage(): Storage | undefined {
   try {

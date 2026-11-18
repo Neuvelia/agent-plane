@@ -12,6 +12,7 @@ before changing a document, operation or save flow.
 | Async open/create/edit/validate/save/run orchestration | `useGraphDocument.ts` |
 | Typed bridge calls and response mapping | `api.ts`, `types.ts`, `hash.ts` |
 | Toolbar, YAML/Visual/Split views, diagnostics and conflict UI | `EditorScreen.tsx` |
+| "New graph" picker (Blank or a bundled template, F2.12) | `TemplatePicker.tsx`, `../templates.ts` |
 | Port handles, operation gestures and keyboard paths | `GraphCanvas.tsx` |
 | Display positions and canvas-only helpers | `layout.ts` |
 | CodeMirror text editing and key bindings | `YamlEditor.tsx` |
@@ -26,7 +27,8 @@ before changing a document, operation or save flow.
   the last engine analysis, not a second graph validator or YAML rewriter.
   `doc.ts` is a pure state machine; `useGraphDocument.ts` coordinates the
   bridge and keeps the document alive across screen navigation. New graphs
-  start as unsaved schema-v0 text and are created on the first save.
+  start as unsaved schema-v0 text (blank, or a bundled template whose text differs only
+  in its `id:` line, F2.12) and are created on the first save.
 - Typing marks analysis stale and is validated after a 300 ms pause. A
   validation answer for older text is ignored. A canvas operation sends
   the text on screen with its SHA-256 `base_hash` to `/graphs/edit`; it does
@@ -89,6 +91,7 @@ and the F2.4 Issues panel are present; F2.3 remains a separate scope.
 ## Choose regression tests
 
 - Draft/history, stale validation and run gating: `desktop/test/editor-doc.test.ts`.
+- Template picker and draft text: `desktop/test/templates.test.tsx`, stories in `picker.stories.tsx`.
 - Layout, ID suggestion and deletion counts: `desktop/test/editor-layout.test.ts`.
 - Guard against renderer graph rules: `desktop/test/no-graph-rules.test.ts`.
 - Inspector model, help catalogue and stories: `desktop/test/inspector-model.test.ts`,

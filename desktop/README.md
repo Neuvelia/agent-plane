@@ -141,8 +141,8 @@ a dev dependency and is never part of the packaged app.
   reported by `GET /capabilities`; "Check again" calls `POST /capabilities/check`.
   The CLIs are only looked up on the engine's `PATH`, never run. Main passes
   `--codex-bin` only when `AGENTPLANE_CODEX_BIN` is an absolute path
-  (`electron/capabilities.cjs`). "Start from a template" opens the blank New
-  graph flow until the F2.12 picker lands.
+  (`electron/capabilities.cjs`). "Start from a template" opens the New graph
+  picker (F2.12, below).
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 
@@ -154,7 +154,20 @@ state and conflict handling live in `src/editor/doc.ts` and
 `useGraphDocument.ts`; validation is the engine's (`POST /graphs/validate`), the
 renderer holds no graph rules. Saving sends the hash of the text it opened
 (`base_hash`); a file changed on disk is reported as a conflict and is never
-overwritten silently. A new graph is create-only. The canvas, Visual/Split view
+overwritten silently. A new graph is create-only. "New graph" first opens a
+picker (F2.12, `src/editor/TemplatePicker.tsx`): Blank graph or one of the four
+templates of `.agents/templates/`, which the renderer bundles as text at build
+time (`src/templates.ts`). A template's draft is its text with only the
+`id: <template id>` line replaced by the id derived from the chosen file name;
+nothing else is parsed or changed in the renderer, and the engine validates the
+draft like any other. Each entry shows notices from the F2.11 capability report
+(platform, status of `git` and `codex`, "not checked" when there is no report)
+that inform and never disable an entry. The picker is a modal dialog with a
+native radio group (arrow keys), Enter to create and Escape to cancel; cancelling
+the dialog or the save dialog creates nothing, and with unsaved changes open the
+save / discard / cancel prompt runs once a choice is made, before the save
+dialog. Re-record the story answer for the agent template with
+`AP_RECORD=templates node scripts/record-graph-fixtures.cjs`. The canvas, Visual/Split view
 and "Save and run" come in later slices.
 
 ## Canvas (F2.1, slice E2.2)

@@ -26,6 +26,17 @@ describe('no graph rules in the renderer', () => {
     expect(hits).toEqual([])
   })
 
+  // F2.12: the template picker copies bundled text and replaces one `id:` line. It
+  // never parses template YAML, names a node type to decide anything or lists a config key.
+  const picker = sources.filter((s) => /[\\/](templates\.ts|TemplatePicker\.tsx)$/.test(s.p))
+  it('scans the template picker', () => {
+    expect(picker.map((s) => s.p.split(/[\\/]/).pop()).sort()).toEqual(['TemplatePicker.tsx', 'templates.ts'])
+  })
+  it('the template picker never parses YAML or branches on a node type or config key', () => {
+    const hits = picker.filter((s) => /from ['"](yaml|js-yaml|@codemirror\/lang-yaml)['"]|YAML\.parse|JSON\.parse|\.type\s*[!=]==?\s*['"`]|config\??\.\w+|workspace|allowed_paths/.test(s.text)).map((s) => s.p)
+    expect(hits).toEqual([])
+  })
+
   // F2.2: the inspector renders the sidecar's descriptors. It must not branch on
   // a node type or name a config key to decide what is valid.
   const inspector = sources.filter((s) => s.p.includes(join('editor', 'inspector')))
