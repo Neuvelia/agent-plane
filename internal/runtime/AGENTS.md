@@ -16,6 +16,7 @@ The root `AGENTS.md` still applies. This file adds rules for
 | Bounded progress, logs and redaction | `progress.go`, `log_redactor.go` |
 | Opt-in recorded run values (ADR-0023) | `values.go`, called from `preflight.go` and `accept.go` |
 | Opt-in worktree isolation (ADR-0024): port, preflight, lifecycle, integration, release | `isolation.go`, called from `preflight.go`, `batch.go`, `accept.go`, `scheduler.go` (`finish`) |
+| Source checkout guard for isolated runs (`source_workspace_changed`) | `source_guard.go` |
 
 ## Preserve these contracts
 
@@ -63,7 +64,7 @@ The root `AGENTS.md` still applies. This file adds rules for
   nodes get a synthetic, never-conflicting scheduling identity. Production
   `runtime` reaches Git only through `WorkspaceManager`; it must not import
   `internal/worktree`. The source guard (`captureSourceGuard` in preflight,
-  `reportSourceChanges` in `finish`) uses `gitstate` directly, is bounded,
+  `reportSourceChanges` in `finish`, both in `source_guard.go`) uses `gitstate` directly, is bounded,
   emits `source_workspace_changed` (or `indeterminate`) and never fails the run.
 - Production `runtime` imports `graph`, `events` and `gitstate` and defines
   small consumer-owned executor interfaces. Put concrete Agent, Gate, Shell,
