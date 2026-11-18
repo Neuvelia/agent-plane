@@ -9,3 +9,9 @@ They provide broader context than the executable repository contracts:
 - `implementation-queue.md` (historical Phase 0 and Phase 1 checklist)
 
 For day-to-day Codex work, prefer the shorter contracts in the parent `docs/` directory and the active feature spec. Use these reference documents when broader product context is needed.
+
+Progress against these documents is tracked separately, so the reference text
+stays a faithful copy of the source PDFs:
+
+- `../progress/roadmap-features-status.md` - status of every F-ID, UI screens, demos and v1.0 criteria
+- `../progress/architecture-plan-status.md` - status of every section of the architecture plan and MVP criteria

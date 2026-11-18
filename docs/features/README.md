@@ -21,8 +21,8 @@ contract decisions are in ADR-0009. F1.2 adds explicit Codex CLI routing and
 Git-derived evidence (ADR-0010), verified by a real disposable-repository smoke.
 F1.3 adds bounded normalized progress (ADR-0011). F1.4 adds deterministic Gate checks (ADR-0012). F1.5 adds versioned Check Results (ADR-0013), F1.6 bounded correction
 attempts (ADR-0014), and F1.7 static-unit envelopes/immutable runtime acceptance
-(ADR-0015). Shared files remain mutable; the after-merge real-Codex demo is
-prepared but has not been executed in this implementation. F1.8 adds opt-in
+(ADR-0015). Shared files remain mutable; the after-merge real-Codex demo passed on
+2026-11-17 (`docs/validation/F1.7-real-codex-demo.md`). F1.8 adds opt-in
 Git-observed changed-files scope checking (ADR-0016). See `docs/roadmap.md` for the complete ID catalog,
 dependencies and phase exit criteria. A roadmap entry is not an executable
 feature contract.
@@ -55,8 +55,8 @@ feature contract.
 | `F2.6-run-inspector-overview.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (overview largely delivered by F2.5/F2.5a/F2.9); no ADR |
 | `F2.7-run-inspector-node-detail.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (partly delivered by F2.5/F2.8a); additive `graph_summary` fields recorded as a proposed ADR-0019 amendment |
 | `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0026 (proposed, owner decisions recorded) |
-| `F2.11-onboarding-capability-detection.md` | Go side implemented; ADR-0025 (proposed); desktop pending |
-| `F2.12-graph-templates.md` | Templates and Go tests implemented; no ADR; desktop picker pending |
+| `F2.11-onboarding-capability-detection.md` | Go side and Linux desktop (welcome screen) implemented; native macOS/Windows verification pending; ADR-0025 (proposed) |
+| `F2.12-graph-templates.md` | Templates, Go tests and desktop picker implemented; no ADR |
 
 ## Phase 3 - Local Production Ready
 

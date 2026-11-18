@@ -7,7 +7,7 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 ## Status
 
 **Phase 0 - Execution Core and Phase 1 - Agent Loop (F1.1-F1.8) are implemented;
-the real-Codex F1.7 demo is prepared but not yet executed.** F1.1 provides the adapter contract and F1.2 adds
+the real-Codex F1.7 demo passed on 2026-11-17 (`docs/validation/F1.7-real-codex-demo.md`).** F1.1 provides the adapter contract and F1.2 adds
 explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
 normalized progress and live delivery. F1.4 adds deterministic read-only Gates;
 F1.5 adds versioned Check Results with checked-input scope, duration and typed

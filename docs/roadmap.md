@@ -9,6 +9,11 @@ active feature needs a measurable spec in `docs/features/`, and a new public
 or durable contract needs an ADR before implementation. Do not generate later
 feature specs solely to fill this index.
 
+Progress snapshot against both source PDFs (every F-ID, UI screens, MVP
+criteria, demos): `docs/progress/roadmap-features-status.md` and
+`docs/progress/architecture-plan-status.md`; review notes in
+`docs/audits/2026-11-18-spec-vs-repository.md`.
+
 ## Phase 0 - Execution Core (implemented)
 
 Goal: prove graph/node/edge/run semantics without UI.
@@ -23,7 +28,7 @@ Goal: prove graph/node/edge/run semantics without UI.
 
 Exit: a three-node graph runs independent branches concurrently, joins them, passes explicit data, emits structured events, and exits deterministically.
 
-## Phase 1 - Agent Loop (implemented; real-agent demo pending)
+## Phase 1 - Agent Loop (implemented; real-Codex F1.7 demo passed 2026-11-17)
 
 Goal: execute one real coding agent behind an adapter and add deterministic correction.
 
@@ -44,24 +49,24 @@ more than three attempts. F1.8 (P1) adds the Git-derived enforcement that
 F1.4's reported-path check does not provide. F1.7 preserves accepted runtime outputs; F3.1 adds
 filesystem/workspace isolation.
 
-## Phase 2 - Local IDE
+## Phase 2 - Local IDE (in progress: 4 of 12 implemented, 8 partial)
 
 Goal: move graph authoring and execution debugging from terminal to a local IDE.
 
-| ID | Feature | Priority | Proposed dependencies |
-| --- | --- | --- | --- |
-| F2.1 | Graph Canvas | P0 | F0 graph schema |
-| F2.2 | Node Inspector | P0 | F2.1 |
-| F2.3 | Edge/Data Mapping Editor | P0 | F2.1, F0.3 |
-| F2.4 | Graph Validation UI | P0 | F2.1-F2.3, F0.2 |
-| F2.5 | Live Execution Map | P0 | F1.3, F2.1 |
-| F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: accepted for implementation, remaining gap only) |
-| F2.7 | Run Inspector - Node Detail | P0 | F2.6, F1.6 (spec: accepted for implementation, remaining gap only) |
-| F2.8 | Attempt Compare | P1 | F2.7, F1.6 |
-| F2.9 | Local Run History + SQLite | P0 | F0.6, F2.6 |
-| F2.10 | Human Gate UI | P0 | F2.5, F2.6; local pause/approval contract |
-| F2.11 | Onboarding + Capability Detection | P1 | F1.1, F1.2 |
-| F2.12 | Graph Templates | P1 | F2.1-F2.4 |
+| ID | Feature | Priority | Proposed dependencies | Status (2026-11-18) |
+| --- | --- | --- | --- | --- |
+| F2.1 | Graph Canvas | P0 | F0 graph schema | Implemented |
+| F2.2 | Node Inspector | P0 | F2.1 | Implemented (permissions section waits for F3.9) |
+| F2.3 | Edge/Data Mapping Editor | P0 | F2.1, F0.3 | Partial: E5a.1 and E6 implemented; E5a.2, E5a.3, E5b.1, E5b.2 not started |
+| F2.4 | Graph Validation UI | P0 | F2.1-F2.3, F0.2 | Implemented |
+| F2.5 | Live Execution Map | P0 | F1.3, F2.1 | Implemented |
+| F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: accepted for implementation, remaining gap only) | Partial: gap spec accepted, not implemented |
+| F2.7 | Run Inspector - Node Detail | P0 | F2.6, F1.6 (spec: accepted for implementation, remaining gap only) | Partial: gap spec accepted, not implemented |
+| F2.8 | Attempt Compare | P1 | F2.7, F1.6 | Partial: F2.8a implemented; F2.8b (diffs) planned, ADR-0026 proposed |
+| F2.9 | Local Run History + SQLite | P0 | F0.6, F2.6 | Partial: JSONL store instead of SQLite (ADR-0019); no filters, branch/commit or prune |
+| F2.10 | Human Gate UI | P0 | F2.5, F2.6; local pause/approval contract | Partial: pause, approve/reject, CLI and desktop done; no blast radius or diff in the panel |
+| F2.11 | Onboarding + Capability Detection | P1 | F1.1, F1.2 | Partial: Go and Linux desktop; Docker, repository list and self-check deferred |
+| F2.12 | Graph Templates | P1 | F2.1-F2.4 | Partial: picker and 4 templates; roadmap template set not built |
 
 F2.6 and F2.7 are largely delivered through F2.5, F2.5a, F2.8a, F2.9 and F2.3-E6; their
 specs in `docs/features/` list what is already delivered and cover only the remaining gap.
@@ -71,23 +76,23 @@ reason/evidence, handles a human gate and returns to an older run without a
 terminal except for launching the application. F2.10 requires a local
 pause/approval contract; its spec and ADR must define that before UI coding.
 
-## Phase 3 - Local Production Ready
+## Phase 3 - Local Production Ready (started: F3.1 implemented, F3.2 in progress)
 
 Goal: make long-running local execution durable and safer.
 
-| ID | Feature | Priority | Proposed dependencies |
-| --- | --- | --- | --- |
-| F3.1 | Workspace Isolation / Git Worktrees | P0 | F1.7; closes file-state gap. Implemented; ADR-0024 |
-| F3.2 | Durable Run State / Append-only Event Store | P0 | F0.6, F1.3 |
-| F3.3 | Resume / Recovery | P0 | F3.1, F3.2 |
-| F3.4 | Cancellation and Timeouts | P0 | F1.2, F1.6; F3.2 only for the durable-store criteria |
-| F3.5 | Artifact Store Local | P0 | F1.2, F3.2 |
-| F3.6 | Graph Versioning and Run Reproducibility | P0 | F0.6, F3.2 |
-| F3.7 | Export JSON/CSV | P0 | F3.2, F3.5 |
-| F3.8 | Secrets References | P0 | F1.1, F3.1 |
-| F3.9 | Permissions / Execution Policy v0 | P0 | F1.2, F3.1, F3.8 |
-| F3.10 | Cost/Usage Metadata | P1 | F1.1, F3.2 |
-| F3.11 | Local Diagnostics | P1 | F3.2, F3.4 |
+| ID | Feature | Priority | Proposed dependencies | Status (2026-11-18) |
+| --- | --- | --- | --- | --- |
+| F3.1 | Workspace Isolation / Git Worktrees | P0 | F1.7; closes file-state gap | Implemented (opt-in, Agent only); ADR-0024 |
+| F3.2 | Durable Run State / Append-only Event Store | P0 | F0.6, F1.3 | In progress: plan tasks 1-4 of 9; ADR-0027 proposed |
+| F3.3 | Resume / Recovery | P0 | F3.1, F3.2 | Not started; no spec |
+| F3.4 | Cancellation and Timeouts | P0 | F1.2, F1.6; F3.2 only for the durable-store criteria | Spec, ADR-0028 and plan; no code |
+| F3.5 | Artifact Store Local | P0 | F1.2, F3.2 | Not started; no spec |
+| F3.6 | Graph Versioning and Run Reproducibility | P0 | F0.6, F3.2 | Partial without spec: semantic hash and graph snapshot per stored run |
+| F3.7 | Export JSON/CSV | P0 | F3.2, F3.5 | Not started; no spec (`runs show --json` only) |
+| F3.8 | Secrets References | P0 | F1.1, F3.1 | Spec, ADR-0029 and plan; no code |
+| F3.9 | Permissions / Execution Policy v0 | P0 | F1.2, F3.1, F3.8 | Spec, ADR-0029 and plan; no code |
+| F3.10 | Cost/Usage Metadata | P1 | F1.1, F3.2 | Partial: unknown-vs-zero usage contract; Codex reports no usage |
+| F3.11 | Local Diagnostics | P1 | F3.2, F3.4 | Partial: `version` and capability report only |
 
 Exit: a run can stop and resume after restart, parallel nodes use isolated
 workspaces, trace/artifacts are durable, and secrets and permissions have an
@@ -96,61 +101,61 @@ file-level isolation that F1.7 does not promise; it is not a sandbox (F3.9),
 downstream nodes do not yet see upstream files, and Shell nodes are not isolated. Design F3.8 and F3.9 together so secret resolution never bypasses
 the execution policy.
 
-## Phase 4 - Connected Control Plane
+## Phase 4 - Connected Control Plane (not started)
 
 Goal: remotely supervise local runners without requiring repository code in cloud storage.
 
-| ID | Feature | Priority | Proposed dependencies |
-| --- | --- | --- | --- |
-| F4.1 | Account + Authentication | P0 | F3 exit |
-| F4.2 | Projects | P0 | F4.1 |
-| F4.3 | Runner Enrollment | P0 | F4.1, F4.2 |
-| F4.4 | Outbound Secure Connection | P0 | F4.3 |
-| F4.5 | Runner Presence & Health | P0 | F4.4 |
-| F4.6 | Remote Run Start | P0 | F4.2, F4.4, F4.9 security baseline |
-| F4.7 | Cloud Run Metadata Sync | P0 | F3.2, F4.4, F4.6 |
-| F4.8 | Web Human Approval | P0 | F2.10, F4.4, F4.7, F4.9 |
-| F4.9 | Cloud Security Baseline | P0 | F4.1-F4.4; before remote commands |
-| F4.10 | Optional Artifact Sync | P1 | F3.5, F4.7, F4.9 |
+| ID | Feature | Priority | Proposed dependencies | Status (2026-11-18) |
+| --- | --- | --- | --- | --- |
+| F4.1 | Account + Authentication | P0 | F3 exit | Not started |
+| F4.2 | Projects | P0 | F4.1 | Not started |
+| F4.3 | Runner Enrollment | P0 | F4.1, F4.2 | Not started |
+| F4.4 | Outbound Secure Connection | P0 | F4.3 | Not started |
+| F4.5 | Runner Presence & Health | P0 | F4.4 | Not started |
+| F4.6 | Remote Run Start | P0 | F4.2, F4.4, F4.9 security baseline | Not started |
+| F4.7 | Cloud Run Metadata Sync | P0 | F3.2, F4.4, F4.6 | Not started |
+| F4.8 | Web Human Approval | P0 | F2.10, F4.4, F4.7, F4.9 | Not started |
+| F4.9 | Cloud Security Baseline | P0 | F4.1-F4.4; before remote commands | Not started |
+| F4.10 | Optional Artifact Sync | P1 | F3.5, F4.7, F4.9 | Not started |
 
 Exit: a user pairs a laptop as runner, sees its status, starts a graph from
 the web, watches run metadata and approves a human gate. Repository contents
 may remain entirely local.
 
-## Phase 5 - Pro / Team
+## Phase 5 - Pro / Team (not started)
 
 Goal: monetize continuity, collaboration, policy, and history.
 
-| ID | Feature | Priority | Proposed dependencies |
-| --- | --- | --- | --- |
-| F5.1 | Plans + Billing | P0 | F4.1, F4.2 |
-| F5.2 | Scheduling | P0 | F4.6, F4.9 |
-| F5.3 | Alerts / Notifications | P0 | F4.7, F5.2 |
-| F5.4 | Long-term History & Analytics | P0 | F4.7 |
-| F5.5 | Organizations / Team Workspaces | P0 | F4.1, F4.2 |
-| F5.6 | RBAC | P0 | F5.5 |
-| F5.7 | Shared Graph Registry | P0 | F3.6, F5.5, F5.6 |
-| F5.8 | Shared Constraints / Learning Edge v1 | P1 | F5.6, F5.7 |
-| F5.9 | Policy Engine v1 | P1 | F3.9, F5.6 |
-| F5.10 | Audit Log | P0 | F5.5, F5.6; before team actions |
-| F5.11 | Budgets & Guardrails | P1 | F3.10, F5.1, F5.9 |
-| F5.12 | Git Provider Integration | P1 | F4.2, F5.6, F5.10 |
+| ID | Feature | Priority | Proposed dependencies | Status (2026-11-18) |
+| --- | --- | --- | --- | --- |
+| F5.1 | Plans + Billing | P0 | F4.1, F4.2 | Not started |
+| F5.2 | Scheduling | P0 | F4.6, F4.9 | Not started |
+| F5.3 | Alerts / Notifications | P0 | F4.7, F5.2 | Not started |
+| F5.4 | Long-term History & Analytics | P0 | F4.7 | Not started |
+| F5.5 | Organizations / Team Workspaces | P0 | F4.1, F4.2 | Not started |
+| F5.6 | RBAC | P0 | F5.5 | Not started |
+| F5.7 | Shared Graph Registry | P0 | F3.6, F5.5, F5.6 | Not started |
+| F5.8 | Shared Constraints / Learning Edge v1 | P1 | F5.6, F5.7 | Not started |
+| F5.9 | Policy Engine v1 | P1 | F3.9, F5.6 | Not started |
+| F5.10 | Audit Log | P0 | F5.5, F5.6; before team actions | Not started |
+| F5.11 | Budgets & Guardrails | P1 | F3.10, F5.1, F5.9 | Not started |
+| F5.12 | Git Provider Integration | P1 | F4.2, F5.6, F5.10 | Not started |
 
 Exit: Pro/Team supports paid plans, schedules and alerts, shared history,
 organizations, RBAC and audit. A team can control and inspect its agents as a
 shared system.
 
-## Phase 6 - Managed execution / enterprise
+## Phase 6 - Managed execution / enterprise (not started)
 
 Only after the control-plane value is proven. Every F6 item is P2.
 
-| ID | Feature | Priority | Proposed dependencies |
-| --- | --- | --- | --- |
-| F6.1 | Managed Ephemeral Runners | P2 | F3.1, F3.9, F4.9, F5.1 |
-| F6.2 | Managed Artifact Storage | P2 | F3.5, F4.10, F6.1 |
-| F6.3 | Enterprise Identity | P2 | F4.1, F5.5, F5.6 |
-| F6.4 | Advanced Policy / Approval Chains | P2 | F3.9, F4.8, F5.9, F6.3 |
-| F6.5 | Plugin/Adapter SDK | P2 | F1.1/F1.2 contract proven, F5.7 |
+| ID | Feature | Priority | Proposed dependencies | Status (2026-11-18) |
+| --- | --- | --- | --- | --- |
+| F6.1 | Managed Ephemeral Runners | P2 | F3.1, F3.9, F4.9, F5.1 | Not started |
+| F6.2 | Managed Artifact Storage | P2 | F3.5, F4.10, F6.1 | Not started |
+| F6.3 | Enterprise Identity | P2 | F4.1, F5.5, F5.6 | Not started |
+| F6.4 | Advanced Policy / Approval Chains | P2 | F3.9, F4.8, F5.9, F6.3 | Not started |
+| F6.5 | Plugin/Adapter SDK | P2 | F1.1/F1.2 contract proven, F5.7 | Not started |
 
 Exit: managed execution is isolated and measurable, while enterprise features
 do not complicate the local-first core for an individual developer.
