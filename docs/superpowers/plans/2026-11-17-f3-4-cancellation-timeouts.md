@@ -403,26 +403,37 @@ tests next to each.
   AGENTS.md rule 5). `runDiff` keeps its separation of lifecycle failures from the
   two valid comparison exits. The bound is independent of the node limit and is
   injectable in tests (`gate.Executor.EvidenceBound`, zero means 30 s).
+  B4 implements the bound as an operational error wrapping
+  `context.DeadlineExceeded`; the typed failure kind `timeout` moves to Task 7
+  with the cause types. `/usr/bin/diff` and `/dev/fd/3` stay until Task 11.
 - Git helpers: `gitstate.Run`, the `git rev-parse` in `runtime/workspace.go`, and
   the capability probe start through `proctree.Start` and terminate by the
   contract, so a Git child that spawns a helper cannot outlive its time bound.
-  `gitstate.Run`'s `RunError` classes are unchanged. `internal/runtime/workspace.go`
-  keeps its existing baseline line (still imports `os/exec`); no new violation.
+  `gitstate.Run`'s `RunError` classes are unchanged. Deviation: `workspace.go`
+  now calls `gitstate.Run` (same hardened argv, 2 s bound, 16 KiB stdout limit)
+  instead of its own `exec`, so it no longer imports `os/exec` and the
+  `internal/runtime -> os/exec` line is removed from the architecture baseline.
+  `internal/worktree` already runs every Git call through `gitstate.Run`.
 
-- [ ] Red: `TestCommandGateTimeoutIsNotARedVerdict` against a fake diff that blocks
-  (the fake is injected through an unexported command path variable used only by
+- [x] Red: `TestCommandGateTimeoutIsNotARedVerdict` against a fake diff that blocks
+  (the fake is injected through an unexported `Executor.diffPath` used only by
   tests, never from graph config; production keeps the fixed
   `/usr/bin/diff`).
-- [ ] Red: `TestGitRunTimeoutKillsGrandchild` using a fake `git` that spawns a
-  child (a test `PATH` is not used: `gitstate.Run` is hardened and absolute; add
-  an unexported `gitBinary` seam for tests).
-- [ ] Port the three callers.
+- [x] Red: `TestGitRunTimeoutKillsGrandchild` using a fake `git` that spawns a
+  child (a test `PATH` is not used: `gitstate.Run` is hardened and absolute; an
+  unexported `resolveGit` seam serves tests).
+- [x] Port the three callers.
 
 **Tests:** `TestCommandGateTimeoutIsNotARedVerdict`,
 `TestCommandGateKillsDiffTreeOnCancel`,
 `TestCommandGateGreenRedUnchanged` (existing tests untouched),
-`TestGitRunTimeoutKillsGrandchild`, `TestGitRunCancelClassesUnchanged`,
-`TestCapabilityProbeBoundedTree`.
+`TestGitRunTimeoutKillsGrandchild`, `TestGitRunCancelKillsGrandchildAndKeepsClass`
+(replaces `TestGitRunCancelClassesUnchanged`), `TestCapabilityProbeBoundedTree`.
+The assertion that a gate evidence timeout carries failure kind `timeout` moves
+to Task 7.
+
+**Follow-up (own small PR, after Task 4):** extract the duplicated watch-and-terminate
+loop (shell, codex, gate, gitstate, capability) into one `proctree` helper.
 
 **Phase A exit:** on Linux and macOS a cancelled or timed-out Shell, Codex, Gate
 or Git child leaves no descendant; Windows still builds on the interim file.
@@ -529,6 +540,7 @@ as noted, create `internal/runtime/cancel.go` (cause helpers, `Timers`,
   `finish`, so nothing appends after `run_finished`. This guarantees
   `cancel_requested` precedes any `process_terminated`, which is only emitted by
   the coordinator when it consumes a worker result.
+- From Task 4: a Gate evidence timeout (`gate.commandEvidenceBound`) is classified as failure kind `timeout` here, once the cause types exist.
 - Reason of an external parent cancel: `run.ReasonOf(context.Cause(parent))`;
   an untyped `context.Canceled` means `interrupt` (the CLI default). `serve.go`
   supplies typed causes (T8). The `source` is derived from the reason, not

@@ -15,27 +15,43 @@ import (
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/proctree"
 	"agentplane/internal/runtime"
 )
 
-type Executor struct{}
+// Executor evaluates Gate nodes. The zero value is valid.
+type Executor struct {
+	// EvidenceBound limits the whole command-evidence step; zero selects
+	// commandEvidenceBound. It is independent of the node limit.
+	EvidenceBound time.Duration
+	// Termination tunes how an owned process tree is stopped on cancellation.
+	Termination proctree.Policy
+	// diffPath replaces the fixed diff binary in tests only; it never comes
+	// from graph configuration.
+	diffPath string
+}
+
 type RedError struct{}
 
 func (RedError) GateVerdict() string    { return "red" }
 func (RedError) Error() string          { return "gate check returned red" }
 func (RedError) DiagnosticCode() string { return "E_GATE_RED" }
-func (Executor) ExecuteNode(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value) (map[string]graph.Value, error) {
-	o, _, e := (Executor{}).ExecuteNodeObserved(ctx, id, n, in, runtime.ExecutionObservation{})
-	return o, e
+
+// ExecuteNode evaluates the Gate without observing its Check Result.
+func (e Executor) ExecuteNode(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value) (map[string]graph.Value, error) {
+	o, _, err := e.ExecuteNodeObserved(ctx, id, n, in, runtime.ExecutionObservation{})
+	return o, err
 }
-func (Executor) ExecuteNodeObserved(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
-	out, err := execute(ctx, n, in, o)
+
+// ExecuteNodeObserved evaluates the Gate and reports its Check Result to o.Check.
+func (e Executor) ExecuteNodeObserved(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
+	out, err := e.execute(ctx, n, in, o)
 	if err != nil {
 		return nil, nil, fmt.Errorf("gate node %q: %w", id, err)
 	}
 	return out, nil, nil
 }
-func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, error) {
+func (e Executor) execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -44,44 +60,9 @@ func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Va
 		return nil, err
 	}
 	started := time.Now()
-	scopeInputs := []string{c.Input}
-	if c.Kind == "command" {
-		scopeInputs = []string{c.Left}
-		if c.Right != c.Left {
-			scopeInputs = append(scopeInputs, c.Right)
-		}
-		sort.Strings(scopeInputs)
-	}
+	scopeInputs := checkedInputs(c)
 	p := events.GateCheckPayload{Version: 1, Scope: events.CheckScope{CheckedInputs: scopeInputs}, CheckID: c.CheckID, Kind: events.CheckKind(c.Kind), Verdict: "green", Reason: "check matched", Evidence: []events.GateEvidence{{Kind: events.EvidenceKind(c.Kind), Source: events.EvidenceSource(c.Kind)}}}
-	switch c.Kind {
-	case "command":
-		p, err = command(ctx, c, in, o)
-	case "json_predicate":
-		err = predicate(c, in, &p)
-	case "reported_file_scope":
-		err = scope(c, in, &p)
-	case "changed_files_scope":
-		if _, ok := in[c.Input]; !ok {
-			err = fmt.Errorf("changed-files scope requires candidate input %q", c.Input)
-			break
-		}
-		if o.ScopeBaselineError != nil && c.Mode == "warn" {
-			p = indeterminateChangedFiles(c.Allowed, c.CheckID, "")
-			p.Scope.CheckedInputs = []string{c.Input}
-			break
-		}
-		if o.ScopeBaseline == nil {
-			err = errors.New("changed-files scope baseline unavailable")
-			break
-		}
-		root, e := filepath.EvalSymlinks(c.Workspace)
-		if e != nil || root != o.ScopeBaseline.Root {
-			err = errors.New("changed-files scope workspace differs from baseline")
-			break
-		}
-		p, err = CheckChangedFiles(ctx, *o.ScopeBaseline, c.Allowed, c.Mode, c.CheckID)
-		p.Scope.CheckedInputs = []string{c.Input}
-	}
+	p, err = e.evaluate(ctx, c, in, o, p)
 	if err != nil {
 		return nil, err
 	}
@@ -108,6 +89,56 @@ func execute(ctx context.Context, n graph.NodeDefinition, in map[string]graph.Va
 		out["verdict"] = graph.NewStringValue("green")
 	}
 	return out, nil
+}
+func checkedInputs(c config) []string {
+	if c.Kind != KindCommand {
+		return []string{c.Input}
+	}
+	inputs := []string{c.Left}
+	if c.Right != c.Left {
+		inputs = append(inputs, c.Right)
+	}
+	sort.Strings(inputs)
+	return inputs
+}
+
+// evaluate runs the check for c.Kind; p is the default result for kinds that
+// fill it in place.
+func (e Executor) evaluate(ctx context.Context, c config, in map[string]graph.Value, o runtime.ExecutionObservation, p events.GateCheckPayload) (events.GateCheckPayload, error) {
+	var err error
+	switch c.Kind {
+	case KindCommand:
+		p, err = e.command(ctx, c, in, o)
+	case KindJSONPredicate:
+		err = predicate(c, in, &p)
+	case KindReportedFileScope:
+		err = scope(c, in, &p)
+	case KindChangedFilesScope:
+		p, err = changedFilesCheck(ctx, c, in, o)
+	}
+	return p, err
+}
+
+func changedFilesCheck(ctx context.Context, c config, in map[string]graph.Value, o runtime.ExecutionObservation) (events.GateCheckPayload, error) {
+	var p events.GateCheckPayload
+	if _, ok := in[c.Input]; !ok {
+		return p, fmt.Errorf("changed-files scope requires candidate input %q", c.Input)
+	}
+	if o.ScopeBaselineError != nil && c.Mode == "warn" {
+		p = indeterminateChangedFiles(c.Allowed, c.CheckID, "")
+		p.Scope.CheckedInputs = []string{c.Input}
+		return p, nil
+	}
+	if o.ScopeBaseline == nil {
+		return p, errors.New("changed-files scope baseline unavailable")
+	}
+	root, e := filepath.EvalSymlinks(c.Workspace)
+	if e != nil || root != o.ScopeBaseline.Root {
+		return p, errors.New("changed-files scope workspace differs from baseline")
+	}
+	p, err := CheckChangedFiles(ctx, *o.ScopeBaseline, c.Allowed, c.Mode, c.CheckID)
+	p.Scope.CheckedInputs = []string{c.Input}
+	return p, err
 }
 func decodeInput(c config, in map[string]graph.Value) (any, error) {
 	b, ok := in[c.Input].AsJSON()
