@@ -644,6 +644,7 @@ func TestParseErrorMessageIsValidUTF8(t *testing.T) {
 	path := writeGraph(t, dir, "utf8.yaml", text)
 	g := grantFor(t, ts, path, "open")
 
+	// The validate/open checks below passed before the fix (JSON encoding replaces invalid bytes); only this direct assertion proves it.
 	if got := parseErrorMessage(errors.New("cannot unmarshal into \xc5 value")); !utf8.ValidString(got) || !strings.Contains(got, "\uFFFD") {
 		t.Errorf("parseErrorMessage kept invalid UTF-8: %q", got)
 	}
