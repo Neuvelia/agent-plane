@@ -163,6 +163,62 @@ describe('reducer properties', () => {
   })
 })
 
+describe('interrupted runs (F3.2)', () => {
+  // The log is cut where nodes are in each unfinished state, as a kill -9 would leave it.
+  const cutAfter = (pred: (e: ApEvent) => boolean) => approve.slice(0, firstIndex(approve, pred) + 1)
+  const waiting = cutAfter((e) => e.type === 'approval_requested')
+  const flakyAttempts = approve.filter((e) => e.type === 'attempt_started' && e.node_id === 'flaky')
+  const retrying = approve.slice(0, approve.indexOf(flakyAttempts[1]!) + 1)
+
+  it('derives interrupted nodes once the run is interrupted and leaves finished nodes alone', () => {
+    for (const events of [waiting, retrying]) {
+      const open = reduceAll(events)
+      const settled = settle(open, false)
+      expect(settled.status).toBe('interrupted')
+      let unfinished = 0
+      for (const [id, node] of Object.entries(open.nodes)) {
+        const unfinishedNode = node.status === 'running' || node.status === 'waiting_human'
+        unfinished += unfinishedNode ? 1 : 0
+        expect(settled.nodes[id]!.status).toBe(unfinishedNode ? 'interrupted' : node.status)
+        expect(displayStatus(settled.nodes[id]!)).toBe(unfinishedNode ? 'interrupted' : displayStatus(node))
+      }
+      expect(unfinished).toBeGreaterThan(0)
+    }
+    expect(displayStatus(reduceAll(waiting).nodes.approve!)).toBe('waiting_human')
+    expect(displayStatus(settle(reduceAll(waiting), false).nodes.approve!)).toBe('interrupted')
+    expect(displayStatus(reduceAll(retrying).nodes.flaky!)).toBe('retrying')
+    expect(displayStatus(settle(reduceAll(retrying), false).nodes.flaky!)).toBe('interrupted')
+  })
+
+  it('keeps every node as the events said while the run is still followed', () => {
+    const open = reduceAll(waiting)
+    expect(settle(open, true)).toBe(open)
+  })
+
+  it('does not touch a finished run', () => {
+    const finished = reduceAll(approve)
+    expect(settle(finished, false)).toBe(finished)
+  })
+
+  it('uses the store status for a run live in another process', () => {
+    const open = reduceAll(waiting)
+    // the stored log ended normally but a writer still holds the run: not interrupted
+    expect(presentRun(open, true, false, 'running')).toBe(open)
+    expect(presentRun(open, true, false, 'interrupted').status).toBe('interrupted')
+    expect(presentRun(open, true, false).status).toBe('interrupted')
+  })
+
+  it('reduces the stored sequence and the same sequence delivered as a stream to the same state', () => {
+    const stored = reduceAll(approve)
+    // a stream replays what the client already has and delivers in batches
+    let streamed = initialRun()
+    for (const batch of [approve.slice(0, 7), approve.slice(3, 20), approve.slice(0, approve.length), approve.slice(15)]) {
+      streamed = batch.reduce(reduce, streamed)
+    }
+    expect(streamed).toEqual(stored)
+  })
+})
+
 describe('lost connection after the run already finished', () => {
   it('is not reported once the terminal event was received', () => {
     expect(streamLost(reduceAll(approve), 'dropped')).toBeNull()
