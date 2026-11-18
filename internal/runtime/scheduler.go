@@ -74,8 +74,9 @@ type Options struct {
 	// fails preflight (ADR-0017).
 	Decisions DecisionProvider
 	// Persist records every retained event synchronously and in sequence order
-	// (F2.9). A failure never stops the run; it is reported in
-	// RunResult.PersistError and the caller must treat the run as not durable.
+	// (F2.9). A failure never stops the run and live subscribers stop receiving
+	// events at the first error; it is reported in RunResult.PersistError and the
+	// caller must treat the run as not durable (serve also cancels the run).
 	Persist func(events.Event) error
 	// RecordValues emits one bounded, redacted value_recorded fact per supplied
 	// graph input and per accepted output port (ADR-0023). Off by default;
