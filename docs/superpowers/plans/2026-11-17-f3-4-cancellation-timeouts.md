@@ -27,8 +27,8 @@ is build-tagged to Windows, runtime-only, and maintained by the Go project.
 
 **Spec:** `docs/features/F3.4-cancellation-and-timeouts.md` and
 `docs/features/F3.4a-windows-process-tree-termination.md`.
-**ADR:** `docs/adr/00XX-cancel-timeout-reasons-and-process-ownership.md`
-(proposed; number assigned at merge).
+**ADR:** `docs/adr/0028-cancel-timeout-reasons-and-process-ownership.md`
+(proposed; number assigned by the owner).
 **Evidence:** `experiments/spikes/2026-11-17-landlock-namespaces-jobobject.md`
 (branch `claude/spikes-landlock-jobobject`).
 
@@ -826,15 +826,14 @@ before the flag commit, and `main` after merge.
 **Branch:** `claude/f3-4-docs`
 
 **Files:** Edit `docs/features/F3.4-*.md`, `F3.4a-*.md` (status, tick only what a
-named test proves, leave the D criteria open), `docs/adr/00XX-*.md` (final number,
-Accepted, assigned schema number, the Windows assignment decision, the `Leaked`
+named test proves, leave the D criteria open), `docs/adr/0028-*.md` (Accepted, assigned schema number, the Windows assignment decision, the `Leaked`
 lower-bound note, the pid-reuse residual), `docs/adr/README.md`,
 `docs/features/README.md`, `docs/roadmap.md`, `docs/architecture.md`,
 `docs/domain-model.md`, `docs/graph-spec.md`, `docs/codebase-map.md`, `AGENTS.md`
 ("Current product phase" paragraph), `docs/development-workflow.md`.
 
-- [ ] Rename `00XX-...` to the next free ADR number at merge and update every
-  reference (spec headers, plan, codebase map).
+- [ ] Confirm every reference uses the assigned ADR number 0028 (spec headers,
+  plan, codebase map).
 - [ ] State honestly what is not done: durable criteria (D), Unix crash orphans,
   `setsid` escape, desktop display of the reason, graph-edit operations for the new
   fields, HTTP cancel endpoint.
