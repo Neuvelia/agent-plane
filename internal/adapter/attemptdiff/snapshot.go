@@ -75,6 +75,10 @@ type Recorder struct {
 	ignoredCap int
 }
 
+// ScratchDirForTest names the scratch directory so tests can prove it is
+// removed; production code has no use for it.
+func (r *Recorder) ScratchDirForTest() string { return r.scratch.dir }
+
 // Close removes every scratch copy; it is idempotent.
 func (r *Recorder) Close() error { return r.scratch.remove() }
 

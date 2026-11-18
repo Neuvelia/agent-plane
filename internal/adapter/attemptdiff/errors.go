@@ -68,3 +68,6 @@ func unavailable(err error) *Error {
 	}
 	return fail(events.DiffGitUnavailable, "workspace is not an inspectable Git worktree", err)
 }
+// DiagnosticCode lets a consumer that cannot import this package read the
+// closed diagnostic code of a capture failure.
+func (e *Error) DiagnosticCode() string { return e.Code }
