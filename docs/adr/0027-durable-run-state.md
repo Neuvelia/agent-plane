@@ -1,6 +1,6 @@
-# ADR-00XX - Durable run state on an append-only JSONL log
+# ADR-0027 - Durable run state on an append-only JSONL log
 
-**Status:** proposed (number assigned at merge)
+**Status:** proposed
 **Date:** 2026-11-17
 **Extends:** ADR-0019 (local JSONL run store)
 

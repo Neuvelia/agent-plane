@@ -63,7 +63,7 @@ feature contract.
 | Feature | Spec status |
 | --- | --- |
 | `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
-| `F3.2-durable-run-state.md` | Draft; ADR-00XX proposed (JSONL, no SQLite) |
+| `F3.2-durable-run-state.md` | Draft; ADR-0027 proposed (JSONL, no SQLite) |
 
 ## Later phases
 

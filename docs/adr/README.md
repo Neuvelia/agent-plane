@@ -46,3 +46,6 @@ Onboarding (proposed): [ADR-0025 - Read-only capability report on the loopback A
 Phase 3:
 [ADR-0024 - Workspace isolation with Git worktrees and deterministic integration](0024-workspace-isolation-with-git-worktrees.md)
 (accepted; real-Codex sandbox spike passed).
+
+F3.2 durable run state (proposed):
+[ADR-0027 - Durable run state on an append-only JSONL log](0027-durable-run-state.md).
