@@ -10,21 +10,24 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/proctree"
 	"agentplane/internal/runtime"
 	"agentplane/internal/testenv"
 )
+
+// extraModes lets platform test files add helper modes that need
+// platform-specific syscalls; a mode runs forever or exits itself.
+var extraModes = map[string]func(args []string){}
 
 func TestHelperProcess(t *testing.T) {
 	if os.Getenv("AGENTPLANE_HELPER") != "1" {
@@ -93,18 +96,6 @@ func TestHelperProcess(t *testing.T) {
 				time.Sleep(time.Hour)
 			}
 		}
-	case "ignore-term":
-		signal.Ignore(syscall.SIGTERM)
-		writeAtomic(args[1], "ready")
-		for {
-			time.Sleep(time.Hour)
-		}
-	case "term-exit0":
-		c := make(chan os.Signal, 1)
-		signal.Notify(c, syscall.SIGTERM)
-		writeAtomic(args[1], "ready")
-		<-c
-		os.Exit(0)
 	case "pid-hold":
 		writeAtomic(args[1], strconv.Itoa(os.Getpid()))
 		for {
@@ -141,6 +132,9 @@ func TestHelperProcess(t *testing.T) {
 		}
 		_ = os.WriteFile(args[3], []byte("done"), 0600)
 	default:
+		if mode, ok := extraModes[args[0]]; ok {
+			mode(args)
+		}
 		os.Exit(91)
 	}
 	os.Exit(0)
@@ -767,5 +761,70 @@ func TestReservedAttemptVariableIsRejectedEverywhereInAnyCase(t *testing.T) {
 	}
 	if err := (Executor{}).ValidateNodeConfig("n", attemptNode(nil)); err != nil {
 		t.Fatalf("an ordinary node was rejected: %v", err)
+	}
+}
+
+func TestExecuteCancelAfterExitIsNotAnExitFailure(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	// The helper is alive while it writes its output and exits right after,
+	// so cancellation races with a normal exit.
+	_, err := execute(ctx, "worker", helperNode("echo", "x"), nil, func(string, []byte) { cancel() }, 0, Executor{})
+	var executionErr *ExecutionError
+	if err != nil && (!errors.As(err, &executionErr) || executionErr.Kind != FailureCanceled) {
+		t.Fatalf("cancel racing with exit = %v", err)
+	}
+}
+
+func TestExecuteLeakIsShutdownWithCount(t *testing.T) {
+	executor := Executor{terminate: func(tree *proctree.Tree, ctx context.Context, p proctree.Policy) (proctree.Outcome, error) {
+		outcome, err := tree.Terminate(ctx, p)
+		if err != nil {
+			return outcome, err
+		}
+		outcome.Leaked = 3
+		return outcome, &proctree.LeakError{Leaked: 3}
+	}}
+	err := cancelWhenReady(t, executor, "wait")
+	var executionErr *ExecutionError
+	var leak *proctree.LeakError
+	if !errors.As(err, &executionErr) || executionErr.Kind != FailureShutdown || !errors.As(err, &leak) || leak.Leaked != 3 {
+		t.Fatalf("leak = %v", err)
+	}
+	if got := executionErr.ProcessTermination(); got == nil || got.Leaked != 3 {
+		t.Fatalf("termination = %#v", got)
+	}
+}
+
+func cancelWhenReady(t *testing.T, executor Executor, mode string) error {
+	t.Helper()
+	ready := filepath.Join(t.TempDir(), "ready")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		_, err := executor.Execute(ctx, "worker", helperNode(mode, ready), nil)
+		done <- err
+	}()
+	deadline := time.After(10 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("child ended before cancellation: %v", err)
+		case <-deadline:
+			t.Fatal("child did not start")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(15 * time.Second):
+		t.Fatal("execute did not return after cancellation")
+		return nil
 	}
 }

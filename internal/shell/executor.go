@@ -27,6 +27,9 @@ type Executor struct {
 	// Policy tunes termination of a canceled node's process tree. The zero
 	// value selects proctree's defaults.
 	Policy proctree.Policy
+
+	// terminate replaces tree termination in tests to make a leak deterministic.
+	terminate func(*proctree.Tree, context.Context, proctree.Policy) (proctree.Outcome, error)
 }
 
 // Result is the process evidence retained by Execute and ExecutionError.
@@ -91,10 +94,10 @@ type config struct {
 // argument text as shell syntax. Only inputs listed in input_env enter the
 // child process environment.
 func (e Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
-	return execute(ctx, nodeID, node, inputs, nil, 0, e.Policy)
+	return execute(ctx, nodeID, node, inputs, nil, 0, e)
 }
 
-func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int, policy proctree.Policy) (Result, error) {
+func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int, e Executor) (Result, error) {
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -130,7 +133,7 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	result.StartedAt = time.Now()
 
 	exited := make(chan struct{})
-	stopped := watchCancellation(ctx, tree, policy, exited)
+	stopped := watchCancellation(ctx, tree, e, exited)
 	err = tree.Wait()
 	close(exited)
 	cancellation := <-stopped
@@ -162,14 +165,18 @@ func (c *cancellation) record() *proctree.Outcome {
 
 // watchCancellation terminates the tree when ctx is done before exited closes.
 // The result channel delivers once, so the caller reads it without a race.
-func watchCancellation(ctx context.Context, tree *proctree.Tree, policy proctree.Policy, exited <-chan struct{}) <-chan cancellation {
+func watchCancellation(ctx context.Context, tree *proctree.Tree, e Executor, exited <-chan struct{}) <-chan cancellation {
 	result := make(chan cancellation, 1)
 	go func() {
 		var c cancellation
 		select {
 		case <-ctx.Done():
 			c.requested = true
-			c.outcome, c.err = tree.Terminate(context.Background(), policy)
+			terminate := e.terminate
+			if terminate == nil {
+				terminate = (*proctree.Tree).Terminate
+			}
+			c.outcome, c.err = terminate(tree, context.Background(), e.Policy)
 		case <-exited:
 		}
 		result <- c
@@ -234,7 +241,7 @@ func (e Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node gr
 	if outputErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: outputErr}
 	}
-	result, err := execute(ctx, nodeID, node, inputs, observe, attempt, e.Policy)
+	result, err := execute(ctx, nodeID, node, inputs, observe, attempt, e)
 	if err != nil {
 		return nil, err
 	}
