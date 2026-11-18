@@ -33,9 +33,15 @@ runtime owns scheduling, accepted node values, loops and event emission.
   undeclared/non-string ports, invalid or duplicate target names and collisions
   with `env`/`env_allowlist` without regard to case. Do not embed secrets in
   graph config or assume an input mapping marks a value for redaction.
-- `exec.CommandContext` runs the direct child with explicit argv, cwd and
-  environment. Cancellation kills and waits for that child. It does not
-  manage descendants or sandbox filesystem access. `WaitDelay` bounds the
+- `exec.Command` with explicit argv, cwd and environment starts the child through
+  `internal/proctree`, which owns its process tree. When the context is done,
+  a goroutine joined before `execute` returns calls `Terminate` (request, grace,
+  force). Cancellation is classified from that record, not the exit status:
+  `FailureCanceled` when termination succeeded, `FailureShutdown` when the tree
+  could not be emptied; `ExecutionError.ProcessTermination()` returns the
+  outcome. `Executor.Policy` tunes the grace. A descendant that left the group
+  is out of scope; Windows terminates only the direct process until Job
+  Objects land. It does not sandbox filesystem access. `WaitDelay` bounds the
   drain of inherited stdout/stderr pipes to one second. An otherwise
   successful child with pipes still open yields an output failure with partial
   evidence; a nonzero direct-child exit remains an exit failure. Preserve the
