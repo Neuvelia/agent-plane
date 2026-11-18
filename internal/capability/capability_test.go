@@ -18,6 +18,7 @@ import (
 	"agentplane/internal/agent"
 	"agentplane/internal/agent/adaptertest"
 	"agentplane/internal/agent/codex"
+	"agentplane/internal/gitlocate"
 )
 
 // absent is a Git path that never exists, so tests about adapters start no
@@ -119,9 +120,9 @@ func TestDarwinGitWithDeveloperToolsIsProbed(t *testing.T) {
 		present  map[string]bool
 		readlink func(string) (string, error)
 	}{
-		"command line tools": {map[string]bool{darwinCLTGit: true}, func(string) (string, error) { return "", os.ErrNotExist }},
+		"command line tools": {map[string]bool{gitlocate.DarwinCLTGit: true}, func(string) (string, error) { return "", os.ErrNotExist }},
 		"xcode-select target": {map[string]bool{"/Xcode-beta/Contents/Developer/usr/bin/git": true}, func(p string) (string, error) {
-			if p != darwinSelectLink {
+			if p != gitlocate.DarwinSelectLink {
 				t.Errorf("readlink %q", p)
 			}
 			return "/Xcode-beta/Contents/Developer", nil

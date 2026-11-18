@@ -18,14 +18,11 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
+	"agentplane/internal/gitlocate"
 )
 
 // ReportVersion is the version of the Report JSON contract.
 const ReportVersion = 1
-
-// GitPath is the only Git binary the engine runs (internal/gitstate,
-// internal/runtime/workspace.go), so it is the only one detection checks.
-const GitPath = "/usr/bin/git"
 
 type Status string
 
@@ -111,7 +108,7 @@ var AgentCLIs = []CLI{
 type Detector struct {
 	EngineVersion string
 	GOOS, GOARCH  string // default: the running platform
-	GitPath       string // default: GitPath
+	GitPath       string // default: git resolved from PATH
 	Agents        []Agent
 	Timeout       time.Duration // per Git probe; default 10s
 	Now           func() time.Time
@@ -125,40 +122,6 @@ type Detector struct {
 	// LookPath finds a command on PATH without executing it. Default:
 	// exec.LookPath, which stats candidates and checks the execute permission.
 	LookPath func(string) (string, error)
-}
-
-// On macOS /usr/bin/git is an xcrun shim. Without Command Line Tools or Xcode,
-// running it opens the "install developer tools" dialog, a side effect a
-// read-only check must not cause. These paths locate a real Git without
-// executing anything.
-const (
-	darwinCLTGit       = "/Library/Developer/CommandLineTools/usr/bin/git"
-	darwinSelectLink   = "/var/db/xcode_select_link"
-	darwinXcodeDevel   = "/Applications/Xcode.app/Contents/Developer"
-	darwinDevelGitPath = "usr/bin/git"
-)
-
-// darwinDeveloperGit reports whether the developer tools behind the shim
-// contain an executable Git: the Command Line Tools, the xcode-select target,
-// or the default Xcode location.
-func (d Detector) darwinDeveloperGit() bool {
-	stat, readlink := d.Stat, d.Readlink
-	if stat == nil {
-		stat = os.Stat
-	}
-	if readlink == nil {
-		readlink = os.Readlink
-	}
-	candidates := []string{darwinCLTGit, darwinXcodeDevel + "/" + darwinDevelGitPath}
-	if target, err := readlink(darwinSelectLink); err == nil && strings.HasPrefix(target, "/") {
-		candidates = append(candidates, strings.TrimSuffix(target, "/")+"/"+darwinDevelGitPath)
-	}
-	for _, c := range candidates {
-		if info, err := stat(c); err == nil && info.Mode().IsRegular() && info.Mode()&0o111 != 0 {
-			return true
-		}
-	}
-	return false
 }
 
 const maxProbeOutput = 4 << 10
@@ -254,9 +217,23 @@ func (d Detector) git(ctx context.Context, goos string) Tool {
 		t.Status, t.Reason = StatusUnsupportedPlatform, ReasonPlatformNotSupported
 		return t
 	}
+	loc := gitlocate.Locator{GOOS: goos, Stat: d.Stat, Readlink: d.Readlink}
 	path := d.GitPath
 	if path == "" {
-		path = GitPath
+		var err error
+		path, err = loc.Resolve()
+		switch {
+		case errors.Is(err, gitlocate.ErrDeveloperToolsMissing):
+			t.Status, t.Reason = StatusMissing, ReasonDeveloperToolsMissing
+			return t
+		case err != nil:
+			t.Status = StatusMissing
+			return t
+		}
+	} else {
+		// An explicit path stands in for the resolved git, so it is also the
+		// path the macOS shim guard applies to.
+		loc.Shim = path
 	}
 	stat := d.Stat
 	if stat == nil {
@@ -271,7 +248,7 @@ func (d Detector) git(ctx context.Context, goos string) Tool {
 		t.Status, t.Reason = StatusError, ReasonNotExecutable
 		return t
 	}
-	if goos == "darwin" && !d.darwinDeveloperGit() {
+	if errors.Is(loc.Check(path), gitlocate.ErrDeveloperToolsMissing) {
 		t.Status, t.Reason = StatusMissing, ReasonDeveloperToolsMissing
 		return t
 	}

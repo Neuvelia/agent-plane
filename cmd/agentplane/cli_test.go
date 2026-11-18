@@ -258,7 +258,10 @@ func TestWatchCancellationWithBlockedOutputReturns(t *testing.T) {
 		// (exit 4) instead of cancellation (130). Product fix, not a test fix.
 		t.Skip("shell cancellation after child exit is misclassified on Windows")
 	}
-	path := graphFile(t, oneNode)
+	// The child outlives the blocked write, so the run cannot finish before the
+	// cancellation and the expected exit status is deterministic.
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	path := graphFile(t, strings.Replace(oneNode, `"echo"]`, `"write-wait", `+strconv.Quote(pidFile)+`]`, 1))
 	writer := &blockingOutput{entered: make(chan struct{}), release: make(chan struct{})}
 	defer close(writer.release)
 	ctx, cancel := context.WithCancel(context.Background())

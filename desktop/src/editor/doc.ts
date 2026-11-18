@@ -15,6 +15,8 @@ export interface Analysis {
   diagnostics: Diagnostic[]
   parseError?: string
   parseLine?: number
+  /** Present only where the engine could locate the failing node. */
+  parseColumn?: number
   version?: string
   /** The last definition the engine could parse. Kept while the text does not parse. */
   definition?: Definition
@@ -52,7 +54,7 @@ export interface DocState {
 
 export const isDirty = (s: DocState): boolean => s.draft !== s.savedText
 
-function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; parse_line?: number; version?: string; definition?: Definition; readonly_reasons?: string[]; node_types?: Record<string, NodeTypeDescriptor>; node_info?: Record<string, NodeInfo> }, previous?: Analysis): Analysis {
+function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; parse_line?: number; parse_column?: number; version?: string; definition?: Definition; readonly_reasons?: string[]; node_types?: Record<string, NodeTypeDescriptor>; node_info?: Record<string, NodeInfo> }, previous?: Analysis): Analysis {
   const keep = !r.definition && !!r.parse_error
   return {
     // Like the definition, the inspector data of the last good text stays while the text does not parse.
@@ -62,6 +64,7 @@ function analysisOf(r: { diagnostics: Diagnostic[]; parse_error?: string; parse_
     diagnostics: r.diagnostics,
     parseError: r.parse_error,
     parseLine: r.parse_line,
+    parseColumn: r.parse_column,
     version: r.version,
     // While the text does not parse the canvas keeps the last good definition (read-only).
     definition: r.definition ?? (r.parse_error ? previous?.definition : undefined),

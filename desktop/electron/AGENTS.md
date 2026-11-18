@@ -40,10 +40,14 @@ spec before changing an IPC or API boundary.
   labels. `touchRecent` accepts only grants main issued; `closeGraph` requests
   revocation and reports whether it succeeded. Recents are a convenience:
   read/write failure must not block editing.
-- The legacy New run flow still has `pickGraph`, which returns a path, and
-  `POST /runs` still accepts `graph_path`. Do not describe all renderer reads
-  and runs as grant-only. Keep graph-document writes grant-only; the Go API
-  owns path checks, conflict detection and atomic save. Electron main and
+- New run chooses its graph with `openGraph()` and holds only the grant;
+  there is no bridge call that returns a path. `isBodyAllowed` (in
+  `allowlist.cjs`) forwards `POST /runs` and `POST /graphs/validate` only with
+  the body keys `graph_grant`, `inputs` and `grant`, `text`; keep it a key
+  allow-list, since the Go decoder matches JSON keys case-insensitively. The Go
+  API still accepts `graph_path`/`path` for non-renderer clients (tests,
+  scripts), so do not remove them from it. Keep graph-document writes
+  grant-only; the Go API owns path checks, conflict detection and atomic save. Electron main and
   preload do not implement graph validation, scheduling, retry or run-state
   reduction; the renderer derives run state from events.
 - "Record run values" is a main-process preference in user data
@@ -70,7 +74,7 @@ requirements, when describing implemented behavior.
 
 ## Choose regression tests
 
-- Generic route exposure and path escapes: `desktop/test/allowlist.test.ts`.
+- Generic route exposure, path escapes and refused path bodies: `desktop/test/allowlist.test.ts`.
 - Graph dialogs, grants and revocation: `desktop/test/graphs-handlers.test.ts`.
 - Recent-list privacy, ordering and failure: `desktop/test/recents.test.ts`.
 - Recording preference, validation and `serve` flags: `desktop/test/recording.test.tsx`.

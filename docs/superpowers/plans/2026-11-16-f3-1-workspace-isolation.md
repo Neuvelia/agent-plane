@@ -67,7 +67,7 @@ T1 and T2 are independent and can be built in parallel by different people.
 
 ### Task 1: Shared Git runner and `internal/worktree`
 
-**Branch:** `claude/f3-1-worktree-package`
+**Branch:** `claude/f3-1-worktree-package` (implemented; PR open)
 
 **Files:** Create `internal/worktree/{doc,worktree,integrate,refs,preflight}.go`
 and `*_test.go`, `internal/worktree/AGENTS.md`. Edit
@@ -126,10 +126,10 @@ Rules fixed by the ADR that the package enforces:
 - `Remove`: removes only handles created by this manager instance (tracked by
   ID, not by a path argument); never the source.
 
-- [ ] Write failing tests first (below), then extract the runner with `git()`
+- [x] Write failing tests first (below), then extract the runner with `git()`
   behavior unchanged (existing `internal/gitstate` and Codex tests pass untouched).
-- [ ] Implement the package to the interface above.
-- [ ] Add `AGENTS.md` for the package and update the codebase map.
+- [x] Implement the package to the interface above.
+- [x] Add `AGENTS.md` for the package and update the codebase map.
 
 **Tests (temporary Git repos, no Codex):**
 `TestPreflightRejectsDirtyTrackedAndAcceptsUntracked`,
@@ -150,7 +150,7 @@ limit and stderr never returned.
 
 ### Task 2: Events
 
-**Branch:** `claude/f3-1-events`
+**Branch:** `claude/f3-1-events` (implemented; PR open). Schema number: **11** (10 is taken by `value_recorded`, ADR-0023)
 
 **Files:** Create `internal/events/workspace.go`, `workspace_test.go`. Edit
 `internal/events/event.go` (schema constant, `Validate` switch, clone),
@@ -166,16 +166,16 @@ limit and stderr never returned.
 | `workspace_released` | `action` (`removed` / `retained`), `reason`, `path`, `cleanup_error` (class only) |
 | `source_workspace_changed` | `paths` (sorted, bounded), `omitted`, `indeterminate` (T5) |
 
-- [ ] **Schema number by merge order.** Check `origin/main` for the current
+- [x] **Schema number by merge order.** Check `origin/main` for the current
   `events.SchemaVersion` and for ADR-0023's `value_recorded` work. Take the next
   free number, gate the new types on it in `Validate`, and amend the ADR text
   that says "assigned by merge order" with the final number in the same PR.
-- [ ] Strict validation: correlation fields (run, node, node run) required where
+- [x] Strict validation: correlation fields (run, node, node run) required where
   the event is node-scoped; reject payloads whose size/count exceed bounds;
   reject new types below the new schema.
-- [ ] Round-trip and old-fixture tests: schemas 1-9 fixtures still decode; the
+- [x] Round-trip and old-fixture tests: schemas 1-9 fixtures still decode; the
   JSONL store (`internal/store`) writes and reads the new types unchanged.
-- [ ] Verify the desktop reducer ignores unknown event types (read
+- [x] Verify the desktop reducer ignores unknown event types (read
   `desktop/src/reducer.ts`); add a reducer test with a `workspace_*` event so
   the tolerance is a tested contract, not an assumption.
 

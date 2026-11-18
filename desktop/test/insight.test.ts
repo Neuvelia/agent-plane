@@ -141,6 +141,22 @@ describe('event tail', () => {
     const run = reduce(initialRun(), { event_schema_version: 9, type: 'from_the_future', timestamp: '2026-01-01T00:00:00Z', sequence: 1, run_id: 'r', graph_id: 'g', graph_version: 'v', payload: { x: 1 } })
     expect(run.tail).toEqual([{ sequence: 1, timestamp: '2026-01-01T00:00:00Z', type: 'from_the_future', node: undefined, detail: undefined, kind: undefined }])
   })
+  it('tolerates the schema 11 workspace isolation events without interpreting them', () => {
+    const base = { event_schema_version: 11, timestamp: '2026-01-01T00:00:00Z', run_id: 'r', graph_id: 'g', graph_version: 'v' }
+    const sha = '0123456789abcdef0123456789abcdef01234567'
+    const stream: ApEvent[] = [
+      { ...base, type: 'workspace_prepared', sequence: 1, node_id: 'n', node_run_id: 'nr', payload: { base_sha: sha, mode: 'worktree', path: '/w', source_root: '/s' } },
+      { ...base, type: 'workspace_integrated', sequence: 2, node_id: 'n', node_run_id: 'nr', attempt_id: 'a', payload: { unit_ref: 'refs/agentplane/r/units/n-0123456789abcdef', unit_commit: sha, integrated_ref: 'refs/agentplane/r/integrated', integrated_commit: sha, changed_paths: 1 } },
+      { ...base, type: 'workspace_conflict', sequence: 3, node_id: 'n', node_run_id: 'nr', attempt_id: 'a', payload: { unit_ref: 'refs/agentplane/r/units/n-0123456789abcdef', unit_commit: sha, tip_commit: sha, paths: ['a.txt'], omitted: 0 } },
+      { ...base, type: 'workspace_released', sequence: 4, node_id: 'n', node_run_id: 'nr', payload: { action: 'retained', reason: 'conflict', path: '/w' } },
+      { ...base, type: 'source_workspace_changed', sequence: 5, payload: { paths: [], omitted: 0, indeterminate: true } },
+    ]
+    const run = stream.reduce((acc, e) => reduce(acc, e), initialRun())
+    expect(run.eventCount).toBe(5)
+    expect(run.tail.map((e) => e.type)).toEqual(stream.map((e) => e.type))
+    expect(run.tail.every((e) => e.kind === undefined)).toBe(true)
+    expect(run.status).toBe(initialRun().status)
+  })
   it('filters Failed, Retried and Human from the recorded runs', () => {
     const tail = reduceAll(reject).tail
     expect(filterEvents(tail, 'all')).toHaveLength(tail.length)

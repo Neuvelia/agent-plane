@@ -2,11 +2,11 @@
 package agent
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 
 	"agentplane/internal/domain/events"
-	"agentplane/internal/runtime"
 )
 
 type AdapterID string
@@ -34,15 +34,15 @@ type CapabilityReport struct {
 // AgentExecutionInput contains only explicitly authored references, not resolved
 // files, environment values, secrets, or hidden repository context.
 type AgentExecutionInput struct {
-	Feedback        *runtime.CorrectionFeedback `json:"feedback,omitempty"`
-	Task            string                      `json:"task"`
-	Workspace       string                      `json:"workspace"`
-	AllowedPaths    []string                    `json:"allowed_paths,omitempty"`
-	ContextRefs     []string                    `json:"context_refs,omitempty"`
-	EnvironmentRefs []string                    `json:"environment_refs,omitempty"`
-	RunID           events.RunID                `json:"run_id,omitempty"`
-	NodeRunID       events.NodeRunID            `json:"node_run_id,omitempty"`
-	AttemptID       events.AttemptID            `json:"attempt_id,omitempty"`
+	Feedback        *run.CorrectionFeedback `json:"feedback,omitempty"`
+	Task            string                  `json:"task"`
+	Workspace       string                  `json:"workspace"`
+	AllowedPaths    []string                `json:"allowed_paths,omitempty"`
+	ContextRefs     []string                `json:"context_refs,omitempty"`
+	EnvironmentRefs []string                `json:"environment_refs,omitempty"`
+	RunID           events.RunID            `json:"run_id,omitempty"`
+	NodeRunID       events.NodeRunID        `json:"node_run_id,omitempty"`
+	AttemptID       events.AttemptID        `json:"attempt_id,omitempty"`
 }
 
 type FileProvenance string

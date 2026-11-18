@@ -29,9 +29,8 @@ contextBridge.exposeInMainWorld('agentplane', {
       ipcRenderer.send('ap:unsubscribe', subId)
     }
   },
-  pickGraph: () => ipcRenderer.invoke('ap:pickGraph'),
-  // Graph files for the editor: native dialogs run in the main process and the
-  // renderer receives only an opaque grant and a file name, never a path.
+  // Graph files for the editor and New run: native dialogs run in the main
+  // process and the renderer receives only an opaque grant and a file name, never a path.
   openGraph: () => ipcRenderer.invoke('ap:openGraph'),
   newGraph: () => ipcRenderer.invoke('ap:newGraph'),
   recentGraphs: () => ipcRenderer.invoke('ap:recentGraphs'),

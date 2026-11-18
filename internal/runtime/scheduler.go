@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"agentplane/internal/app/trace"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -22,17 +24,9 @@ type Executor interface {
 	ExecuteNode(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error)
 }
 
-// ExecutionCorrelation is created by the scheduler and passed to executors
-// that need to associate external work with the run's lifecycle facts.
-type ExecutionCorrelation struct {
-	RunID     events.RunID
-	NodeRunID events.NodeRunID
-	AttemptID events.AttemptID
-}
-
 // CorrelatedExecutor is optional; legacy executors keep the F0.4 API.
 type CorrelatedExecutor interface {
-	ExecuteNodeWithCorrelation(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionCorrelation) (map[string]graph.Value, error)
+	ExecuteNodeWithCorrelation(context.Context, string, graph.NodeDefinition, map[string]graph.Value, run.ExecutionCorrelation) (map[string]graph.Value, error)
 }
 
 // LogStreamingExecutor optionally reports bounded output chunks while a node
@@ -52,8 +46,8 @@ type ExecutionObservation struct {
 	AttemptNumber      int
 	ScopeBaseline      *gitstate.Baseline
 	ScopeBaselineError error
-	Feedback           *CorrectionFeedback
-	Correlation        ExecutionCorrelation
+	Feedback           *run.CorrectionFeedback
+	Correlation        run.ExecutionCorrelation
 	Log                func(string, []byte)
 	Progress           func(events.Type, events.Payload)
 	Check              func(events.GateCheckPayload)
@@ -91,6 +85,18 @@ type Options struct {
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.
 	GraphVersion graph.Encoder
+	// Clock stamps events. Required: the engine never reads the wall clock.
+	Clock trace.Clock
+	// IDs generates run, node-run and attempt identifiers. Required.
+	IDs IDGenerator
+}
+
+// IDGenerator is the engine's source of identifiers; the composition root
+// supplies random ones and tests supply deterministic ones.
+type IDGenerator interface {
+	NewRunID() (events.RunID, error)
+	NewNodeRunID() (events.NodeRunID, error)
+	NewAttemptID() (events.AttemptID, error)
 }
 
 type completedNode struct {
@@ -112,28 +118,32 @@ type runMachine struct {
 	workspaces  map[string]workspaceIdentity
 	definition  *graph.Definition
 	ids         []string
-	nodes       map[string]*NodeResult
+	nodes       map[string]*run.NodeResult
 	resolved    map[string]map[string]graph.Value
 	outputs     map[string]map[string]graph.Value
-	result      RunResult
-	emitter     *events.Collector
+	result      run.Result
+	emitter     *trace.Collector
 	startedAt   time.Time
 	nodeStarted map[string]time.Time
 	decisions   DecisionProvider
 	values      *valueRecorder
+	attemptIDs  IDGenerator
+	clock       trace.Clock
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
 // failed and no run started. Runtime failures are represented in RunResult.
 // Callers must not mutate definition or inputs while Run is active.
-func Run(ctx context.Context, definition *graph.Definition, inputs map[string]graph.Value, executor Executor, options Options) (RunResult, error) {
+//
+//nolint:gocognit,gocyclo,funlen // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
+func Run(ctx context.Context, definition *graph.Definition, inputs map[string]graph.Value, executor Executor, options Options) (run.Result, error) {
 	prepared, err := preflightRun(ctx, definition, inputs, executor, options)
 	if err != nil {
-		return RunResult{}, err
+		return run.Result{}, err
 	}
 	machine, dependencies, err := initializeRun(ctx, definition, options, prepared)
 	if err != nil {
-		return RunResult{}, err
+		return run.Result{}, err
 	}
 	plan := prepared.plan
 	graphInputs := prepared.graphInputs
@@ -146,19 +156,19 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	for {
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(RunCancelled)
+			machine.finish(run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 		failures := machine.promoteReady(ctx, plan, graphInputs, dependencies)
 		if len(failures) > 0 {
 			machine.result.Failure = failures[0]
 			machine.skipUnstarted()
-			machine.finish(RunFailed)
+			machine.finish(run.RunFailed)
 			return machine.snapshot(), nil
 		}
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(RunCancelled)
+			machine.finish(run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 
@@ -167,16 +177,16 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			if machine.allSucceeded() {
 				outputs, resolution := plan.ResolveGraphOutputs(machine.outputs)
 				if !resolution.Valid() {
-					machine.result.Failure = &Failure{Kind: FailureGraphOutput, Diagnostics: resolution.Diagnostics}
-					machine.finish(RunFailed)
+					machine.result.Failure = &run.Failure{Kind: run.FailureGraphOutput, Diagnostics: resolution.Diagnostics}
+					machine.finish(run.RunFailed)
 				} else {
 					machine.result.Outputs = sortedPortValues(outputs)
-					machine.finish(RunSucceeded)
+					machine.finish(run.RunSucceeded)
 				}
 			} else {
-				machine.result.Failure = &Failure{Kind: FailureScheduler, Err: errors.New("no runnable nodes remain in validated graph")}
+				machine.result.Failure = &run.Failure{Kind: run.FailureScheduler, Err: errors.New("no runnable nodes remain in validated graph")}
 				machine.skipUnstarted()
-				machine.finish(RunFailed)
+				machine.finish(run.RunFailed)
 			}
 			return machine.snapshot(), nil
 		}
@@ -184,7 +194,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		state := batchState{
 			attempts:  map[string]events.AttemptID{},
 			numbers:   map[string]int{},
-			feedbacks: map[string]*CorrectionFeedback{},
+			feedbacks: map[string]*run.CorrectionFeedback{},
 			baselines: map[string]*gitstate.Baseline{},
 		}
 		for len(batch) > 0 {
@@ -192,37 +202,37 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			retry := machine.acceptBatchResults(ctx, definition, results, &state)
 			failed := false
 			for _, id := range machine.ids {
-				if machine.nodes[id].State == NodeFailed {
+				if machine.nodes[id].State == run.NodeFailed {
 					failed = true
 				}
 			}
 			if failed || ctx.Err() != nil {
 				for _, id := range retry {
-					machine.transitionNode(id, NodeCancelled)
+					machine.transitionNode(id, run.NodeCancelled)
 				}
 				break
 			}
 			batch = retry
 		}
 		for _, id := range machine.ids {
-			if machine.nodes[id].State == NodeRunning {
-				machine.transitionNode(id, NodeCancelled)
+			if machine.nodes[id].State == run.NodeRunning {
+				machine.transitionNode(id, run.NodeCancelled)
 			}
 		}
 		for _, id := range machine.ids {
-			if node := machine.nodes[id]; node.State == NodeFailed {
+			if node := machine.nodes[id]; node.State == run.NodeFailed {
 				machine.result.Failure = node.Failure
 				break
 			}
 		}
 		if machine.result.Failure != nil {
 			machine.skipUnstarted()
-			machine.finish(RunFailed)
+			machine.finish(run.RunFailed)
 			return machine.snapshot(), nil
 		}
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(RunCancelled)
+			machine.finish(run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 	}
@@ -230,14 +240,14 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 
 func newRunMachine(ctx context.Context, definition *graph.Definition, options Options) (*runMachine, error) {
 	live, persist := options.LiveEvents, options.Persist
-	if options.GraphVersion == nil {
-		return nil, errors.New("runtime options: GraphVersion is required")
+	if options.GraphVersion == nil || options.Clock == nil || options.IDs == nil {
+		return nil, errors.New("runtime options: GraphVersion, Clock and IDs are required")
 	}
 	version, err := graph.SemanticVersion(definition, options.GraphVersion)
 	if err != nil {
 		return nil, err
 	}
-	runID, err := events.NewRunID()
+	runID, err := options.IDs.NewRunID()
 	if err != nil {
 		return nil, err
 	}
@@ -249,22 +259,24 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 	m := &runMachine{
 		ids:         ids,
 		units:       unitRegistry{},
-		nodes:       make(map[string]*NodeResult, len(ids)),
+		nodes:       make(map[string]*run.NodeResult, len(ids)),
 		resolved:    make(map[string]map[string]graph.Value, len(ids)),
 		outputs:     make(map[string]map[string]graph.Value, len(ids)),
-		result:      RunResult{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: RunRunning},
+		result:      run.Result{GraphID: definition.ID, GraphVersion: version, RunID: runID, State: run.RunRunning},
 		nodeStarted: make(map[string]time.Time, len(ids)),
+		attemptIDs:  options.IDs,
+		clock:       options.Clock,
 	}
 	for _, id := range ids {
-		nodeRunID, err := events.NewNodeRunID()
+		nodeRunID, err := options.IDs.NewNodeRunID()
 		if err != nil {
 			return nil, err
 		}
-		m.nodes[id] = &NodeResult{NodeID: id, NodeRunID: nodeRunID, State: NodePending}
+		m.nodes[id] = &run.NodeResult{NodeID: id, NodeRunID: nodeRunID, State: run.NodePending}
 	}
-	m.emitter = events.NewCollectorWithLiveEvents(ctx, runID, definition.ID, version, live)
+	m.emitter = trace.NewCollectorWithLiveEvents(ctx, options.Clock, runID, definition.ID, version, live)
 	m.emitter.SetPersist(persist)
-	m.record("", "", string(RunRunning))
+	m.record("", "", string(run.RunRunning))
 	return m, nil
 }
 
@@ -287,31 +299,31 @@ func (m *runMachine) record(id, from, to string) {
 			counts := events.NodeCounts{}
 			for _, nodeID := range m.ids {
 				switch m.nodes[nodeID].State {
-				case NodeSucceeded:
+				case run.NodeSucceeded:
 					counts.Succeeded++
-				case NodeFailed:
+				case run.NodeFailed:
 					counts.Failed++
-				case NodeSkipped:
+				case run.NodeSkipped:
 					counts.Skipped++
-				case NodeCancelled:
+				case run.NodeCancelled:
 					counts.Cancelled++
 				}
 			}
 			failureKind, _ := eventFailure(m.result.Failure)
-			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: time.Since(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
+			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: m.clock.Now().Sub(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
 		}
 	} else {
 		node := m.nodes[id]
 		event.NodeRunID = node.NodeRunID
 		switch to {
-		case string(NodeReady):
+		case string(run.NodeReady):
 			event.Type, event.Payload = events.NodeReady, events.NodeReadyPayload{}
-		case string(NodeRunning):
+		case string(run.NodeRunning):
 			event.Type, event.Payload = events.NodeStarted, events.NodeStartedPayload{}
 		default:
 			failureKind, codes := eventFailure(node.Failure)
-			if from == string(NodeRunning) {
-				duration := time.Since(m.nodeStarted[id]).Milliseconds()
+			if from == string(run.NodeRunning) {
+				duration := m.clock.Now().Sub(m.nodeStarted[id]).Milliseconds()
 				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes, DurationMS: &duration}
 			} else {
 				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes}
@@ -322,13 +334,13 @@ func (m *runMachine) record(id, from, to string) {
 	if id == "" && from == "" {
 		m.startedAt = recorded.Timestamp
 	}
-	if id != "" && to == string(NodeRunning) {
+	if id != "" && to == string(run.NodeRunning) {
 		m.nodeStarted[id] = recorded.Timestamp
 	}
-	m.result.Transitions = append(m.result.Transitions, StateTransition{Sequence: recorded.Sequence, NodeID: id, From: from, To: to})
+	m.result.Transitions = append(m.result.Transitions, run.StateTransition{Sequence: recorded.Sequence, NodeID: id, From: from, To: to})
 }
 
-func eventFailure(failure *Failure) (string, []string) {
+func eventFailure(failure *run.Failure) (string, []string) {
 	if failure == nil {
 		return "", nil
 	}
@@ -347,17 +359,17 @@ func eventFailure(failure *Failure) (string, []string) {
 	return string(failure.Kind), codes
 }
 
-func (m *runMachine) transitionNode(id string, to NodeState) {
+func (m *runMachine) transitionNode(id string, to run.NodeState) {
 	from := m.nodes[id].State
-	if !validNodeTransition(from, to) {
+	if !run.ValidNodeTransition(from, to) {
 		panic(fmt.Sprintf("invalid scheduler node transition %q: %s -> %s", id, from, to))
 	}
 	m.nodes[id].State = to
 	m.record(id, string(from), string(to))
 }
 
-func (m *runMachine) finish(to RunState) {
-	if !validRunTransition(m.result.State, to) {
+func (m *runMachine) finish(to run.State) {
+	if !run.ValidRunTransition(m.result.State, to) {
 		panic(fmt.Sprintf("invalid scheduler run transition: %s -> %s", m.result.State, to))
 	}
 	from := m.result.State
@@ -365,18 +377,19 @@ func (m *runMachine) finish(to RunState) {
 	m.record("", string(from), string(to))
 }
 
-func (m *runMachine) promoteReady(ctx context.Context, plan *graph.BindingPlan, graphInputs map[string]graph.Value, dependencies map[string][]string) []*Failure {
-	var failures []*Failure
+//nolint:gocognit // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
+func (m *runMachine) promoteReady(ctx context.Context, plan *graph.BindingPlan, graphInputs map[string]graph.Value, dependencies map[string][]string) []*run.Failure {
+	var failures []*run.Failure
 	for _, id := range m.ids {
 		if ctx.Err() != nil {
 			return failures
 		}
-		if m.nodes[id].State != NodePending {
+		if m.nodes[id].State != run.NodePending {
 			continue
 		}
 		ready := true
 		for _, predecessor := range dependencies[id] {
-			if m.nodes[predecessor].State != NodeSucceeded {
+			if m.nodes[predecessor].State != run.NodeSucceeded {
 				ready = false
 				break
 			}
@@ -389,22 +402,23 @@ func (m *runMachine) promoteReady(ctx context.Context, plan *graph.BindingPlan, 
 			return failures
 		}
 		if !resolution.Valid() {
-			failure := &Failure{NodeID: id, Kind: FailureBinding, Diagnostics: resolution.Diagnostics}
+			failure := &run.Failure{NodeID: id, Kind: run.FailureBinding, Diagnostics: resolution.Diagnostics}
 			m.nodes[id].Failure = failure
-			m.transitionNode(id, NodeFailed)
+			m.transitionNode(id, run.NodeFailed)
 			failures = append(failures, failure)
 			continue
 		}
 		m.resolved[id] = inputs
-		m.transitionNode(id, NodeReady)
+		m.transitionNode(id, run.NodeReady)
 	}
 	return failures
 }
 
+//nolint:nestif // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
 func (m *runMachine) nextBatch(limit int) []string {
 	batch := make([]string, 0, limit)
 	for _, id := range m.ids {
-		if m.nodes[id].State == NodeReady {
+		if m.nodes[id].State == run.NodeReady {
 			conflict := false
 			if m.workspaces != nil && m.definition.Nodes[id].Type == "agent" {
 				for _, other := range batch {
@@ -428,7 +442,7 @@ func (m *runMachine) nextBatch(limit int) []string {
 
 func (m *runMachine) allSucceeded() bool {
 	for _, id := range m.ids {
-		if m.nodes[id].State != NodeSucceeded {
+		if m.nodes[id].State != run.NodeSucceeded {
 			return false
 		}
 	}
@@ -438,9 +452,9 @@ func (m *runMachine) allSucceeded() bool {
 func (m *runMachine) skipUnstarted() {
 	for _, id := range m.ids {
 		node := m.nodes[id]
-		if node.State == NodePending || node.State == NodeReady {
+		if node.State == run.NodePending || node.State == run.NodeReady {
 			node.SkipReason = "run_failed"
-			m.transitionNode(id, NodeSkipped)
+			m.transitionNode(id, run.NodeSkipped)
 		}
 	}
 }
@@ -448,33 +462,33 @@ func (m *runMachine) skipUnstarted() {
 func (m *runMachine) cancelUnstarted() {
 	for _, id := range m.ids {
 		state := m.nodes[id].State
-		if state == NodePending || state == NodeReady {
-			m.transitionNode(id, NodeCancelled)
+		if state == run.NodePending || state == run.NodeReady {
+			m.transitionNode(id, run.NodeCancelled)
 		}
 	}
 }
 
-func (m *runMachine) snapshot() RunResult {
+func (m *runMachine) snapshot() run.Result {
 	result := m.result
 	result.Events = m.emitter.Snapshot()
 	result.ProgressStats = m.emitter.Stats()
 	result.PersistError = m.emitter.PersistError()
-	result.Nodes = make([]NodeResult, 0, len(m.ids))
+	result.Nodes = make([]run.NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])
 	}
 	return result
 }
 
-func sortedPortValues(values map[string]graph.Value) []PortValue {
+func sortedPortValues(values map[string]graph.Value) []run.PortValue {
 	names := make([]string, 0, len(values))
 	for name := range values {
 		names = append(names, name)
 	}
 	sort.Strings(names)
-	result := make([]PortValue, 0, len(names))
+	result := make([]run.PortValue, 0, len(names))
 	for _, name := range names {
-		result = append(result, PortValue{Name: name, Value: values[name]})
+		result = append(result, run.PortValue{Name: name, Value: values[name]})
 	}
 	return result
 }
@@ -517,7 +531,8 @@ func validateNodeOutputs(graphID, nodeID string, declared map[string]graph.PortD
 	return diagnostics
 }
 
-func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, attemptNumber int, feedback *CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
+//nolint:gocognit,gocyclo,funlen // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
+func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, node graph.NodeDefinition, resolved map[string]graph.Value, attemptID events.AttemptID, attemptNumber int, feedback *run.CorrectionFeedback, baseline *gitstate.Baseline, baselineError error, redactionTemplate *logRedactor) completedNode {
 	nodeRunID := m.nodes[id].NodeRunID
 	var outputs map[string]graph.Value
 	var err error
@@ -655,7 +670,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: CloneFeedback(feedback), Correlation: ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
 		} else {
 			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 		}
@@ -666,7 +681,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 		closed = true
 		logMu.Unlock()
 	} else if correlated, ok := executor.(CorrelatedExecutor); ok {
-		outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
+		outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
 	} else {
 		outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
 	}

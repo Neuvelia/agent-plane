@@ -231,6 +231,7 @@ type docResponse struct {
 	Diagnostics     []diagnosticDTO `json:"diagnostics"`
 	ParseError      string          `json:"parse_error,omitempty"`
 	ParseLine       int             `json:"parse_line,omitempty"`
+	ParseColumn     int             `json:"parse_column,omitempty"`
 	ReadonlyCanvas  bool            `json:"readonly_canvas"`
 	ReadonlyReasons []string        `json:"readonly_reasons,omitempty"`
 	LineEnding      string          `json:"line_ending"`
@@ -258,6 +259,13 @@ func (s *Server) diagnostics(def *graph.Definition) []graph.Diagnostic {
 	return diags
 }
 
+// parseErrorMessage is the text shown to the user. The YAML library cuts long
+// scalars at a byte count, which can split a multi-byte character; the position
+// lookups keep using the raw message because they match that cut.
+func parseErrorMessage(err error) string {
+	return strings.ToValidUTF8(err.Error(), "�")
+}
+
 func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	res := docResponse{Text: string(text), Hash: hashOf(text), Diagnostics: []diagnosticDTO{}, Label: g.label, LineEnding: "lf"}
 	res.NodeTypes = s.nodeTypesFor(nil, allTypes)
@@ -269,8 +277,9 @@ func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	}
 	def, err := yamlgraph.Parse(text)
 	if err != nil {
-		res.ParseError = err.Error()
-		res.ParseLine = edit.ParseErrorLine(res.ParseError)
+		res.ParseError = parseErrorMessage(err)
+		res.ParseLine = edit.ParseErrorLine(err.Error())
+		res.ParseColumn = edit.ParseErrorColumn(text, err.Error())
 		return res
 	}
 	res.Definition = toDefinitionDTO(def)
@@ -414,7 +423,7 @@ func (s *Server) editDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		base = g.text
 	}
-	res, err := edit.Apply(base, ops)
+	res, err := edit.ApplyWith(base, ops, s.configFields)
 	if err != nil {
 		editFailure(w, err)
 		return

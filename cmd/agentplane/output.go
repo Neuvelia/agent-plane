@@ -1,13 +1,13 @@
 package main
 
 import (
+	"agentplane/internal/domain/run"
 	"fmt"
 	"io"
 	"strings"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
-	"agentplane/internal/runtime"
 )
 
 func renderDiagnostics(w io.Writer, diagnostics []graph.Diagnostic) error {
@@ -28,7 +28,7 @@ func renderDiagnostics(w io.Writer, diagnostics []graph.Diagnostic) error {
 	return nil
 }
 
-func renderFailure(w io.Writer, failure *runtime.Failure) error {
+func renderFailure(w io.Writer, failure *run.Failure) error {
 	if failure == nil {
 		return nil
 	}

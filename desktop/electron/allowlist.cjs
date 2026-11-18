@@ -24,4 +24,20 @@ function isAllowed(method, requestPath) {
   return RULES.some(([m, re]) => m === method && re.test(requestPath))
 }
 
-module.exports = { isAllowed }
+// The two routes whose body can name a graph file accept exactly these keys from
+// the renderer, so a file is addressed by grant (or validated as text) and never
+// by path. This is a key allow-list, not a deny-list: the Go API decodes JSON keys
+// case-insensitively, so "GRAPH_PATH" would reach `graph_path`.
+const GRAPH_BODIES = [
+  ['POST', /^\/runs$/, ['graph_grant', 'inputs']],
+  ['POST', /^\/graphs\/validate$/, ['grant', 'text']],
+]
+
+function isBodyAllowed(method, requestPath, body) {
+  const rule = GRAPH_BODIES.find(([m, re]) => m === method && re.test(requestPath))
+  if (!rule) return true
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return false
+  return Object.keys(body).every((key) => rule[2].includes(key))
+}
+
+module.exports = { isAllowed, isBodyAllowed }

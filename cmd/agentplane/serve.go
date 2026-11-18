@@ -1,6 +1,8 @@
 package main
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -168,13 +170,13 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			}
 			return persist(e)
 		}
-		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
+		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr
 		}
 		if err != nil {
-			var preflight *runtime.PreflightError
+			var preflight *run.PreflightError
 			if errors.As(err, &preflight) {
 				return &api.StartError{Status: http.StatusUnprocessableEntity, Message: "preflight failed", Diagnostics: preflight.Diagnostics.Diagnostics}
 			}

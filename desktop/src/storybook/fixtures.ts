@@ -5,8 +5,10 @@
 import approve from '../../test/fixtures/demo-approve.json'
 import reject from '../../test/fixtures/demo-reject.json'
 import exhausted from '../../test/fixtures/exhausted.json'
+import standaloneGate from '../../test/fixtures/standalone-gate-red.json'
 import demoYaml from '../../../.agents/graphs/demo-vertical.yaml?raw'
 import exhaustedYaml from '../../test/fixtures/exhausted.yaml?raw'
+import standaloneGateYaml from '../../test/fixtures/standalone-gate-red.yaml?raw'
 // Recorded from the engine runtime with the test fake Agent adapter (see the YAML header).
 import agentScope from '../../test/fixtures/agent-scope-retry.json'
 import agentScopeYaml from '../../test/fixtures/agent-scope-retry.yaml?raw'
@@ -16,6 +18,9 @@ import type { ApEvent, GraphSummary, PendingApproval, RunSummary } from '../type
 export const demoApprove = approve as unknown as ApEvent[]
 export const demoReject = reject as unknown as ApEvent[]
 export const exhaustedRetries = exhausted as unknown as ApEvent[]
+export const standaloneGateRed = standaloneGate as unknown as ApEvent[]
+export const standaloneGateGraph: GraphSummary = { nodes: [{ id: 'build', type: 'shell' }, { id: 'accept', type: 'gate' }], edges: [{ from: 'build', to: 'accept' }] }
+export { standaloneGateYaml }
 export const agentScopeRetry = agentScope as unknown as ApEvent[]
 export const agentScopeGraph: GraphSummary = { nodes: [{ id: 'work', type: 'agent', max_attempts: 3 }], edges: [] }
 export { agentScopeYaml }

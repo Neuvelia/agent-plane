@@ -17,14 +17,26 @@ func parseRef(ref, kind string) bool {
 
 func edgeLabel(from, to string) string { return from + " -> " + to }
 
-// newErrors returns the blocking diagnostics present after an edit that were not
-// present before. can_connect has no rules of its own: it asks the validator.
-func newErrors(before, after *graph.Definition) []graph.Diagnostic {
-	seen := map[string]int{}
+// errorBaseline holds the blocking diagnostics of a definition, so many
+// candidate edits can each be judged against one validation of the original.
+type errorBaseline map[string]int
+
+func baselineOf(before *graph.Definition) errorBaseline {
+	seen := errorBaseline{}
 	for _, d := range graph.Validate(before).Diagnostics {
 		if d.Severity == graph.SeverityError {
 			seen[d.Code+"|"+d.Message]++
 		}
+	}
+	return seen
+}
+
+// newErrors returns the blocking diagnostics of after that the baseline does
+// not have.
+func (b errorBaseline) newErrors(after *graph.Definition) []graph.Diagnostic {
+	left := make(errorBaseline, len(b))
+	for k, v := range b {
+		left[k] = v
 	}
 	var added []graph.Diagnostic
 	for _, d := range graph.Validate(after).Diagnostics {
@@ -32,8 +44,8 @@ func newErrors(before, after *graph.Definition) []graph.Diagnostic {
 			continue
 		}
 		key := d.Code + "|" + d.Message
-		if seen[key] > 0 {
-			seen[key]--
+		if left[key] > 0 {
+			left[key]--
 			continue
 		}
 		added = append(added, d)
@@ -41,23 +53,54 @@ func newErrors(before, after *graph.Definition) []graph.Diagnostic {
 	return added
 }
 
-func (s *session) canConnect(from, to string) *QueryResult {
-	if !parseRef(from, "outputs") {
-		return &QueryResult{Code: CodeInvalidOp, Message: fmt.Sprintf("%q is not a node output reference (NODE.outputs.PORT)", from)}
-	}
-	if !parseRef(to, "inputs") {
-		return &QueryResult{Code: CodeInvalidOp, Message: fmt.Sprintf("%q is not a node input reference (NODE.inputs.PORT)", to)}
-	}
+// newErrors returns the blocking diagnostics present after an edit that were not
+// present before. can_connect has no rules of its own: it asks the validator.
+func newErrors(before, after *graph.Definition) []graph.Diagnostic {
+	return baselineOf(before).newErrors(after)
+}
+
+// parseGraphInputRef reports whether ref is inputs.NAME.
+func parseGraphInputRef(ref string) bool {
+	name, ok := strings.CutPrefix(ref, "inputs.")
+	return ok && graph.ValidIdentifier(name)
+}
+
+// connectionAfter is the definition with from connected to to: an edge for a
+// node output, a graph input binding for inputs.NAME.
+func (s *session) connectionAfter(from, to string) *graph.Definition {
 	after := *s.want
+	if parseGraphInputRef(from) {
+		after.GraphInputBindings = append(append([]graph.GraphInputBindingDefinition(nil), s.want.GraphInputBindings...), graph.GraphInputBindingDefinition{From: graph.GraphInputReference(from), To: graph.NodeInputReference(to)})
+		return &after
+	}
 	after.Edges = append(append([]graph.EdgeDefinition(nil), s.want.Edges...), graph.EdgeDefinition{From: graph.NodeOutputReference(from), To: graph.NodeInputReference(to)})
-	if errs := newErrors(s.want, &after); len(errs) > 0 {
+	return &after
+}
+
+func connectionVerdict(base errorBaseline, after *graph.Definition) *QueryResult {
+	if errs := base.newErrors(after); len(errs) > 0 {
 		return &QueryResult{Code: errs[0].Code, Message: errs[0].Message}
 	}
 	return &QueryResult{OK: true}
 }
 
+func (s *session) canConnect(from, to string) *QueryResult {
+	if !parseRef(from, "outputs") && !parseGraphInputRef(from) {
+		return &QueryResult{Code: CodeInvalidOp, Message: fmt.Sprintf("%q is not a node output reference (NODE.outputs.PORT) or a graph input reference (inputs.NAME)", from)}
+	}
+	if !parseRef(to, "inputs") {
+		return &QueryResult{Code: CodeInvalidOp, Message: fmt.Sprintf("%q is not a node input reference (NODE.inputs.PORT)", to)}
+	}
+	return connectionVerdict(baselineOf(s.want), s.connectionAfter(from, to))
+}
+
 func (s *session) addEdge(op Op) *Error {
-	q := s.canConnect(op.From, op.To)
+	var q *QueryResult
+	if parseRef(op.From, "outputs") {
+		q = s.canConnect(op.From, op.To)
+	} else {
+		q = &QueryResult{Code: CodeInvalidOp, Message: fmt.Sprintf("%q is not a node output reference (NODE.outputs.PORT)", op.From)}
+	}
 	if !q.OK {
 		return &Error{Code: CodeCannotConnect, Message: q.Message, OpIndex: -1, Edge: edgeLabel(op.From, op.To), Suggestion: "the validator refused this edge (" + q.Code + "); check the port types and that the input has no other provider"}
 	}
