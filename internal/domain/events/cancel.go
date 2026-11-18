@@ -6,15 +6,15 @@ import (
 )
 
 // Cancellation and timeout facts (F3.4, ADR-0028). They exist from event
-// schema 12; older schemas never carry them and stay readable unchanged.
+// schema 13; older schemas never carry them and stay readable unchanged.
 const (
 	CancelRequested   Type = "cancel_requested"
 	ProcessTerminated Type = "process_terminated"
 )
 
-// schemaCancelTimeout is the first schema with these facts. Renumber to 13 if
-// F2.8b's schema 12 merges first; tests derive from this constant.
-const schemaCancelTimeout = 12
+// schemaCancelTimeout is the first schema with these facts. Schema 12 is F2.8b's
+// attempt_diff; tests derive from this constant.
+const schemaCancelTimeout = 13
 
 // Closed cause vocabulary shared by run.CancelReason and the terminal payloads.
 const (

@@ -321,7 +321,7 @@ External writers can still alter the shared workspace. See ADR-0016.
 
 ## Cancellation and timeout facts (F3.4)
 
-Event schema 12 (renumber to 13 if F2.8b's schema 12 merges first) adds two
+Event schema 13 (schema 12 is F2.8b's `attempt_diff`) adds two
 bounded facts and one optional field. `cancel_requested` carries `scope`
 (`run|node`), a closed `reason` (`interrupt|user_cancel|run_timeout|
 sibling_failed|node_timeout`) and `source` (`signal|api|deadline|failure`); it is

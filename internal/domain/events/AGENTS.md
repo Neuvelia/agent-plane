@@ -17,7 +17,7 @@ the CLI, local run store, loopback API and desktop client.
 | Human approval facts and bounded text | `approval.go` |
 | Opt-in recorded run values (schema 10) and their bounds | `value.go` |
 | Workspace isolation facts, closed reason vocabulary, path bounding | `workspace.go` |
-| Cancel/timeout facts, closed cause vocabulary, terminal `reason` (schema 12) | `cancel.go` |
+| Cancel/timeout facts, closed cause vocabulary, terminal `reason` (schema 13) | `cancel.go` |
 
 ## Preserve these contracts
 
@@ -39,7 +39,7 @@ the CLI, local run store, loopback API and desktop client.
   the per-run `MaxRunValueBytes` budget and whether recording is enabled.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes, approval,
   workspace isolation facts (schema 11, ADR-0024) and cancel/timeout facts
-  (schema 12, ADR-0028) survive progress retention limits. Logs and normalized progress share
+  (schema 13, ADR-0028) survive progress retention limits. Logs and normalized progress share
   bounded retained and live budgets. An omitted progress event still consumes
   a sequence, so retained traces may have gaps. `progress_omitted` records
   retained and live omissions before `run_finished`; final facts are replay

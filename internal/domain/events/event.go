@@ -10,7 +10,7 @@ import (
 
 // SchemaVersion is the event schema new events are stamped with. Readers
 // accept every earlier schema with its historical shape.
-const SchemaVersion = 12
+const SchemaVersion = 13
 
 type RunID string
 type NodeRunID string
