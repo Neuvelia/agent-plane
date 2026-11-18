@@ -251,13 +251,20 @@ A future durable event store should preserve append-only audit semantics even if
 
 ## Workspace isolation direction
 
-The expected progression is:
+The progression is:
 
-1. current workspace during the earliest prototype;
-2. Git worktree per unit/node;
-3. process-level restrictions;
+1. current workspace during the earliest prototype (still the default, and what
+   Shell nodes use);
+2. Git worktree per unit/node: implemented by F3.1 as opt-in
+   `isolation: worktree` on loop Agent units (see "Workspace isolation facts");
+3. process-level restrictions (F3.9, not started);
 4. optional container isolation;
 5. ephemeral VM/sandbox for managed execution.
+
+Step 2 is file-level isolation only: a worktree is a different directory, not a
+permission boundary, and an agent that writes to an absolute path can still
+modify the source checkout. The source guard below detects that; it does not
+prevent it.
 
 Do not design Phase 0 APIs in a way that requires every node to share the same mutable working directory forever.
 
@@ -323,6 +330,22 @@ isolated node's first attempt, `workspace_integrated` or `workspace_conflict`
 after `attempt_finished` of the accepted attempt, and `workspace_released` when
 the node run ends (retention `never|failed|always`). Git operations stay in
 `internal/worktree` behind a consumer-owned `runtime.WorkspaceManager` port that
-the CLI composes; `source_workspace_changed` is emitted by a later F3.1 task.
+the CLI composes.
+
+The source guard (`source_workspace_changed`) is part of the same schema. When at
+least one isolated node exists, the runtime captures the source checkout with
+`gitstate.Capture` during preflight, before `run_started`, and compares it before
+`run_finished`. A difference is emitted as one run-level, unattributed fact with
+sorted, bounded paths; a failed or timed-out inspection (the capture hashes
+ignored files, see ADR-0016) is emitted with `indeterminate: true` and no paths,
+and an unchanged source emits nothing. The guard never changes run status.
+
+Known limits of F3.1: downstream isolated nodes do not see upstream file changes
+(every unit starts from the run's base commit and data flows through ports), Shell,
+standalone Gate and Human nodes are not isolated, Agent task text must not ask the
+agent to stage or commit (Codex's sandbox cannot write the worktree index),
+untracked and ignored source files are absent from worktrees, there is no
+`workspaces prune` (crash leftovers are `agentplane-` prefixed, cleanup is
+F3.3/F3.11), and the feature supports Linux and macOS only.
 Readers accept schemas 1-10 and older streams contain none of these facts. See
 ADR-0024.

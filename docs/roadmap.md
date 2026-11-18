@@ -74,7 +74,7 @@ Goal: make long-running local execution durable and safer.
 
 | ID | Feature | Priority | Proposed dependencies |
 | --- | --- | --- | --- |
-| F3.1 | Workspace Isolation / Git Worktrees | P0 | F1.7; closes file-state gap |
+| F3.1 | Workspace Isolation / Git Worktrees | P0 | F1.7; closes file-state gap. Implemented; ADR-0024 |
 | F3.2 | Durable Run State / Append-only Event Store | P0 | F0.6, F1.3 |
 | F3.3 | Resume / Recovery | P0 | F3.1, F3.2 |
 | F3.4 | Cancellation and Timeouts | P0 | F1.2, F1.6, F3.2 |
@@ -88,8 +88,9 @@ Goal: make long-running local execution durable and safer.
 
 Exit: a run can stop and resume after restart, parallel nodes use isolated
 workspaces, trace/artifacts are durable, and secrets and permissions have an
-explicit model. F3.1 establishes file-level isolation that F1.7 does not
-promise. Design F3.8 and F3.9 together so secret resolution never bypasses
+explicit model. F3.1 (implemented, opt-in per Agent node) establishes
+file-level isolation that F1.7 does not promise; it is not a sandbox (F3.9),
+downstream nodes do not yet see upstream files, and Shell nodes are not isolated. Design F3.8 and F3.9 together so secret resolution never bypasses
 the execution policy.
 
 ## Phase 4 - Connected Control Plane

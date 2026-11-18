@@ -60,7 +60,7 @@ feature contract.
 
 | Feature | Spec status |
 | --- | --- |
-| `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
+| `F3.1-workspace-isolation.md` | Implemented (opt-in Agent worktree isolation, ADR-0024; event schema 11); real-Codex demo passed once, see `docs/validation/F3.1-real-codex-demo.md` |
 
 ## Release engineering - drafts (not roadmap F-IDs)
 
