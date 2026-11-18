@@ -44,7 +44,11 @@ units: one linked Git worktree per node run, accepted units integrated onto a
 run-scoped ref, and a non-fatal `source_workspace_changed` guard. It is not a
 sandbox, gives downstream nodes no view of upstream files, does not isolate Shell
 nodes, and supports Linux/macOS only; a real-Codex run passed once
-(`docs/validation/F3.1-real-codex-demo.md`).
+(`docs/validation/F3.1-real-codex-demo.md`). F3.2 (ADR-0027, proposed) makes a run's durable
+state exactly its JSONL event log: persist-before-deliver, durable creation, a run
+lock that separates `running` from `interrupted` (derived, no new event), a
+rebuildable `summary.json`, `store.json` and explicit `runs prune` retention.
+Implemented on Linux; the Windows tests have not been run.
 A Phase 2 vertical slice is also active (event schema 11): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
