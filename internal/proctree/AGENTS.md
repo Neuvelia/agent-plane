@@ -2,8 +2,9 @@
 
 The root `AGENTS.md` applies here. `internal/proctree` is a neutral layer: it
 imports only the standard library (and later `x/sys/windows`) and no project
-package. Adapters that run children (Shell, Codex, Gate) adopt it in separate
-changes; `internal/runtime` never imports it.
+package. Adapters that run children (Shell, Codex, Gate, `gitstate.Run`, the
+capability probe) adopt it in separate changes; `internal/runtime` never imports
+it and reaches Git only through `gitstate.Run`.
 
 ## Find the owner
 

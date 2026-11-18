@@ -41,6 +41,12 @@ node state, retry and event emission.
   preopened regular non-symlink files under a canonical absolute cwd, and a
   controlled `LC_ALL=C` environment. Exit 0 is green, exit 1 red; other
   exits, start/drain failures and cancellation are operational errors.
+  The diff starts through `internal/proctree`: cancellation terminates the
+  whole tree (`Executor.Termination` tunes the grace) and a leader that exits
+  on its own has its group swept. The whole evidence step is bounded by
+  `commandEvidenceBound` (30 s, `Executor.EvidenceBound` in tests); exceeding
+  it is an operational error wrapping `context.DeadlineExceeded`, never a red
+  verdict. `Executor.diffPath` is a test-only seam.
   Capture/redact bounded stdout and stderr with omitted-byte counts. Path
   preflight does not protect against hostile concurrent filesystem mutation
   and is not a general process sandbox.
@@ -86,7 +92,8 @@ behavior read `docs/features/F1.6-correction-loop.md` and
 ## Choose regression tests
 
 - Config, exact predicate numbers, reported paths, fixed diff process,
-  cancellation and Check Result integration: `executor_test.go`.
+  cancellation and Check Result integration: `executor_test.go`; whole-tree
+  termination and the evidence bound: `command_tree_test.go`.
 - Git path classes, scope rules, warn/deny, ignored files and long-path
   evidence: `changed_files_test.go`.
 - Observation consistency, red downstream blocking and loop feedback:
