@@ -1,6 +1,7 @@
 package store
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,15 +57,28 @@ func (w *Writer) writeSnapshot() error {
 	return writeSnapshotFile(w.store.ops(), w.runDir, w.summary, w.logBytes)
 }
 
-// writeSnapshotFile writes the snapshot to a temporary file in the run
-// directory, syncs it, and renames it into place. The temporary name carries
-// the process ID so two processes never share one.
+// snapshotTempPath names a temporary file in dir that no other writer shares:
+// concurrent listings in one server rewrite the same stale snapshot, and a
+// shared name would let one writer's cleanup delete the other's file.
+func snapshotTempPath(dir string) (string, error) {
+	var random [6]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return "", fmt.Errorf("name temporary file: %w", err)
+	}
+	return filepath.Join(dir, fmt.Sprintf("%s.%d.%x.tmp", snapshotFile, os.Getpid(), random)), nil
+}
+
+// writeSnapshotFile writes the snapshot to a uniquely named temporary file in
+// the run directory, syncs it, and renames it into place.
 func writeSnapshotFile(fs fsOps, dir string, summary Summary, logBytes int64) error {
 	data, err := json.Marshal(snapshotRecord{Summary: summary, LogBytes: logBytes})
 	if err != nil {
 		return &SnapshotWriteError{RunID: summary.RunID, Err: fmt.Errorf("encode: %w", err)}
 	}
-	temp := filepath.Join(dir, fmt.Sprintf("%s.%d.tmp", snapshotFile, os.Getpid()))
+	temp, err := snapshotTempPath(dir)
+	if err != nil {
+		return &SnapshotWriteError{RunID: summary.RunID, Err: err}
+	}
 	err = fs.WriteFileSync(temp, append(data, '\n'))
 	if err == nil {
 		err = fs.Rename(temp, filepath.Join(dir, snapshotFile))
