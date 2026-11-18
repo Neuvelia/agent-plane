@@ -340,6 +340,17 @@ sorted, bounded paths; a failed or timed-out inspection (the capture hashes
 ignored files, see ADR-0016) is emitted with `indeterminate: true` and no paths,
 and an unchanged source emits nothing. The guard never changes run status.
 
+## Attempt diff facts (F2.8b)
+
+Event schema 12 adds the typed, bounded `attempt_diff` fact (ADR-0026). It is
+recorded only when diff recording is enabled: one event per changed file (path,
+change kind, hashes, sizes, line counts and a patch of at most 16 KiB, or an
+`omitted_reason`) and one summary event per attempt with an empty path. The
+payload shape and its validation live in `internal/domain/events/diff.go`; the
+patch text comes from the pure `internal/domain/diff` package. Capture,
+redaction and budgets are later F2.8b tasks. Readers of schemas 1-11 decode
+unchanged, and a schema 11 stream containing `attempt_diff` is invalid.
+
 Known limits of F3.1: downstream isolated nodes do not see upstream file changes
 (every unit starts from the run's base commit and data flows through ports), Shell,
 standalone Gate and Human nodes are not isolated, Agent task text must not ask the

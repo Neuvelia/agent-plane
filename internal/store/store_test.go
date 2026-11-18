@@ -65,6 +65,23 @@ func TestRoundTripPreservesEventsAndGraph(t *testing.T) {
 	}
 }
 
+func TestAttemptDiffPatchOfSixteenKiBRoundTripsThroughTheLog(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	now := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	unit := "+say \"héllo\" \\ 日本\t\n"
+	patch := strings.ToValidUTF8(strings.Repeat(unit, 1000)[:events.MaxAttemptDiffPatchBytes], "")
+	diff := ev(runA, 2, events.AttemptDiff, events.AttemptDiffPayload{Path: "q.txt", Change: events.DiffModified, Patch: patch}, now)
+	diff.NodeID, diff.NodeRunID, diff.AttemptID = "n", "nr", "att"
+	write(t, s, runA, started(runA, now), diff, finished(runA, 3, "succeeded", now))
+	rec, err := s.Read(runA)
+	if err != nil || len(rec.Events) != 3 {
+		t.Fatalf("%v %d", err, len(rec.Events))
+	}
+	if got := rec.Events[1].Payload.(events.AttemptDiffPayload).Patch; got != patch {
+		t.Fatal("patch changed in the store round trip")
+	}
+}
+
 func TestRecordedValuesRoundTripAndOlderSchemaRunsStayReadable(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
