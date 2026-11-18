@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"time"
 
 	"agentplane/internal/domain/events"
@@ -58,7 +57,13 @@ func ValidRunID(id string) bool { return runIDPattern.MatchString(id) }
 // Store is a directory of run directories.
 type Store struct {
 	Dir string
-	fs  fsOps
+	// SnapshotWarn, when set, receives the failure of a best-effort snapshot
+	// rewrite made while listing (an unwritable store, a sharing violation). A
+	// snapshot is rebuildable, so such a failure never fails the listing; nil
+	// means the caller does not want to hear about it.
+	SnapshotWarn func(runID string, err error)
+	fs           fsOps
+	parsed       func(runID string) // test hook: called for every log List parses
 }
 
 // fsOps is the set of filesystem operations a run creation performs, in the
@@ -70,6 +75,7 @@ type fsOps interface {
 	CreateLog(path string) (logFile, error)
 	SyncDir(path string) error
 	Rename(oldPath, newPath string) error
+	RemoveAll(path string) error
 }
 
 func (s Store) ops() fsOps {
@@ -86,6 +92,8 @@ func (osFS) Mkdir(path string) error    { return os.Mkdir(path, dirMode) }
 func (osFS) SyncDir(path string) error  { return syncDir(path) }
 
 func (osFS) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
+
+func (osFS) RemoveAll(path string) error { return os.RemoveAll(path) }
 
 func (osFS) WriteFileSync(path string, data []byte) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
@@ -145,6 +153,14 @@ type Writer struct {
 	file  logFile
 	lock  *runLock
 	err   error
+	// summary and logBytes describe the log written so far; they become the
+	// run's snapshot at the terminal event. snapshotErr is that write's outcome.
+	summary     Summary
+	logBytes    int64
+	snapshotErr error
+	// runDir is the run directory this writer created; empty until then. The
+	// snapshot belongs to that directory and to nothing else.
+	runDir string
 }
 
 // logFile is the part of *os.File the writer needs; a seam for fault injection.
@@ -186,10 +202,16 @@ func (w *Writer) Append(e events.Event) error {
 	if err != nil {
 		return w.fail(fmt.Errorf("write event log: %w", err))
 	}
+	w.logBytes += int64(len(line))
+	w.summary.EventCount++
+	terminal := w.summary.observe(e)
 	if !events.IsProgress(e.Type) {
 		if err := w.file.Sync(); err != nil {
 			return w.fail(fmt.Errorf("sync event log: %w", err))
 		}
+	}
+	if terminal {
+		w.snapshotErr = w.writeSnapshot()
 	}
 	return nil
 }
@@ -209,6 +231,8 @@ func (w *Writer) open(first events.Event) error {
 	if !ValidRunID(id) {
 		return fmt.Errorf("refusing to store run with invalid ID %q", id)
 	}
+	w.summary = Summary{RunID: id}
+	w.runDir = filepath.Join(w.store.Dir, id)
 	fs := w.store.ops()
 	if err := fs.MkdirAll(w.store.Dir); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
@@ -321,43 +345,4 @@ func (s Store) Check() error {
 		return fmt.Errorf("close store probe: %w", err)
 	}
 	return os.Remove(name)
-}
-
-// List returns runs newest first. Unreadable or foreign entries are skipped.
-func (s Store) List() ([]Summary, error) {
-	entries, err := os.ReadDir(s.Dir)
-	if errors.Is(err, os.ErrNotExist) {
-		return []Summary{}, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("read store directory: %w", err)
-	}
-	out := []Summary{}
-	for _, entry := range entries {
-		if !entry.IsDir() || !ValidRunID(entry.Name()) {
-			continue
-		}
-		record, err := s.Read(entry.Name())
-		if err != nil {
-			// Never drop a run silently: an unreadable one is listed as corrupt.
-			if errors.Is(err, ErrRunStarting) {
-				continue
-			}
-			var unsupported *UnsupportedSchemaError
-			if errors.As(err, &unsupported) {
-				out = append(out, s.unsupportedSummary(entry.Name(), err))
-				continue
-			}
-			out = append(out, Summary{RunID: entry.Name(), Status: StatusCorrupt, Error: err.Error()})
-			continue
-		}
-		out = append(out, record.Summary)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].StartedAt.Equal(out[j].StartedAt) {
-			return out[i].StartedAt.After(out[j].StartedAt)
-		}
-		return out[i].RunID < out[j].RunID
-	})
-	return out, nil
 }

@@ -66,6 +66,9 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err := runStore.Check(); err != nil {
 		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
 	}
+	if err := pruneOnServeStart(runStore, stderr); err != nil {
+		return presentationError(err, stderr)
+	}
 	token, err := api.NewToken()
 	if err != nil {
 		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
