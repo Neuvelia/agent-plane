@@ -9,7 +9,8 @@ it does not execute graphs or define event payloads.
 | Concern | Start here |
 | --- | --- |
 | JSONL writer, directory layout, permissions and fsync | `store.go`: `Writer`, `Append`, `open`, `Close` |
-| Readback, summaries, corruption and run-ID validation | `store.go`: `Read`, `List`, `ValidRunID` |
+| Readback, summaries, corruption and run-ID validation | `read.go`: `Read`; `store.go`: `ValidRunID` |
+| Listing and the rebuildable per-run `summary.json` snapshot (F3.2) | `list.go`: `List`; `snapshot.go` |
 | Store preflight and CLI `run`/`runs list/show` behavior | `cmd/agentplane/cli.go`, `cmd/agentplane/runs.go` |
 | Served-run persistence and client-visible failure handling | `cmd/agentplane/serve.go`, `internal/api/server.go` |
 | Event schema, retention and sequence assignment | `internal/events/AGENTS.md`, `internal/events/emitter.go` |
@@ -36,8 +37,13 @@ it does not execute graphs or define event payloads.
   marked `truncated` while earlier events remain readable. Mid-log
   corruption is an error. `List` scans directories newest first, skips
   foreign entries, and reports unreadable run directories as `corrupt` with
-  a reason instead of silently dropping them. There is no index, retention
-  policy or recovery of interrupted runs in this slice.
+  a reason instead of silently dropping them. A finished run is listed from
+  its `summary.json` without parsing the log, but only while the snapshot names
+  the run, describes a complete finished log and its `log_bytes` equals the
+  log size; otherwise the log decides and the snapshot is rewritten best effort
+  (never while the run lock is held, never as a listing error). The log is the
+  only authority. There is no store-wide index, retention policy or recovery of
+  interrupted runs in this slice.
 - CLI `run` stores history only with `--store-dir`; `runs list/show` and
   `serve` default to `.agentplane/runs`, and the server stores every run.
   `Check` probes writability before execution. The writer latches the first
@@ -71,7 +77,8 @@ the root policy.
 - File layout, permissions, IDs, exclusive creation, sync order and fault
   latching: `store_test.go`.
 - Round trip, incomplete/corrupt logs, ordering and list behavior:
-  `store_test.go`.
+  `store_test.go`. Snapshot trust, damage, rewrite and the 5,000-run budget:
+  `snapshot_test.go`, `list_bench_test.go`.
 - Opt-in history, CLI replay, killed runs, secret refusal and persistence
   errors: `cmd/agentplane/store_test.go`. Real `kill -9` across processes and
   the run lock as seen by another process: `cmd/agentplane/crash_test.go`.

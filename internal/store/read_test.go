@@ -52,6 +52,13 @@ func futureSchemaRun(t *testing.T, s Store, run string) (path string, before []b
 	if err := os.WriteFile(path, []byte(future), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	// The edit keeps the log's size, so the snapshot of the schema-11 write would
+	// still match it. A newer build writes its own snapshot, which carries its
+	// schema and is not trusted (TestSnapshotOfANewerSchemaIsNotTrusted); drop the
+	// stale one to model a run this build has never summarized.
+	if err := os.Remove(filepath.Join(s.Dir, run, snapshotFile)); err != nil {
+		t.Fatal(err)
+	}
 	return path, []byte(future)
 }
 
