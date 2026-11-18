@@ -38,6 +38,21 @@ func (s *Server) nodeType(name string) *NodeType {
 	return nil
 }
 
+// configFields serves edit.ApplyWith: the config descriptors of a node type, or of
+// its loop Gate, from the catalogue the composition root handed over.
+func (s *Server) configFields(nodeType string, loop bool) []fields.Field {
+	t := s.nodeType(nodeType)
+	switch {
+	case t == nil:
+		return nil
+	case !loop:
+		return t.Config
+	case t.Loop != nil:
+		return t.Loop.Gate
+	}
+	return nil
+}
+
 // nodeTypesFor returns the descriptors for the types used in def, or for every
 // known type when all is set.
 func (s *Server) nodeTypesFor(def *graph.Definition, all bool) map[string]nodeTypeDTO {

@@ -39,6 +39,7 @@ type session struct {
 	top     *yaml.Node        // top-level mapping
 	want    *graph.Definition // typed prediction
 	renames [][2]string       // old element path -> new, for blank-line restoration
+	fields  ConfigFields      // nil: a kind change drops nothing
 }
 
 // tamper lets a test corrupt the tree after the operations ran, to prove the
@@ -62,7 +63,11 @@ func Inspect(src []byte) []string {
 
 // Apply applies a batch to src atomically: either every operation applies and the
 // result passes the safety net, or an *Error is returned and nothing is produced.
-func Apply(src []byte, ops []Op) (*Result, error) {
+func Apply(src []byte, ops []Op) (*Result, error) { return ApplyWith(src, ops, nil) }
+
+// ApplyWith is Apply for callers that own the node-type descriptors: with them, a
+// change of a config `kind` also drops the keys only the old kind declares.
+func ApplyWith(src []byte, ops []Op, fields ConfigFields) (*Result, error) {
 	if len(ops) > MaxOps {
 		return nil, fail(CodeTooManyOps, fmt.Sprintf("a batch may hold at most %d operations, got %d", MaxOps, len(ops)), "split the batch")
 	}
@@ -85,7 +90,7 @@ func Apply(src []byte, ops []Op) (*Result, error) {
 	if err != nil {
 		return nil, fail(CodeParse, err.Error(), "")
 	}
-	s := &session{doc: &doc, top: docMapping(&doc), want: want}
+	s := &session{doc: &doc, top: docMapping(&doc), want: want, fields: fields}
 	if s.top.Kind != yaml.MappingNode {
 		return nil, fail(CodeParse, "the graph is not a mapping", "")
 	}

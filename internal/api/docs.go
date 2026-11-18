@@ -416,7 +416,7 @@ func (s *Server) editDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		base = g.text
 	}
-	res, err := edit.Apply(base, ops)
+	res, err := edit.ApplyWith(base, ops, s.configFields)
 	if err != nil {
 		editFailure(w, err)
 		return
