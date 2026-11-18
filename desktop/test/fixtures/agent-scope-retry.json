@@ -1,6 +1,6 @@
 [
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "run_started",
   "timestamp": "2026-11-16T22:30:29.016945465Z",
   "sequence": 1,
@@ -12,7 +12,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "node_ready",
   "timestamp": "2026-11-16T22:30:29.019057015Z",
   "sequence": 2,
@@ -24,7 +24,7 @@
   "payload": {}
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "node_started",
   "timestamp": "2026-11-16T22:30:29.019128545Z",
   "sequence": 3,
@@ -36,7 +36,7 @@
   "payload": {}
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "attempt_started",
   "timestamp": "2026-11-16T22:30:29.01914599Z",
   "sequence": 4,
@@ -52,7 +52,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "attempt_input",
   "timestamp": "2026-11-16T22:30:29.01918627Z",
   "sequence": 5,
@@ -75,7 +75,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "gate_check",
   "timestamp": "2026-11-16T22:30:29.035194057Z",
   "sequence": 6,
@@ -116,7 +116,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "return_envelope",
   "timestamp": "2026-11-16T22:30:29.035272468Z",
   "sequence": 7,
@@ -151,7 +151,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "node_evidence",
   "timestamp": "2026-11-16T22:30:29.03528731Z",
   "sequence": 8,
@@ -177,7 +177,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "attempt_finished",
   "timestamp": "2026-11-16T22:30:29.035307311Z",
   "sequence": 9,
@@ -193,7 +193,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "attempt_started",
   "timestamp": "2026-11-16T22:30:29.035330718Z",
   "sequence": 10,
@@ -209,7 +209,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "attempt_input",
   "timestamp": "2026-11-16T22:30:29.035344927Z",
   "sequence": 11,
@@ -234,7 +234,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "gate_check",
   "timestamp": "2026-11-16T22:30:29.043240941Z",
   "sequence": 12,
@@ -274,7 +274,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "return_envelope",
   "timestamp": "2026-11-16T22:30:29.043326246Z",
   "sequence": 13,
@@ -308,7 +308,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "node_evidence",
   "timestamp": "2026-11-16T22:30:29.043349201Z",
   "sequence": 14,
@@ -338,7 +338,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "attempt_finished",
   "timestamp": "2026-11-16T22:30:29.043369023Z",
   "sequence": 15,
@@ -354,7 +354,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "node_finished",
   "timestamp": "2026-11-16T22:30:29.043391285Z",
   "sequence": 16,
@@ -369,7 +369,7 @@
   }
  },
  {
-  "event_schema_version": 11,
+  "event_schema_version": 12,
   "type": "run_finished",
   "timestamp": "2026-11-16T22:30:29.043430894Z",
   "sequence": 17,

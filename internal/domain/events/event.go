@@ -10,7 +10,7 @@ import (
 
 // SchemaVersion is the event schema new events are stamped with. Readers
 // accept every earlier schema with its historical shape.
-const SchemaVersion = 11
+const SchemaVersion = SchemaPolicy
 
 type RunID string
 type NodeRunID string
@@ -211,6 +211,22 @@ func (e Event) Validate() error {
 		if err := p.Validate(); err != nil {
 			return err
 		}
+	case PolicyEvaluatedPayload:
+		payloadType = PolicyEvaluated
+		if err := validatePolicy(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case PolicyViolationPayload:
+		payloadType = PolicyViolation
+		if err := validatePolicy(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
 	case AttemptStartedPayload:
 		payloadType = AttemptStarted
 		if err := validateAttempt(e); err != nil {
@@ -240,6 +256,9 @@ func (e Event) Validate() error {
 		}
 		if p.Kind == CheckChangedFilesScope && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
 			return errors.New("changed-files scope requires schema 8")
+		}
+		if isPolicyCheckKind(p.Kind) && e.SchemaVersion != 0 && e.SchemaVersion < SchemaPolicy {
+			return fmt.Errorf("%s check requires schema %d", p.Kind, SchemaPolicy)
 		}
 		payloadType = GateCheck
 		if err := p.Validate(); err != nil {
@@ -351,6 +370,10 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = WorkspaceReleasedPayload{}
 	case SourceWorkspaceChanged:
 		payload = SourceWorkspaceChangedPayload{}
+	case PolicyEvaluated:
+		payload = PolicyEvaluatedPayload{}
+	case PolicyViolation:
+		payload = PolicyViolationPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -441,6 +464,16 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		payload = p
 	case SourceWorkspaceChangedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case PolicyEvaluatedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case PolicyViolationPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}

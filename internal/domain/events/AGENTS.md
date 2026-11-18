@@ -16,6 +16,7 @@ the CLI, local run store, loopback API and desktop client.
 | Return Envelopes, accepted-unit scope and declared conflicts | `unit.go` |
 | Human approval facts and bounded text | `approval.go` |
 | Opt-in recorded run values (schema 10) and their bounds | `value.go` |
+| Secret and execution-policy facts, closed vocabularies (schema 12) | `policy.go` |
 | Workspace isolation facts, closed reason vocabulary, path bounding | `workspace.go` |
 
 ## Preserve these contracts
@@ -26,7 +27,7 @@ the CLI, local run store, loopback API and desktop client.
   the distinction between `node_finished` after a start and
   `node_terminated` before one. The runtime owns state transitions and
   decides when to emit facts; this package owns their shape and collection.
-- New events use `SchemaVersion` 11. JSON readers accept schemas 1 through 11
+- New events use `SchemaVersion` 12 (`SchemaPolicy`). JSON readers accept schemas 1 through 12
   with their actual historical payload shapes; in-memory zero is a builder
   convention, not a serialized schema. Keep strict type/payload matching,
   unknown payload-field rejection and the schema-4 legacy Gate payload distinct
@@ -36,6 +37,11 @@ the CLI, local run store, loopback API and desktop client.
   text; `value` is omitted only with `truncated: true`, and an untruncated
   value must match its `size_bytes` and `sha256`. The runtime owns redaction,
   the per-run `MaxRunValueBytes` budget and whether recording is enabled.
+- `policy_evaluated` and `policy_violation` (schema 12, ADR-0029) describe a
+  secret by name only and use closed vocabularies; a value, length, hash or
+  prefix field needs a reviewed schema change. Renumber to 14 (after F2.8b=12,
+  F3.4=13); whoever merges later bumps `SchemaPolicy` and greps for schema
+  literals.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes, approval
   and workspace isolation facts (schema 11, ADR-0024) survive progress retention limits. Logs and normalized progress share
   bounded retained and live budgets. An omitted progress event still consumes

@@ -319,6 +319,18 @@ the existing CheckResult; the Return Envelope and correction loop use their
 established path. This is post-execution detection, not filesystem isolation.
 External writers can still alter the shared workspace. See ADR-0016.
 
+## Secret and policy facts (F3.8/F3.9)
+
+Event schema 12 adds two typed, bounded facts, `policy_evaluated` (per node
+run: mode, `applied`, scope root, the four permissions with their state, the
+assigned secrets by name, provider and variable name, and a redaction-value
+count) and `policy_violation` (permission, closed reason, `blocked` or
+`recorded` outcome, bounded sorted evidence), plus the Check Result kinds
+`execution_policy` and `secret_in_workspace`. No payload can hold a secret
+value. Renumber to 14 (after F2.8b=12, F3.4=13); whoever merges later bumps
+`events.SchemaPolicy` and greps for schema literals. Nothing emits these facts
+yet; the runtime pipeline lands in later F3.8 tasks (ADR-0029).
+
 ## Workspace isolation facts (F3.1)
 
 Event schema 11 adds five typed, bounded facts for isolated Agent units:

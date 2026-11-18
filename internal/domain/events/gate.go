@@ -21,7 +21,13 @@ const (
 	CheckJSONPredicate     CheckKind = "json_predicate"
 	CheckReportedFileScope CheckKind = "reported_file_scope"
 	CheckChangedFilesScope CheckKind = "changed_files_scope"
+	CheckExecutionPolicy   CheckKind = "execution_policy"
+	CheckSecretInWorkspace CheckKind = "secret_in_workspace"
 )
+
+func isPolicyCheckKind(k CheckKind) bool {
+	return k == CheckExecutionPolicy || k == CheckSecretInWorkspace
+}
 
 type CheckVerdict string
 
@@ -129,7 +135,7 @@ func (p GateCheckPayload) Validate() error {
 	if strings.TrimSpace(p.CheckID) == "" || len(p.CheckID) > 256 || !utf8.ValidString(p.CheckID) || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 512 || !utf8.ValidString(p.Reason) {
 		return errors.New("invalid gate identity/reason")
 	}
-	if p.Kind != "command" && p.Kind != "json_predicate" && p.Kind != "reported_file_scope" && p.Kind != CheckChangedFilesScope {
+	if p.Kind != CheckCommand && p.Kind != CheckJSONPredicate && p.Kind != CheckReportedFileScope && p.Kind != CheckChangedFilesScope && !isPolicyCheckKind(p.Kind) {
 		return errors.New("invalid gate kind")
 	}
 	if p.Kind == CheckChangedFilesScope {
