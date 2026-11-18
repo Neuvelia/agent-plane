@@ -8,7 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/testenv"
 )
 
 func demoGraphPath(t *testing.T) string {
@@ -20,8 +21,16 @@ func demoGraphPath(t *testing.T) string {
 	return filepath.Join(root, ".agents", "graphs", "demo-vertical.yaml")
 }
 
+// requireDemoTools skips where demo-vertical.yaml cannot run: its shell nodes
+// start /usr/bin/printf and /bin/sh.
+func requireDemoTools(t *testing.T) {
+	t.Helper()
+	testenv.RequireExecutable(t, "/usr/bin/printf", "/bin/sh")
+}
+
 func runDemo(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
+	requireDemoTools(t)
 	var out, errout bytes.Buffer
 	code := runCommand(context.Background(), append([]string{"run", demoGraphPath(t), "--json"}, args...), &out, &errout)
 	return code, out.String(), errout.String()

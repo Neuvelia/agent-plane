@@ -14,6 +14,7 @@ The root `AGENTS.md` still applies. This file adds rules for
 | Human approval and cancellation | `human.go` |
 | Workspace identity and changed-file baselines | `workspace.go`, `loop.go` |
 | Bounded progress, logs and redaction | `progress.go`, `log_redactor.go` |
+| Opt-in recorded run values (ADR-0023) | `values.go`, called from `preflight.go` and `accept.go` |
 
 ## Preserve these contracts
 
@@ -35,6 +36,13 @@ The root `AGENTS.md` still applies. This file adds rules for
   an envelope. Lifecycle facts accompany state transitions; bounded worker
   logs/progress and human approval facts also use the event collector. Keep
   secrets and raw error text out of events.
+- `Options.RecordValues` is off by default; when off, no `value_recorded`
+  fact exists. When on, supplied graph inputs are recorded directly after
+  `run_started` and each accepted output port directly before the node's
+  succeeded transition, never for failed, skipped, cancelled or rejected
+  work. Redact the whole text with the configured redactor before cutting,
+  hash the redacted text, cut at a rune boundary and charge the per-run
+  budget on the coordinator only.
 - Production `runtime` imports `graph`, `events` and `gitstate` and defines
   small consumer-owned executor interfaces. Put concrete Agent, Gate, Shell,
   API and store behavior in their owning packages; do not import them into
@@ -66,6 +74,7 @@ Before changing a contract, read its feature spec and ADR:
 - Human decisions, workspace scope and observations: `human_test.go`,
   `workspace_test.go`, `changed_scope_integration_test.go`,
   `observation_test.go`, `progress_test.go`.
+- Recorded values: `values_test.go`, `values_loop_test.go`.
 
 Run `go test ./internal/runtime/...` before the repository gate. For changes
 to concurrency, cancellation or observer callbacks, also run

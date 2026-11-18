@@ -1,8 +1,10 @@
 package main
 
 import (
+	"agentplane/internal/domain/run"
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"os"
 	"strings"
@@ -10,8 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/runtime"
+	"agentplane/internal/domain/graph"
 )
 
 // orderedLog records prompt output and the test's own steps in one sequence.
@@ -78,12 +79,12 @@ func TestInteractivePromptsAreSerializedAndAttributedToTheRightNode(t *testing.T
 	p := cliDecisions{prompt: bufio.NewReader(pr), out: log, turn: make(chan struct{}, 1)}
 	type answer struct {
 		node string
-		d    runtime.Decision
+		d    run.Decision
 	}
 	answers := make(chan answer, 2)
 	for _, node := range []string{"alpha", "beta"} {
 		go func() {
-			d, err := p.Decide(context.Background(), runtime.ApprovalRequest{NodeID: node, Prompt: "ok " + node + "?"})
+			d, err := p.Decide(context.Background(), run.ApprovalRequest{NodeID: node, Prompt: "ok " + node + "?"})
 			if err != nil {
 				t.Errorf("%s: %v", node, err)
 			}
@@ -120,15 +121,15 @@ func TestInteractivePromptStopsWhenCancelledAndQueuedPromptsDoNotStartAReader(t 
 	ctx, cancel := context.WithCancel(context.Background())
 	first := make(chan error, 1)
 	go func() {
-		_, err := p.Decide(ctx, runtime.ApprovalRequest{NodeID: "alpha"})
+		_, err := p.Decide(ctx, run.ApprovalRequest{NodeID: "alpha"})
 		first <- err
 	}()
 	log.waitFor(t, "Approve? ")
 	cancel()
-	if err := recv(t, first, "the cancelled prompt"); err != context.Canceled {
+	if err := recv(t, first, "the cancelled prompt"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("first: %v", err)
 	}
-	if _, err := p.Decide(ctx, runtime.ApprovalRequest{NodeID: "beta"}); err != context.Canceled {
+	if _, err := p.Decide(ctx, run.ApprovalRequest{NodeID: "beta"}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("a prompt queued after cancellation must not start: %v", err)
 	}
 	if log.index(`"beta"`) >= 0 {
@@ -148,7 +149,7 @@ func TestCancelledContextNeverPromptsEvenWhenTheTurnIsFree(t *testing.T) {
 		p := cliDecisions{prompt: bufio.NewReader(pr), out: log, turn: make(chan struct{}, 1)}
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
-		if _, err := p.Decide(ctx, runtime.ApprovalRequest{NodeID: "alpha"}); err != context.Canceled {
+		if _, err := p.Decide(ctx, run.ApprovalRequest{NodeID: "alpha"}); !errors.Is(err, context.Canceled) {
 			t.Fatalf("iteration %d: %v", i, err)
 		}
 		if log.index("Approval needed") >= 0 || log.index("Approve?") >= 0 {

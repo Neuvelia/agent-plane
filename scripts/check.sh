@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 set -eu
 
-unformatted=$(gofmt -l ./cmd ./internal)
+unformatted=$(gofmt -l ./cmd ./internal ./scripts/verifychanges)
 if [ -n "$unformatted" ]; then
   echo "gofmt required for:"
   echo "$unformatted"

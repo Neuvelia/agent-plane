@@ -5,7 +5,7 @@ import (
 	"errors"
 	"sort"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 // logRedactor keeps the undecidable tail of each byte stream until a later

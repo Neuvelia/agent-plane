@@ -1,0 +1,45 @@
+package graph
+
+import (
+	"crypto/sha256"
+	"fmt"
+	"sort"
+)
+
+// Encoder renders a definition as the canonical bytes that are hashed into the
+// semantic version. The schema-v0 contract defines these bytes as the YAML
+// encoding, which lives in the yamlgraph adapter; the domain stays free of any
+// serialization format and receives the encoder as a dependency.
+type Encoder func(*Definition) ([]byte, error)
+
+// SemanticVersion identifies the execution-relevant schema-v0 definition.
+// Name and Metadata are presentation fields and do not affect the version.
+func SemanticVersion(definition *Definition, encode Encoder) (string, error) {
+	if definition == nil {
+		return "", fmt.Errorf("semantic graph version: definition is nil")
+	}
+	semantic := *definition
+	semantic.Units = append([]string(nil), definition.Units...)
+	sort.Strings(semantic.Units)
+	semantic.Name = ""
+	semantic.Metadata = nil
+	semantic.Edges = append([]EdgeDefinition(nil), definition.Edges...)
+	sort.Slice(semantic.Edges, func(i, j int) bool {
+		if semantic.Edges[i].From != semantic.Edges[j].From {
+			return semantic.Edges[i].From < semantic.Edges[j].From
+		}
+		return semantic.Edges[i].To < semantic.Edges[j].To
+	})
+	semantic.GraphInputBindings = append([]GraphInputBindingDefinition(nil), definition.GraphInputBindings...)
+	sort.Slice(semantic.GraphInputBindings, func(i, j int) bool {
+		if semantic.GraphInputBindings[i].From != semantic.GraphInputBindings[j].From {
+			return semantic.GraphInputBindings[i].From < semantic.GraphInputBindings[j].From
+		}
+		return semantic.GraphInputBindings[i].To < semantic.GraphInputBindings[j].To
+	})
+	data, err := encode(&semantic)
+	if err != nil {
+		return "", fmt.Errorf("semantic graph version: %w", err)
+	}
+	return fmt.Sprintf("sha256-v0:%x", sha256.Sum256(data)), nil
+}

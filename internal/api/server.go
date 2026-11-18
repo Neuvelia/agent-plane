@@ -1,6 +1,7 @@
 package api
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -16,9 +17,10 @@ import (
 	"sync"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/capability"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/store"
 )
@@ -58,6 +60,14 @@ type Server struct {
 	// ValidateDefinition is the full validation of a parsed graph: graph rules
 	// plus each node's static configuration. Nil means graph rules only.
 	ValidateDefinition func(*graph.Definition) []graph.Diagnostic
+	// NodeTypes is the node-type catalogue for the inspector (F2.2), built by
+	// the composition root from the validators' descriptors. Nil offers no
+	// descriptors; every config key is then shown as Advanced. Read-only once
+	// serving starts.
+	NodeTypes []NodeType
+	// Capabilities serves the read-only capability report (ADR-0025); nil
+	// answers 503.
+	Capabilities *capability.Service
 
 	docs     docState // graph document grants (ADR-0021)
 	baseCtx  context.Context
@@ -134,6 +144,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /graphs/stat", s.statDoc)
 	mux.HandleFunc("POST /graphs/edit", s.editDoc)
 	mux.HandleFunc("PUT /graphs/save", s.saveDoc)
+	mux.HandleFunc("GET /capabilities", s.getCapabilities)
+	mux.HandleFunc("POST /capabilities/check", s.checkCapabilities)
 	return s.guard(mux)
 }
 
@@ -246,7 +258,7 @@ type GraphEdge struct {
 
 func summarizeGraph(source []byte) GraphSummary {
 	summary := GraphSummary{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
-	def, err := graph.Parse(source)
+	def, err := yamlgraph.Parse(source)
 	if err != nil {
 		return summary
 	}
@@ -448,15 +460,20 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	if !checkText(w, text) {
 		return
 	}
-	out := map[string]any{"diagnostics": []graph.Diagnostic{}}
+	// The editor validates typed text through this route, so it carries the same
+	// inspector data as open and edit (F2.2): descriptors of the types in use.
+	out := map[string]any{"diagnostics": []graph.Diagnostic{}, "node_types": s.nodeTypesFor(nil, false)}
 	if reasons := edit.Inspect(text); len(reasons) > 0 {
 		out["readonly_canvas"], out["readonly_reasons"] = true, reasons
 	}
-	def, err := graph.Parse(text)
+	def, err := yamlgraph.Parse(text)
 	if err != nil {
-		out["status"], out["parse_error"] = "invalid", err.Error()
+		out["status"], out["parse_error"] = "invalid", parseErrorMessage(err)
 		if line := edit.ParseErrorLine(err.Error()); line > 0 {
 			out["parse_line"] = line
+		}
+		if column := edit.ParseErrorColumn(text, err.Error()); column > 0 {
+			out["parse_column"] = column
 		}
 		writeJSON(w, http.StatusOK, out)
 		return
@@ -464,6 +481,8 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	diags := s.diagnostics(def)
 	out["diagnostics"] = withLines(text, diags)
 	out["definition"] = toDefinitionDTO(def)
+	out["node_types"] = s.nodeTypesFor(def, false)
+	out["node_info"] = s.nodeInfo(text, def)
 	out["status"] = "valid"
 	for _, d := range diags {
 		if d.Severity == graph.SeverityError {
@@ -471,7 +490,7 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if v, err := graph.SemanticVersion(def); err == nil {
+	if v, err := yamlgraph.SemanticVersion(def); err == nil {
 		out["version"] = v
 	}
 	writeJSON(w, http.StatusOK, out)

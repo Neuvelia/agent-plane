@@ -1,6 +1,9 @@
 package shell
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -15,9 +18,10 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 func TestHelperProcess(t *testing.T) {
@@ -228,8 +232,8 @@ func TestFailedShellRunEmitsLogsBeforeTerminalEvents(t *testing.T) {
 	node := helperNode("fail")
 	node.Config["env"].(map[string]string)["PRIVATE_MARKER"] = "configured-private-value"
 	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-log-fail", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
-	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogRedactions: []string{"failure detail"}})
-	if err != nil || result.State != runtime.RunFailed {
+	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"failure detail"}})
+	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
 	var stdout, stderr string
@@ -260,8 +264,8 @@ func TestFailedShellRunEmitsLogsBeforeTerminalEvents(t *testing.T) {
 
 func TestLargeShellRunLogsAreCompleteAndBounded(t *testing.T) {
 	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-log-bound", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": helperNode("bulk")}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
-	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{LogRedactions: []string{"secret"}})
-	if err != nil || result.State != runtime.RunSucceeded {
+	result, err := runtime.Run(context.Background(), def, nil, Executor{}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"secret"}})
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("run = %#v, %v", result, err)
 	}
 	var stdout, stderr strings.Builder
@@ -407,19 +411,19 @@ func TestExecuteNodeJSONThroughScheduler(t *testing.T) {
 	node.Config["stdout_json"] = true
 	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}, "stderr": {Type: graph.ValueTypeString}, "exit_code": {Type: graph.ValueTypeNumber}, "json": {Type: graph.ValueTypeJSON, Required: true}}
 	definition := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-test", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{"data": {From: "worker.outputs.json"}}}
-	run, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{})
-	if err != nil || run.State != runtime.RunSucceeded || run.Nodes[0].State != runtime.NodeSucceeded {
-		t.Fatalf("run = %#v / %v", run, err)
+	res, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	if err != nil || res.State != run.RunSucceeded || res.Nodes[0].State != run.NodeSucceeded {
+		t.Fatalf("run = %#v / %v", res, err)
 	}
-	data, ok := run.Outputs[0].Value.AsJSON()
+	data, ok := res.Outputs[0].Value.AsJSON()
 	if !ok || string(data) != `{"answer":[1,true]}` {
 		t.Fatalf("json = %q, %v", data, ok)
 	}
-	if len(run.Nodes[0].Outputs) != 4 {
-		t.Fatalf("node outputs = %#v", run.Nodes[0].Outputs)
+	if len(res.Nodes[0].Outputs) != 4 {
+		t.Fatalf("node outputs = %#v", res.Nodes[0].Outputs)
 	}
 	ports := make(map[string]graph.Value)
-	for _, output := range run.Nodes[0].Outputs {
+	for _, output := range res.Nodes[0].Outputs {
 		ports[output.Name] = output.Value
 	}
 	stdout, stdoutOK := ports["stdout"].AsString()
@@ -464,10 +468,10 @@ func TestNonzeroExitFailsSchedulerWithTypedEvidence(t *testing.T) {
 	node := helperNode("fail")
 	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}}
 	definition := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-fail", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
-	run, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{})
+	res, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	var executionErr *ExecutionError
-	if err != nil || run.State != runtime.RunFailed || run.Nodes[0].State != runtime.NodeFailed || run.Failure == nil || !errors.As(run.Failure.Err, &executionErr) || executionErr.Kind != FailureExit || executionErr.Result.ExitCode != 7 || len(run.Nodes[0].Outputs) != 0 {
-		t.Fatalf("run = %#v / %v", run, err)
+	if err != nil || res.State != run.RunFailed || res.Nodes[0].State != run.NodeFailed || res.Failure == nil || !errors.As(res.Failure.Err, &executionErr) || executionErr.Kind != FailureExit || executionErr.Result.ExitCode != 7 || len(res.Nodes[0].Outputs) != 0 {
+		t.Fatalf("run = %#v / %v", res, err)
 	}
 }
 
@@ -492,15 +496,15 @@ outputs:
   text:
     from: worker.outputs.stdout
 `, os.Args[0])
-	definition, err := graph.Parse([]byte(document))
+	definition, err := yamlgraph.Parse([]byte(document))
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{})
-	if err != nil || run.State != runtime.RunSucceeded {
-		t.Fatalf("parsed run = %#v / %v; failure = %v", run, err, run.Failure)
+	res, err := runtime.Run(context.Background(), definition, nil, Executor{}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	if err != nil || res.State != run.RunSucceeded {
+		t.Fatalf("parsed run = %#v / %v; failure = %v", res, err, res.Failure)
 	}
-	value, ok := run.Outputs[0].Value.AsString()
+	value, ok := res.Outputs[0].Value.AsString()
 	if !ok || value != `["two words"]` {
 		t.Fatalf("parsed output = %q, %v", value, ok)
 	}
@@ -665,6 +669,7 @@ func attemptNode(extra map[string]any) graph.NodeDefinition {
 
 // The child must see exactly the attempt number the runtime assigned.
 func TestExecuteNodeAttemptInjectsTheAttemptNumberOnlyForLoopAttempts(t *testing.T) {
+	testenv.RequireExecutable(t, "/usr/bin/printenv")
 	for _, attempt := range []int{1, 2, 7} {
 		out, err := Executor{}.ExecuteNodeAttempt(context.Background(), "n", attemptNode(nil), nil, nil, attempt)
 		if err != nil {

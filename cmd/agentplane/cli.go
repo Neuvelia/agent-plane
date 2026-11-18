@@ -1,6 +1,9 @@
 package main
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"bytes"
 	"context"
 	"errors"
@@ -15,8 +18,8 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/agent/codex"
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
 	"agentplane/internal/store"
@@ -54,7 +57,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--max-concurrency N] [--watch | --json] | agentplane serve [--store-dir DIR] [--max-concurrency N] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -81,7 +84,7 @@ func readDefinitionBytes(path string) (*graph.Definition, []byte, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("read graph file %q: %w", path, err)
 	}
-	def, err := graph.Parse(data)
+	def, err := yamlgraph.Parse(data)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse graph file %q: %w", path, err)
 	}
@@ -132,6 +135,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	var redactEnv inputFlags
 	var approveNodes, rejectNodes inputFlags
 	storeDir := fs.String("store-dir", "", "persist the run under this directory (events.jsonl + graph.yaml)")
+	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
 	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
@@ -186,20 +190,15 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions}
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
 	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}
 		if err := runStore.Check(); err != nil {
 			return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 		}
-		for _, secret := range redactions {
-			if secret != "" && (bytes.Contains(graphBytes, []byte(secret)) || definitionHoldsSecret(def, secret)) {
-				// The snapshot is a byte copy, so a secret embedded in the graph
-				// would be duplicated into the store. Graphs must reference
-				// secrets, never contain them (AGENTS.md).
-				return commandError("run", "error", "graph", errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run"), nil, *jsonMode, stdout, stderr, exitGraph)
-			}
+		if graphHoldsSecret(def, graphBytes, redactions) {
+			return commandError("run", "error", "graph", errGraphHoldsSecret, nil, *jsonMode, stdout, stderr, exitGraph)
 		}
 		writer = openPersister(runStore, graphBytes)
 		opts.Persist = writer.Append
@@ -221,16 +220,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		finishWatch = func(retained []events.Event) error {
 			close(live)
 			replay <- retained
-			if ctx.Err() == nil {
-				return <-done
-			}
-			select {
-			case err := <-done:
-				return err
-			case <-time.After(100 * time.Millisecond):
-				// An unresponsive terminal must not prevent cancellation.
-				return nil
-			}
+			return awaitWatchOutput(ctx, done, watchOutputGrace)
 		}
 	}
 	var executor runtime.Executor = shell.Executor{}
@@ -261,17 +251,17 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 	}
 	if err != nil {
-		var preflight *runtime.PreflightError
+		var preflight *run.PreflightError
 		if errors.As(err, &preflight) {
 			return commandError("run", "invalid", "input", nil, preflight.Diagnostics.Diagnostics, *jsonMode, stdout, stderr, exitGraph)
 		}
 		return commandError("run", "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 	}
 	code := exitRun
-	if result.State == runtime.RunSucceeded {
+	if result.State == run.RunSucceeded {
 		code = exitOK
 	}
-	if result.State == runtime.RunCancelled {
+	if result.State == run.RunCancelled {
 		code = exitInterrupted
 	}
 	if persistFailure != nil {
@@ -313,6 +303,20 @@ type persister interface {
 }
 
 var openPersister = func(s store.Store, graph []byte) persister { return s.NewWriter(graph) }
+
+var errGraphHoldsSecret = errors.New("graph file contains the value of a configured --redact-env secret; remove it from the graph before storing the run")
+
+// graphHoldsSecret guards the store's byte copy of the graph: a secret embedded
+// in the graph would be duplicated into the store. Graphs must reference
+// secrets, never contain them (AGENTS.md). `run --store-dir` and `serve` share it.
+func graphHoldsSecret(def *graph.Definition, graphBytes []byte, redactions []string) bool {
+	for _, secret := range redactions {
+		if secret != "" && (bytes.Contains(graphBytes, []byte(secret)) || definitionHoldsSecret(def, secret)) {
+			return true
+		}
+	}
+	return false
+}
 
 // definitionHoldsSecret reports whether any string in the parsed definition -
 // values, map keys such as node and port IDs, edge references, bindings - holds
@@ -397,4 +401,23 @@ func commandError(command, status, kind string, err error, diagnostics []graph.D
 func presentationError(err error, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stderr, "write human output: %v\n", err)
 	return exitInternal
+}
+
+const watchOutputGrace = 100 * time.Millisecond
+
+// awaitWatchOutput waits for the renderer to drain. Cancellation at any point,
+// including after the run finished, bounds the wait so an unresponsive terminal
+// cannot keep the command alive.
+func awaitWatchOutput(ctx context.Context, done <-chan error, grace time.Duration) error {
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(grace):
+		return nil
+	}
 }

@@ -1,8 +1,11 @@
 package api
 
 import (
+	"agentplane/internal/domain/run"
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/store"
 )
@@ -139,6 +142,51 @@ func fakeEvent(seq uint64, typ events.Type, p events.Payload) events.Event {
 	return events.Event{SchemaVersion: events.SchemaVersion, Type: typ, Timestamp: time.Now().UTC(), Sequence: seq, RunID: runID, GraphID: "g", GraphVersion: "v", Payload: p}
 }
 
+// Recorded values (ADR-0023) are read through the existing events route: a run
+// of an earlier process replays them from the store, behind the same token,
+// including a maximal value whose JSON escaping is six times its size.
+func TestStoredRecordedValuesReplayThroughTheEventsRoute(t *testing.T) {
+	s, ts := newServer(t, nil)
+	big := strings.Repeat("\x01", events.MaxValueBytes)
+	sum := sha256.Sum256([]byte(big))
+	value := fakeEvent(2, events.ValueRecorded, events.ValueRecordedPayload{NodeRunID: "nr", Port: "out", Type: "string", SizeBytes: int64(len(big)), SHA256: hex.EncodeToString(sum[:]), Value: &big})
+	value.NodeID, value.NodeRunID = "n", "nr"
+	w := s.Store.NewWriter([]byte("schema_version: 0\n"))
+	for _, e := range []events.Event{fakeEvent(1, events.RunStarted, events.RunStartedPayload{NodeCount: 1}), value, fakeEvent(3, events.RunFinished, events.RunFinishedPayload{Status: "succeeded"})} {
+		if err := w.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if resp, _ := do(t, ts, "GET", "/runs/"+runID+"/events", "", false); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("values readable without token: %d", resp.StatusCode)
+	}
+	resp, body := do(t, ts, "GET", "/runs/"+runID+"/events", "", true)
+	if resp.StatusCode != http.StatusOK || !strings.Contains(body, "event: end") {
+		t.Fatalf("%d %.200s", resp.StatusCode, body)
+	}
+	var got *events.ValueRecordedPayload
+	for _, line := range strings.Split(body, "\n") {
+		if strings.HasPrefix(line, "data: {\"event_schema_version\"") {
+			var e events.Event
+			if err := json.Unmarshal([]byte(line[6:]), &e); err != nil {
+				t.Fatal(err)
+			}
+			if p, ok := e.Payload.(events.ValueRecordedPayload); ok {
+				got = &p
+			}
+		}
+	}
+	if got == nil || got.Value == nil || *got.Value != big || got.Truncated {
+		t.Fatal("recorded value did not replay intact")
+	}
+	if _, list := do(t, ts, "GET", "/runs", "", true); !strings.Contains(list, `"graph_version":"v"`) {
+		t.Fatalf("summary lacks graph_version: %s", list)
+	}
+}
+
 // A client that connects mid-run must see every event exactly once, in order.
 func TestStreamReplaysThenFollowsWithoutGapsOrDuplicates(t *testing.T) {
 	release := make(chan struct{})
@@ -224,9 +272,9 @@ func TestDecisionsAreIdempotentScopedToTheRunAndValidated(t *testing.T) {
 	s2 := &Server{Token: token, Store: store.Store{Dir: t.TempDir()}, Hub: NewHub()}
 	ts2 := httptest.NewServer(s2.Handler())
 	defer ts2.Close()
-	decided := make(chan runtime.Decision, 1)
+	decided := make(chan run.Decision, 1)
 	go func() {
-		d, _ := s2.Hub.Decide(context.Background(), runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-1", Prompt: "ship?"})
+		d, _ := s2.Hub.Decide(context.Background(), run.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-1", Prompt: "ship?"})
 		decided <- d
 	}()
 	waitPending(t, s2.Hub, 1)
@@ -265,7 +313,7 @@ func TestCancelledWaitRemovesThePendingApproval(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		if _, err := h.Decide(ctx, runtime.ApprovalRequest{RunID: runID, NodeRunID: "nr"}); err == nil {
+		if _, err := h.Decide(ctx, run.ApprovalRequest{RunID: runID, NodeRunID: "nr"}); err == nil {
 			t.Error("cancelled wait returned no error")
 		}
 	}()
@@ -326,7 +374,7 @@ func TestDecisionAcceptedDuringCancellationIsNotLost(t *testing.T) {
 			}
 			cancel() // both the decision and the cancellation are now ready
 		}
-		d, err := h.Decide(ctx, runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr"})
+		d, err := h.Decide(ctx, run.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr"})
 		if err != nil || !d.Approve || d.Comment != "yes" {
 			t.Fatalf("iteration %d: decision lost: %+v %v", i, d, err)
 		}
@@ -335,7 +383,7 @@ func TestDecisionAcceptedDuringCancellationIsNotLost(t *testing.T) {
 
 func TestDecisionForAnotherRunNeverRevealsAnEarlierDecision(t *testing.T) {
 	h := NewHub()
-	go h.Decide(context.Background(), runtime.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-9"})
+	go h.Decide(context.Background(), run.ApprovalRequest{RunID: runID, NodeID: "ask", NodeRunID: "nr-9"})
 	waitPending(t, h, 1)
 	if _, already, err := h.Submit(runID, "nr-9", true, "secret comment"); err != nil || already {
 		t.Fatalf("%v %v", err, already)

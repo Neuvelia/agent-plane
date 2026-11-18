@@ -39,14 +39,20 @@ changed-files scope checking (ADR-0016; event schema 8). Shared files are not
 isolated; F1.8 detects out-of-scope changes after execution and neither prevents
 writes nor isolates the workspace (F3.1). Phase 1 features F1.1-F1.8 are
 implemented; the real-Codex F1.7 demo is prepared but not yet executed.
-A Phase 2 vertical slice is also active (event schema 9): F1.6a adds the bounded
+A Phase 2 vertical slice is also active (event schema 10): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
 F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
 (ADR-0019). The desktop UI observes and steers runs through that API; it never
 schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
-Storybook; the API and event contracts are unchanged. Read the
+Storybook; the API and event contracts are unchanged. Slice E6 of F2.3 adds
+opt-in, bounded and redacted `value_recorded` events (event schema 10,
+ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
+starts the sidecar with it; the edge inspector (E5b) is not implemented. The graph
+editor (F2.1, F2.4 Issues panel) and the F2.2 node inspector edit graph files through
+versioned operations (ADR-0020, ADR-0021); inspector fields come from
+descriptors owned by the validators (`internal/fields`). Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without
@@ -136,12 +142,14 @@ Expected high-level layout:
 ```text
 cmd/agentplane/          CLI entrypoint
 internal/graph/          graph schema, parsing, validation, bindings
+internal/fields/         node configuration field descriptors for editors
 internal/runtime/        scheduler and execution state transitions
 internal/events/         event contracts and event emission
 internal/agent/          provider-neutral Agent contract and adapters
 internal/shell/          Shell execution
 internal/gate/           deterministic checks
-internal/gitstate/       Git-observed workspace state
+internal/gitstate/       Git-observed workspace state, hardened Git runner
+internal/worktree/       linked Git worktrees for workspace isolation (F3.1)
 internal/store/          local run history
 internal/api/            loopback API for local clients
 internal/version/        build/runtime version metadata
@@ -347,6 +355,8 @@ Before adding a dependency, explain:
 
 Do not add frameworks preemptively for future features.
 
+Upgrading the YAML library (`go.yaml.in/yaml/v3`) must include running the `ParseErrorColumn` tests in `internal/adapter/yamlgraph/edit` and `internal/api`: they pin error-message wording the parse-error column lookup depends on.
+
 ## Code style
 
 The Phase 0 runtime is Go.
@@ -359,6 +369,94 @@ The Phase 0 runtime is Go.
 - Return errors with useful context while preserving causes.
 - Keep serialization types separate from runtime state where that prevents coupling.
 - Comments should explain invariants and non-obvious decisions, not restate code.
+
+## Clean code rules
+
+These apply to all new and changed Go code in `cmd/` and `internal/`. Thresholds
+are mechanical; a breach needs a one-line justification in the code or PR, not
+silence. Do not "fix" legacy breaches opportunistically outside the active
+feature scope; do not add new ones.
+
+Naming and functions:
+
+- Names reveal intent. No abbreviations except `ctx`, `err`, `id`. Package names
+  are short, lowercase, singular and do not stutter (`graph.Graph`, not
+  `graph.GraphValidator`). No `util`, `common`, `helpers`, `types`, `base`.
+- One level of abstraction per function; it does one thing. Body target <= 30
+  lines, hard limit 50.
+- At most 4 parameters (excluding `ctx`). No boolean parameters that switch
+  behavior; split the function instead.
+- Cyclomatic complexity <= 10, cognitive complexity <= 15, nesting depth <= 3.
+  Prefer guard clauses and early returns over `else` chains.
+- A function either changes state or returns information, not both, except in
+  conventional documented cases.
+- No output parameters and no named-return tricks that obscure flow.
+
+Types and files:
+
+- Single responsibility: one reason to change per type and per package. File
+  target <= 300 lines, hard limit 500. More than 7 exported methods on a type
+  needs a justification or a split.
+- No `any`/`map[string]any` in domain or application APIs. Use typed IDs and
+  typed enums with validating constructors so illegal states are
+  unrepresentable.
+- Prefer composition. Embed only for genuine interface promotion.
+- Remove duplicated knowledge, but do not abstract two similar lines.
+- No dead code, unused parameters/fields/exports, commented-out code or stale
+  TODOs.
+
+Errors, comments, concurrency:
+
+- No panics for expected failures. Wrap with `%w` and context. Use sentinel or
+  typed errors for conditions callers branch on and compare with
+  `errors.Is`/`errors.As`, never by string. Never swallow an error and never
+  both log and return it.
+- Every exported identifier has a doc comment starting with its name. Comments
+  state invariants, non-obvious decisions and ADR/spec references.
+- Every goroutine has an owner, a `ctx` cancellation path and a bounded
+  lifetime. `go test -race` must stay clean.
+
+Tests:
+
+- Tests prove contracts, not implementation. One behavior per test, names
+  describe behavior, table-driven where it clarifies. No sleeps for
+  synchronization. Use hand-written fakes of ports, not mocking frameworks.
+  Test code follows the same naming and duplication rules.
+
+## Clean architecture rules
+
+Layers, inside out: domain -> application -> adapters / delivery -> composition
+root (`cmd/agentplane`).
+
+- R1 Dependencies point inward only. Domain imports nothing from this project
+  and only the standard library. Application imports domain and never an
+  adapter or delivery package.
+- R2 Adapters (shell, agent/codex, gitstate, store, graph file/YAML loading)
+  implement ports and never import each other or delivery. Cross-adapter needs
+  go through a port.
+- R3 Ports are small (1-3 methods), owned by the consuming package, named for
+  the role (not `IFoo`/`FooImpl`). Accept interfaces, return concrete types.
+- R4 Domain and application code do not call `time.Now`, `os`, `os/exec`,
+  `net/http`, environment lookups or randomness directly. Inject a clock, ID
+  generator, process runner or filesystem port.
+- R5 Transport and serialization types (YAML, API payloads, JSONL records) live
+  in adapters/delivery and are mapped to domain types. Event schema types are
+  the documented exception and stay in the event contract package.
+- R6 Only domain and application decide state transitions, retries and
+  acceptance. Adapters report facts. The API and CLI observe and steer through
+  use cases and contain no scheduling or business rules.
+- R7 `cmd/agentplane` is the only composition root: it builds concrete adapters
+  and wires them into use cases. `main` stays thin.
+- R8 No global mutable state, no side-effecting `init()`, no import cycles.
+  Dependencies are passed explicitly.
+- R9 Export the minimum. Anything not used outside its package is unexported.
+
+The current package layout predates these rules (for example `agent` and `gate`
+import `runtime`). Until the layered refactor lands, new code must not add
+violations of R1-R9, and any move toward the target layout needs a plan and an
+ADR (see `prompts/refactor-clean-architecture.md`). Enforcement
+(architecture test, `golangci-lint` config, metrics script) is introduced by
+that refactor; until then reviewers check these rules by hand.
 
 ## Git and commit discipline
 

@@ -32,6 +32,12 @@ installs Playwright's Chromium once (`npx playwright install chromium`); set
 `AP_CHROMIUM=/path/to/chrome` to use a browser you already have. Playwright is a
 pinned dev dependency used only by these two checks.
 
+CI (`.github/workflows/ci.yml`): job `desktop` runs `npm run check`; job
+`desktop-e2e` runs both commands above under xvfb with Node 24, caches the npm
+cache, `~/.cache/electron` and `~/.cache/ms-playwright`, and uploads the e2e
+screenshots (`make desktop-e2e E2E_SHOTS=e2e-shots`, git-ignored) as an artifact
+on failure. Locally, pass `E2E_SHOTS=<dir>` to save them.
+
 ## Storybook (development only, F2.5a)
 
 ```bash
@@ -78,6 +84,13 @@ a dev dependency and is never part of the packaged app.
   renderer only as opaque grants and file names, never paths (ADR-0021). Recently
   opened graphs are kept by main in the user data directory
   (`electron/recents.cjs`).
+- **Recording run values is opt-in.** Settings has a "Record run values" switch,
+  off by default (ADR-0023). Main keeps it in user data (`electron/recording.cjs`)
+  and starts the sidecar with `--record-values` and `--redact-env NAME` for the
+  listed variables; a change applies at the next app start. An unset listed
+  variable keeps recording off for that session. The renderer reaches it only
+  through `recordingSettings`/`setRecordingSettings` and never sees environment
+  values.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 
@@ -155,6 +168,6 @@ implemented; screenshots are in `docs/validation/F2.5a-screenshots/`.
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,
 Approvals (IA-17/18), New run with preflight (IA-12/13) and the YAML view of the
-graph (IA-07-11, read-only), plus Settings with only the interface language. Not
+graph (IA-07-11, read-only), plus Settings with the interface language and the opt-in "Record run values" switch. Not
 implemented (greyed out in the sidebar where they would live): Projects, Runners,
 Docs; also mobile approval, onboarding, attempt compare and graph editing.

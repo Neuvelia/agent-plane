@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"crypto/sha256"
 	"errors"
@@ -9,28 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/gitstate"
-	"agentplane/internal/graph"
 )
-
-// CorrectionFeedback preserves the retained sanitized result and the original
-// producer scope. Checked Gate ports never redefine the producer's scope.
-type CorrectionFeedback struct {
-	PreviousAttemptID events.AttemptID   `json:"previous_attempt_id"`
-	CheckResult       events.CheckResult `json:"check_result"`
-	IntendedScope     []string           `json:"intended_scope"`
-}
-
-func CloneFeedback(f *CorrectionFeedback) *CorrectionFeedback {
-	if f == nil {
-		return nil
-	}
-	c := *f
-	c.CheckResult = events.CloneGate(f.CheckResult)
-	c.IntendedScope = append([]string{}, f.IntendedScope...)
-	return &c
-}
 
 // LoopPreflight is optional for ordinary graphs, required for loop composition.
 // All static validation completes before any provider capability detection.
@@ -50,7 +33,7 @@ func preflightLoops(ctx context.Context, d *graph.Definition, e Executor) error 
 		return nil
 	}
 	fail := func(id string, err error) error {
-		return &PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{Severity: graph.SeverityError, Code: "E_LOOP_PREFLIGHT", GraphID: d.ID, Location: graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, Message: err.Error(), Suggestion: "use valid Agent/Gate configuration and a correction-feedback-capable executor"}}}}
+		return &run.PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{Severity: graph.SeverityError, Code: "E_LOOP_PREFLIGHT", GraphID: d.ID, Location: graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id + ".loop"}, Message: err.Error(), Suggestion: "use valid Agent/Gate configuration and a correction-feedback-capable executor"}}}}
 	}
 	p, ok := e.(LoopPreflight)
 	if !ok {
@@ -127,7 +110,7 @@ func originalScope(n graph.NodeDefinition) []string {
 	}
 	return result
 }
-func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *CorrectionFeedback, r *logRedactor) events.AttemptInputPayload {
+func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *run.CorrectionFeedback, r *logRedactor) events.AttemptInputPayload {
 	task, _ := n.Config["task"].(string)
 	if task == "" {
 		task, _ = in["task"].AsString()
@@ -155,7 +138,9 @@ func attemptInput(n graph.NodeDefinition, in map[string]graph.Value, f *Correcti
 	}
 	return p
 }
-func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, number int, f *CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
+
+//nolint:gocognit,gocyclo,funlen // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
+func (m *runMachine) cycle(ctx context.Context, e Executor, id string, n graph.NodeDefinition, in map[string]graph.Value, aid events.AttemptID, number int, f *run.CorrectionFeedback, baseline *gitstate.Baseline, r *logRedactor) completedNode {
 	if n.Type == "human" {
 		return m.humanNode(ctx, id, n, in, r)
 	}

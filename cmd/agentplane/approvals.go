@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/domain/run"
 	"bufio"
 	"context"
 	"errors"
@@ -12,7 +13,7 @@ import (
 
 	"golang.org/x/term"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 )
 
@@ -29,21 +30,22 @@ type cliDecisions struct {
 	turn chan struct{}
 }
 
-func (c cliDecisions) Decide(ctx context.Context, req runtime.ApprovalRequest) (runtime.Decision, error) {
+//nolint:gocognit,gocyclo // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
+func (c cliDecisions) Decide(ctx context.Context, req run.ApprovalRequest) (run.Decision, error) {
 	if approve, ok := c.flags[req.NodeID]; ok {
-		return runtime.Decision{Approve: approve, Comment: "decided by command-line flag"}, nil
+		return run.Decision{Approve: approve, Comment: "decided by command-line flag"}, nil
 	}
 	if c.prompt == nil || c.turn == nil {
-		return runtime.Decision{}, errors.New("no interactive terminal")
+		return run.Decision{}, errors.New("no interactive terminal")
 	}
 	select {
 	case c.turn <- struct{}{}:
 		defer func() { <-c.turn }()
 	case <-ctx.Done():
-		return runtime.Decision{}, ctx.Err()
+		return run.Decision{}, ctx.Err()
 	}
 	if err := ctx.Err(); err != nil {
-		return runtime.Decision{}, err
+		return run.Decision{}, err
 	}
 	fmt.Fprintf(c.out, "\nApproval needed for node %q\n", req.NodeID)
 	if req.Prompt != "" {
@@ -74,12 +76,12 @@ func (c cliDecisions) Decide(ctx context.Context, req runtime.ApprovalRequest) (
 		// exits. That is safe: ctx is already cancelled, and every later Decide
 		// re-checks ctx after taking its turn, so no second reader ever starts
 		// on the same terminal.
-		return runtime.Decision{}, ctx.Err()
+		return run.Decision{}, ctx.Err()
 	case answer, ok := <-answers:
 		if !ok {
-			return runtime.Decision{}, errors.New("terminal closed before a decision")
+			return run.Decision{}, errors.New("terminal closed before a decision")
 		}
-		return runtime.Decision{Approve: strings.HasPrefix(answer, "y"), Comment: "decided interactively"}, nil
+		return run.Decision{Approve: strings.HasPrefix(answer, "y"), Comment: "decided interactively"}, nil
 	}
 }
 

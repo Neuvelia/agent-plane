@@ -1,0 +1,101 @@
+# Development-only linter configuration (not part of go.mod). Thresholds mirror
+# AGENTS.md "Clean code rules". Existing findings are tolerated via
+# `new-from-merge-base`: a change may not introduce a finding on a line it
+# touches. As the layered refactor lands the baseline shrinks; stage 6 of
+# docs/audits/2026-11-16-clean-architecture-refactor-plan.md removes it.
+version: "2"
+
+run:
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - errorlint
+    - unused
+    - ineffassign
+    - gocyclo
+    - gocognit
+    - funlen
+    - revive
+    - gocritic
+    - nestif
+    - nolintlint
+    - goconst
+    - depguard
+    - forbidigo
+  settings:
+    gocyclo:
+      min-complexity: 10
+    gocognit:
+      min-complexity: 15
+    funlen:
+      lines: 50
+      statements: -1
+    nestif:
+      min-complexity: 4
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    goconst:
+      min-len: 4
+      min-occurrences: 4
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: unused-parameter
+        - name: unused-receiver
+        - name: error-naming
+        - name: error-return
+        - name: indent-error-flow
+        - name: var-naming
+    forbidigo:
+      forbid:
+        - pattern: '^time\.Now$'
+          msg: "inject a clock (R4); allowed only in cmd/agentplane"
+        - pattern: '^os\.Getenv$'
+          msg: "environment access belongs to the composition root or an adapter (R4)"
+        - pattern: '^panic$'
+          msg: "return an error; panic only for programmer errors in main (C13)"
+    depguard:
+      rules:
+        domain:
+          files:
+            - "**/internal/domain/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - agentplane/internal/domain
+        app:
+          files:
+            - "**/internal/app/**"
+            - "!$test"
+          allow:
+            - $gostd
+            - agentplane/internal/domain
+            - agentplane/internal/app
+        delivery:
+          files:
+            - "**/internal/delivery/**"
+            - "!$test"
+          deny:
+            - pkg: agentplane/internal/adapter
+              desc: delivery must go through application use cases (R1)
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [funlen, gocognit, gocyclo, nestif, forbidigo, goconst, errcheck]
+      - path: ^cmd/agentplane/
+        linters: [forbidigo]
+      # Adapters touch the world (R4 constrains domain and application code).
+      - path: ^internal/(adapter|agent|gate|shell|gitstate|store|api)/
+        linters: [forbidigo]
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new-from-merge-base: origin/main

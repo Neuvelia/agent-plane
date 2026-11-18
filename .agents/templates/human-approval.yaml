@@ -1,0 +1,40 @@
+# Template: the smallest human gate. "approve" waits for a local decision;
+# "done" runs only after approval. The commands only print text.
+schema_version: 0
+id: human-approval
+name: Human approval
+inputs: {}
+nodes:
+  summarize:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["Ready to continue. Nothing has been changed."]
+    outputs:
+      stdout: {type: string, required: true}
+  approve:
+    type: human
+    config:
+      prompt: Approve continuing?
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  done:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["approved\n"]
+    inputs:
+      decision: {type: string, required: true}
+edges:
+  - {from: summarize.outputs.stdout, to: approve.inputs.summary}
+  - {from: approve.outputs.decision, to: done.inputs.decision}
+outputs: {}
+metadata:
+  layout:
+    nodes:
+      summarize: {x: 0, y: 0}
+      approve: {x: 320, y: 0}
+      done: {x: 640, y: 0}

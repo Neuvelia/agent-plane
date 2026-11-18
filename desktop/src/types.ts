@@ -1,6 +1,9 @@
-// Wire shapes of the AgentPlane event stream (event schema 9). Payloads are
-// kept loose on purpose: the reducer reads only the fields it needs and ignores
-// the rest, so additive schema changes never break the renderer.
+// Wire shapes of the AgentPlane event stream (event schema 11; schemas 1-10 are
+// still delivered for older stored runs). Payloads are kept loose on purpose:
+// the reducer reads only the fields it needs and ignores the rest, so additive
+// schema changes never break the renderer. Schema 10 adds opt-in
+// value_recorded events (ADR-0023) and schema 11 workspace isolation facts
+// (ADR-0024); the run views display neither.
 export interface ApEvent {
   event_schema_version: number
   type: string
@@ -63,6 +66,20 @@ export interface RecentGraph {
   label: string
 }
 
+/**
+ * "Record run values" (ADR-0023). `enabled` and `redactEnv` are the saved
+ * preference; `active` and `missing` describe the running engine, which keeps
+ * its flags until the app restarts. Environment values are never exposed.
+ */
+export interface RecordingSettings {
+  enabled: boolean
+  redactEnv: string[]
+  active: boolean
+  missing: string[]
+}
+
+export type RecordingSaveResult = { ok: true; settings: RecordingSettings } | { ok: false; code: 'invalid' | 'save_failed'; name?: string }
+
 declare global {
   interface Window {
     agentplane: {
@@ -75,6 +92,8 @@ declare global {
       openRecentGraph: (id: string) => Promise<GraphGrantResult>
       touchRecent: (grant: string) => Promise<boolean>
       closeGraph: (grant: string) => Promise<boolean>
+      recordingSettings: () => Promise<RecordingSettings>
+      setRecordingSettings: (settings: { enabled: boolean; redactEnv: string[] }) => Promise<RecordingSaveResult>
     }
   }
 }

@@ -25,6 +25,14 @@ export interface Evidence {
   stdout?: string
   stderr?: string
   omitted?: number
+  /** Typed reference to evidence held elsewhere, e.g. a diff that is `unavailable`. */
+  reference?: EvidenceReference
+}
+
+export interface EvidenceReference {
+  kind: string
+  state: string
+  reason?: string
 }
 
 export interface CheckView {
@@ -43,6 +51,17 @@ export interface Attempt {
   outcome?: string
   check?: CheckView
   log: string
+  /** Event timestamps (ISO) of attempt_started / attempt_finished. */
+  startedAt?: string
+  finishedAt?: string
+  /**
+   * Sorted Git-observed paths from this attempt's node_evidence. Undefined means
+   * not observed (no evidence event), which is different from an empty list.
+   */
+  changedFiles?: string[]
+  /** Feedback linkage from attempt_input: the attempt and check whose result this attempt received. */
+  previousAttemptId?: string
+  previousCheckId?: string
 }
 
 export interface ApprovalView {
@@ -97,7 +116,7 @@ export interface RunView {
   finishedAt?: string
   /** Timestamp of the newest applied event: "now" for a run that is still going. */
   lastEventAt?: string
-  /** The newest MAX_EVENT_ROWS events, oldest first. log_chunk is excluded (it has the Log view). */
+  /** The newest MAX_EVENT_ROWS events, oldest first. log_chunk (Log view) and value_recorded (edge values) are excluded. */
   tail: EventSummary[]
   failureKind?: string
 }
@@ -131,6 +150,12 @@ function bounded(text: string): string {
 
 const num = (v: unknown, fallback = 0): number => (typeof v === 'number' ? v : fallback)
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+
+function reference(v: unknown): EvidenceReference | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const r = v as Record<string, unknown>
+  return { kind: str(r.kind), state: str(r.state), reason: r.reason ? str(r.reason) : undefined }
+}
 
 function attemptFor(n: NodeView, attemptId: string | undefined): Attempt | undefined {
   if (attemptId) {
@@ -192,13 +217,34 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
     case 'attempt_started':
       if (id && event.attempt_id) {
         const n = node(state, id)
-        n.attempts.push({ id: event.attempt_id, number: num(p.number), max: num(p.max_attempts), log: '' })
+        n.attempts.push({ id: event.attempt_id, number: num(p.number), max: num(p.max_attempts), log: '', startedAt: event.timestamp })
       }
       break
     case 'attempt_finished':
       if (id) {
         const a = attemptFor(node(state, id), event.attempt_id)
-        if (a) a.outcome = str(p.outcome)
+        if (a) {
+          a.outcome = str(p.outcome)
+          a.finishedAt = event.timestamp
+        }
+      }
+      break
+    case 'attempt_input':
+      // Only an exact attempt match: feedback must never be attached to the wrong attempt.
+      if (id && event.attempt_id) {
+        const a = node(state, id).attempts.find((x) => x.id === event.attempt_id)
+        if (a) {
+          a.previousAttemptId = str(p.previous_attempt_id) || undefined
+          a.previousCheckId = str(p.previous_check_id) || undefined
+        }
+      }
+      break
+    case 'node_evidence':
+      // Evidence without an attempt ID belongs to a non-loop node; it has no attempt to compare.
+      if (id && event.attempt_id) {
+        const a = node(state, id).attempts.find((x) => x.id === event.attempt_id)
+        const files = (Array.isArray(p.changed_files) ? p.changed_files : []) as Record<string, unknown>[]
+        if (a) a.changedFiles = [...new Set(files.map((f) => str(f.path)).filter((path) => path !== ''))].sort()
       }
       break
     case 'gate_check':
@@ -220,6 +266,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
             stdout: e.stdout ? decode(e.stdout) : undefined,
             stderr: e.stderr ? decode(e.stderr) : undefined,
             omitted: typeof e.omitted === 'number' ? e.omitted : undefined,
+            reference: reference(e.reference),
           })),
         }
         if (a) a.check = view
@@ -266,8 +313,10 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
 
 // summarize is the one place that decides what an event looks like in the EventLog.
 // Unknown event types are kept (by type) and simply have no detail or filter kind.
+// value_recorded (schema 10, ADR-0023) carries user data for the edge inspector
+// (F2.3 E5b); like log_chunk it has its own view and never becomes an EventLog row.
 function summarize(event: ApEvent): EventSummary | null {
-  if (event.type === 'log_chunk') return null
+  if (event.type === 'log_chunk' || event.type === 'value_recorded') return null
   const p = event.payload
   const row: EventSummary = { sequence: event.sequence, timestamp: event.timestamp, type: event.type, node: event.node_id }
   switch (event.type) {

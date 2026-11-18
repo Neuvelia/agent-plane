@@ -1,18 +1,23 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/system"
+	"agentplane/internal/app/trace"
+	"agentplane/internal/domain/run"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
+	"agentplane/internal/testenv"
 )
 
 func workspaceGit(t *testing.T, root string, args ...string) {
 	t.Helper()
+	testenv.RequireExecutable(t, "/usr/bin/git")
 	c := exec.Command("/usr/bin/git", args...)
 	c.Dir = root
 	c.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null"}
@@ -82,16 +87,16 @@ func TestUnitModeSchedulingIncludesUnenrolledAgentsAndKeepsShells(t *testing.T) 
 			"b": {Type: "agent", Config: graph.NodeConfig{"workspace": root, "allowed_paths": scope}},
 			"c": {Type: "shell"}, "d": {Type: "agent", Config: graph.NodeConfig{"workspace": other}},
 		}}
-		m := &runMachine{ids: []string{"a", "b", "c", "d"}, definition: d, nodes: map[string]*NodeResult{}}
+		m := &runMachine{ids: []string{"a", "b", "c", "d"}, definition: d, nodes: map[string]*run.NodeResult{}}
 		for _, id := range m.ids {
-			m.nodes[id] = &NodeResult{State: NodeReady}
+			m.nodes[id] = &run.NodeResult{State: run.NodeReady}
 		}
 		m.workspaces = inspectWorkspaces(context.Background(), d)
 		batch := m.nextBatch(4)
 		if len(batch) != 3 || batch[0] != "a" || batch[1] != "c" || batch[2] != "d" {
 			t.Fatal("scope disjointness authorized unsafe concurrency", batch)
 		}
-		m.nodes["a"].State = NodeSucceeded
+		m.nodes["a"].State = run.NodeSucceeded
 		batch = m.nextBatch(4)
 		if batch[0] != "b" {
 			t.Fatal("unstable order", batch)
@@ -105,13 +110,13 @@ func TestDeclaredPotentialConflictsAreBoundedRetainedAndDetached(t *testing.T) {
 		id := string(rune('a' + i))
 		d.Nodes[id] = graph.NodeDefinition{Type: "agent", Config: graph.NodeConfig{"workspace": root, "allowed_paths": []string{"src/"}}}
 	}
-	m := &runMachine{ids: sortedDefinitionIDs(d), emitter: events.NewCollector("r", "g", "v"), workspaces: inspectWorkspaces(context.Background(), d)}
+	m := &runMachine{ids: sortedDefinitionIDs(d), emitter: trace.NewCollector(system.Clock{}, "r", "g", "v"), workspaces: inspectWorkspaces(context.Background(), d)}
 	m.reportScopeConflicts(d)
-	trace := m.emitter.Snapshot()
-	if len(trace) != 1 {
-		t.Fatal(trace)
+	facts := m.emitter.Snapshot()
+	if len(facts) != 1 {
+		t.Fatal(facts)
 	}
-	p := trace[0].Payload.(events.DeclaredScopeConflictsPayload)
+	p := facts[0].Payload.(events.DeclaredScopeConflictsPayload)
 	if len(p.Details) != 64 || p.Omitted != 41 || p.Details[0].Reason != "declared_scope_overlap" {
 		t.Fatal(p)
 	}
@@ -122,7 +127,7 @@ func TestDeclaredPotentialConflictsAreBoundedRetainedAndDetached(t *testing.T) {
 	d.Nodes = map[string]graph.NodeDefinition{"a": {Type: "agent", Config: graph.NodeConfig{"workspace": "/missing", "allowed_paths": []string{"./"}}}, "b": {Type: "agent", Config: graph.NodeConfig{"workspace": root}}}
 	m.ids = sortedDefinitionIDs(d)
 	m.workspaces = inspectWorkspaces(context.Background(), d)
-	m.emitter = events.NewCollector("r", "g", "v")
+	m.emitter = trace.NewCollector(system.Clock{}, "r", "g", "v")
 	m.reportScopeConflicts(d)
 	p = m.emitter.Snapshot()[0].Payload.(events.DeclaredScopeConflictsPayload)
 	if len(p.Details) != 2 || p.Details[0].Reason != "unknown_workspace_identity" || p.Details[1].Reason != "unknown_scope" {

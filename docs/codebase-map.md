@@ -11,13 +11,15 @@ durable contract.
 | --- | --- | --- |
 | `internal/graph` | YAML definitions, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
 | `internal/graph/edit` | In-memory, fidelity-preserving graph YAML operations | `apply.go`, `ops.go`, `doc.go` |
+| `internal/fields` | Field descriptor types for node configuration; each validator owns and exports its descriptors (`ConfigFields`, `OutputPorts`) | `fields.go`, `fieldstest/` |
 | `internal/events` | Typed event payloads, schema compatibility, ordering and collection | `event.go`, `emitter.go` |
-| `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation and human decisions | `scheduler.go`, `loop.go`, `unit.go` |
+| `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording | `scheduler.go`, `loop.go`, `unit.go`, `values.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
 | `internal/agent/codex` | Installed Codex CLI process and result/progress translation | `adapter.go` |
 | `internal/shell` | Shell node process execution and configuration | `executor.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
-| `internal/gitstate` | Git-observed workspace baselines and changes | `snapshot.go` |
+| `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
+| `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (not yet used by the runtime) | `preflight.go`, `worktree.go`, `integrate.go` |
 | `internal/store` | Local append-only JSONL run history | `store.go` |
 | `internal/api` | Authenticated loopback API for runs, approvals and granted graph documents | `server.go`, `docs.go`, `hub.go` |
 | `internal/version` | Build and runtime version metadata | `version.go` |
@@ -30,13 +32,15 @@ packages only):
 
 | Importer | In-repository imports |
 | --- | --- |
-| `graph`, `events`, `gitstate`, `version` | none |
+| `fields`, `events`, `gitstate`, `version` | none |
+| `graph` | `fields` |
+| `worktree` | `gitstate` |
 | `graph/edit` | `graph` |
 | `runtime` | `events`, `gitstate`, `graph` |
-| `agent` | `events`, `graph`, `runtime` |
+| `agent` | `events`, `fields`, `graph`, `runtime` |
 | `agent/codex` | `agent`, `events`, `gitstate` |
-| `shell` | `graph` |
-| `gate` | `events`, `gitstate`, `graph`, `runtime` |
+| `shell` | `fields`, `graph` |
+| `gate` | `events`, `fields`, `gitstate`, `graph`, `runtime` |
 | `store` | `events` |
 | `api` | `events`, `graph`, `graph/edit`, `runtime`, `store` |
 | `cmd/agentplane` | composition of the Go packages above |
@@ -62,8 +66,9 @@ desktop is a client of that API, not a second execution engine.
    ADR-0015, ADR-0017 and ADR-0018.
 3. **Events:** keep emitted facts, sequence order, correlation IDs, bounded
    progress, redaction and decoding of older schemas stable. No transition
-   may become visible only in a log. See `docs/domain-model.md` and the
-   event-related ADRs.
+   may become visible only in a log. Recorded run values stay opt-in,
+   redacted before truncation and bounded (ADR-0023). See
+   `docs/domain-model.md` and the event-related ADRs.
 4. **Process boundaries:** retain explicit argv/environment handling,
    termination on cancellation, bounded observations and secret redaction.
    Git-observed scope checks detect changes after execution; they are not

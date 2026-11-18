@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"context"
 	"encoding/json"
 	"os"
@@ -8,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 const shellNoCommand = `schema_version: 0
@@ -28,7 +29,7 @@ outputs:
 
 func parseGraph(t *testing.T, text string) *graph.Definition {
 	t.Helper()
-	def, err := graph.Parse([]byte(text))
+	def, err := yamlgraph.Parse([]byte(text))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +59,7 @@ func TestRunnableGraphsHaveNoConfigErrors(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		def, err := graph.Parse(data)
+		def, err := yamlgraph.Parse(data)
 		if err != nil {
 			t.Fatalf("%s: %v", p, err)
 		}
@@ -73,7 +74,7 @@ func TestTemplateExamplesReportTheirPlaceholders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	def, err := graph.Parse(data)
+	def, err := yamlgraph.Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}

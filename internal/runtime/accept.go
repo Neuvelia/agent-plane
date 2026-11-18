@@ -1,11 +1,12 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"errors"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
 
 // acceptBatchResults runs on the coordinator after worker results are sorted.
@@ -62,13 +63,13 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 			}
 			machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}})
 			if outcome == "rejected" && ctx.Err() == nil {
-				state.feedbacks[work.id] = &CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
+				state.feedbacks[work.id] = &run.CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
 				retry = append(retry, work.id)
 				continue
 			}
 			if outcome == "needs_intervention" {
-				nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureNeedsIntervention, Err: interventionError{}}
-				machine.transitionNode(work.id, NodeFailed)
+				nodeResult.Failure = &run.Failure{NodeID: work.id, Kind: run.FailureNeedsIntervention, Err: interventionError{}}
+				machine.transitionNode(work.id, run.NodeFailed)
 				continue
 			}
 			if outcome == "rejected" {
@@ -102,24 +103,24 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 		}
 		if work.err != nil {
 			if ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
-				machine.transitionNode(work.id, NodeCancelled)
+				machine.transitionNode(work.id, run.NodeCancelled)
 			} else {
-				nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureExecutor, Err: work.err}
+				nodeResult.Failure = &run.Failure{NodeID: work.id, Kind: run.FailureExecutor, Err: work.err}
 				if errors.As(work.err, &rejectedError{}) {
-					nodeResult.Failure.Kind = FailureRejected
+					nodeResult.Failure.Kind = run.FailureRejected
 				}
 				if len(work.diagnostics) > 0 {
-					nodeResult.Failure.Kind = FailureOutputContract
+					nodeResult.Failure.Kind = run.FailureOutputContract
 					nodeResult.Failure.Diagnostics = work.diagnostics
 				}
-				machine.transitionNode(work.id, NodeFailed)
+				machine.transitionNode(work.id, run.NodeFailed)
 			}
 			continue
 		}
 		diagnostics := validateNodeOutputs(definition.ID, work.id, definition.Nodes[work.id].Outputs, work.outputs)
 		if len(diagnostics) > 0 {
-			nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureOutputContract, Diagnostics: diagnostics}
-			machine.transitionNode(work.id, NodeFailed)
+			nodeResult.Failure = &run.Failure{NodeID: work.id, Kind: run.FailureOutputContract, Diagnostics: diagnostics}
+			machine.transitionNode(work.id, run.NodeFailed)
 			continue
 		}
 		machine.outputs[work.id] = copyValues(work.outputs)
@@ -127,8 +128,8 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 		if u := machine.units[work.id]; u != nil {
 			values, ports, err := machine.units.acceptedValues(work.id)
 			if err != nil {
-				nodeResult.Failure = &Failure{NodeID: work.id, Kind: FailureScheduler, Err: err}
-				machine.transitionNode(work.id, NodeFailed)
+				nodeResult.Failure = &run.Failure{NodeID: work.id, Kind: run.FailureScheduler, Err: err}
+				machine.transitionNode(work.id, run.NodeFailed)
 				continue
 			}
 			machine.outputs[work.id] = values
@@ -138,7 +139,12 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 		if work.evidence != nil {
 			machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, Payload: *work.evidence})
 		}
-		machine.transitionNode(work.id, NodeSucceeded)
+		acceptedAttempt := work.attemptID
+		if nodeResult.AcceptedAttemptID != "" {
+			acceptedAttempt = nodeResult.AcceptedAttemptID // matches AcceptedProvenance
+		}
+		machine.recordAcceptedOutputs(work.id, acceptedAttempt)
+		machine.transitionNode(work.id, run.NodeSucceeded)
 	}
 	return retry
 }

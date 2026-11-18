@@ -1,0 +1,12 @@
+# Known architecture violations (refactor plan: docs/audits/2026-11-16-clean-architecture-refactor-plan.md).
+# This file may only shrink: the test fails on new violations and on stale lines.
+internal/agent/codex -> agentplane/internal/gitstate : R2 adapters must not import other adapters
+internal/api -> agentplane/internal/adapter/yamlgraph : R1 delivery must not import adapters
+internal/api -> agentplane/internal/adapter/yamlgraph/edit : R1 delivery must not import adapters
+internal/api -> agentplane/internal/capability : R1 delivery must not import adapters
+internal/api -> agentplane/internal/store : R1 delivery must not import adapters
+internal/capability -> agentplane/internal/agent : R2 adapters must not import other adapters
+internal/gate -> agentplane/internal/gitstate : R2 adapters must not import other adapters
+internal/runtime -> agentplane/internal/gitstate : R1 app imports only domain and app
+internal/runtime -> os/exec : R4 domain/app must not use os/exec directly
+internal/worktree -> agentplane/internal/gitstate : R2 adapters must not import other adapters

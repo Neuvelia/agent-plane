@@ -1,6 +1,7 @@
 package api
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -14,8 +15,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
-	"agentplane/internal/graph/edit"
+	"agentplane/internal/adapter/yamlgraph/edit"
+	"agentplane/internal/domain/graph"
 )
 
 // Graph document API (ADR-0021). A client addresses a graph by an opaque grant,
@@ -230,11 +231,17 @@ type docResponse struct {
 	Diagnostics     []diagnosticDTO `json:"diagnostics"`
 	ParseError      string          `json:"parse_error,omitempty"`
 	ParseLine       int             `json:"parse_line,omitempty"`
+	ParseColumn     int             `json:"parse_column,omitempty"`
 	ReadonlyCanvas  bool            `json:"readonly_canvas"`
 	ReadonlyReasons []string        `json:"readonly_reasons,omitempty"`
 	LineEnding      string          `json:"line_ending"`
 	Label           string          `json:"label"`
 	Results         []edit.OpResult `json:"results,omitempty"`
+	// NodeTypes holds the field descriptors of the node types in the graph, or
+	// of every known type on request (F2.2).
+	NodeTypes map[string]nodeTypeDTO `json:"node_types"`
+	// Nodes holds per-node inspector data; absent when the text does not parse.
+	Nodes map[string]nodeInfoDTO `json:"node_info,omitempty"`
 }
 
 // diagnostics runs the full validation: graph rules and, when the composition
@@ -252,22 +259,33 @@ func (s *Server) diagnostics(def *graph.Definition) []graph.Diagnostic {
 	return diags
 }
 
-func (s *Server) document(g *grant, text []byte) docResponse {
+// parseErrorMessage is the text shown to the user. The YAML library cuts long
+// scalars at a byte count, which can split a multi-byte character; the position
+// lookups keep using the raw message because they match that cut.
+func parseErrorMessage(err error) string {
+	return strings.ToValidUTF8(err.Error(), "�")
+}
+
+func (s *Server) document(g *grant, text []byte, allTypes bool) docResponse {
 	res := docResponse{Text: string(text), Hash: hashOf(text), Diagnostics: []diagnosticDTO{}, Label: g.label, LineEnding: "lf"}
+	res.NodeTypes = s.nodeTypesFor(nil, allTypes)
 	if strings.Contains(res.Text, "\r\n") {
 		res.LineEnding = "crlf"
 	}
 	if reasons := edit.Inspect(text); len(reasons) > 0 {
 		res.ReadonlyCanvas, res.ReadonlyReasons = true, reasons
 	}
-	def, err := graph.Parse(text)
+	def, err := yamlgraph.Parse(text)
 	if err != nil {
-		res.ParseError = err.Error()
-		res.ParseLine = edit.ParseErrorLine(res.ParseError)
+		res.ParseError = parseErrorMessage(err)
+		res.ParseLine = edit.ParseErrorLine(err.Error())
+		res.ParseColumn = edit.ParseErrorColumn(text, err.Error())
 		return res
 	}
 	res.Definition = toDefinitionDTO(def)
-	if v, err := graph.SemanticVersion(def); err == nil {
+	res.NodeTypes = s.nodeTypesFor(def, allTypes)
+	res.Nodes = s.nodeInfo(text, def)
+	if v, err := yamlgraph.SemanticVersion(def); err == nil {
 		res.Version = v
 	}
 	res.Diagnostics = withLines(text, s.diagnostics(def))
@@ -286,8 +304,14 @@ func (s *Server) lookup(w http.ResponseWriter, id string) *grant {
 	return g
 }
 
+// openBody is grantRef plus the request for every node type's descriptors.
+type openBody struct {
+	Grant        string `json:"grant"`
+	AllNodeTypes bool   `json:"all_node_types"`
+}
+
 func (s *Server) openDoc(w http.ResponseWriter, r *http.Request) {
-	var body grantRef
+	var body openBody
 	if !readJSON(w, r, &body) {
 		return
 	}
@@ -306,7 +330,7 @@ func (s *Server) openDoc(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g.text, g.hash = data, hashOf(data)
-	writeJSON(w, http.StatusOK, s.document(g, data))
+	writeJSON(w, http.StatusOK, s.document(g, data, body.AllNodeTypes))
 }
 
 func (s *Server) statDoc(w http.ResponseWriter, r *http.Request) {
@@ -335,6 +359,8 @@ type editBody struct {
 	Text       *string         `json:"text"`
 	OpsVersion int             `json:"ops_version"`
 	Ops        json.RawMessage `json:"ops"`
+	// AllNodeTypes asks for every node type's descriptors, as on open.
+	AllNodeTypes bool `json:"all_node_types"`
 }
 
 func editFailure(w http.ResponseWriter, err error) {
@@ -397,13 +423,13 @@ func (s *Server) editDoc(w http.ResponseWriter, r *http.Request) {
 		}
 		base = g.text
 	}
-	res, err := edit.Apply(base, ops)
+	res, err := edit.ApplyWith(base, ops, s.configFields)
 	if err != nil {
 		editFailure(w, err)
 		return
 	}
 	g.text, g.hash = res.Text, hashOf(res.Text)
-	doc := s.document(g, res.Text)
+	doc := s.document(g, res.Text, body.AllNodeTypes)
 	doc.Results = res.Results
 	writeJSON(w, http.StatusOK, doc)
 }

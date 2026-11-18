@@ -78,7 +78,8 @@ go build -o bin/agentplane ./cmd/agentplane
 
 ```text
 agentplane graph validate PATH [--json]
-agentplane run PATH [--input key=value]... [--redact-env NAME]... [--max-concurrency N] [--watch | --json]
+agentplane run PATH [--input key=value]... [--redact-env NAME]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--watch | --json]
+agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N]
 agentplane version
 ```
 
@@ -115,7 +116,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 9 (old schema 1–8 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 10 (old schema 1–9 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
@@ -123,6 +124,16 @@ current value of each named environment variable from event logs, normalized
 progress string fields, evidence and their human display, without putting the value in CLI arguments. The variable
 must be set. Redaction does not alter graph output values explicitly exposed
 by the graph.
+
+`--record-values` (off by default, on `run` and `serve`) adds one
+`value_recorded` event per supplied graph input and per accepted output port
+(ADR-0023, `docs/features/F2.3-E6-recorded-run-values.md`). Values are
+redacted with the `--redact-env` list before they are cut to 16 KiB per event
+and 1 MiB per run; `truncated` marks a cut or omitted value. Redaction covers
+only configured secrets, so recorded values can contain other sensitive data
+and are stored with the run when a store is used. `serve --redact-env` has the
+same meaning as on `run` and also refuses to store a graph that contains a
+configured secret.
 
 If a human-output write fails, the CLI reports the error on stderr when
 possible and exits 1. A closed stdout or stderr pipe also returns exit 1;

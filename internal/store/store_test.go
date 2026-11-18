@@ -2,13 +2,15 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/testenv"
 )
 
 const runA = "11111111-1111-4111-8111-111111111111"
@@ -49,7 +51,7 @@ func TestRoundTripPreservesEventsAndGraph(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.Summary.Status != "succeeded" || rec.Summary.EventCount != 3 || rec.Summary.GraphID != "g" || string(rec.Graph) != "schema_version: 0\n" {
+	if rec.Summary.Status != "succeeded" || rec.Summary.EventCount != 3 || rec.Summary.GraphID != "g" || rec.Summary.GraphVersion != "sha256-v0:x" || string(rec.Graph) != "schema_version: 0\n" {
 		t.Fatalf("%+v", rec.Summary)
 	}
 	for i := range in {
@@ -61,7 +63,43 @@ func TestRoundTripPreservesEventsAndGraph(t *testing.T) {
 	}
 }
 
+func TestRecordedValuesRoundTripAndOlderSchemaRunsStayReadable(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	now := time.Date(2026, 11, 15, 9, 0, 0, 0, time.UTC)
+	text := "hi"
+	input := ev(runA, 2, events.ValueRecorded, events.ValueRecordedPayload{Port: "inputs.job", Type: "string", SizeBytes: 2, SHA256: "8f434346648f6b96df89dda901c5176b10a6d83961dd3c1ac88b59b2dc327aa4", Value: &text}, now)
+	capped := ev(runA, 3, events.ValueRecorded, events.ValueRecordedPayload{NodeRunID: "nr", Port: "out", Type: "json", SizeBytes: 99, SHA256: strings.Repeat("a", 64), Truncated: true}, now)
+	capped.NodeID, capped.NodeRunID = "n", "nr"
+	in := []events.Event{started(runA, now), input, capped, finished(runA, 4, "succeeded", now)}
+	write(t, s, runA, in...)
+	rec, err := s.Read(runA)
+	if err != nil || len(rec.Events) != len(in) {
+		t.Fatalf("%v %d", err, len(rec.Events))
+	}
+	for i := range in {
+		a, _ := json.Marshal(in[i])
+		b, _ := json.Marshal(rec.Events[i])
+		if string(a) != string(b) {
+			t.Fatalf("event %d changed:\n%s\n%s", i, a, b)
+		}
+	}
+	// A run written by an older engine (schema 9) is read without values.
+	path := filepath.Join(s.Dir, runB)
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"event_schema_version":9,"type":"run_started","timestamp":"2026-11-14T09:00:00Z","sequence":1,"run_id":"` + runB + `","graph_id":"g","graph_version":"v9","payload":{"node_count":0}}` + "\n" +
+		`{"event_schema_version":9,"type":"run_finished","timestamp":"2026-11-14T09:00:01Z","sequence":2,"run_id":"` + runB + `","graph_id":"g","graph_version":"v9","payload":{"status":"succeeded","duration_ms":1,"node_counts":{"succeeded":0,"failed":0,"skipped":0,"cancelled":0}}}` + "\n"
+	os.WriteFile(filepath.Join(path, "events.jsonl"), []byte(old), 0o600)
+	os.WriteFile(filepath.Join(path, "graph.yaml"), []byte("schema_version: 0\n"), 0o600)
+	rec, err = s.Read(runB)
+	if err != nil || rec.Summary.Status != "succeeded" || rec.Summary.GraphVersion != "v9" {
+		t.Fatalf("schema 9 run: %+v %v", rec.Summary, err)
+	}
+}
+
 func TestPermissionsAreOwnerOnly(t *testing.T) {
+	testenv.RequireUnixPermissions(t)
 	dir := filepath.Join(t.TempDir(), "runs")
 	s := Store{Dir: dir}
 	write(t, s, runA, started(runA, time.Now().UTC()))
@@ -88,7 +126,7 @@ func TestTruncatedTailIsReportedNotFatal(t *testing.T) {
 	write(t, s, runA, started(runA, now), ev(runA, 2, events.NodeReady, events.NodeReadyPayload{}, now))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	f, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o600)
-	f.WriteString(`{"event_schema_version":9,"type":"node_start`) // killed mid-write
+	fmt.Fprintf(f, `{"event_schema_version":%d,"type":"node_start`, events.SchemaVersion) // killed mid-write
 	f.Close()
 	rec, err := s.Read(runA)
 	if err != nil {
@@ -254,14 +292,14 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	write(t, s, runA, started(runA, time.Now().UTC()))
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	data, _ := os.ReadFile(path)
-	os.WriteFile(path, []byte(strings.Replace(string(data), `"event_schema_version":9`, `"event_schema_version":99`, 1)), 0o600)
+	os.WriteFile(path, []byte(strings.Replace(string(data), fmt.Sprintf(`"event_schema_version":%d`, events.SchemaVersion), `"event_schema_version":99`, 1)), 0o600)
 	if _, err := s.Read(runA); err == nil {
 		t.Fatal("an event from a future schema was accepted")
 	}
 }
 
 func TestEmptyOrHeaderOnlyLogIsCorruptNotAnInterruptedRun(t *testing.T) {
-	for name, content := range map[string]string{"empty": "", "torn first line": `{"event_schema_version":9,"type":"run_st`} {
+	for name, content := range map[string]string{"empty": "", "torn first line": fmt.Sprintf(`{"event_schema_version":%d,"type":"run_st`, events.SchemaVersion)} {
 		t.Run(name, func(t *testing.T) {
 			s := Store{Dir: t.TempDir()}
 			dir := filepath.Join(s.Dir, runA)
@@ -285,5 +323,53 @@ func TestListReportsUnreadableRunsAsCorruptWithTheReason(t *testing.T) {
 	list, err := s.List()
 	if err != nil || len(list) != 1 || list[0].Status != StatusCorrupt || list[0].Error == "" || list[0].RunID != runA {
 		t.Fatalf("%v %+v", err, list)
+	}
+}
+
+// Workspace isolation facts (event schema 10, F3.1) are lifecycle-grade: they
+// round trip through the JSONL store unchanged and are fsynced like other
+// non-progress facts.
+func TestWorkspaceFactsRoundTripAndAreSynced(t *testing.T) {
+	const sha = "0123456789abcdef0123456789abcdef01234567"
+	const unit = "refs/agentplane/" + runA + "/units/worker-0123456789abcdef"
+	const tip = "refs/agentplane/" + runA + "/integrated"
+	now := time.Date(2026, 11, 16, 9, 0, 0, 0, time.UTC)
+	node := func(e events.Event) events.Event { e.NodeID, e.NodeRunID = "worker", "nr"; return e }
+	attempt := func(e events.Event) events.Event { e = node(e); e.AttemptID = "att"; return e }
+	in := []events.Event{
+		started(runA, now),
+		node(ev(runA, 2, events.WorkspacePrepared, events.WorkspacePreparedPayload{BaseSHA: sha, Mode: events.WorkspaceModeWorktree, Path: "/w", SourceRoot: "/s"}, now)),
+		attempt(ev(runA, 3, events.WorkspaceIntegrated, events.WorkspaceIntegratedPayload{UnitRef: unit, UnitCommit: sha, IntegratedRef: tip, IntegratedCommit: sha, ChangedPaths: 2}, now)),
+		attempt(ev(runA, 4, events.WorkspaceConflict, events.WorkspaceConflictPayload{UnitRef: unit, UnitCommit: sha, TipCommit: sha, Paths: []string{"a.txt"}}, now)),
+		node(ev(runA, 5, events.WorkspaceReleased, events.WorkspaceReleasedPayload{Action: events.WorkspaceRemoved, Reason: events.ReleaseIntegrated, Path: "/w"}, now)),
+		ev(runA, 6, events.SourceWorkspaceChanged, events.SourceWorkspaceChangedPayload{Paths: []string{}, Indeterminate: true}, now),
+		finished(runA, 7, "succeeded", now),
+	}
+	s := Store{Dir: t.TempDir()}
+	write(t, s, runA, in...)
+	rec, err := s.Read(runA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.Events) != len(in) {
+		t.Fatalf("read %d events, wrote %d", len(rec.Events), len(in))
+	}
+	for i := range in {
+		a, _ := json.Marshal(in[i])
+		b, _ := json.Marshal(rec.Events[i])
+		if string(a) != string(b) {
+			t.Fatalf("event %d changed:\n%s\n%s", i, a, b)
+		}
+	}
+
+	f := &recordingFile{}
+	w := &Writer{file: f}
+	for _, e := range in[:3] {
+		if err := w.Append(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := strings.Join(f.ops, ","); got != "write,sync,write,sync,write,sync" {
+		t.Fatalf("workspace facts must be fsynced like other lifecycle facts: %s", got)
 	}
 }

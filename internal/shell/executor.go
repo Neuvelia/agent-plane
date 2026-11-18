@@ -17,7 +17,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
+	"agentplane/internal/fields"
 )
 
 // Executor satisfies runtime.Executor without adding process details to the
@@ -187,21 +188,9 @@ func (Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node grap
 	if configErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
 	}
-	names := make([]string, 0, len(node.Outputs))
-	for name := range node.Outputs {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	for _, name := range names {
-		switch name {
-		case "stdout", "stderr", "exit_code":
-		case "json":
-			if !cfg.stdoutJSON {
-				return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: errors.New("json output requires stdout_json: true")}
-			}
-		default:
-			return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: fmt.Errorf("unsupported shell output %q", name)}
-		}
+	names, outputErr := checkOutputs(node, cfg)
+	if outputErr != nil {
+		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: outputErr}
 	}
 	result, err := execute(ctx, nodeID, node, inputs, observe, attempt)
 	if err != nil {
@@ -226,6 +215,28 @@ func (Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node grap
 		}
 	}
 	return outputs, nil
+}
+
+// checkOutputs returns the declared output names, sorted, or the first one a
+// Shell node cannot produce.
+func checkOutputs(node graph.NodeDefinition, cfg config) ([]string, error) {
+	names := make([]string, 0, len(node.Outputs))
+	for name := range node.Outputs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		switch name {
+		case "stdout", "stderr", "exit_code":
+		case "json":
+			if !cfg.stdoutJSON {
+				return nil, errors.New("json output requires stdout_json: true")
+			}
+		default:
+			return nil, fmt.Errorf("unsupported shell output %q", name)
+		}
+	}
+	return names, nil
 }
 
 const maxLogChunk = 16 * 1024
@@ -262,10 +273,9 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
+	allowed := fields.AllowedKeys(ConfigFields(), node.Config)
 	for _, key := range keys {
-		switch key {
-		case "command", "args", "cwd", "env_allowlist", "env", "input_env", "stdout_json":
-		default:
+		if !allowed[key] {
 			return config{}, fmt.Errorf("unknown shell config field %q", key)
 		}
 	}

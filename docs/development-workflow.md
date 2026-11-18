@@ -97,6 +97,13 @@ The implementer should:
 
 `make check` is the minimum repository gate.
 
+`make verify-changes` prints a read-only JSON inventory of local staged,
+unstaged and non-ignored untracked paths. Each path has sorted `sources`, and
+the document has `checks_executed: false`. A successful exit means the
+inventory was collected; it does not mean tests were selected, run or passed.
+This command is a foundation for later selective verification and does not
+replace `make check`.
+
 For changes under `desktop/`, also run `npm run check` there. CI reports the
 Go `make check`/build, full `go test -race ./...` and desktop `npm run check`
 as separate jobs on pushes and pull requests. For concurrency changes, run
@@ -105,6 +112,53 @@ real Electron e2e are separate checks; use `desktop/AGENTS.md` to choose them
 for the affected behavior.
 
 A green check is necessary, not sufficient. Acceptance criteria still need human and reviewer inspection.
+
+## CI matrix
+
+`.github/workflows/ci.yml` runs `scripts/check.sh` (the body of `make check`)
+on every push and pull request, on three runners: `linux-x64`
+(`ubuntu-latest`), `macos-arm64` (`macos-latest`) and `windows-x64`
+(`windows-latest`). Linux and macOS are required and also run `make build`.
+Windows is reported but non-blocking (`continue-on-error`, 20 minute cap)
+because main does not pass there yet; the job checks out with LF line endings
+so `gofmt -l` means the same on every OS. Remove `experimental` for Windows once
+it is green. The desktop shell stays outside this gate (`make desktop-check`).
+
+Two desktop jobs run beside it. `desktop` runs `npm ci --ignore-scripts` and
+`npm run check` (typecheck, reducer tests, build, Storybook build, bundle scan).
+`desktop-e2e` first runs `npm ci` and installs the Playwright Chromium system
+dependencies (which also provide xvfb), then `make desktop-e2e` (real Electron
+against `bin/agentplane` under `xvfb-run`) and `make desktop-stories`
+(Storybook smoke in Playwright Chromium). Both pin Node 24 and
+use `npm ci`; `desktop-e2e` caches the npm cache, `~/.cache/electron` and
+`~/.cache/ms-playwright`, and uploads `desktop/e2e-shots` as the
+`desktop-e2e-screenshots` artifact on failure. They have no path filter, so a
+sidecar or graph change is also exercised, and they are not required checks:
+Go-only work does not wait on them unless branch protection says otherwise. If
+the e2e flakes, capture a Playwright trace rather than retrying silently.
+
+The Go tests compile on every OS. A test that needs something Windows lacks
+skips with a reason, using the test-only `internal/testenv` guards:
+`RequireExecutable` for absolute Unix tool paths (`/usr/bin/git`, `/bin/sh`,
+...), `RequireDarwinOrLinux` for components that reject other platforms by
+design, and `RequireUnixPermissions` for permission-bit assertions. On Linux
+and macOS nothing is skipped. Skips on Windows mark product work that waits
+for an owner decision on native Windows support:
+
+- Production code resolves Git from `PATH` (`gitlocate.ResolveGit`), but test helpers still start
+  `/usr/bin/git`, so git-evidence and changed-files tests skip.
+- The Codex adapter accepts only Darwin and Linux
+  (`internal/agent/codex/adapter.go:75`).
+- The command Gate requires `/usr/bin/diff` and `/dev/fd/3`
+  (`internal/gate/config.go:62`, `internal/gate/command.go:63,90`).
+- Cancelling a shell child that already exited fails with "TerminateProcess:
+  Access is denied", which `internal/shell/executor.go` (around line 136)
+  reports as an exit failure instead of cancellation.
+- Shell-node fixtures and `.agents/graphs/demo-vertical.yaml` start
+  `/usr/bin/printf`, `/usr/bin/printenv` and `/bin/sh`.
+
+Still failing on Windows: `internal/api/docs_test.go:407,448` assert Unix file
+modes after a save (`-rw-rw-rw-` on Windows).
 
 ## Review session
 

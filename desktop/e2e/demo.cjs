@@ -26,6 +26,17 @@ async function launch() {
   page.external = []
   page.on('request', (r) => { if (!/^(file|data|blob):/.test(r.url())) page.external.push(r.url()) })
   await page.setViewportSize({ width: 1440, height: 900 })
+  // Under xvfb without a window manager nothing focuses the window, and key events
+  // are dropped until it has focus: wait for the UI, focus the window, then wait for proof.
+  await page.waitForSelector('.skip-link', { state: 'attached' })
+  await app.evaluate(({ BrowserWindow }) => {
+    const win = BrowserWindow.getAllWindows()[0]
+    win.show()
+    win.focus()
+    win.webContents.focus()
+  })
+  await page.bringToFront()
+  await page.waitForFunction(() => document.hasFocus(), null, { timeout: 15000 })
   return { app, page }
 }
 const shot = async (page, name) => shots && (fs.mkdirSync(shots, { recursive: true }), page.screenshot({ path: path.join(shots, name + '.png') }))
@@ -218,7 +229,7 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-close"]')
     // A file with anchors opens with a read-only canvas and an editable YAML view.
     const anchored = path.join(graphDir, 'anchors.yaml')
-    fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'graph', 'edit', 'testdata', 'hostile.yaml'), anchored)
+    fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'adapter', 'yamlgraph', 'edit', 'testdata', 'hostile.yaml'), anchored)
     await stubOpen(anchored)
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="canvas-readonly"]')
@@ -415,6 +426,177 @@ async function startDemo(page) {
     await page.keyboard.press('Enter')
     await page.waitForFunction(() => ['selected-heading', 'graph-heading'].includes(document.activeElement?.getAttribute('data-testid') || ''))
     await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="nav-dashboard"]')
+
+    // F2.2: the node inspector, keyboard only. Every change is an operation on the file.
+    const inspected = path.join(graphDir, 'inspect.yaml')
+    fs.writeFileSync(inspected, 'schema_version: 0\nid: inspect\ninputs: {}\nnodes:\n  # the producer\n  build:\n    type: shell\n    config:\n      command: /usr/bin/true\n      retries: {max: 2, on: [timeout]}\n    outputs:\n      stdout: {type: string}\nedges: []\noutputs: {}\n')
+    await stubOpen(inspected)
+    await page.click('[data-testid="nav-editor"]')
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="node-build"]')
+    await key('list-node-build')
+    await page.waitForSelector('[data-testid="inspector-node"]')
+    const yamlText = () => page.locator('[data-testid="yaml-content"]').textContent()
+    const waitYaml = (s) => page.waitForFunction((x) => document.querySelector('[data-testid="yaml-content"]')?.textContent?.includes(x), s)
+    const commandInput = '[data-testid="field-shell.config.command"] input'
+    // Change the command: typing alone sends nothing, Enter commits one operation.
+    await page.focus(commandInput)
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.type('/usr/bin/printf')
+    assert.ok(!(await yamlText()).includes('/usr/bin/printf'), 'typing alone does not edit the file')
+    await page.keyboard.press('Enter')
+    await waitYaml('command: /usr/bin/printf')
+    // Add an argument through the list editor.
+    await page.focus('[data-testid="list-args-add"]')
+    await page.keyboard.type('{"ok":true}')
+    await page.keyboard.press('Enter')
+    await waitYaml('args:')
+    // Toggle stdout_json with Space, then declare the outputs it allows.
+    await page.focus('[data-testid="field-shell.config.stdout_json"] input[type="checkbox"]')
+    await page.keyboard.press('Space')
+    await waitYaml('stdout_json: true')
+    await page.focus('[data-testid="add-port-outputs"]')
+    await page.selectOption('[data-testid="add-port-outputs"]', 'json')
+    await page.waitForSelector('[data-testid="port-outputs-json"]')
+    await page.selectOption('[data-testid="add-port-outputs"]', 'stderr')
+    await page.waitForSelector('[data-testid="port-outputs-stderr"]')
+    // Enable a loop: the starter binds the json output to a json_predicate Gate.
+    await key('loop-enable')
+    await page.waitForSelector('[data-testid="loop-on"]')
+    await page.keyboard.press(`${mod}+s`)
+    await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    const inspectedText = fs.readFileSync(inspected, 'utf8')
+    for (const want of ['command: /usr/bin/printf', 'stdout_json: true', 'stderr:', 'json:', 'kind: json_predicate', 'candidate.outputs.json', 'retries: {max: 2, on: [timeout]}', '# the producer']) {
+      assert.ok(inspectedText.includes(want), `${want} in\n${inspectedText}`)
+    }
+    // The saved file is accepted by the CLI, apart from the Advanced key the Shell executor rejects.
+    const validated = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', inspected, '--json'], { encoding: 'utf8' }).stdout)
+    assert.deepEqual(validated.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message.includes('retries')), [true], JSON.stringify(validated.diagnostics))
+    // The Advanced section shows the unknown key as it is in the file; removing it makes the graph valid.
+    assert.match(await page.textContent('[data-testid="advanced-entry-retries"]'), /\{max: 2, on: \[timeout\]\}/)
+    await key('advanced-remove-retries')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="advanced-entry-retries"]'))
+    await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
+    // An invalid value is saved as typed, its diagnostic is shown in the inspector, and Run is disabled.
+    await page.focus(commandInput)
+    await page.keyboard.press(`${mod}+a`)
+    await page.keyboard.press('Backspace')
+    await page.keyboard.press('Enter')
+    await waitYaml('command: ""')
+    await page.waitForSelector('[data-testid="section-execution"] [data-testid="inspector-diagnostics"]')
+    assert.match(await page.textContent('[data-testid="inspector-status"]'), /1 error/)
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    await page.keyboard.press(`${mod}+s`)
+    await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    assert.ok(fs.readFileSync(inspected, 'utf8').includes('command: ""'), 'the invalid value is in the file, not dropped')
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    await shot(page, '10-inspector')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="nav-dashboard"]')
+
+    // F2.2: every gate kind the inspector offers is configured through the inspector, on a loop and on a standalone Gate,
+    // and the saved file is accepted by `graph validate`. The kinds are read from the kind selector, not listed here.
+    const cli = path.join(__dirname, '..', '..', 'bin', 'agentplane')
+    const validateErrors = (file) => JSON.parse(require('node:child_process').spawnSync(cli, ['graph', 'validate', file, '--json'], { encoding: 'utf8' }).stdout).diagnostics.filter((d) => d.severity === 'error')
+    const producer = 'schema_version: 0\nid: kinds\ninputs: {}\nnodes:\n  build:\n    type: shell\n    config: {command: /usr/bin/true, stdout_json: true}\n    outputs:\n      stdout: {type: string}\n      stderr: {type: string}\n      json: {type: json}\n'
+    const standalone = `${producer}  chk:\n    type: gate\n    inputs:\n      s1: {type: string, required: true}\n      s2: {type: string, required: true}\n      j: {type: json, required: true}\nedges:\n  - {from: build.outputs.stdout, to: chk.inputs.s1}\n  - {from: build.outputs.stderr, to: chk.inputs.s2}\n  - {from: build.outputs.json, to: chk.inputs.j}\noutputs: {}\n`
+    const invalid = () => page.evaluate(() => /error/i.test(document.querySelector('[data-testid="inspector-status"]')?.textContent || ''))
+    // Fills required fields that are still empty, in order, with the control the inspector rendered for each, until the node shows no error.
+    const fillMissing = async (scope) => {
+      // A locked value (the command Gate's /usr/bin/diff) is set with the button the inspector offers for it.
+      for (const use = page.locator(`${scope} [data-field-key]:has(input[readonly]) button`); await use.count(); ) {
+        await use.first().click()
+        await page.waitForFunction((x) => !document.querySelector(x), `${scope} [data-field-key]:has(input[readonly]) button`)
+      }
+      for (const done = new Set(); await invalid(); ) {
+        const k = await page.evaluate(([sc, skip]) => [...document.querySelectorAll(`${sc} [data-field-key]`)].find((f) => {
+          const key = f.getAttribute('data-field-key')
+          const control = f.querySelector('select, input:not([readonly])')
+          const empty = f.querySelector('.ins-list') ? !!f.querySelector('.ins-list > p.mu') : control?.value === ''
+          return f.querySelector('.ins-req') && empty && !skip.includes(key)
+        })?.getAttribute('data-field-key'), [scope, [...done]])
+        if (!k) return
+        done.add(k)
+        const before = await yamlText()
+        const field = `${scope} [data-field-key="${k}"]`
+        const adder = page.locator(`${field} [data-testid="list-${k}-add"]`)
+        if (await adder.count()) {
+          if ((await adder.evaluate((e) => e.tagName)) === 'SELECT') await adder.selectOption({ index: 1 })
+          else (await adder.focus(), await page.keyboard.type(/path/.test(k) ? 'src' : 'ok'), await page.keyboard.press('Enter'))
+        } else if (await page.locator(`${field} select`).count()) {
+          const taken = await page.evaluate((sc) => [...document.querySelectorAll(`${sc} select`)].map((x) => x.value), scope)
+          const option = await page.locator(`${field} select option`).evaluateAll((os, t) => os.map((o) => o.value).find((v) => v && !t.includes(v)), taken)
+          await page.selectOption(`${field} select`, option)
+        } else {
+          await page.focus(`${field} input`)
+          await page.keyboard.type(/cwd/.test(k) ? '/tmp' : 'x')
+          await page.keyboard.press('Enter')
+        }
+        // The next change is built on the file this one wrote, so wait for it to land.
+        await page.waitForFunction((t) => document.querySelector('[data-testid="yaml-content"]')?.textContent !== t, before)
+      }
+    }
+    // The selector shows the file's value, so it reads the chosen kind only once the engine has analysed the change.
+    const chooseKind = async (scope, kind) => {
+      await page.selectOption(`${scope} [data-field-key="kind"] select`, kind)
+      await page.waitForFunction(([sc, k]) => document.querySelector(`${sc} [data-field-key="kind"] select`)?.value === k, [scope, kind])
+      // The engine drops the old kind's keys with the kind change: nothing is left under Advanced.
+      assert.equal(await page.locator('[data-testid^="advanced-entry-"]').count(), 0, `${kind}: keys of the previous kind were left behind`)
+    }
+    const saveAndValidate = async (file, what) => {
+      await page.keyboard.press(`${mod}+s`)
+      await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+      assert.deepEqual(validateErrors(file), [], `${what} must validate:\n${fs.readFileSync(file, 'utf8')}`)
+    }
+    const openKinds = async (file, text, node) => {
+      fs.writeFileSync(file, text)
+      await stubOpen(file)
+      await key('editor-open')
+      await page.waitForSelector(`[data-testid="node-${node}"]`)
+      await key(`list-node-${node}`)
+      await page.waitForSelector('[data-testid="inspector-node"]')
+    }
+    await page.click('[data-testid="nav-editor"]')
+    let loopKinds = []
+    for (let i = 0; i === 0 || i < loopKinds.length; i++) {
+      const file = path.join(graphDir, `kinds-loop-${i}.yaml`)
+      await openKinds(file, `${producer}edges: []\noutputs: {}\n`, 'build')
+      await key('loop-enable')
+      await page.waitForSelector('[data-testid="loop-on"]')
+      const scope = '[data-testid="section-loop"]'
+      loopKinds = await page.locator(`${scope} [data-field-key="kind"] option`).evaluateAll((os) => os.map((o) => o.value).filter(Boolean))
+      assert.ok(loopKinds.length >= 3, `the loop offers every kind: ${loopKinds}`)
+      // Two string Gate inputs fed by the producer, beside the starter's json input, so any kind can find the inputs it takes.
+      for (const [name, from] of [['s1', 'stdout'], ['s2', 'stderr']]) {
+        await page.focus('[data-testid="loop-on"] form input')
+        await page.keyboard.type(name)
+        await page.selectOption('[data-testid="loop-on"] form select', 'string')
+        await page.keyboard.press('Enter')
+        await page.waitForSelector(`[data-testid="loop-on"] li:has-text("${name}")`)
+        await page.selectOption('[data-testid="binding-from"]', `candidate.outputs.${from}`)
+        await page.selectOption('[data-testid="binding-to"]', `gate.inputs.${name}`)
+        await page.waitForFunction((b) => document.querySelector('[data-testid="loop-bindings"]')?.textContent?.includes(b), `gate.inputs.${name}`)
+      }
+      await chooseKind(scope, loopKinds[i])
+      await fillMissing(scope)
+      await saveAndValidate(file, `a loop with a ${loopKinds[i]} Gate`)
+      assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${loopKinds[i]}`))
+      await page.click('[data-testid="editor-close"]')
+    }
+    let gateKinds = []
+    for (let i = 0; i === 0 || i < gateKinds.length; i++) {
+      const file = path.join(graphDir, `kinds-gate-${i}.yaml`)
+      await openKinds(file, standalone, 'chk')
+      const scope = '[data-testid="section-execution"]'
+      gateKinds = await page.locator(`${scope} [data-field-key="kind"] option`).evaluateAll((os) => os.map((o) => o.value).filter(Boolean))
+      assert.ok(gateKinds.length >= 3, `the standalone Gate offers every kind: ${gateKinds}`)
+      await chooseKind(scope, gateKinds[i])
+      await fillMissing(scope)
+      await saveAndValidate(file, `a standalone ${gateKinds[i]} Gate`)
+      assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${gateKinds[i]}`))
+      await page.click('[data-testid="editor-close"]')
+    }
     await page.click('[data-testid="nav-dashboard"]')
 
     // R0 shell: deferred surfaces are inert, language switches without restart.

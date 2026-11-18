@@ -1,0 +1,550 @@
+package events
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// SchemaVersion is the event schema new events are stamped with. Readers
+// accept every earlier schema with its historical shape.
+const SchemaVersion = 11
+
+type RunID string
+type NodeRunID string
+
+// AttemptID identifies one scheduler-owned produce/check cycle.
+type AttemptID string
+
+type Type string
+
+const (
+	NodeEvidence   Type = "node_evidence"
+	RunStarted     Type = "run_started"
+	NodeReady      Type = "node_ready"
+	NodeStarted    Type = "node_started"
+	LogChunk       Type = "log_chunk"
+	NodeFinished   Type = "node_finished"
+	NodeTerminated Type = "node_terminated"
+	RunFinished    Type = "run_finished"
+)
+
+type Stream string
+
+const (
+	Stdout Stream = "stdout"
+	Stderr Stream = "stderr"
+)
+
+// Payload is implemented only by the event payloads defined in this package.
+type Payload interface{ eventPayload() }
+
+type RunStartedPayload struct {
+	NodeCount int `json:"node_count"`
+}
+type ChangedFile struct {
+	Path       string `json:"path"`
+	Provenance string `json:"provenance"`
+}
+type NodeEvidencePayload struct {
+	AdapterID      string        `json:"adapter_id"`
+	AdapterVersion string        `json:"adapter_version"`
+	ChangedFiles   []ChangedFile `json:"changed_files"`
+}
+
+func (NodeEvidencePayload) eventPayload() {}
+
+type NodeReadyPayload struct{}
+type NodeStartedPayload struct{}
+type LogChunkPayload struct {
+	Stream Stream `json:"stream"`
+	Data   []byte `json:"data"` // JSON represents bytes as base64.
+}
+type NodeFinishedPayload struct {
+	Status          string   `json:"status"`
+	FailureKind     string   `json:"failure_kind,omitempty"`
+	DiagnosticCodes []string `json:"diagnostic_codes,omitempty"`
+	DurationMS      *int64   `json:"duration_ms,omitempty"`
+}
+
+// NodeTerminated records a terminal transition that never entered running.
+type NodeTerminatedPayload struct {
+	Status          string   `json:"status"`
+	FailureKind     string   `json:"failure_kind,omitempty"`
+	DiagnosticCodes []string `json:"diagnostic_codes,omitempty"`
+}
+type NodeCounts struct {
+	Succeeded int `json:"succeeded"`
+	Failed    int `json:"failed"`
+	Skipped   int `json:"skipped"`
+	Cancelled int `json:"cancelled"`
+}
+type RunFinishedPayload struct {
+	Status      string     `json:"status"`
+	DurationMS  int64      `json:"duration_ms"`
+	NodeCounts  NodeCounts `json:"node_counts"`
+	FailureKind string     `json:"failure_kind,omitempty"`
+}
+
+func (RunStartedPayload) eventPayload()     {}
+func (NodeReadyPayload) eventPayload()      {}
+func (NodeStartedPayload) eventPayload()    {}
+func (LogChunkPayload) eventPayload()       {}
+func (NodeFinishedPayload) eventPayload()   {}
+func (NodeTerminatedPayload) eventPayload() {}
+func (RunFinishedPayload) eventPayload()    {}
+
+// Event is a versioned, append-oriented fact. (run_id, sequence) is its ID.
+type Event struct {
+	SchemaVersion int       `json:"event_schema_version"`
+	Type          Type      `json:"type"`
+	Timestamp     time.Time `json:"timestamp"`
+	Sequence      uint64    `json:"sequence"`
+	RunID         RunID     `json:"run_id"`
+	GraphID       string    `json:"graph_id"`
+	GraphVersion  string    `json:"graph_version"`
+	NodeID        string    `json:"node_id,omitempty"`
+	NodeRunID     NodeRunID `json:"node_run_id,omitempty"`
+	AttemptID     AttemptID `json:"attempt_id,omitempty"`
+	Payload       Payload   `json:"payload"`
+}
+
+// Validate checks the event envelope before it becomes a serialized fact.
+func (e Event) Validate() error {
+	if e.SchemaVersion < 0 || e.SchemaVersion > SchemaVersion {
+		return fmt.Errorf("unsupported event schema version %d", e.SchemaVersion)
+	}
+	if e.SchemaVersion > 0 && e.SchemaVersion < 3 && (IsNormalized(e.Type) || e.Type == ProgressOmitted) {
+		return errors.New("progress requires event schema 3")
+	}
+	if e.SchemaVersion == 1 && e.Type == NodeEvidence {
+		return errors.New("node_evidence requires event schema 2")
+	}
+	if e.SchemaVersion > 0 && e.SchemaVersion < 4 && e.Type == GateCheck {
+		return errors.New("gate_check requires event schema 4")
+	}
+	var payloadType Type
+	switch p := e.Payload.(type) {
+	case ValueRecordedPayload:
+		payloadType = ValueRecorded
+		if err := validateValueRecorded(e, p); err != nil {
+			return err
+		}
+	case ReturnEnvelopePayload:
+		payloadType = ReturnEnvelope
+		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
+			return errors.New("return envelope requires schema 7")
+		}
+		if len(p.Evidence) > 0 && p.Evidence[0].Kind == EvidenceKind(CheckChangedFilesScope) && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
+			return errors.New("changed-files return envelope requires schema 8")
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+		if p.SourceRunID != e.RunID || p.SourceNodeID != e.NodeID || p.SourceNodeRunID != e.NodeRunID || p.AttemptID != e.AttemptID || p.SourceGraphVersion != e.GraphVersion {
+			return errors.New("return envelope source does not match event")
+		}
+	case ApprovalRequestedPayload:
+		payloadType = ApprovalRequested
+		if err := validateApproval(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case ApprovalDecidedPayload:
+		payloadType = ApprovalDecided
+		if err := validateApproval(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case DeclaredScopeConflictsPayload:
+		payloadType = DeclaredScopeConflicts
+		if e.SchemaVersion != 0 && e.SchemaVersion < 7 {
+			return errors.New("declared conflicts require schema 7")
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+
+	case WorkspacePreparedPayload:
+		payloadType = WorkspacePrepared
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceIntegratedPayload:
+		payloadType = WorkspaceIntegrated
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceConflictPayload:
+		payloadType = WorkspaceConflict
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case WorkspaceReleasedPayload:
+		payloadType = WorkspaceReleased
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case SourceWorkspaceChangedPayload:
+		payloadType = SourceWorkspaceChanged
+		if err := validateWorkspace(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case AttemptStartedPayload:
+		payloadType = AttemptStarted
+		if err := validateAttempt(e); err != nil {
+			return err
+		}
+	case AttemptInputPayload:
+		payloadType = AttemptInput
+		if err := validateAttempt(e); err != nil {
+			return err
+		}
+	case AttemptFinishedPayload:
+		payloadType = AttemptFinished
+		if err := validateAttempt(e); err != nil {
+			return err
+		}
+	case LegacyGateCheckPayload:
+		if e.SchemaVersion != 4 {
+			return errors.New("legacy gate_check requires schema 4")
+		}
+		payloadType = GateCheck
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case GateCheckPayload:
+		if e.SchemaVersion != 0 && (e.SchemaVersion < 5 || e.SchemaVersion > SchemaVersion) {
+			return errors.New("full check result requires schema 5")
+		}
+		if p.Kind == CheckChangedFilesScope && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
+			return errors.New("changed-files scope requires schema 8")
+		}
+		payloadType = GateCheck
+		if err := p.Validate(); err != nil {
+			return err
+		}
+	case TextDeltaPayload:
+		payloadType = TextDelta
+	case ToolCallPayload:
+		if e.Type == ToolCallStarted || e.Type == ToolCallFinished {
+			payloadType = e.Type
+		}
+	case CommandPayload:
+		if e.Type == CommandStarted || e.Type == CommandFinished {
+			payloadType = e.Type
+		}
+	case FileChangedPayload:
+		payloadType = FileChanged
+	case StatusPayload:
+		payloadType = Status
+	case ProgressOmittedPayload:
+		payloadType = ProgressOmitted
+	case NodeEvidencePayload:
+		payloadType = NodeEvidence
+	case RunStartedPayload:
+		payloadType = RunStarted
+	case NodeReadyPayload:
+		payloadType = NodeReady
+	case NodeStartedPayload:
+		payloadType = NodeStarted
+	case LogChunkPayload:
+		payloadType = LogChunk
+	case NodeFinishedPayload:
+		payloadType = NodeFinished
+	case NodeTerminatedPayload:
+		payloadType = NodeTerminated
+	case RunFinishedPayload:
+		payloadType = RunFinished
+	default:
+		return fmt.Errorf("event %q has no supported payload", e.Type)
+	}
+	if e.Type != payloadType {
+		return fmt.Errorf("event %q has payload for %q", e.Type, payloadType)
+	}
+	return validateProgress(e.Type, e.Payload)
+}
+
+func (e Event) MarshalJSON() ([]byte, error) {
+	if err := e.Validate(); err != nil {
+		return nil, err
+	}
+	type wire Event
+	return json.Marshal(wire(e))
+}
+
+func decodePayload(data json.RawMessage, target any) error {
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		return errors.New("event payload must be an object")
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode(target)
+}
+
+func (e *Event) UnmarshalJSON(data []byte) error {
+	var wire struct {
+		SchemaVersion int             `json:"event_schema_version"`
+		Type          Type            `json:"type"`
+		Timestamp     time.Time       `json:"timestamp"`
+		Sequence      uint64          `json:"sequence"`
+		RunID         RunID           `json:"run_id"`
+		GraphID       string          `json:"graph_id"`
+		GraphVersion  string          `json:"graph_version"`
+		NodeID        string          `json:"node_id"`
+		NodeRunID     NodeRunID       `json:"node_run_id"`
+		AttemptID     AttemptID       `json:"attempt_id"`
+		Payload       json.RawMessage `json:"payload"`
+	}
+	if err := json.Unmarshal(data, &wire); err != nil {
+		return err
+	}
+	if wire.SchemaVersion < 1 || wire.SchemaVersion > SchemaVersion {
+		return fmt.Errorf("unsupported event schema version %d", wire.SchemaVersion)
+	}
+	if len(wire.Payload) == 0 {
+		return errors.New("event payload is missing")
+	}
+	var payload Payload
+	if wire.SchemaVersion == 1 && wire.Type == NodeEvidence {
+		return errors.New("node_evidence requires event schema 2")
+	}
+	switch wire.Type {
+	case ValueRecorded:
+		payload = ValueRecordedPayload{}
+	case ReturnEnvelope:
+		payload = ReturnEnvelopePayload{}
+	case DeclaredScopeConflicts:
+		payload = DeclaredScopeConflictsPayload{}
+	case ApprovalRequested:
+		payload = ApprovalRequestedPayload{}
+	case ApprovalDecided:
+		payload = ApprovalDecidedPayload{}
+	case WorkspacePrepared:
+		payload = WorkspacePreparedPayload{}
+	case WorkspaceIntegrated:
+		payload = WorkspaceIntegratedPayload{}
+	case WorkspaceConflict:
+		payload = WorkspaceConflictPayload{}
+	case WorkspaceReleased:
+		payload = WorkspaceReleasedPayload{}
+	case SourceWorkspaceChanged:
+		payload = SourceWorkspaceChangedPayload{}
+	case AttemptStarted:
+		payload = AttemptStartedPayload{}
+	case AttemptInput:
+		payload = AttemptInputPayload{}
+	case AttemptFinished:
+		payload = AttemptFinishedPayload{}
+	case GateCheck:
+		if wire.SchemaVersion == 4 {
+			payload = LegacyGateCheckPayload{}
+		} else {
+			payload = GateCheckPayload{}
+		}
+	case TextDelta:
+		payload = TextDeltaPayload{}
+	case ToolCallStarted, ToolCallFinished:
+		payload = ToolCallPayload{}
+	case CommandStarted, CommandFinished:
+		payload = CommandPayload{}
+	case FileChanged:
+		payload = FileChangedPayload{}
+	case Status:
+		payload = StatusPayload{}
+	case ProgressOmitted:
+		payload = ProgressOmittedPayload{}
+	case NodeEvidence:
+		payload = NodeEvidencePayload{}
+	case RunStarted:
+		payload = RunStartedPayload{}
+	case NodeReady:
+		payload = NodeReadyPayload{}
+	case NodeStarted:
+		payload = NodeStartedPayload{}
+	case LogChunk:
+		payload = LogChunkPayload{}
+	case NodeFinished:
+		payload = NodeFinishedPayload{}
+	case NodeTerminated:
+		payload = NodeTerminatedPayload{}
+	case RunFinished:
+		payload = RunFinishedPayload{}
+	default:
+		return fmt.Errorf("unknown event type %q", wire.Type)
+	}
+	switch p := payload.(type) {
+	case ValueRecordedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ReturnEnvelopePayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case DeclaredScopeConflictsPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ApprovalRequestedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ApprovalDecidedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspacePreparedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceIntegratedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceConflictPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case WorkspaceReleasedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case SourceWorkspaceChangedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case AttemptStartedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case AttemptInputPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case AttemptFinishedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case LegacyGateCheckPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case GateCheckPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ProgressOmittedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case StatusPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case FileChangedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case CommandPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ToolCallPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case TextDeltaPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case NodeEvidencePayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case RunStartedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case NodeReadyPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case NodeStartedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case LogChunkPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case NodeFinishedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case NodeTerminatedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case RunFinishedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	}
+	decoded := Event{SchemaVersion: wire.SchemaVersion, Type: wire.Type, Timestamp: wire.Timestamp, Sequence: wire.Sequence, RunID: wire.RunID, GraphID: wire.GraphID, GraphVersion: wire.GraphVersion, NodeID: wire.NodeID, NodeRunID: wire.NodeRunID, AttemptID: wire.AttemptID, Payload: payload}
+	if err := decoded.Validate(); err != nil {
+		return err
+	}
+	*e = decoded
+	return nil
+}

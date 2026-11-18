@@ -10,12 +10,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/testenv"
 )
 
 func TestCLIChangedFilesScopeDenyUsesGitNotProviderOutput(t *testing.T) {
 	workspace := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
+		testenv.RequireExecutable(t, "/usr/bin/git")
 		c := exec.Command("/usr/bin/git", args...)
 		c.Dir = workspace
 		if out, err := c.CombinedOutput(); err != nil {

@@ -1,0 +1,87 @@
+## E_BINDING_TYPE_MISMATCH exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_BINDING_TYPE_MISMATCH","message":"edge binds \"a.outputs.o\" (string) to \"b.inputs.i\" (number)","graph_id":"g","location":{"edge_index":0,"path":"edges[0]"},"suggestion":"bind ports with the same declared type"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"o\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.o"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+
+## E_EDGE_SOURCE_NODE_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_SOURCE_NODE_NOT_FOUND","message":"reference \"ghost.outputs.o\" uses missing node \"ghost\"","graph_id":"g","location":{"edge_index":0,"path":"edges[0].from"},"suggestion":"declare the node or update the reference"}],"failure":null,"error":null}
+
+## E_EDGE_SOURCE_OUTPUT_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_SOURCE_OUTPUT_NOT_FOUND","message":"output \"nope\" does not exist on node \"a\"","graph_id":"g","location":{"node_id":"a","edge_index":0,"path":"edges[0].from"},"suggestion":"declare the output or update the reference"}],"failure":null,"error":null}
+
+## E_EDGE_SOURCE_REFERENCE_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_SOURCE_REFERENCE_INVALID","message":"\"nope\" is not a valid node output reference","graph_id":"g","location":{"edge_index":0,"path":"edges[0].from"},"suggestion":"use NODE.outputs.PORT"}],"failure":null,"error":null}
+
+## E_EDGE_TARGET_INPUT_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_TARGET_INPUT_NOT_FOUND","message":"input \"nope\" does not exist on node \"b\"","graph_id":"g","location":{"node_id":"b","edge_index":0,"path":"edges[0].to"},"suggestion":"declare the input or update the reference"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"o\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.o"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+
+## E_EDGE_TARGET_NODE_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_TARGET_NODE_NOT_FOUND","message":"reference \"ghost.inputs.i\" uses missing node \"ghost\"","graph_id":"g","location":{"edge_index":0,"path":"edges[0].to"},"suggestion":"declare the node or update the reference"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"o\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.o"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+
+## E_EDGE_TARGET_REFERENCE_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_TARGET_REFERENCE_INVALID","message":"\"nope\" is not a valid node input reference","graph_id":"g","location":{"edge_index":0,"path":"edges[0].to"},"suggestion":"use NODE.inputs.PORT"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"o\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.o"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+
+## E_GRAPH_CYCLE exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_CYCLE","message":"graph contains cycle: a -\u003e b -\u003e a","graph_id":"g","location":{"edge_index":1,"path":"edges[1]"},"suggestion":"remove a dependency from the cycle"}],"failure":null,"error":null}
+
+## E_GRAPH_FIELD_REQUIRED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_FIELD_REQUIRED","message":"graph is missing required \"edges\" collection","graph_id":"g","location":{"path":"edges"},"suggestion":"declare the collection, using an empty mapping or list when appropriate"}],"failure":null,"error":null}
+
+## E_GRAPH_ID_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"Bad_ID","diagnostics":[{"severity":"error","code":"E_GRAPH_ID_INVALID","message":"graph id \"Bad_ID\" is invalid","graph_id":"Bad_ID","location":{"path":"id"},"suggestion":"use lowercase letters, digits, hyphens, and underscores"}],"failure":null,"error":null}
+
+## E_GRAPH_ID_REQUIRED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","diagnostics":[{"severity":"error","code":"E_GRAPH_ID_REQUIRED","message":"graph id is required","location":{"path":"id"},"suggestion":"set a stable graph id"}],"failure":null,"error":null}
+
+## E_GRAPH_INPUT_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_INPUT_NOT_FOUND","message":"graph input \"ghost\" does not exist","graph_id":"g","location":{"graph_input_binding_index":0,"path":"graph_input_bindings[0].from"},"suggestion":"declare the graph input or update the binding"}],"failure":null,"error":null}
+
+## E_GRAPH_INPUT_REFERENCE_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_INPUT_REFERENCE_INVALID","message":"\"nope\" is not a valid graph input reference","graph_id":"g","location":{"graph_input_binding_index":0,"path":"graph_input_bindings[0].from"},"suggestion":"use inputs.INPUT"}],"failure":null,"error":null}
+
+## E_GRAPH_INPUT_TARGET_INPUT_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_INPUT_TARGET_INPUT_NOT_FOUND","message":"input \"nope\" does not exist on node \"b\"","graph_id":"g","location":{"node_id":"b","graph_input_binding_index":0,"path":"graph_input_bindings[0].to"},"suggestion":"declare the input or update the binding"}],"failure":null,"error":null}
+
+## E_GRAPH_INPUT_TARGET_NODE_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_INPUT_TARGET_NODE_NOT_FOUND","message":"node \"ghost\" does not exist","graph_id":"g","location":{"graph_input_binding_index":0,"path":"graph_input_bindings[0].to"},"suggestion":"declare the node or update the binding"}],"failure":null,"error":null}
+
+## E_GRAPH_INPUT_TARGET_REFERENCE_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_INPUT_TARGET_REFERENCE_INVALID","message":"\"nope\" is not a valid node input reference","graph_id":"g","location":{"graph_input_binding_index":0,"path":"graph_input_bindings[0].to"},"suggestion":"use NODE.inputs.PORT"}],"failure":null,"error":null}
+
+## E_GRAPH_OUTPUT_REFERENCE_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_OUTPUT_REFERENCE_INVALID","message":"\"nope\" is not a valid node output reference","graph_id":"g","location":{"path":"outputs.r.from"},"suggestion":"use NODE.outputs.PORT"}],"failure":null,"error":null}
+
+## E_GRAPH_OUTPUT_SOURCE_NODE_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_OUTPUT_SOURCE_NODE_NOT_FOUND","message":"graph output \"r\" references missing node \"ghost\"","graph_id":"g","location":{"path":"outputs.r.from"},"suggestion":"declare the node or update the graph output"}],"failure":null,"error":null}
+
+## E_GRAPH_OUTPUT_SOURCE_OUTPUT_NOT_FOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_OUTPUT_SOURCE_OUTPUT_NOT_FOUND","message":"graph output \"r\" references missing output \"nope\" on node \"a\"","graph_id":"g","location":{"node_id":"a","path":"outputs.r.from"},"suggestion":"declare the node output or update the graph output"}],"failure":null,"error":null}
+
+## E_HUMAN_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_HUMAN_INVALID","message":"human node must declare exactly one output \"decision\" of type string","graph_id":"g","location":{"node_id":"h","path":"nodes.h"},"suggestion":"declare outputs: {decision: {type: string, required: true}}"}],"failure":null,"error":null}
+
+## E_IDENTIFIER_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_IDENTIFIER_INVALID","message":"node id \"Bad Node\" is invalid","graph_id":"g","location":{"node_id":"Bad Node","path":"nodes[\"Bad Node\"]"},"suggestion":"use lowercase letters, digits, hyphens, and underscores"}],"failure":null,"error":null}
+
+## E_INPUT_MULTIPLE_PROVIDERS exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_INPUT_MULTIPLE_PROVIDERS","message":"input \"i\" on node \"b\" has multiple providers","graph_id":"g","location":{"node_id":"b","edge_index":1,"path":"nodes.b.inputs.i"},"suggestion":"bind exactly one source to this input"}],"failure":null,"error":null}
+
+## E_LOOP_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_LOOP_INVALID","message":"loop requires a candidate output dependency","graph_id":"g","location":{"node_id":"a","path":"nodes.a.loop"},"suggestion":"declare an Agent or Shell loop with a bounded budget and explicit typed Gate bindings"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"predicate requires exactly one of expected or expected_json","graph_id":"g","location":{"node_id":"a","path":"nodes.a.loop.gate"},"suggestion":"correct the configuration of node \"a\""}],"failure":null,"error":null}
+
+## E_NODE_CONFIG_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"shell node \"a\": command must be a nonempty string","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config"},"suggestion":"correct the configuration of node \"a\""}],"failure":null,"error":null}
+
+## E_NODE_TYPE_REQUIRED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_NODE_TYPE_REQUIRED","message":"node \"a\" is missing required type","graph_id":"g","location":{"node_id":"a","path":"nodes.a.type"},"suggestion":"set the node type"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"x\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.x"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+
+## E_REQUIRED_INPUT_UNBOUND exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_REQUIRED_INPUT_UNBOUND","message":"required input \"i\" on node \"b\" has no valid binding","graph_id":"g","location":{"node_id":"b","path":"nodes.b.inputs.i"},"suggestion":"add one compatible edge or graph input binding"}],"failure":null,"error":null}
+
+## E_UNIT_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_UNIT_INVALID","message":"unit \"a\" must uniquely reference an existing loop Agent node","graph_id":"g","location":{"node_id":"a","path":"units[0]"},"suggestion":"use each loop Agent node ID at most once"}],"failure":null,"error":null}
+
+## E_VALUE_TYPE_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_VALUE_TYPE_INVALID","message":"value type \"banana\" is not supported","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.x.type"},"suggestion":"use string, number, boolean, json, or artifact_ref"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"x\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.x"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+
+## W_DECLARED_OUTPUT_UNUSED exit=0 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"valid","graph_id":"g","diagnostics":[{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"o\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.o"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
+

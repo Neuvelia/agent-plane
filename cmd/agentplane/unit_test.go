@@ -1,6 +1,7 @@
 package main
 
 import (
+	"agentplane/internal/adapter/yamlgraph"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,8 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
+	"agentplane/internal/testenv"
 )
 
 func TestCLIFakeCodexUnitsRetryOnlyRejectedCandidate(t *testing.T) {
@@ -23,6 +25,7 @@ func TestCLIFakeCodexUnitsRetryOnlyRejectedCandidate(t *testing.T) {
 				t.Fatal(e)
 			}
 			for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
+				testenv.RequireExecutable(t, "/usr/bin/git")
 				c := exec.Command("/usr/bin/git", args...)
 				c.Dir = root
 				if b, e := c.CombinedOutput(); e != nil {
@@ -73,7 +76,7 @@ printf '{"summary":"%s.candidate","artifacts":[]}' "$unit" >"$result"
 				d.Edges = append(d.Edges, graph.EdgeDefinition{From: graph.NodeOutputReference(id + ".outputs.summary"), To: graph.NodeInputReference("join.inputs." + id)})
 			}
 			d.Outputs["joined"] = graph.OutputDefinition{From: "join.outputs.stdout"}
-			encoded, e := graph.Marshal(d)
+			encoded, e := yamlgraph.Marshal(d)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -199,7 +202,7 @@ outputs: {}
 		t.Fatal(e)
 	}
 	var out, errout bytes.Buffer
-	code := runCommand(context.Background(), []string{"run", path, "--adapter", "codex", "--codex-bin", "/missing/codex", "--json"}, &out, &errout)
+	code := runCommand(context.Background(), []string{"run", path, "--adapter", "codex", "--codex-bin", filepath.Join(t.TempDir(), "missing", "codex"), "--json"}, &out, &errout)
 	if code != exitGraph || !strings.Contains(out.String(), `"code":"E_UNIT_SCOPE"`) || !strings.Contains(out.String(), `"status":"invalid"`) {
 		t.Fatal(code, out.String(), errout.String())
 	}

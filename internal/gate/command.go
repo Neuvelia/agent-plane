@@ -11,9 +11,9 @@ import (
 	"runtime"
 	"time"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
-	run "agentplane/internal/runtime"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
+	rt "agentplane/internal/runtime"
 )
 
 // openCompared rejects symlinks in every component before opening read-only.
@@ -58,7 +58,7 @@ func openCompared(cwd, relative string) (*os.File, error) {
 	}
 	return f, nil
 }
-func command(ctx context.Context, c config, in map[string]graph.Value, o run.ExecutionObservation) (events.GateCheckPayload, error) {
+func command(ctx context.Context, c config, in map[string]graph.Value, o rt.ExecutionObservation) (events.GateCheckPayload, error) {
 	var p events.GateCheckPayload
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return p, errors.New("read-only diff unsupported on this platform")
@@ -83,7 +83,7 @@ func command(ctx context.Context, c config, in map[string]graph.Value, o run.Exe
 	defer right.Close()
 	capture := o.NewCheckCapture
 	if capture == nil {
-		capture = run.NewCheckCapture
+		capture = rt.NewCheckCapture
 	}
 	stdout, stderr := capture(), capture()
 	// Only these fixed operands and descriptors reach the trusted OS operation.

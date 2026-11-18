@@ -12,7 +12,10 @@ document or event contract.
 | Live event replay and pending human decisions | `hub.go` |
 | Graph grants, open/edit/stat/save and file checks | `docs.go` |
 | Graph document response types | `docs_dto.go` |
+| Inspector data: node-type descriptors, Advanced entries, independence (F2.2) | `inspector.go`, `inspector_dto.go` |
+| Read-only capability report routes (ADR-0025) | `capabilities.go`; detection in `internal/capability` |
 | CLI composition of store, validators and executors | `cmd/agentplane/serve.go` |
+| Node-type catalogue from the validators' descriptors | `cmd/agentplane/catalogue.go` |
 | Renderer forwarding and sidecar token ownership | `desktop/electron/main.cjs`, `desktop/electron/allowlist.cjs` |
 | Native graph choice and recent-file grant registration | `desktop/electron/graphs.cjs` |
 
@@ -36,6 +39,12 @@ document or event contract.
   memory; other finished runs replay from the store. Preserve the distinction
   between a persistence failure and an ordinary run failure. Shutdown cancels
   active runs and admits no new runs.
+- Opt-in recorded values (`value_recorded`, ADR-0023) are ordinary events:
+  clients read them through `GET /runs/{id}/events`, live or from the store.
+  Do not add a second values route or side store. Recording and redaction
+  are fixed per server by `serve --record-values` and `--redact-env`; the
+  `serve` starter refuses a graph that holds a configured secret before a run
+  exists. Run summaries carry `graph_version` from the store.
 - Human decisions are scoped to both run ID and node-run ID. The first
   accepted decision wins; a repeat for that run returns 409 with the original
   decision, while a different run gets 404. Cancellation must not discard a
@@ -56,6 +65,11 @@ document or event contract.
   in-memory edit hash as the file's save precondition. Document validation
   composes graph rules with executor configuration checks when supplied;
   `graph.Validate` alone does not cover those configurations.
+- `Server.NodeTypes` is a composition seam like `ValidateDefinition`: this
+  package never imports executors or decides which Gate kinds a type offers.
+  The inspector DTOs copy descriptors field by field; keep them separate from
+  `internal/fields`. Advanced entries are read from the YAML tree and never
+  rewrite the document (F2.2 requirement 4).
 
 Read `docs/features/F2.5-live-map.md`, `docs/features/F2.9-run-store.md`,
 `docs/features/F2.10-human-node.md`, `docs/features/F2.1-graph-canvas.md`,
@@ -69,8 +83,12 @@ authentication mechanism.
 
 - Auth, routes, lifecycle, store/SSE and decisions: `server_test.go`.
 - Grants, edit/save conflicts, path safety, limits and DTOs: `docs_test.go`.
+- Inspector descriptors, Advanced entries and independence: `docs_inspector_test.go`;
+  the real catalogue: `cmd/agentplane/catalogue_test.go`.
 - CLI composition: `cmd/agentplane/serve_test.go`; CLI/API diagnostic parity:
   `cmd/agentplane/validation_test.go`.
+- Capability routes, single flight and body rules: `capabilities_test.go`;
+  detection itself: `internal/capability/capability_test.go`.
 - Renderer route exposure: `desktop/test/allowlist.test.ts`.
 
 SSE uses Electron main's separate `ap:subscribe` bridge in

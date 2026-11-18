@@ -1,12 +1,13 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"errors"
 	"fmt"
 	"unicode/utf8"
 
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/graph"
 )
 
 // runPreparation contains only values established before a run starts.
@@ -52,13 +53,17 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		}
 	}
 
+	if err := preflightValueRecording(options.RecordValues, redactions, redactionTemplate); err != nil {
+		return runPreparation{}, err
+	}
+
 	plan, validation := graph.CompileBindings(definition)
 	if !validation.Valid() {
-		return runPreparation{}, &PreflightError{Diagnostics: validation}
+		return runPreparation{}, &run.PreflightError{Diagnostics: validation}
 	}
 	inputValidation := plan.ValidateGraphInputs(inputs)
 	if !inputValidation.Valid() {
-		return runPreparation{}, &PreflightError{Diagnostics: inputValidation}
+		return runPreparation{}, &run.PreflightError{Diagnostics: inputValidation}
 	}
 	// Run inputs are a stable snapshot even if the caller reuses its map.
 	graphInputs := make(map[string]graph.Value, len(inputs))
@@ -89,12 +94,15 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 // initializeRun starts the event stream after preflight has accepted all
 // inputs and capabilities. Its setup order matches the former Run body.
 func initializeRun(ctx context.Context, definition *graph.Definition, options Options, prepared runPreparation) (*runMachine, map[string][]string, error) {
-	machine, err := newRunMachine(ctx, definition, options.LiveEvents, options.Persist)
+	machine, err := newRunMachine(ctx, definition, options)
 	if err != nil {
 		return nil, nil, err
 	}
 	machine.definition = definition
 	machine.decisions = options.Decisions
+	// Graph inputs are recorded directly after run_started, before any other fact.
+	machine.values = newValueRecorder(options.RecordValues, prepared.redactionTemplate)
+	machine.recordGraphInputs(prepared.graphInputs)
 	for _, id := range definition.Units {
 		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, prepared.scopes[id], prepared.scopeRedacted[id]); err != nil {
 			return nil, nil, err

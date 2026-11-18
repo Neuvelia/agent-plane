@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 func TestWatchDisplaysPartialLogBeforeNodeFinishes(t *testing.T) {
@@ -31,5 +34,36 @@ func TestWatchReplaysRetainedCancellationTailOnce(t *testing.T) {
 	}
 	if got := errOut.String(); strings.Count(got, "Run started:") != 1 || strings.Count(got, "Run cancelled") != 1 {
 		t.Fatalf("watch output = %q", got)
+	}
+}
+
+func TestAwaitWatchOutputReturnsWhenCancelledAfterRunFinished(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error)
+	returned := make(chan error, 1)
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		returned <- awaitWatchOutput(ctx, done, time.Millisecond)
+	}()
+	<-started
+	cancel()
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatalf("err=%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("awaitWatchOutput stayed blocked on an unresponsive renderer after cancellation")
+	}
+}
+
+func TestAwaitWatchOutputReturnsRenderError(t *testing.T) {
+	done := make(chan error, 1)
+	want := errors.New("terminal gone")
+	done <- want
+	if err := awaitWatchOutput(context.Background(), done, time.Millisecond); !errors.Is(err, want) {
+		t.Fatalf("err=%v", err)
 	}
 }

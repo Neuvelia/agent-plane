@@ -32,4 +32,8 @@ contextBridge.exposeInMainWorld('agentplane', {
   openRecentGraph: (id) => ipcRenderer.invoke('ap:openRecentGraph', id),
   touchRecent: (grant) => ipcRenderer.invoke('ap:touchRecent', grant),
   closeGraph: (grant) => ipcRenderer.invoke('ap:closeGraph', grant),
+  // "Record run values" (ADR-0023): a preference held by the main process that
+  // takes effect when the engine next starts. No environment values pass here.
+  recordingSettings: () => ipcRenderer.invoke('ap:recordingSettings'),
+  setRecordingSettings: (settings) => ipcRenderer.invoke('ap:setRecordingSettings', settings),
 })

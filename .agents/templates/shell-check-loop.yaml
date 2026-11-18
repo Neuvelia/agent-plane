@@ -1,0 +1,40 @@
+# Template: a shell node with a bounded correction loop. The embedded
+# json_predicate gate rejects attempt 1 and accepts attempt 2, so the run shows
+# one retry of only this node. Replace the script with your own check that
+# prints a JSON object. The command only prints text.
+schema_version: 0
+id: shell-check-loop
+name: Shell check with a bounded loop
+inputs: {}
+nodes:
+  check:
+    type: shell
+    config:
+      command: /bin/sh
+      args:
+        - -c
+        - 'if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then printf "{\"ready\":false}"; else printf "{\"ready\":true}"; fi'
+      stdout_json: true
+    outputs:
+      json: {type: json, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: check-ready
+          kind: json_predicate
+          input: candidate
+          field: [ready]
+          operator: eq
+          expected: true
+      bindings:
+        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+edges: []
+outputs:
+  result: {from: check.outputs.json}
+metadata:
+  layout:
+    nodes:
+      check: {x: 0, y: 0}

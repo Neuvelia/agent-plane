@@ -33,7 +33,7 @@ honest statement of limits.
   alpha artifacts are explicitly unsigned).
 - Auto-update. An updater is network egress that the user did not ask for.
 - Package managers (Homebrew tap, winget, apt/rpm repositories), Docker image.
-- Any other desktop shell. Electron is the decided shell (ADR-0026).
+- Any other desktop shell. Electron is the decided shell (ADR-0027).
 - Bundling Git or the Codex CLI. They stay external prerequisites.
 - Any cloud service, account, telemetry or crash reporting.
 - Windows artifacts, until the Windows gaps below are closed.
@@ -244,7 +244,7 @@ SHA-256, and the attestation reference, as its audit trail.
    run a secret scan.
 3. Resolved: bundle identifier `run.tarmind.desktop` (domain `tarmind.run`); app
    name Tarmind; binary `tarmind`.
-4. Resolved: Electron (ADR-0026).
+4. Resolved: Electron (ADR-0027).
 5. Should arm64 Linux be in the first release, or only macOS arm64 and Linux amd64?
 
 ## Out of scope for this iteration

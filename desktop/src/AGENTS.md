@@ -11,12 +11,14 @@ spec before changing a screen, API wrapper or event view. The sibling
 | --- | --- |
 | Bridge types and thin API calls | `types.ts`, `api.ts`; editor calls in `editor/api.ts` |
 | Event-derived node/run/approval detail | `reducer.ts` |
+| Attempt compare (F2.8a): pure model and view | `compare.ts`, `AttemptCompare.tsx`, `check.tsx` |
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
 | Runs, inspector, approvals and New run screens | `views.tsx`, `preflight.ts`, `GraphMap.tsx`, `NodePanel.tsx` |
 | Dashboard and event-derived insight | `dashboard.ts`, `dashboardView.tsx`, `insight.ts` |
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
+| Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
 | Story fixtures and bridge substitute | `screens.stories.tsx`, `storybook/bridge.tsx`, `storybook/fixtures.ts` |
 
 ## Preserve these contracts
@@ -69,7 +71,11 @@ as implemented merely because the full spec describes it.
 
 ## Choose regression tests
 
-- Event reduction, replay and stream loss: `desktop/test/reducer.test.ts`.
+- Event reduction, replay and stream loss: `desktop/test/reducer.test.ts`;
+  schema-10 `value_recorded` streams leave run views unchanged:
+  `desktop/test/schema10.test.ts`.
+- Settings recording switch: `desktop/test/recording.test.tsx`.
+- Attempt compare model and view: `desktop/test/compare.test.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.
 - Dashboard, timeline and bounded event detail: `desktop/test/dashboard.test.ts`,

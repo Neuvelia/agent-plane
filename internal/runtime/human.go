@@ -1,36 +1,21 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"errors"
 	"strings"
 	"unicode/utf8"
 
-	"agentplane/internal/events"
-	"agentplane/internal/graph"
+	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 )
-
-// ApprovalRequest is what a DecisionProvider shows to a person. Prompt and
-// Context are already redacted and bounded.
-type ApprovalRequest struct {
-	RunID     events.RunID
-	NodeID    string
-	NodeRunID events.NodeRunID
-	Prompt    string
-	Context   []events.ApprovalContext
-}
-
-// Decision is a human's answer. Comment is bounded by the event contract.
-type Decision struct {
-	Approve bool
-	Comment string
-}
 
 // DecisionProvider blocks until a human decides or ctx ends. The scheduler
 // calls it once per human node run, so a provider that serves several
 // channels (CLI, API) owns first-decision-wins and idempotency (ADR-0017).
 type DecisionProvider interface {
-	Decide(context.Context, ApprovalRequest) (Decision, error)
+	Decide(context.Context, run.ApprovalRequest) (run.Decision, error)
 }
 
 type rejectedError struct{}
@@ -57,7 +42,7 @@ func preflightHuman(d *graph.Definition, p DecisionProvider) error {
 	if !ok || p != nil {
 		return nil
 	}
-	return &PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{
+	return &run.PreflightError{Diagnostics: graph.ValidationResult{Diagnostics: []graph.Diagnostic{{
 		Severity: graph.SeverityError, Code: "E_HUMAN_NO_PROVIDER", GraphID: d.ID,
 		Location:   graph.DiagnosticLocation{NodeID: id, Path: "nodes." + id},
 		Message:    "graph contains a human node but no decision provider is configured",
@@ -110,7 +95,7 @@ func (m *runMachine) humanNode(ctx context.Context, id string, n graph.NodeDefin
 	}
 	nodeRunID := m.nodes[id].NodeRunID
 	m.appendEvent(events.Event{Type: events.ApprovalRequested, NodeID: id, NodeRunID: nodeRunID, Payload: events.ApprovalRequestedPayload{Prompt: prompt, Context: contextItems}})
-	decision, err := m.decisions.Decide(ctx, ApprovalRequest{RunID: m.result.RunID, NodeID: id, NodeRunID: nodeRunID, Prompt: prompt, Context: contextItems})
+	decision, err := m.decisions.Decide(ctx, run.ApprovalRequest{RunID: m.result.RunID, NodeID: id, NodeRunID: nodeRunID, Prompt: prompt, Context: contextItems})
 	if err != nil {
 		if ctx.Err() != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 			return done(nil, err)

@@ -3,7 +3,7 @@ package codex
 import (
 	"encoding/json"
 
-	"agentplane/internal/events"
+	"agentplane/internal/domain/events"
 )
 
 // normalize projects exact supported JSONL public fields. Unknown fields,

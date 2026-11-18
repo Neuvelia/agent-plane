@@ -9,15 +9,66 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    name: check (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One OS failing must not hide the others: each OS needs its own evidence.
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            os: ubuntu-latest
+            experimental: false
+            timeout: 30
+          - name: macos-arm64
+            os: macos-latest
+            experimental: false
+            timeout: 30
+          # Windows is not yet a supported target: main does not pass there
+          # (see docs/development-workflow.md, "CI matrix"). Its result is
+          # reported but does not block; drop `experimental` once it is green.
+          - name: windows-x64
+            os: windows-latest
+            experimental: true
+            # A hung Windows test otherwise runs to the 10 min go test limit.
+            timeout: 20
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: ${{ matrix.timeout }}
+    defaults:
+      run:
+        shell: bash
     steps:
+      # Windows runners check out with CRLF, which makes `gofmt -l` flag every
+      # Go file. Keep LF so formatting checks mean the same on all OSes.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - run: make check
-      - run: make build
+      # scripts/check.sh is the body of `make check`; invoking it directly
+      # avoids depending on GNU make being present on Windows runners.
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
+        if: runner.os != 'Windows'
+        run: make build
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.5.0
 
   race:
     runs-on: ubuntu-latest
@@ -46,3 +97,52 @@ jobs:
         working-directory: desktop
       - run: npm run check
         working-directory: desktop
+
+  # Real Electron + real sidecar under a virtual display, plus the Storybook
+  # smoke. Separate from `check`/`desktop` so Go-only work never waits on it;
+  # no path filter (the sidecar binary and graphs are inputs too) and it is not
+  # a required check unless the branch protection says so deliberately.
+  desktop-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+      - name: Cache Electron binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: electron-${{ runner.os }}-${{ hashFiles('desktop/package-lock.json') }}
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('desktop/package-lock.json') }}
+      # System libraries (and xvfb) first, so the Electron run below has them; the
+      # locked Playwright version comes from `npm ci`, never from a fresh npx download.
+      - name: Install desktop dependencies
+        run: npm ci --prefix desktop
+      - name: Install Chromium system dependencies
+        run: npx --prefix desktop playwright install --with-deps chromium
+      # `make desktop-*` run `npm ci` (never `npm install`) and pick xvfb-run on Linux.
+      - name: Electron e2e
+        run: make desktop-e2e E2E_SHOTS=e2e-shots
+      - name: Storybook smoke
+        run: make desktop-stories
+      - name: Upload e2e screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-e2e-screenshots
+          path: desktop/e2e-shots
+          if-no-files-found: ignore

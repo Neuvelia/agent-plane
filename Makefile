@@ -1,7 +1,7 @@
-.PHONY: fmt test vet check build clean desktop-check desktop-e2e desktop-stories
+.PHONY: fmt test vet check verify-changes lint metrics build clean desktop-check desktop-e2e desktop-stories
 
 fmt:
-	gofmt -w ./cmd ./internal
+	gofmt -w ./cmd ./internal ./scripts/verifychanges
 
 test:
 	go test ./...
@@ -11,6 +11,19 @@ vet:
 
 check:
 	./scripts/check.sh
+
+# Inventories staged, unstaged and untracked paths; does not run checks.
+verify-changes:
+	go run ./scripts/verifychanges
+
+# Needs golangci-lint v2 (development-only; not in go.mod). `make check` does not
+# require it. Findings on code that a change touches fail; legacy findings are
+# tolerated until stage 6 of the clean-architecture refactor plan.
+lint:
+	golangci-lint run ./cmd/... ./internal/...
+
+metrics:
+	./scripts/metrics.sh
 
 build:
 	mkdir -p bin
@@ -26,10 +39,12 @@ desktop-check: build
 # A virtual display is needed (and available) only on Linux; macOS and Windows
 # open a real window. Override with `make desktop-e2e XVFB=` to force none.
 XVFB ?= $(if $(shell command -v xvfb-run 2>/dev/null),xvfb-run -a,)
+# Directory (relative to desktop/) for e2e screenshots; empty saves none.
+E2E_SHOTS ?=
 
 # Drives the real Electron app against bin/agentplane under a virtual display.
 desktop-e2e: build
-	cd desktop && npm ci && npm run build && $(XVFB) node e2e/demo.cjs
+	cd desktop && npm ci && npm run build && $(XVFB) node e2e/demo.cjs $(E2E_SHOTS)
 
 # Opens every Storybook story in a real browser (EN and PL): a11y, no network.
 desktop-stories:

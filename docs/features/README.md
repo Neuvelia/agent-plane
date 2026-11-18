@@ -49,15 +49,25 @@ feature contract.
 | `F2.5a-desktop-redesign.md` | Implemented (R0-R3); presentation only, no ADR |
 | `F2.1-graph-canvas.md` | Implemented (E1, E2.1-E2.3); ADR-0020, ADR-0021, ADR-0022 (accepted) |
 | `F2.2-node-inspector.md` | Draft; ADR-0020, ADR-0021 (accepted) |
-| `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (proposed, one open decision) |
+| `F2.3-edge-data-mapping-editor.md` | Draft; ADR-0020, ADR-0023 (accepted) |
+| `F2.3-E6-recorded-run-values.md` | Implemented (engine slice E6 and desktop switch, opt-in); ADR-0023 (accepted) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
+| `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0026 (proposed, owner decisions recorded) |
+| `F2.11-onboarding-capability-detection.md` | Go side implemented; ADR-0025 (proposed); desktop pending |
+| `F2.12-graph-templates.md` | Templates and Go tests implemented; no ADR; desktop picker pending |
+
+## Phase 3 - Local Production Ready
+
+| Feature | Spec status |
+| --- | --- |
+| `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
 
 ## Release engineering - drafts (not roadmap F-IDs)
 
 | Feature | Spec status |
 | --- | --- |
-| `REL1-release-engineering.md` | Draft; ADR-0026 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
-| `REL2-public-roadmap-status.md` | Draft; ADR-0027 (proposed) |
+| `REL1-release-engineering.md` | Draft; ADR-0027 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
+| `REL2-public-roadmap-status.md` | Draft; ADR-0028 (proposed) |
 
 ## Later phases
 
