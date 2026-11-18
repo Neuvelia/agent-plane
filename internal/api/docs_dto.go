@@ -60,6 +60,12 @@ type nodeDTO struct {
 	Inputs  map[string]portDTO `json:"inputs,omitempty"`
 	Config  map[string]any     `json:"config,omitempty"`
 	Outputs map[string]portDTO `json:"outputs,omitempty"`
+
+	TimeoutSeconds *int `json:"timeout_seconds,omitempty"`
+}
+
+type limitsDTO struct {
+	RunTimeoutSeconds *int `json:"run_timeout_seconds,omitempty"`
 }
 
 type graphInputDTO struct {
@@ -82,6 +88,7 @@ type definitionDTO struct {
 	Edges              []edgeDTO                `json:"edges"`
 	GraphInputBindings []edgeDTO                `json:"graph_input_bindings,omitempty"`
 	Outputs            map[string]outputDTO     `json:"outputs"`
+	Limits             *limitsDTO               `json:"limits,omitempty"`
 }
 
 func toDefinitionDTO(d *graph.Definition) *definitionDTO {
@@ -96,11 +103,14 @@ func toDefinitionDTO(d *graph.Definition) *definitionDTO {
 		Edges:         []edgeDTO{},
 		Outputs:       map[string]outputDTO{},
 	}
+	if d.Limits != nil && d.Limits.RunTimeoutSeconds != nil {
+		out.Limits = &limitsDTO{RunTimeoutSeconds: d.Limits.RunTimeoutSeconds}
+	}
 	for k, v := range d.Inputs {
 		out.Inputs[k] = graphInputDTO{Type: string(v.Type), Required: v.Required}
 	}
 	for id, n := range d.Nodes {
-		node := nodeDTO{Type: n.Type, Inputs: ports(n.Inputs), Config: safeMap(n.Config), Outputs: ports(n.Outputs)}
+		node := nodeDTO{Type: n.Type, Inputs: ports(n.Inputs), Config: safeMap(n.Config), Outputs: ports(n.Outputs), TimeoutSeconds: n.TimeoutSeconds}
 		if n.Loop != nil {
 			l := &loopDTO{MaxAttempts: n.Loop.MaxAttempts, Gate: loopGateDTO{Inputs: ports(n.Loop.Gate.Inputs), Config: safeMap(n.Loop.Gate.Config)}, Bindings: []loopBindingDTO{}}
 			for _, b := range n.Loop.Bindings {
