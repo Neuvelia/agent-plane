@@ -55,15 +55,15 @@ feature contract.
 | `F2.6-run-inspector-overview.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (overview largely delivered by F2.5/F2.5a/F2.9); no ADR |
 | `F2.7-run-inspector-node-detail.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (partly delivered by F2.5/F2.8a); additive `graph_summary` fields recorded as a proposed ADR-0019 amendment |
 | `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0026 (proposed, owner decisions recorded) |
-| `F2.11-onboarding-capability-detection.md` | Go side implemented; ADR-0025 (proposed); desktop pending |
-| `F2.12-graph-templates.md` | Templates and Go tests implemented; no ADR; desktop picker pending |
+| `F2.11-onboarding-capability-detection.md` | Implemented (Go and desktop); ADR-0025 (accepted); Linux native check recorded, macOS verification pending (#24) |
+| `F2.12-graph-templates.md` | Implemented (template files, Go tests and desktop picker); no ADR |
 
 ## Phase 3 - Local Production Ready
 
 | Feature | Spec status |
 | --- | --- |
 | `F3.1-workspace-isolation.md` | Implemented (opt-in Agent worktree isolation, ADR-0024; event schema 11); real-Codex demo passed once, see `docs/validation/F3.1-real-codex-demo.md` |
-| `F3.2-durable-run-state.md` | In progress (plan tasks 1-4 of 9); ADR-0027 proposed (JSONL, no SQLite) |
+| `F3.2-durable-run-state.md` | Implemented on Linux (Windows tests not run); ADR-0027 proposed (JSONL, no SQLite) |
 | `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | Draft; ADR-0028 proposed; criteria split by dependency on F3.2 |
 | `F3.8-secrets-references.md` | Draft; ADR-0029 proposed (shared with F3.9) |
 | `F3.9-execution-policy-v0.md` | Draft; ADR-0029 proposed (shared with F3.8) |

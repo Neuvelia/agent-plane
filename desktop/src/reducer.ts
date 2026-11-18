@@ -14,6 +14,8 @@ export type NodeStatus =
   | 'failed'
   | 'skipped'
   | 'cancelled'
+  /** Derived for a node that started and never finished in a run that was interrupted (F3.2). Never in an event. */
+  | 'interrupted'
 
 export type RunStatus = 'running' | 'succeeded' | 'failed' | 'cancelled' | 'interrupted'
 
@@ -387,17 +389,26 @@ export function classifyEnd(reason: string): StreamEnd {
   return { kind: 'lost', code: 'connection', message: 'The connection to the engine ended unexpectedly.' }
 }
 
-// A run that has no terminal event and is not being followed is interrupted.
+// A run that has no terminal event and is not being followed is interrupted, and
+// so is every node that started and never finished (running, retrying or waiting
+// for a human). A finished node keeps the status its events gave it.
 export function settle(run: RunView, live: boolean): RunView {
-  if (run.status === 'running' && !live && run.eventCount > 0) return { ...run, status: 'interrupted' }
-  return run
+  if (run.status !== 'running' || live || run.eventCount === 0) return run
+  const nodes: Record<string, NodeView> = {}
+  for (const [id, node] of Object.entries(run.nodes)) {
+    nodes[id] = node.status === 'running' || node.status === 'waiting_human' ? { ...node, status: 'interrupted' } : node
+  }
+  return { ...run, status: 'interrupted', nodes }
 }
 
 // presentRun is what the inspector shows for a stream in a given end state:
 // a normally ended log without a terminal event is "interrupted"; a stream that
 // is still followed, or whose connection was lost, keeps the reduced status.
-export function presentRun(run: RunView, endedNormally: boolean, lost: boolean): RunView {
-  return settle(run, !endedNormally || lost)
+// storeStatus is the status the store reported for the run: "running" means a
+// writer in another process still holds it, so a log without a terminal event is
+// live there, not interrupted.
+export function presentRun(run: RunView, endedNormally: boolean, lost: boolean, storeStatus?: string): RunView {
+  return settle(run, !endedNormally || lost || storeStatus === 'running')
 }
 
 // streamLost is the lost-connection message worth showing, or null. Once the
