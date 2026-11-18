@@ -432,6 +432,9 @@ tests next to each.
 The assertion that a gate evidence timeout carries failure kind `timeout` moves
 to Task 7.
 
+**Follow-up (own small PR, after Task 4):** extract the duplicated watch-and-terminate
+loop (shell, codex, gate, gitstate, capability) into one `proctree` helper.
+
 **Phase A exit:** on Linux and macOS a cancelled or timed-out Shell, Codex, Gate
 or Git child leaves no descendant; Windows still builds on the interim file.
 

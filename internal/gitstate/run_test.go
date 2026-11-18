@@ -75,3 +75,12 @@ func TestRunEnforcesTimeoutAndStdoutLimitAndHidesStderr(t *testing.T) {
 		t.Fatalf("raw Git stderr must never appear in the error: %v", err)
 	}
 }
+
+func TestEnvironmentDisablesTerminalPrompts(t *testing.T) {
+	for _, kv := range Environment("/usr/bin/git") {
+		if kv == "GIT_TERMINAL_PROMPT=0" {
+			return
+		}
+	}
+	t.Fatal("Git must never prompt on a terminal")
+}
