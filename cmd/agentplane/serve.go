@@ -41,6 +41,8 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
 	var redactEnv inputFlags
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
+	var isolation isolationFlags
+	isolation.register(fs)
 	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path, used only for capability detection")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return usageError("serve", err, false, stdout, stderr)
@@ -50,6 +52,9 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	if *concurrency < 1 {
 		return usageError("serve", errors.New("--max-concurrency must be at least 1"), false, stdout, stderr)
+	}
+	if _, err := isolation.policy(); err != nil {
+		return usageError("serve", err, false, stdout, stderr)
 	}
 	// An unset variable refuses to start: recording must never run with a
 	// redaction list that silently lost an entry (ADR-0023).
@@ -82,7 +87,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Validate:           validateForAPI,
 		ValidateDefinition: diagnosticsFor,
 		NodeTypes:          nodeCatalogue(),
-		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues}),
+		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues, isolation: isolation}),
 		Capabilities:       &capability.Service{Detect: capabilityDetector(*codexBin).Detect},
 	}
 	if onServe != nil {
@@ -126,6 +131,7 @@ type serveRunOptions struct {
 	concurrency  int
 	redactions   []string
 	recordValues bool
+	isolation    isolationFlags
 }
 
 func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
@@ -171,6 +177,9 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			return persist(e)
 		}
 		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
+		if err := config.isolation.configure(def, &opts); err != nil {
+			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
+		}
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr
