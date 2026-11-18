@@ -302,3 +302,27 @@ main:focus{outline:none}
 .ins-strip li:not([aria-hidden]){padding:4px 10px;border-radius:var(--radius-pill);background:var(--raised)}
 .ins-yaml{margin:0;padding:6px 8px;border-radius:var(--radius-6);background:var(--bg);white-space:pre-wrap;word-break:break-word}
 .ins-preview ul{margin:4px 0 0;padding-left:18px}
+/* F2.11 welcome screen */
+.welcome{max-width:880px}
+.welcome-intro{margin:0 0 var(--space-8);max-width:70ch}
+.cap-list{list-style:none;margin:0;padding:0 var(--space-8);display:flex;flex-direction:column;gap:var(--space-4)}
+.cap-row{padding:var(--space-8) var(--space-10);border-radius:var(--radius-12);background:var(--fill-4)}
+.cap-head{display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap}
+.cap-name{font-weight:600}
+.cap-meaning,.cap-still{margin:var(--space-4) 0 0}
+.cap-note{margin:0 var(--space-12)}
+.cap-note:empty{display:none}
+.cap-state{display:flex;justify-content:space-between;align-items:center;gap:var(--space-12);margin:0 var(--space-12);padding:10px 14px;border-radius:var(--radius-12);background:var(--bad-soft)}
+/* F2.12 New graph picker */
+.picker{max-width:640px;width:calc(100% - 32px);max-height:calc(100vh - 64px);overflow:auto;padding:var(--space-14) var(--space-14) var(--space-12);border:1px solid var(--card-line);border-radius:var(--radius-20);background:var(--surface);color:var(--fg)}
+.picker::backdrop{background:rgba(0,0,0,.6)}
+.picker h2{margin:0 0 var(--space-4);font-size:18px}
+.picker-list{border:0;margin:var(--space-8) 0;padding:0;display:flex;flex-direction:column;gap:var(--space-4)}
+.picker-entry{display:flex;gap:var(--space-10);align-items:flex-start;padding:var(--space-8) var(--space-10);border-radius:var(--radius-12);background:var(--fill-4);cursor:pointer}
+.picker-entry:has(input:checked){box-shadow:var(--ring-selected)}
+.picker-entry input{margin-top:3px;accent-color:var(--brand)}
+.picker-text,.picker-desc{display:flex;flex-direction:column;gap:2px}
+.picker-title{display:flex;gap:var(--space-8);align-items:center;font-weight:600}
+.picker-meta{display:flex;gap:var(--space-4);flex-wrap:wrap;margin-top:2px}
+.picker-notice{color:var(--warn)}
+.picker-actions{justify-content:flex-end}

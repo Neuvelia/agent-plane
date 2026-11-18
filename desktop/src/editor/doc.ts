@@ -181,12 +181,16 @@ export function counts(a: Analysis): { errors: number; warnings: number } {
 }
 
 /**
- * The starting text of a new graph: valid schema v0 with empty collections. The
- * id is derived from the file name and always satisfies the identifier grammar
- * (a lowercase letter, then lowercase letters, digits, hyphens or underscores).
+ * The graph id a new file gets from its name: it always satisfies the identifier
+ * grammar (a lowercase letter, then lowercase letters, digits, hyphens or
+ * underscores). Blank graphs and template drafts (F2.12) derive the same id.
  */
-export function newGraphText(label: string): string {
+export function graphIdFromLabel(label: string): string {
   const base = label.replace(/\.ya?ml$/i, '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^[^a-z]+/, '').replace(/-+$/, '')
-  const id = base || 'graph'
-  return `schema_version: 0\nid: ${id}\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n`
+  return base || 'graph'
+}
+
+/** The starting text of a new graph: valid schema v0 with empty collections. */
+export function newGraphText(label: string): string {
+  return `schema_version: 0\nid: ${graphIdFromLabel(label)}\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n`
 }

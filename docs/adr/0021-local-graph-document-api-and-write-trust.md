@@ -69,11 +69,22 @@ gate and agent config errors surface only when a run starts (executors' `Validat
    executors validate against (key, type, required, allowed values, nesting for gate kinds and the loop).
    Forms render descriptors; unknown config keys are preserved and shown in an "Advanced" view. Exact shapes
    are fixed in the F2.2 spec.
-9. **Run start is unchanged and its exposure is stated, not widened.** `POST /runs` keeps accepting
-   `graph_path` (typed or picked), as ADR-0019 decided. A compromised renderer can therefore already ask the
-   sidecar to run any graph file the user can read. This ADR does not widen that: because writes are
-   grant-only, the renderer cannot create a new graph to run. Moving run start to grants is a recommended
-   follow-up (it would remove the typed-path box on New run) and is deliberately not part of this ADR.
+9. **The renderer starts runs and validates graph files by grant only; `graph_path` stays on the API for other
+   clients.** This ADR first left `POST /runs {graph_path}` and `POST /graphs/validate {path}` unchanged, as
+   ADR-0019 decided, and stated the exposure: a compromised renderer could ask the sidecar to run any graph
+   file the user can read. Issue #56 closed it. New run chooses the file with `openGraph()`, validates with
+   `POST /graphs/validate {grant}` and starts with `POST /runs {graph_grant, inputs}`; the renderer holds a
+   grant and a file name, never a path, and revokes the grant when it leaves the screen or chooses another
+   file. Main enforces this and does not rely on the renderer's code: for those two routes it forwards only
+   bodies whose keys are exactly `graph_grant`, `inputs` (runs) or `grant`, `text` (validate), and answers
+   400 `body not allowed` otherwise. The check is a key allow-list because the Go decoder matches JSON keys
+   case-insensitively, so refusing `graph_path` alone would let `GRAPH_PATH` through. The legacy `pickGraph`
+   bridge call, which returned a path, is removed. What remains of `graph_path`: the Go API still accepts
+   `graph_path` on `POST /runs` and `path` on `POST /graphs/validate` (exactly one of path, grant or text), read
+   with the user's own permissions as ADR-0019 states, for clients other than the renderer: API tests and
+   scripts that call a local `agentplane serve` with the bearer token. The CLI reads its graph path directly and
+   does not use the API. A compromised renderer can now run only a file the person chose in a native dialog;
+   a graph chosen on New run also joins the recent-graphs list, like one opened in the editor.
 10. **Run uses saved bytes.** The editor offers "Save and run"; a run never reads unsaved editor state.
     So the renderer can start a run of a graph it holds only as a grant, `POST /runs` additionally accepts
     `graph_grant` in place of `graph_path` (exactly one of the two); the sidecar resolves the grant to the
@@ -128,14 +139,15 @@ Cons:
 - The preload surface frozen by F2.5/F2.5a grows by `openGraph`, `newGraph` and the recent-graphs calls;
   `desktop/README.md` and F2.5 must be updated.
 - Main and sidecar must agree on canonical paths; grants add state to both.
-- The typed-path box on New run keeps working for running graphs, so the weaker read/run exposure remains
-  until the follow-up.
+- New run has no typed-path box any more (issue #56): a graph must be chosen in the native dialog, so a path
+  cannot be pasted or scripted into the renderer.
 - Descriptors add a Go-side surface that must stay in step with the executors (mitigated by generating them
   from the same definitions).
 
 ## Compatibility and migration
 
-Existing endpoints and CLI behaviour are unchanged; `POST /graphs/validate {path}` keeps working. The desktop
+Existing endpoints and CLI behaviour are unchanged; `POST /graphs/validate {path}` and `POST /runs {graph_path}`
+keep working for API clients other than the desktop renderer (decision 9). The desktop
 forwarding rule changes from a prefix match to an exact allowlist; routes outside it, if any renderer code
 used them, stop working (only `/graphs/validate` was used). Event schema, run store and graph schema are
 untouched. Making `agentplane graph validate` report node-config errors is a user-visible improvement: graphs that

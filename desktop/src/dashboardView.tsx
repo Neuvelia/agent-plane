@@ -8,11 +8,12 @@ import { formatDateTime } from './i18n'
 import { useI18n } from './i18n/context'
 import { formatDuration } from './insight'
 import { RunPill } from './status'
+import type { ChosenGraph } from './types'
 import { DotChart } from './ui/data'
 import { Button, Card, HelpTip, ListRow, Pill } from './ui/primitives'
 
 /** `nowOverride` exists so stories and tests are deterministic; the app passes nothing. */
-export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride }: { onOpenRun: (id: string) => void; onNewRun: () => void; onOpenGraph: (path: string) => void; onAllRuns: () => void; nowOverride?: Date }) {
+export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride }: { onOpenRun: (id: string) => void; onNewRun: () => void; onOpenGraph: (graph: ChosenGraph) => void; onAllRuns: () => void; nowOverride?: Date }) {
   const { t, locale } = useI18n()
   const polledRuns = usePoll(listRuns, 1500)
   const polledApprovals = usePoll(listApprovals, 1000)
@@ -21,6 +22,7 @@ export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOver
   const runs = polledRuns.data ?? []
   const approvals = polledApprovals.data ?? []
   const [expanded, setExpanded] = useState(false)
+  const [openError, setOpenError] = useState<string | null>(null)
   const now = nowOverride ?? new Date()
   const items = needsAttention(runs, approvals)
   const shown = expanded ? items : items.slice(0, ATTENTION_PREVIEW)
@@ -28,8 +30,11 @@ export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOver
   const { dots, slots } = outcomes(runs, now)
 
   async function openGraph() {
-    const picked = await window.agentplane.pickGraph()
-    if (picked) onOpenGraph(picked)
+    setOpenError(null)
+    const picked = await window.agentplane.openGraph()
+    if ('canceled' in picked) return
+    if (picked.ok) onOpenGraph({ grant: picked.grant, label: picked.label })
+    else setOpenError(picked.message)
   }
 
   if (failed || !polledRuns.data || !polledApprovals.data)
@@ -108,6 +113,7 @@ export function Dashboard({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOver
                 <div className="mu">{t('dash.quick.openHint')}</div>
               </span>
             </ListRow>
+            {openError && <div className="err empty-line" role="alert" data-testid="open-error">{openError}</div>}
           </Card>
         </div>
       </div>
