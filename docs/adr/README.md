@@ -52,3 +52,6 @@ F3.2 durable run state (proposed):
 
 F3.4 cancellation and timeouts (proposed):
 [ADR-0028 - Cancel and timeout reasons, cross-platform process ownership](0028-cancel-timeout-reasons-and-process-ownership.md).
+
+F3.8 secret references and F3.9 execution policy (proposed):
+[ADR-0029 - Secret references and execution policy v0](0029-secret-references-and-execution-policy.md).
