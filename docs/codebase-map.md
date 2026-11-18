@@ -20,7 +20,7 @@ durable contract.
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
 | `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
 | `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (behind `runtime.WorkspaceManager`, composed by the CLI) | `preflight.go`, `worktree.go`, `integrate.go` |
-| `internal/store` | Local append-only JSONL run history | `store.go` |
+| `internal/store` | Local append-only JSONL run history, run lock, summary snapshot, retention and prune (uses `golang.org/x/sys` for file locks) | `store.go`, `read.go`, `list.go`, `snapshot.go`, `prune.go`, `lock*.go`, `format.go` |
 | `internal/api` | Authenticated loopback API for runs, approvals and granted graph documents | `server.go`, `docs.go`, `hub.go` |
 | `internal/version` | Build and runtime version metadata | `version.go` |
 | `cmd/agentplane` | CLI commands and composition of the engine, adapters, store and API | `main.go`, `cli.go`, `serve.go` |
