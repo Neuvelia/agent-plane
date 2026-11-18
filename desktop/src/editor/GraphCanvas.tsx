@@ -21,6 +21,7 @@ import { queryConnectTargets } from './connect'
 import type { DocState } from './doc'
 import { NODE_TYPES, freeSpot, makeRef, nodeSize, parseRef, placements, removalImpact, rowY, suggestId, type Point } from './layout'
 import { badgesOf, type Badge, type Badges, type FocusReq } from './issues'
+import type { Selection, SelectionOwner } from './selection'
 import type { Definition, Op, QueryResult } from './types'
 import type { GraphDocument } from './useGraphDocument'
 import { Inspector } from './inspector/Inspector'
@@ -146,11 +147,10 @@ function mergeNodes(prev: Node<EdData>[], next: Node<EdData>[]): Node<EdData>[] 
 }
 
 type Mode = null | { kind: 'rename' } | { kind: 'delete' } | { kind: 'connect'; from?: string; checks?: Record<string, QueryResult> }
-type Sel = { kind: 'node'; id: string } | { kind: 'edge'; from: string; to: string } | null
 
 export type CanvasBlock = 'parse' | 'anchors' | null
 
-export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null }) {
+export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner }) {
   return (
     <ReactFlowProvider>
       <Inner {...props} />
@@ -158,14 +158,15 @@ export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: 
   )
 }
 
-function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null }) {
+function Inner({ g, doc, focusReq, selection }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner }) {
   const { t } = useI18n()
   const def = doc.analysis.definition
   // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
   const block: CanvasBlock = doc.analysis.parseError ? 'parse' : doc.analysis.readonlyReasons?.length ? 'anchors' : null
   const readOnly = block !== null || !def
   const flow = useReactFlow()
-  const [sel, setSel] = useState<Sel>(null)
+  const sel = selection.selection
+  const setSel = selection.select
   const [mode, setMode] = useState<Mode>(null)
   const [renameTo, setRenameTo] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -182,16 +183,6 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
     setNodes((prev) => mergeNodes(prev, desired))
   }, [desired, resetKey])
 
-  // A selection that no longer exists in the definition is dropped.
-  useEffect(() => {
-    if (!def) return setSel(null)
-    setSel((s) => {
-      if (!s) return s
-      if (s.kind === 'node') return s.id in def.nodes ? s : null
-      return def.edges.some((e) => e.from === s.from && e.to === s.to) ? s : null
-    })
-  }, [def])
-
   const badges = useMemo(() => badgesOf(doc.analysis.diagnostics, def), [doc.analysis.diagnostics, def])
   const [focusPort, setFocusPort] = useState<string | null>(null)
   const [focusTick, setFocusTick] = useState(0)
@@ -199,23 +190,11 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
   const graphHead = useRef<HTMLDivElement>(null)
   const selectedHead = useRef<HTMLElement>(null)
 
-  // An issue was chosen: select and reveal its element, then move keyboard focus to its heading.
+  // An issue was chosen (the editor already selected its element): outline its port, then move keyboard focus to its heading.
   useEffect(() => {
     if (!focusReq || !def) return
     const t = focusReq.target
-    setFocusPort(null)
-    if (t.kind === 'node') setSel({ kind: 'node', id: t.id })
-    else if (t.kind === 'port') {
-      setSel({ kind: 'node', id: t.node })
-      setFocusPort(makeRef(t.node, t.side, t.port))
-    } else if (t.kind === 'edge') setSel({ kind: 'edge', from: t.from, to: t.to })
-    else if (t.kind === 'binding') {
-      const to = parseRef(t.to)
-      if (to) {
-        setSel({ kind: 'node', id: to.node })
-        setFocusPort(t.to)
-      }
-    } else setSel(null)
+    setFocusPort(t.kind === 'port' ? makeRef(t.node, t.side, t.port) : t.kind === 'binding' ? t.to : null)
     setFocusTick(focusReq.nonce) // focus once the selection below has rendered
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusReq?.nonce])
@@ -549,7 +528,7 @@ function placementsAuto(def: Definition): Record<string, Point> {
   return Object.fromEntries(Object.entries(auto).map(([id, p]) => [id, { x: p.x, y: p.y }]))
 }
 
-function Selected({ def, sel, onRemoveEdge, readOnly, headRef }: { def: Definition; sel: NonNullable<Sel>; onRemoveEdge: (from: string, to: string) => void; readOnly: boolean; headRef: React.RefObject<HTMLElement | null> }) {
+function Selected({ def, sel, onRemoveEdge, readOnly, headRef }: { def: Definition; sel: NonNullable<Selection>; onRemoveEdge: (from: string, to: string) => void; readOnly: boolean; headRef: React.RefObject<HTMLElement | null> }) {
   const { t } = useI18n()
   const conns = sel.kind === 'node' ? def.edges.filter((e) => parseRef(e.from)?.node === sel.id || parseRef(e.to)?.node === sel.id) : def.edges.filter((e) => e.from === sel.from && e.to === sel.to)
   const node = sel.kind === 'node' ? def.nodes[sel.id] : undefined
