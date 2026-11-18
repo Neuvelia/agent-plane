@@ -143,16 +143,18 @@ function EventsCard({ run }: { run: RunView }) {
 
 export function RunInspector({ runId, onBack }: { runId: string; onBack: () => void }) {
   const { t } = useI18n()
-  const { run, graph, yaml, following, notFound, lost, reconnect } = useRunStream(runId)
+  const { run, graph, yaml, following, notFound, unsupported, lost, reconnect } = useRunStream(runId)
   const [selected, setSelected] = useState<string | null>(null)
   const [view, setView] = useState<GraphView>('map')
   const isLost = lost !== null
   useConnectionReport('run', isLost)
-  if (notFound)
+  if (notFound || unsupported)
     return (
       <section>
         <Button onClick={onBack}>{t('run.back')}</Button>
-        <div className="empty-state">{t('run.notFound')}</div>
+        <div className="empty-state" data-testid={unsupported ? 'run-unsupported' : 'run-not-found'}>
+          {t(unsupported ? 'run.unsupported' : 'run.notFound')}
+        </div>
       </section>
     )
   const waiting = run.order.filter((id) => displayStatus(nodeView(run, id)) === 'waiting_human')

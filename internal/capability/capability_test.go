@@ -285,6 +285,29 @@ func TestRealCodexAdapterWithAbsentBinaryIsMissing(t *testing.T) {
 	}
 }
 
+func TestRealCodexAdapterWithFakeCLIsMapsEachDetectOutcome(t *testing.T) {
+	requirePOSIX(t)
+	const flags = "--no-daemon --ask-for-approval --sandbox --ignore-user-config --ephemeral --json --color --cd --output-schema --output-last-message"
+	cases := []struct {
+		name   string
+		script string
+		want   Tool
+	}{
+		{"available", "case \"$*\" in *--version*) echo 'codex-cli 0.163.0';; *) echo '" + flags + "';; esac", Tool{Status: StatusAvailable, Version: "0.163.0"}},
+		{"missing required flags", "case \"$*\" in *--version*) echo 'codex-cli 0.163.0';; *) echo '--json';; esac", Tool{Status: StatusUnsupportedVersion, Reason: ReasonMissingRequiredFlags}},
+		{"unrecognized version output", "echo unexpected", Tool{Status: StatusError, Reason: ReasonProbeFailed}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			bin := fakeBinary(t, c.script)
+			got := Detector{GOOS: "linux", GitPath: absent, Agents: []Agent{{ID: "codex", Adapter: codex.Adapter{Binary: bin}}}}.Detect(context.Background()).Tools[1]
+			if got.Status != c.want.Status || got.Version != c.want.Version || got.Reason != c.want.Reason {
+				t.Fatalf("got %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
+
 func TestReportCarriesNoPathEnvironmentOrRawOutput(t *testing.T) {
 	requirePOSIX(t)
 	const marker = "LEAKMARKER"

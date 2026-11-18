@@ -227,7 +227,7 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	rec, err := s.Store.Read(id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "unknown run")
+		writeReadFailure(w, err)
 		return
 	}
 	if live, ok := s.Hub.Live(id); ok {
@@ -553,7 +553,7 @@ func (s *Server) streamEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	rec, err := s.Store.Read(id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "not_found", "unknown run")
+		writeReadFailure(w, err)
 		return
 	}
 	header()

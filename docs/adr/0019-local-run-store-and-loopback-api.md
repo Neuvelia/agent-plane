@@ -56,7 +56,7 @@ keeps accepting `graph_path` for other clients.
 Durability scope: lifecycle events survive the process being killed. They are
 not guaranteed across power loss: the run directory entry and `graph.yaml` are
 not fsynced. Persistence runs under the collector lock, so a hung filesystem
-blocks the run; there is no timeout.
+blocks the run; there is no timeout. F3.2 (ADR-0027) later added creation durability, a run lock, a rebuildable summary snapshot and explicit retention on top of this layout; see that ADR for what now holds.
 
 Known limitations of this slice: `serve` has no `--redact-env` and no cap on
 concurrent runs; finished runs stay in memory for the server's lifetime; a run

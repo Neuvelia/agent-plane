@@ -143,7 +143,7 @@ Attempt         1 --- N CheckResult
 7. Visual canvas metadata must not change graph execution semantics.
 8. A correction attempt never overwrites the trace of a previous attempt.
 9. Unknown usage/cost is represented as unknown, never as zero.
-10. Runtime state must be reconstructable from durable events once persistence is introduced.
+10. Runtime state must be reconstructable from durable events. `interrupted` is not a scheduler state: it is derived at read time for a log with no terminal event and no live writer (F3.2), and no event records it.
 
 ### F1.6 attempts and accepted candidates
 
