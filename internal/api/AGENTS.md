@@ -83,6 +83,10 @@ authentication mechanism.
 ## Choose regression tests
 
 - Auth, routes, lifecycle, store/SSE and decisions: `server_test.go`.
+- Run state the store derives (`interrupted_at_sequence`, `running` for a run
+  live in another process, `unsupported` runs and their typed 422
+  `unsupported_schema`): `runstate_test.go`. The hub overlay only ever upgrades
+  a store status to `running`; keep it that way.
 - Grants, edit/save conflicts, path safety, limits and DTOs: `docs_test.go`.
 - Inspector descriptors, Advanced entries and independence: `docs_inspector_test.go`;
   the real catalogue: `cmd/agentplane/catalogue_test.go`.

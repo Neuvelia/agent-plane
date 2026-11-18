@@ -236,18 +236,30 @@ input contract and are copied without narrowing; total authored input memory and
 the full feedback object including authored scope have no new global size cap.
 The trace limits above apply only to its observable summary.
 
-## Persistence direction
+## Persistence
 
-Phase 0 is in-memory.
+A run's durable state is exactly its append-only event log
+(`<store>/<run_id>/events.jsonl`, ADR-0019, ADR-0027). No database is used.
 
-Later local persistence should use:
+- A non-progress event is fsynced before it is delivered to any subscriber, so
+  anything a client saw is on disk; live delivery stops at the first persist
+  error. Progress and `log_chunk` events are synced with the next lifecycle fact.
+- A run is created durably: `graph.yaml` is synced before the log exists, then the
+  run and store directories (POSIX).
+- A live writer holds an advisory lock on `<run>/run.lock` (`flock`, `LockFileEx`),
+  which the operating system drops when the process dies. A log with no terminal
+  event is `running` while the lock is held and `interrupted` otherwise; this is
+  derived, never recorded, and adds no event.
+- `store.json` carries the store format and optional retention. Logs of every
+  earlier schema stay readable; a newer schema is listed `unsupported` and never
+  modified.
+- `<run>/summary.json` is a rebuildable snapshot written at the terminal event so
+  `List` does not parse every log. The log always wins.
+- Retention is explicit: `agentplane runs prune`, and once at `serve` start when
+  configured. It never removes an unterminated run.
 
-- SQLite for metadata and event indexes;
-- filesystem for larger artifacts/logs;
-- YAML/JSON for graph definitions;
-- Git for graph/repository version context.
-
-A future durable event store should preserve append-only audit semantics even if snapshots are added for performance.
+Larger artifacts (F3.5), graph versioning (F3.6) and export (F3.7) remain later
+work. Git still supplies graph and repository version context.
 
 ## Workspace isolation direction
 

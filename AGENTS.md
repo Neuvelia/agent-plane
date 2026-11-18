@@ -44,7 +44,11 @@ units: one linked Git worktree per node run, accepted units integrated onto a
 run-scoped ref, and a non-fatal `source_workspace_changed` guard. It is not a
 sandbox, gives downstream nodes no view of upstream files, does not isolate Shell
 nodes, and supports Linux/macOS only; a real-Codex run passed once
-(`docs/validation/F3.1-real-codex-demo.md`).
+(`docs/validation/F3.1-real-codex-demo.md`). F3.2 (ADR-0027, proposed) makes a run's durable
+state exactly its JSONL event log: persist-before-deliver, durable creation, a run
+lock that separates `running` from `interrupted` (derived, no new event), a
+rebuildable `summary.json`, `store.json` and explicit `runs prune` retention.
+Implemented on Linux; the Windows tests have not been run.
 A Phase 2 vertical slice is also active (event schema 11): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
@@ -63,7 +67,7 @@ versioned operations (ADR-0020, ADR-0021) served by `POST /graphs/open`, `/graph
 descriptors owned by the validators (`internal/fields`). F2.11 adds the read-only
 capability report (`GET /capabilities`, `POST /capabilities/check`, ADR-0025) and the
 desktop welcome screen; F2.12 adds bundled graph templates and the template picker.
-F3.2 (durable run state, ADR-0027 proposed) has plan tasks 1-4 of 9 on `main`. Read the
+Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without

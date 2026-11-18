@@ -63,7 +63,7 @@ feature contract.
 | Feature | Spec status |
 | --- | --- |
 | `F3.1-workspace-isolation.md` | Implemented (opt-in Agent worktree isolation, ADR-0024; event schema 11); real-Codex demo passed once, see `docs/validation/F3.1-real-codex-demo.md` |
-| `F3.2-durable-run-state.md` | In progress (plan tasks 1-4 of 9); ADR-0027 proposed (JSONL, no SQLite) |
+| `F3.2-durable-run-state.md` | Implemented on Linux (Windows tests not run); ADR-0027 proposed (JSONL, no SQLite) |
 | `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | Draft; ADR-0028 proposed; criteria split by dependency on F3.2 |
 | `F3.8-secrets-references.md` | Draft; ADR-0029 proposed (shared with F3.9) |
 | `F3.9-execution-policy-v0.md` | Draft; ADR-0029 proposed (shared with F3.8) |
