@@ -335,6 +335,16 @@
      },
      "key": "environment_refs",
      "kind": "list"
+    },
+    {
+     "default": "none",
+     "enum": [
+      "none",
+      "worktree"
+     ],
+     "id": "agent.config.isolation",
+     "key": "isolation",
+     "kind": "enum"
     }
    ],
    "loop": {

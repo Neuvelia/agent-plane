@@ -318,7 +318,11 @@ Event schema 11 adds five typed, bounded facts for isolated Agent units:
 `workspace_prepared`, `workspace_integrated`, `workspace_conflict`,
 `workspace_released` and the run-level `source_workspace_changed`. They are
 retained outside progress limits, deeply copied and fsynced by the run store.
-The events package only defines their shape; the runtime that emits them and
-the Git operations behind them (`internal/worktree`) arrive in later F3.1
-tasks. Readers accept schemas 1-10 and older streams contain none of these
-facts. See ADR-0024.
+The coordinator in `internal/runtime` emits `workspace_prepared` before an
+isolated node's first attempt, `workspace_integrated` or `workspace_conflict`
+after `attempt_finished` of the accepted attempt, and `workspace_released` when
+the node run ends (retention `never|failed|always`). Git operations stay in
+`internal/worktree` behind a consumer-owned `runtime.WorkspaceManager` port that
+the CLI composes; `source_workspace_changed` is emitted by a later F3.1 task.
+Readers accept schemas 1-10 and older streams contain none of these facts. See
+ADR-0024.

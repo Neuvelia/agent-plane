@@ -56,6 +56,16 @@
      "kind": "string",
      "format": "not_blank"
     }
+   },
+   {
+    "id": "agent.config.isolation",
+    "key": "isolation",
+    "kind": "enum",
+    "default": "none",
+    "enum": [
+     "none",
+     "worktree"
+    ]
    }
   ],
   "outputs": [
