@@ -10,20 +10,24 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/fields"
+	"agentplane/internal/proctree"
 )
 
 // Executor satisfies runtime.Executor without adding process details to the
 // scheduler. It has no mutable state and is safe to use for concurrent nodes.
-type Executor struct{}
+// The zero value is valid.
+type Executor struct {
+	// Policy tunes termination of a canceled node's process tree. The zero
+	// value selects proctree's defaults.
+	Policy proctree.Policy
+}
 
 // Result is the process evidence retained by Execute and ExecutionError.
 // ExitCode is -1 if no OS exit code is available. A canceled process may
@@ -46,6 +50,8 @@ const (
 	FailureExit     FailureKind = "exit"
 	FailureCanceled FailureKind = "canceled"
 	FailureOutput   FailureKind = "output"
+	// FailureShutdown means cancellation could not empty the process tree.
+	FailureShutdown FailureKind = "shutdown"
 )
 
 // ExecutionError carries process evidence even when ExecuteNode cannot return
@@ -55,7 +61,12 @@ type ExecutionError struct {
 	Kind   FailureKind
 	Result Result
 	Cause  error
+	// Termination records how the process tree was stopped, if it was.
+	Termination *proctree.Outcome
 }
+
+// ProcessTermination returns the recorded tree termination, or nil.
+func (e *ExecutionError) ProcessTermination() *proctree.Outcome { return e.Termination }
 
 func (e *ExecutionError) Error() string {
 	if e.Cause == nil {
@@ -79,11 +90,11 @@ type config struct {
 // Execute runs one local process and returns its raw result. It never treats
 // argument text as shell syntax. Only inputs listed in input_env enter the
 // child process environment.
-func (Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
-	return execute(ctx, nodeID, node, inputs, nil, 0)
+func (e Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
+	return execute(ctx, nodeID, node, inputs, nil, 0, e.Policy)
 }
 
-func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int) (Result, error) {
+func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int, policy proctree.Policy) (Result, error) {
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -100,59 +111,90 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
 
-	cmd := exec.CommandContext(ctx, cfg.command, cfg.args...)
+	cmd := exec.Command(cfg.command, cfg.args...)
 	cmd.Dir = cfg.cwd
 	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
 	if attempt > 0 {
 		cmd.Env = append(cmd.Env, AttemptEnv+"="+strconv.Itoa(attempt))
 	}
 	// A descendant may inherit stdout or stderr after the direct child exits.
-	// Bound the pipe drain so Wait can finish without managing the process tree.
+	// Bound the pipe drain so Wait can finish even if a descendant escapes.
 	cmd.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &logWriter{capture: &stdout, stream: "stdout", observe: observe}
 	cmd.Stderr = &logWriter{capture: &stderr, stream: "stderr", observe: observe}
-	var killRequested atomic.Bool
-	cmd.Cancel = func() error {
-		err := cmd.Process.Kill()
-		if err == nil {
-			killRequested.Store(true)
-		}
-		return err
-	}
-	if err := cmd.Start(); err != nil {
-		kind := FailureStart
-		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			kind = FailureCanceled
-		}
-		return result, &ExecutionError{NodeID: nodeID, Kind: kind, Result: result, Cause: err}
+	tree, err := proctree.Start(cmd)
+	if err != nil {
+		return result, &ExecutionError{NodeID: nodeID, Kind: FailureStart, Result: result, Cause: err}
 	}
 	result.StartedAt = time.Now()
-	err = cmd.Wait()
+
+	exited := make(chan struct{})
+	stopped := watchCancellation(ctx, tree, policy, exited)
+	err = tree.Wait()
+	close(exited)
+	cancellation := <-stopped
 	result.EndedAt = time.Now()
 	result.Stdout, result.Stderr = stdout.String(), stderr.String()
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
-	if err != nil {
-		kind := FailureExit
-		if errors.Is(err, exec.ErrWaitDelay) {
-			kind = FailureOutput
-		} else if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			kind = FailureCanceled
-		}
-		if killRequested.Load() && ctx.Err() != nil && cmd.ProcessState != nil {
-			// Unix wait status distinguishes a signal kill from a normal
-			// nonzero exit that raced with cancellation. Other platforms
-			// retain the successful kill request as the available evidence.
-			status, hasSignalStatus := cmd.ProcessState.Sys().(interface{ Signaled() bool })
-			if runtime.GOOS == "windows" || !hasSignalStatus || status.Signaled() {
-				kind, err = FailureCanceled, ctx.Err()
-			}
-		}
-		return result, &ExecutionError{NodeID: nodeID, Kind: kind, Result: result, Cause: err}
+	failure := classify(ctx, err, cancellation)
+	if failure == nil {
+		return result, nil
 	}
-	return result, nil
+	failure.NodeID, failure.Result, failure.Termination = nodeID, result, cancellation.record()
+	return result, failure
+}
+
+type cancellation struct {
+	requested bool
+	outcome   proctree.Outcome
+	err       error
+}
+
+func (c *cancellation) record() *proctree.Outcome {
+	if !c.requested {
+		return nil
+	}
+	return &c.outcome
+}
+
+// watchCancellation terminates the tree when ctx is done before exited closes.
+// The result channel delivers once, so the caller reads it without a race.
+func watchCancellation(ctx context.Context, tree *proctree.Tree, policy proctree.Policy, exited <-chan struct{}) <-chan cancellation {
+	result := make(chan cancellation, 1)
+	go func() {
+		var c cancellation
+		select {
+		case <-ctx.Done():
+			c.requested = true
+			c.outcome, c.err = tree.Terminate(context.Background(), policy)
+		case <-exited:
+		}
+		result <- c
+	}()
+	return result
+}
+
+// classify decides the failure kind from the termination record, not the exit
+// status: a child that traps the request may exit 0 or nonzero. A tree that
+// ended on its own before the request is not a cancellation. It returns nil for
+// success.
+func classify(ctx context.Context, waitErr error, c cancellation) *ExecutionError {
+	termErr, outcome := c.err, c.outcome
+	var leak *proctree.LeakError
+	switch {
+	case errors.As(termErr, &leak):
+		return &ExecutionError{Kind: FailureShutdown, Cause: termErr}
+	case c.requested && termErr == nil && (waitErr != nil || outcome.Method != proctree.MethodAlreadyExited):
+		return &ExecutionError{Kind: FailureCanceled, Cause: ctx.Err()}
+	case errors.Is(waitErr, exec.ErrWaitDelay):
+		return &ExecutionError{Kind: FailureOutput, Cause: waitErr}
+	case waitErr != nil:
+		return &ExecutionError{Kind: FailureExit, Cause: waitErr}
+	}
+	return nil
 }
 
 // ExecuteNode adapts process output to explicitly declared node output ports.
@@ -183,7 +225,7 @@ func (Executor) ValidateNodeConfig(id string, node graph.NodeDefinition) error {
 
 // ExecuteNodeAttempt is ExecuteNodeWithLogs for a loop producer attempt.
 // attempt 0 means "not a loop attempt" and adds no variable.
-func (Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int) (map[string]graph.Value, error) {
+func (e Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int) (map[string]graph.Value, error) {
 	cfg, configErr := parseConfig(node)
 	if configErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
@@ -192,7 +234,7 @@ func (Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node grap
 	if outputErr != nil {
 		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: outputErr}
 	}
-	result, err := execute(ctx, nodeID, node, inputs, observe, attempt)
+	result, err := execute(ctx, nodeID, node, inputs, observe, attempt, e.Policy)
 	if err != nil {
 		return nil, err
 	}

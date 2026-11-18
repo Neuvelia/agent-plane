@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -91,6 +93,43 @@ func TestHelperProcess(t *testing.T) {
 				time.Sleep(time.Hour)
 			}
 		}
+	case "ignore-term":
+		signal.Ignore(syscall.SIGTERM)
+		writeAtomic(args[1], "ready")
+		for {
+			time.Sleep(time.Hour)
+		}
+	case "term-exit0":
+		c := make(chan os.Signal, 1)
+		signal.Notify(c, syscall.SIGTERM)
+		writeAtomic(args[1], "ready")
+		<-c
+		os.Exit(0)
+	case "pid-hold":
+		writeAtomic(args[1], strconv.Itoa(os.Getpid()))
+		for {
+			time.Sleep(time.Hour)
+		}
+	case "spawn-tree":
+		child := exec.Command(os.Args[0], "-test.run=^TestHelperProcess$", "--", "pid-hold", args[1])
+		child.Env = os.Environ()
+		if err := child.Start(); err != nil {
+			os.Exit(92)
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for {
+			if _, err := os.Stat(args[1]); err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				os.Exit(93)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		writeAtomic(args[2], "ready")
+		for {
+			time.Sleep(time.Hour)
+		}
 	case "pipeholder":
 		_ = os.WriteFile(args[1], []byte("ready"), 0600)
 		deadline := time.Now().Add(10 * time.Second)
@@ -105,6 +144,16 @@ func TestHelperProcess(t *testing.T) {
 		os.Exit(91)
 	}
 	os.Exit(0)
+}
+
+func writeAtomic(path, content string) {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(content), 0600); err != nil {
+		os.Exit(94)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Exit(95)
+	}
 }
 
 func helperNode(mode string, more ...string) graph.NodeDefinition {
@@ -613,7 +662,8 @@ func TestExecuteCancellationReturnsWithInheritedOutputPipes(t *testing.T) {
 	ready := filepath.Join(dir, "holder-ready")
 	release := filepath.Join(dir, "holder-release")
 	holderDone := filepath.Join(dir, "holder-done")
-	defer releaseAndWaitForHolder(t, ready, release, holderDone)
+	// Cancellation now terminates the holder with the tree, so it never reports done.
+	defer func() { _ = os.WriteFile(release, []byte("release"), 0600) }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	type outcome struct {
