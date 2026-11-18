@@ -17,6 +17,7 @@ the CLI, local run store, loopback API and desktop client.
 | Human approval facts and bounded text | `approval.go` |
 | Opt-in recorded run values (schema 10) and their bounds | `value.go` |
 | Workspace isolation facts, closed reason vocabulary, path bounding | `workspace.go` |
+| Opt-in attempt diff facts (schema 12), bounds and closed vocabularies | `diff.go` |
 | Cancel/timeout facts, closed cause vocabulary, terminal `reason` (schema 13) | `cancel.go` |
 
 ## Preserve these contracts
@@ -38,8 +39,8 @@ the CLI, local run store, loopback API and desktop client.
   value must match its `size_bytes` and `sha256`. The runtime owns redaction,
   the per-run `MaxRunValueBytes` budget and whether recording is enabled.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes, approval,
-  workspace isolation facts (schema 11, ADR-0024) and cancel/timeout facts
-  (schema 13, ADR-0028) survive progress retention limits. Logs and normalized progress share
+  workspace isolation facts (schema 11, ADR-0024), attempt diffs (schema 12,
+  ADR-0026) and cancel/timeout facts (schema 13, ADR-0028) survive progress retention limits. Logs and normalized progress share
   bounded retained and live budgets. An omitted progress event still consumes
   a sequence, so retained traces may have gaps. `progress_omitted` records
   retained and live omissions before `run_finished`; final facts are replay
@@ -77,7 +78,7 @@ the root policy.
 - Checks, attempts, units, changed-file scope and approvals: `gate_test.go`,
   `attempt_test.go`, `unit_test.go`, `changed_files_test.go`,
   `approval_test.go`, `value_test.go`; workspace facts, bounds and retention:
-  `workspace_test.go`; cancel/timeout facts and reason rules: `cancel_test.go`.
+  `workspace_test.go`; cancel/timeout facts and reason rules: `cancel_test.go`; attempt diffs: `diff_test.go`.
 - Producer ordering and redaction: `internal/runtime/events_test.go`,
   `internal/runtime/progress_test.go`; durable replay and API delivery:
   `internal/store/` and `internal/api/` tests.
