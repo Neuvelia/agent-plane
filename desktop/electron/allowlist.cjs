@@ -14,6 +14,9 @@ const RULES = [
   ['GET', /^\/approvals$/],
   ['POST', /^\/graphs\/(validate|open|stat|edit)$/],
   ['PUT', /^\/graphs\/save$/],
+  // Read-only capability report (F2.11, ADR-0025).
+  ['GET', /^\/capabilities$/],
+  ['POST', /^\/capabilities\/check$/],
 ]
 
 function isAllowed(method, requestPath) {

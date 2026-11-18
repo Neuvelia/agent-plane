@@ -14,6 +14,7 @@ spec before changing an IPC or API boundary.
 | Native graph dialogs, grant registration and revocation | `graphs.cjs` |
 | Recent graph paths held in main-process user data | `recents.cjs` |
 | "Record run values" preference and `serve` flags (ADR-0023) | `recording.cjs` |
+| `serve --codex-bin` from an absolute `AGENTPLANE_CODEX_BIN` (F2.11) | `capabilities.cjs` |
 | Renderer bridge types and API wrappers | `desktop/src/types.ts`, `desktop/src/api.ts`, `desktop/src/editor/api.ts` |
 | Go API routes, grant checks and run decisions | `internal/api/AGENTS.md` |
 
@@ -77,6 +78,8 @@ requirements, when describing implemented behavior.
 - Graph dialogs, grants and revocation: `desktop/test/graphs-handlers.test.ts`.
 - Recent-list privacy, ordering and failure: `desktop/test/recents.test.ts`.
 - Recording preference, validation and `serve` flags: `desktop/test/recording.test.tsx`.
+- Capability routes and `--codex-bin`: `desktop/test/allowlist.test.ts`,
+  `desktop/test/capabilities-flags.test.ts`.
 - Real bridge, sidecar, API and editor path: `desktop/e2e/demo.cjs`.
 - API auth, SSE and grant checks: `internal/api/server_test.go`,
   `internal/api/docs_test.go`.

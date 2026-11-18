@@ -1,6 +1,6 @@
 // Package capability reports what this machine can run (F2.11, ADR-0025): the
-// engine version, the Git binary the engine uses, and each agent adapter the
-// engine is composed with. Detection is read-only and bounded. Nothing it learns
+// engine version, the Git binary the engine uses, each agent adapter the
+// engine is composed with, and the common agent CLIs that have no adapter yet. Detection is read-only and bounded. Nothing it learns
 // leaves the report except fixed status and reason codes and a version string
 // that matches a strict pattern: no path, environment value or raw tool output.
 package capability
@@ -32,7 +32,10 @@ const (
 	StatusNotConfigured       Status = "not_configured"
 	StatusUnsupportedPlatform Status = "unsupported_platform"
 	StatusUnsupportedVersion  Status = "unsupported_version"
-	StatusError               Status = "error"
+	// StatusDetectedNoAdapter means an agent CLI was found on PATH, but the engine
+	// has no adapter for it, so it cannot run it.
+	StatusDetectedNoAdapter Status = "detected_no_adapter"
+	StatusError             Status = "error"
 )
 
 // Reason codes are a closed set; a new one needs a spec change.
@@ -47,10 +50,13 @@ const (
 	ReasonMissingRequiredFlags  = "missing_required_flags"
 	ReasonPlatformNotSupported  = "platform_not_supported"
 	ReasonDeveloperToolsMissing = "developer_tools_missing"
+	// ReasonFoundOnPath means an adapter has no configured binary, but its command
+	// name was found on PATH. The path itself is never reported.
+	ReasonFoundOnPath = "found_on_path"
 )
 
 // Reasons lists every reason code, for tests and clients.
-var Reasons = []string{ReasonNone, ReasonNoBinaryConfigured, ReasonNotExecutable, ReasonProbeFailed, ReasonProbeTimeout, ReasonOutputTooLarge, ReasonUnrecognizedVersion, ReasonMissingRequiredFlags, ReasonPlatformNotSupported, ReasonDeveloperToolsMissing}
+var Reasons = []string{ReasonNone, ReasonNoBinaryConfigured, ReasonNotExecutable, ReasonProbeFailed, ReasonProbeTimeout, ReasonOutputTooLarge, ReasonUnrecognizedVersion, ReasonMissingRequiredFlags, ReasonPlatformNotSupported, ReasonDeveloperToolsMissing, ReasonFoundOnPath}
 
 type Engine struct {
 	Version string `json:"version"`
@@ -60,7 +66,7 @@ type Engine struct {
 
 type Tool struct {
 	ID      string `json:"id"`
-	Kind    string `json:"kind"` // "tool" or "agent_adapter"
+	Kind    string `json:"kind"` // "tool", "agent_adapter" or "agent_cli"
 	Status  Status `json:"status"`
 	Version string `json:"version"`
 	Reason  string `json:"reason"`
@@ -75,9 +81,27 @@ type Report struct {
 
 // Agent is one adapter the engine is composed with. A nil Adapter means the
 // adapter exists but has no binary configured; it is reported without probing.
+// Command, when set, is the name looked up on PATH (without executing it) to
+// tell the person that an unconfigured adapter's CLI is installed.
 type Agent struct {
 	ID      string
 	Adapter agent.AgentAdapter
+	Command string
+}
+
+// CLI is an agent CLI for which no adapter exists yet. It is only looked up on
+// PATH, never executed (owner decision 2026-11-16, ADR-0025 4a).
+type CLI struct {
+	ID      string // report id
+	Command string // name looked up on PATH
+}
+
+// AgentCLIs is the fixed table of common agent CLIs the welcome screen lists.
+// Adding one is a row here plus its PL/EN name in the desktop catalogue.
+var AgentCLIs = []CLI{
+	{ID: "claude", Command: "claude"},
+	{ID: "cursor-agent", Command: "cursor-agent"},
+	{ID: "gemini", Command: "gemini"},
 }
 
 // Detector holds everything detection depends on, so tests substitute fakes.
@@ -93,6 +117,11 @@ type Detector struct {
 	// os.Stat and os.Readlink.
 	Stat     func(string) (os.FileInfo, error)
 	Readlink func(string) (string, error)
+	// CLIs are reported after the adapters, in this order, from a PATH lookup.
+	CLIs []CLI
+	// LookPath finds a command on PATH without executing it. Default:
+	// exec.LookPath, which stats candidates and checks the execute permission.
+	LookPath func(string) (string, error)
 }
 
 const maxProbeOutput = 4 << 10
@@ -118,7 +147,21 @@ func (d Detector) Detect(ctx context.Context) Report {
 	}
 	agents := append([]Agent(nil), d.Agents...)
 	sort.SliceStable(agents, func(i, j int) bool { return agents[i].ID < agents[j].ID })
-	tools := make([]Tool, 1+len(agents))
+	lookPath := d.LookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	// found reports only whether the name resolves; the path is dropped here.
+	found := func(command string) (ok bool) {
+		defer func() {
+			if recover() != nil {
+				ok = false
+			}
+		}()
+		_, err := lookPath(command)
+		return err == nil
+	}
+	tools := make([]Tool, 1+len(agents)+len(d.CLIs))
 	var wg sync.WaitGroup
 	run := func(i int, id, kind string, probe func() Tool) {
 		wg.Add(1)
@@ -140,7 +183,22 @@ func (d Detector) Detect(ctx context.Context) Report {
 			tools[i+1] = Tool{ID: a.ID, Kind: "agent_adapter", Status: StatusUnsupportedPlatform, Reason: ReasonPlatformNotSupported}
 			continue
 		}
-		run(i+1, a.ID, "agent_adapter", func() Tool { return adapterTool(ctx, a) })
+		run(i+1, a.ID, "agent_adapter", func() Tool {
+			t := adapterTool(ctx, a)
+			if a.Adapter == nil && a.Command != "" && found(a.Command) {
+				t.Reason = ReasonFoundOnPath
+			}
+			return t
+		})
+	}
+	// The lookup executes nothing and works on every OS, so these rows are
+	// reported on Windows too.
+	for i, c := range d.CLIs {
+		t := Tool{ID: c.ID, Kind: "agent_cli", Status: StatusMissing}
+		if found(c.Command) {
+			t.Status = StatusDetectedNoAdapter
+		}
+		tools[1+len(agents)+i] = t
 	}
 	wg.Wait()
 	return Report{

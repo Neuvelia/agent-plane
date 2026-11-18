@@ -19,6 +19,9 @@ Verified facts that bound the decision:
   `--version`, `--help` and `exec --help` probes with an empty environment, 10 seconds each, Linux and macOS
   only.
 - `serve` has no agent adapter; agent nodes cannot run from the desktop. No Claude Code adapter exists.
+- Owner decision 2026-11-16: the welcome screen also lists the common agent CLIs for which no adapter
+  exists yet (Claude Code `claude`, Cursor Agent `cursor-agent`, Gemini CLI `gemini`), so a person sees
+  that AgentPlane noticed them and why it cannot run them. They are found without executing anything.
 
 ## Decision
 
@@ -28,24 +31,40 @@ Verified facts that bound the decision:
    registered by exact method and path. Without a configured detector they answer 503.
 2. **DTO, version 1.** `{version, checked_at, engine: {version, os, arch}, tools: [{id, kind, status,
    version, reason}]}`. `tools` is `git` followed by the composed adapters sorted by id (today exactly
-   `codex`). `status` is `available`, `missing`, `not_configured`, `unsupported_platform`,
-   `unsupported_version` or `error`; `reason` is a closed set of codes. `version` is set only for
-   `available` and must match `^[0-9A-Za-z.+-]{1,64}$`. The report never contains a path, an environment
-   value, error text or raw probe output.
+   `codex`), followed by the agent-CLI table in its fixed order (today `claude`, `cursor-agent`,
+   `gemini`). `kind` is `tool`, `agent_adapter` or `agent_cli`. `status` is `available`, `missing`,
+   `not_configured`, `unsupported_platform`, `unsupported_version`, `detected_no_adapter` or `error`;
+   `reason` is a closed set of codes. `version` is set only for `available` and must match
+   `^[0-9A-Za-z.+-]{1,64}$`. The report never contains a path, an environment value, error text or raw
+   probe output. Adding the CLI rows, the `agent_cli` kind, the `detected_no_adapter` status and the
+   `found_on_path` reason is additive within version 1: clients already show an unknown status verbatim.
 3. **Detection is the engine's own.** Git: on Linux/Darwin only, resolve Git as the engine does (`gitlocate.ResolveGit`), stat it, then one bounded
    `--version` probe with structured argv, the environment `GIT_CONFIG_NOSYSTEM=1`,
    `GIT_CONFIG_GLOBAL=/dev/null`, `LC_ALL=C` and nothing else, stdin closed, the temp directory as working
    directory, output capped at 4 KiB, a 10 second timeout with termination. Adapters: the existing
    `Detect`, with the error kind (never its text) selecting the status. On other operating systems no probe
-   process starts and every row is `unsupported_platform`. On Darwin, if the resolved
-   path is `/usr/bin/git`, it is an `xcrun` shim that opens the "install developer tools" dialog when no developer
+   process starts and the Git and adapter rows are `unsupported_platform`. Adapters are never
+   looked up on `PATH` for execution; Git is resolved as the engine does (see the amendment at the end).
+   On Darwin, if the resolved path is `/usr/bin/git`, it is an `xcrun` shim that opens the "install developer tools" dialog when no developer
    tools exist, so it is executed only after a stat (no execution) finds a real Git under the Command Line
    Tools, the `xcode_select_link` target or the default Xcode location; otherwise the row is `missing`
    with `developer_tools_missing`. This is unit-tested with injected stat/readlink and still needs a
    native macOS check.
 4. **Codex binary.** `serve` accepts an optional `--codex-bin ABSOLUTE_PATH` used only to compose detection;
    agent execution in `serve` is unchanged. Without it Codex is `not_configured` and `Detect` is not called.
-   Electron main passes it only from an absolute `AGENTPLANE_CODEX_BIN`.
+   Electron main passes it only from an absolute `AGENTPLANE_CODEX_BIN`. When it is absent, a stat-only
+   `PATH` lookup of `codex` (see 4a) turns the row's reason into `found_on_path`, so the UI can say "found
+   on PATH; set AGENTPLANE_CODEX_BIN to use it". The found path is not reported and not executed.
+4a. **Agent CLIs without an adapter (owner decision 2026-11-16).** A small fixed table in
+   `internal/capability` names each CLI by report id and command name (`claude`/`claude`,
+   `cursor-agent`/`cursor-agent`, `gemini`/`gemini`); adding one is a one-line change plus its UI text.
+   Each is looked up on the sidecar's `PATH` with `exec.LookPath`, which inspects the filesystem (stat and
+   an access check) and never runs the file. Found is `detected_no_adapter`, otherwise `missing`. These
+   files are never executed, their configuration is never read and the found path never leaves the
+   lookup. The lookup works on every OS, so these rows are shown on Windows too. The lookup function is
+   injected so tests use fakes, and a test with real `exec.LookPath` and marker-writing scripts proves no
+   process is started. The `PATH` seen is the sidecar's own; a desktop app started from a macOS GUI
+   inherits a short `PATH`, so a CLI installed elsewhere can show as `missing`.
 5. **Single flight, memory only.** One detection runs at a time; concurrent callers join it. The shared
    detection is bounded by the server context, not by one client's request. The report is kept in memory and
    discarded when the sidecar exits. Detection emits no run event and writes nothing to the store or disk.
@@ -76,6 +95,22 @@ Cons:
 
 - Reports binaries the engine never runs, contradicting ADR-0010's absolute-binary rule; a misleading
   "available" is worse than an honest "not configured".
+
+Rejected for execution. Accepted in a narrower form (decision 4a): a stat-only lookup that never runs the
+file and reports only "found" as `detected_no_adapter` (or `found_on_path` for an unconfigured Codex),
+never "available".
+
+### Run `--version` on the agent CLIs found on `PATH`
+
+Pros:
+
+- Could show their versions.
+
+Cons:
+
+- Executes third-party binaries the engine has no adapter for and will not run; their startup can read
+  configuration, update themselves or contact the network. A found/missing fact is enough to explain why
+  they cannot be used yet.
 
 ### Emit detection as events or persist the report
 
@@ -112,7 +147,9 @@ exactly `GET /capabilities` and `POST /capabilities/check` (F2.11, pending deskt
 Go tests with fake binaries cover each Git outcome, exact argv and environment, timeout termination, an
 unsupported platform starting no process, adapter mapping including panics, report sanitisation with
 marker strings, single flight under concurrency (race detector), no store writes, auth on both routes, body
-rules, 503 without a detector, the `serve` flag and the composed report.
+rules, 503 without a detector, the `serve` flag and the composed report. The agent-CLI rows are covered by
+an injected lookup (found, missing, Codex found but not configured, Windows) and by a real `exec.LookPath`
+over marker-writing scripts that asserts no marker appears.
 
 ## Amendment: Git is resolved from PATH
 

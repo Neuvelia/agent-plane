@@ -113,6 +113,9 @@ outputs: {}
   }
   const write = (name, data) => fs.writeFileSync(path.join(out, name), JSON.stringify(data, null, 1) + '\n')
   try {
+    // F2.11: this machine's capability report; stories derive the other states from it.
+    fs.writeFileSync(path.join(out, 'capabilities-linux.json'), JSON.stringify((await call('GET', '/capabilities')).body, null, 2) + '\n')
+    if (process.env.AP_RECORD === 'capabilities') return
     for (const [name, text] of Object.entries(GRAPHS)) {
       const file = path.join(dir, `${name}.yaml`)
       fs.writeFileSync(file, text)
@@ -126,7 +129,7 @@ outputs: {}
     // The canvas (E2.2): the demo graph, a file with anchors, and real answers to
     // the operations the canvas sends.
     const demoText = fs.readFileSync(path.join(root, '.agents', 'graphs', 'demo-vertical.yaml'), 'utf8')
-    const hostile = fs.readFileSync(path.join(root, 'internal', 'graph', 'edit', 'testdata', 'hostile.yaml'), 'utf8')
+    const hostile = fs.readFileSync(path.join(root, 'internal', 'adapter', 'yamlgraph', 'edit', 'testdata', 'hostile.yaml'), 'utf8')
     for (const [name, text] of [['demo', demoText], ['anchors', hostile]]) {
       const file = path.join(dir, `${name}.yaml`)
       fs.writeFileSync(file, text)

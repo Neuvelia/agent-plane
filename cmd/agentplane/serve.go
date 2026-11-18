@@ -190,14 +190,15 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 }
 
 // capabilityDetector composes F2.11 detection: Git at the engine's fixed path
-// and the Codex adapter's own Detect, which runs only when a binary was given.
+// and the Codex adapter's own Detect, which runs only when a binary was given,
+// then the agent CLIs without an adapter, looked up on PATH without running them.
 // Agent execution in serve is unchanged by --codex-bin (ADR-0025).
 func capabilityDetector(codexBin string) capability.Detector {
-	codexAgent := capability.Agent{ID: "codex"}
+	codexAgent := capability.Agent{ID: "codex", Command: "codex"}
 	if codexBin != "" {
 		codexAgent.Adapter = codex.Adapter{Binary: codexBin}
 	}
-	return capability.Detector{EngineVersion: version.String(), Agents: []capability.Agent{codexAgent}}
+	return capability.Detector{EngineVersion: version.String(), Agents: []capability.Agent{codexAgent}, CLIs: capability.AgentCLIs}
 }
 
 // onServe lets tests reach the running server (for example its Hub) without

@@ -89,6 +89,8 @@ export type RecordingSaveResult = { ok: true; settings: RecordingSettings } | { 
 declare global {
   interface Window {
     agentplane: {
+      /** Desktop app version (Electron app.getVersion()); read-only, display only (F2.11). */
+      readonly appVersion: string
       request: <T = unknown>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) => Promise<ApiResponse<T>>
       subscribe: (runId: string, onEvent: (e: ApEvent) => void, onEnd: (reason: string) => void) => () => void
       openGraph: () => Promise<GraphGrantResult>
