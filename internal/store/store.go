@@ -40,7 +40,52 @@ var runIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9
 func ValidRunID(id string) bool { return runIDPattern.MatchString(id) }
 
 // Store is a directory of run directories.
-type Store struct{ Dir string }
+type Store struct {
+	Dir string
+	fs  fsOps
+}
+
+// fsOps is the set of filesystem operations a run creation performs, in the
+// order the writer issues them; a seam for fault injection and order tests.
+type fsOps interface {
+	MkdirAll(path string) error
+	Mkdir(path string) error
+	WriteFileSync(path string, data []byte) error
+	CreateLog(path string) (logFile, error)
+	SyncDir(path string) error
+}
+
+func (s Store) ops() fsOps {
+	if s.fs != nil {
+		return s.fs
+	}
+	return osFS{}
+}
+
+type osFS struct{}
+
+func (osFS) MkdirAll(path string) error { return os.MkdirAll(path, dirMode) }
+func (osFS) Mkdir(path string) error    { return os.Mkdir(path, dirMode) }
+func (osFS) SyncDir(path string) error  { return syncDir(path) }
+
+func (osFS) WriteFileSync(path string, data []byte) error {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return err
+}
+
+func (osFS) CreateLog(path string) (logFile, error) {
+	return os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, fileMode)
+}
 
 // Summary describes one stored run without loading its whole log.
 type Summary struct {
@@ -107,7 +152,12 @@ func (w *Writer) Append(e events.Event) error {
 		w.err = fmt.Errorf("encode event: %w", err)
 		return w.err
 	}
-	if _, err := w.file.Write(append(line, '\n')); err != nil {
+	line = append(line, '\n')
+	n, err := w.file.Write(line)
+	if err == nil && n != len(line) {
+		err = io.ErrShortWrite
+	}
+	if err != nil {
 		w.err = fmt.Errorf("write event log: %w", err)
 		return w.err
 	}
@@ -125,28 +175,38 @@ func (w *Writer) open(first events.Event) error {
 	if !ValidRunID(id) {
 		return fmt.Errorf("refusing to store run with invalid ID %q", id)
 	}
-	if err := os.MkdirAll(w.store.Dir, dirMode); err != nil {
+	fs := w.store.ops()
+	if err := fs.MkdirAll(w.store.Dir); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
 	}
 	dir := filepath.Join(w.store.Dir, id)
-	if err := os.Mkdir(dir, dirMode); err != nil {
+	if err := fs.Mkdir(dir); err != nil {
 		return fmt.Errorf("create run directory: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, graphFile), w.graph, fileMode); err != nil {
+	if err := fs.WriteFileSync(filepath.Join(dir, graphFile), w.graph); err != nil {
 		return fmt.Errorf("write graph snapshot: %w", err)
 	}
-	f, err := os.OpenFile(filepath.Join(dir, eventsFile), os.O_CREATE|os.O_EXCL|os.O_WRONLY|os.O_APPEND, fileMode)
+	f, err := fs.CreateLog(filepath.Join(dir, eventsFile))
 	if err != nil {
 		return fmt.Errorf("create event log: %w", err)
+	}
+	for _, d := range []string{dir, w.store.Dir} {
+		if err := fs.SyncDir(d); err != nil {
+			if cerr := f.Close(); cerr != nil {
+				err = errors.Join(err, cerr)
+			}
+			return fmt.Errorf("sync run directory entry: %w", err)
+		}
 	}
 	w.file = f
 	return nil
 }
 
 // Durability scope: a lifecycle event is fsynced before Append returns, so it
-// survives the process being killed. The run directory entry and graph.yaml are
-// not fsynced, so after power loss a run directory or its graph snapshot can be
-// missing or empty; that is outside this store's guarantee (ADR-0019).
+// survives the process being killed. Creation is ordered graph.yaml (synced),
+// event log, then the run and store directories, so after power loss a run
+// directory is either absent or has its graph snapshot. On Windows directory
+// entries cannot be synced (syncdir_windows.go); the log itself still is.
 
 // Close flushes and closes the log. It is safe to call without any Append.
 func (w *Writer) Close() error {
