@@ -27,6 +27,13 @@ const (
 	CodePortConflict = "E_EDIT_PORT_TYPE_CONFLICT" // a type change would break a connected binding
 	CodeLoopInvalid  = "E_EDIT_LOOP_INVALID"       // set_loop that cannot be made valid
 	CodeUnitsInvalid = "E_EDIT_UNITS_INVALID"      // set_units naming a missing or repeated node
+
+	// Codes added by F2.3 (Edge / Data Mapping Editor).
+	CodeGraphInputExists       = "E_EDIT_GRAPH_INPUT_EXISTS"        // add_graph_input or a rename onto an existing input
+	CodeGraphInputNotFound     = "E_EDIT_GRAPH_INPUT_NOT_FOUND"     // the graph input does not exist
+	CodeGraphInputTypeConflict = "E_EDIT_GRAPH_INPUT_TYPE_CONFLICT" // a retype would break a binding
+	CodeBindingNotFound        = "E_EDIT_BINDING_NOT_FOUND"         // remove_graph_input_binding of a binding that is not there
+	CodeGraphOutputInvalid     = "E_EDIT_GRAPH_OUTPUT_INVALID"      // a graph output name or source that cannot be used
 )
 
 // Error is a structured, actionable editing failure: what failed, which

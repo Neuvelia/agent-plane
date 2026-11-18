@@ -49,7 +49,7 @@ feature contract.
 | `F2.5a-desktop-redesign.md` | Implemented (R0-R3); presentation only, no ADR |
 | `F2.1-graph-canvas.md` | Implemented (E1, E2.1-E2.3); ADR-0020, ADR-0021, ADR-0022 (accepted) |
 | `F2.2-node-inspector.md` | Implemented through E4.5; ADR-0020, ADR-0021 (accepted) |
-| `F2.3-edge-data-mapping-editor.md` | Accepted for implementation; E6 implemented, E5a.1-E5a.3 and E5b.1-E5b.2 specified, not started; ADR-0020, ADR-0023 (accepted) |
+| `F2.3-edge-data-mapping-editor.md` | Accepted for implementation; E6 and E5a.1 (engine operations) implemented; E5a.2-E5a.3 and E5b.1-E5b.2 specified, not started; ADR-0020, ADR-0023 (accepted) |
 | `F2.3-E6-recorded-run-values.md` | Implemented (engine slice E6 and desktop switch, opt-in); ADR-0023 (accepted) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
 | `F2.6-run-inspector-overview.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (overview largely delivered by F2.5/F2.5a/F2.9); no ADR |
@@ -62,11 +62,18 @@ feature contract.
 
 | Feature | Spec status |
 | --- | --- |
-| `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
+| `F3.1-workspace-isolation.md` | Implemented (opt-in Agent worktree isolation, ADR-0024; event schema 11); real-Codex demo passed once, see `docs/validation/F3.1-real-codex-demo.md` |
 | `F3.2-durable-run-state.md` | Draft; ADR-0027 proposed (JSONL, no SQLite) |
 | `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | Draft; ADR-0028 proposed; criteria split by dependency on F3.2 |
 | `F3.8-secrets-references.md` | Draft; ADR-0029 proposed (shared with F3.9) |
 | `F3.9-execution-policy-v0.md` | Draft; ADR-0029 proposed (shared with F3.8) |
+
+## Release engineering - drafts (not roadmap F-IDs)
+
+| Feature | Spec status |
+| --- | --- |
+| `REL1-release-engineering.md` | Draft; ADR-0030 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
+| `REL2-public-roadmap-status.md` | Draft; ADR-0031 (proposed) |
 
 ## Later phases
 

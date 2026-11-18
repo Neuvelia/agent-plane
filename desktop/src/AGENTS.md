@@ -19,6 +19,8 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
 | Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
+| Welcome screen, capability rows and first-run flag (F2.11) | `welcome.tsx`, `capabilities.ts` |
+| New graph picker, bundled templates, draft and notices (F2.12) | `editor/TemplatePicker.tsx`, `templates.ts` |
 | Story fixtures and bridge substitute | `screens.stories.tsx`, `storybook/bridge.tsx`, `storybook/fixtures.ts` |
 
 ## Preserve these contracts
@@ -75,6 +77,8 @@ as implemented merely because the full spec describes it.
   schema-10 `value_recorded` streams leave run views unchanged:
   `desktop/test/schema10.test.ts`.
 - Settings recording switch: `desktop/test/recording.test.tsx`.
+- Welcome screen, capability text and first-run flag: `desktop/test/capabilities.test.tsx`.
+- Template picker, draft (only the `id` line changes), notices and EN/PL keys: `desktop/test/templates.test.tsx`; no YAML parsing or graph rule in the picker: `desktop/test/no-graph-rules.test.ts`.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.

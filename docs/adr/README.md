@@ -45,7 +45,8 @@ Onboarding (proposed): [ADR-0025 - Read-only capability report on the loopback A
 
 Phase 3:
 [ADR-0024 - Workspace isolation with Git worktrees and deterministic integration](0024-workspace-isolation-with-git-worktrees.md)
-(accepted; real-Codex sandbox spike passed).
+(accepted; real-Codex sandbox spike passed; implemented by F3.1, with a real-Codex run recorded in
+`docs/validation/F3.1-real-codex-demo.md`).
 
 F3.2 durable run state (proposed):
 [ADR-0027 - Durable run state on an append-only JSONL log](0027-durable-run-state.md).
@@ -55,3 +56,7 @@ F3.4 cancellation and timeouts (proposed):
 
 F3.8 secret references and F3.9 execution policy (proposed):
 [ADR-0029 - Secret references and execution policy v0](0029-secret-references-and-execution-policy.md).
+
+Release engineering (proposed):
+[ADR-0030 - Distribution channels, desktop shell and release tooling](0030-distribution-and-release-channels.md),
+[ADR-0031 - Public roadmap status feed and landing synchronization](0031-public-roadmap-status-feed.md).

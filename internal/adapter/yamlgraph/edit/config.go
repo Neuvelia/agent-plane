@@ -2,10 +2,13 @@ package edit
 
 import (
 	"fmt"
+	"maps"
 	"reflect"
+	"slices"
 	"strings"
 
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/fields"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -152,7 +155,51 @@ func (s *session) setConfig(op Op) *Error { return s.setConfigAt(op, false) }
 
 func (s *session) unsetConfig(op Op) *Error { return s.unsetConfigAt(op, false) }
 
+// ConfigFields returns the config descriptors of a node type: the node's own
+// config, or with loop the config of its embedded Gate. Nil means unknown.
+type ConfigFields func(nodeType string, loop bool) []fields.Field
+
+// setConfigAt sets one config value. Changing `kind` also removes the keys the
+// old kind declared and the new one does not, so the file never keeps keys the
+// engine would reject; keys no descriptor lists are never touched.
 func (s *session) setConfigAt(op Op, loop bool) *Error {
+	var fs []fields.Field
+	var old map[string]any
+	if s.fields != nil && len(op.Path) == 1 && op.Path[0] == "kind" {
+		if n, ok := s.want.Nodes[op.Node]; ok {
+			if cfg, err := typedConfig(&n, op.Node, loop, false); err == nil {
+				fs, old = s.fields(n.Type, loop), maps.Clone(cfg)
+			}
+		}
+	}
+	if err := s.setConfigValue(op, loop); err != nil {
+		return err
+	}
+	if fs == nil {
+		return nil
+	}
+	n := s.want.Nodes[op.Node]
+	cfg, err := typedConfig(&n, op.Node, loop, false)
+	if err != nil {
+		return err
+	}
+	kept := fields.AllowedKeys(fs, cfg)
+	var stale []string
+	for k := range fields.AllowedKeys(fs, old) {
+		if _, present := cfg[k]; present && !kept[k] {
+			stale = append(stale, k)
+		}
+	}
+	slices.Sort(stale)
+	for _, k := range stale {
+		if err := s.unsetConfigAt(Op{Op: op.Op, Node: op.Node, Path: []string{k}}, loop); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *session) setConfigValue(op Op, loop bool) *Error {
 	n, err := s.knownNode(op.Node)
 	if err != nil {
 		return err

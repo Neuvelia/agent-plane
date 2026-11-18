@@ -47,6 +47,7 @@ var legacyLayers = map[string]layer{
 	"internal/store":             layerAdapter,
 	"internal/api":               layerDelivery,
 	"internal/version":           layerNeutral,
+	"internal/gitlocate":         layerNeutral, // resolves the git executable; shared by adapters and runtime
 	"internal/fields":            layerNeutral, // config field descriptors shared by domain, adapters and delivery
 	"internal/fields/fieldstest": layerNeutral,
 	"internal/testenv":           layerNeutral, // test-only helpers

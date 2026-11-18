@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isAllowed } from '../electron/allowlist.cjs'
+import { isAllowed, isBodyAllowed } from '../electron/allowlist.cjs'
 
 describe('renderer route allowlist (ADR-0021)', () => {
   it('allows exactly the documented routes', () => {
@@ -14,6 +14,8 @@ describe('renderer route allowlist (ADR-0021)', () => {
       ['POST', '/graphs/stat'],
       ['POST', '/graphs/edit'],
       ['PUT', '/graphs/save'],
+      ['GET', '/capabilities'],
+      ['POST', '/capabilities/check'],
     ]
     for (const [m, p] of allowed) expect(isAllowed(m, p), `${m} ${p}`).toBe(true)
   })
@@ -64,7 +66,57 @@ describe('renderer route allowlist (ADR-0021)', () => {
     ]) expect(isAllowed('POST', p) || isAllowed('GET', p) || isAllowed('PUT', p), JSON.stringify(p)).toBe(false)
   })
 
+  it('allows the capability routes only with their exact method and path (F2.11)', () => {
+    for (const [m, p] of [
+      ['GET', '/capabilities/check'],
+      ['POST', '/capabilities'],
+      ['PUT', '/capabilities'],
+      ['DELETE', '/capabilities'],
+      ['GET', '/capabilities/'],
+      ['POST', '/capabilities/check/'],
+      ['GET', '/capabilities/../runs'],
+      ['POST', '/capabilities/../runs'],
+      ['GET', '/capabilitiesx'],
+      ['POST', '/capabilities/checkx'],
+      ['GET', '/capabilities?x=1'],
+      ['POST', '/capabilities/check?x=1'],
+      ['GET', '/capabilities/%2e%2e'],
+      ['GET', '//capabilities'],
+    ] as [string, string][]) expect(isAllowed(m, p), `${m} ${p}`).toBe(false)
+  })
+
   it('refuses anything that is not a method and a path string', () => {
     for (const [m, p] of [[undefined, '/runs'], ['GET', undefined], [null, null], [1, 2], [{}, []]]) expect(isAllowed(m, p)).toBe(false)
+  })
+})
+
+describe('renderer request bodies name a graph only by grant or text (ADR-0021, decision 9)', () => {
+  it('accepts a run started from a grant and a validation of a grant or of text', () => {
+    expect(isBodyAllowed('POST', '/runs', { graph_grant: 'g1', inputs: ['a=b'] })).toBe(true)
+    expect(isBodyAllowed('POST', '/graphs/validate', { grant: 'g1' })).toBe(true)
+    expect(isBodyAllowed('POST', '/graphs/validate', { text: 'schema_version: 0' })).toBe(true)
+  })
+
+  it('refuses a filesystem path on both routes, whatever the key spelling', () => {
+    // The Go API decodes JSON keys case-insensitively, so a deny-list of "graph_path" would not hold.
+    for (const body of [{ graph_path: '/x.yaml' }, { GRAPH_PATH: '/x.yaml' }, { Graph_Path: '/x.yaml' }, { graph_grant: 'g', graph_path: '/x.yaml' }, { graph_grant: 'g', extra: 1 }]) {
+      expect(isBodyAllowed('POST', '/runs', body), JSON.stringify(body)).toBe(false)
+    }
+    for (const body of [{ path: '/x.yaml' }, { PATH: '/x.yaml' }, { grant: 'g', path: '/x.yaml' }, { text: 't', path: '/x.yaml' }]) {
+      expect(isBodyAllowed('POST', '/graphs/validate', body), JSON.stringify(body)).toBe(false)
+    }
+  })
+
+  it('refuses a body that is not a plain object', () => {
+    for (const body of [undefined, null, 'graph_path', 7, ['graph_path']]) {
+      expect(isBodyAllowed('POST', '/runs', body)).toBe(false)
+      expect(isBodyAllowed('POST', '/graphs/validate', body)).toBe(false)
+    }
+  })
+
+  it('leaves the other routes to the sidecar', () => {
+    expect(isBodyAllowed('POST', '/graphs/open', { grant: 'g1' })).toBe(true)
+    expect(isBodyAllowed('PUT', '/graphs/save', { grant: 'g1', base_hash: null, text: 't' })).toBe(true)
+    expect(isBodyAllowed('GET', '/runs', undefined)).toBe(true)
   })
 })
