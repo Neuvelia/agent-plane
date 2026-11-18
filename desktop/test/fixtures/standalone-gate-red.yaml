@@ -1,0 +1,33 @@
+# Fixture graph for Storybook/tests: a standalone Gate node (no loop) that
+# rejects its input, so the run fails with a red gate_check that carries no
+# attempt ID. Recorded with
+#   agentplane run test/fixtures/standalone-gate-red.yaml --json
+# keeping the "events" array of the answer in test/fixtures/standalone-gate-red.json.
+schema_version: 0
+id: standalone-gate-red
+inputs: {}
+nodes:
+  build:
+    type: shell
+    config:
+      command: /bin/sh
+      args: ["-c", 'echo "{\"ready\":false}"']
+      stdout_json: true
+    outputs:
+      json: {type: json, required: true}
+  accept:
+    type: gate
+    config:
+      check_id: build-ready
+      kind: json_predicate
+      input: candidate
+      field: [ready]
+      operator: eq
+      expected: true
+    inputs:
+      candidate: {type: json, required: true}
+    outputs:
+      verdict: {type: string, required: true}
+edges:
+  - {from: build.outputs.json, to: accept.inputs.candidate}
+outputs: {}

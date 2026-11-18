@@ -228,16 +228,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		finishWatch = func(retained []events.Event) error {
 			close(live)
 			replay <- retained
-			if ctx.Err() == nil {
-				return <-done
-			}
-			select {
-			case err := <-done:
-				return err
-			case <-time.After(100 * time.Millisecond):
-				// An unresponsive terminal must not prevent cancellation.
-				return nil
-			}
+			return awaitWatchOutput(ctx, done, watchOutputGrace)
 		}
 	}
 	var executor runtime.Executor = shell.Executor{}
@@ -421,4 +412,23 @@ func commandError(command, status, kind string, err error, diagnostics []graph.D
 func presentationError(err error, stderr io.Writer) int {
 	_, _ = fmt.Fprintf(stderr, "write human output: %v\n", err)
 	return exitInternal
+}
+
+const watchOutputGrace = 100 * time.Millisecond
+
+// awaitWatchOutput waits for the renderer to drain. Cancellation at any point,
+// including after the run finished, bounds the wait so an unresponsive terminal
+// cannot keep the command alive.
+func awaitWatchOutput(ctx context.Context, done <-chan error, grace time.Duration) error {
+	select {
+	case err := <-done:
+		return err
+	case <-ctx.Done():
+	}
+	select {
+	case err := <-done:
+		return err
+	case <-time.After(grace):
+		return nil
+	}
 }

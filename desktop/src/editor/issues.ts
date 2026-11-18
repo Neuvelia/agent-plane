@@ -22,6 +22,8 @@ export interface Issue {
   message: string
   suggestion?: string
   line?: number
+  /** Only a parse issue can carry one, and only when the engine located the node. */
+  column?: number
   target: Target
   /** Machine-readable name of the element (empty for the graph). */
   element: string
@@ -68,8 +70,8 @@ export function toIssues(diags: Diagnostic[], def: Definition | undefined): Issu
 }
 
 /** A text that does not parse has exactly one issue and no others (requirement 8). */
-export function parseIssue(message: string, line?: number): Issue {
-  return { key: 'parse', severity: 'error', code: 'YAML', message, line, target: { kind: 'graph' }, element: '' }
+export function parseIssue(message: string, line?: number, column?: number): Issue {
+  return { key: 'parse', severity: 'error', code: 'YAML', message, line, column, target: { kind: 'graph' }, element: '' }
 }
 
 /** A request to take the person to an element; `nonce` makes repeating it observable. */

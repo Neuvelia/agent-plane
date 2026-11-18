@@ -7,6 +7,7 @@ import mixedOpen from '../../test/fixtures/graph-open-mixed.json'
 import pairOpen from '../../test/fixtures/graph-open-pair.json'
 import parseErrorOpen from '../../test/fixtures/graph-open-parse-error.json'
 import parseErrorValidate from '../../test/fixtures/graph-validate-parse-error.json'
+import parseColumnValidate from '../../test/fixtures/graph-validate-parse-column.json'
 import emptyValidate from '../../test/fixtures/graph-validate-empty.json'
 import pairValidate from '../../test/fixtures/graph-validate-pair.json'
 import editAddNode from '../../test/fixtures/graph-edit-add-node.json'
@@ -80,6 +81,7 @@ export const YamlErrorWhileTyping: S = story(base, async (root) => {
 })
 export const NewGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
   await click(root, 'editor-new')
+  await click(root, 'picker-create')
   await until(root, '.cm-content')
 })
 export const SaveConflict: S = story({ ...base, save: 'conflict' }, async (root) => {
@@ -253,6 +255,14 @@ export const IssuesParseError: S = story(base, async (root) => {
   await open(root)
   await typeIn(root, 'id: [\n')
   await until(root, '[data-testid="issue"][data-code="YAML"]')
+})
+const unknownFieldValidate = (text: string): ValidateResponse => ((text.includes('colour:') ? parseColumnValidate : pairValidate) as unknown as ValidateResponse)
+export const IssuesParseErrorColumn: S = story({ ...base, validate: unknownFieldValidate }, async (root) => {
+  await open(root)
+  await typeIn(root, 'colour: red\n')
+  const issue = await issueButton(root, 'YAML')
+  const position = issue.querySelector('.mu.mono')?.textContent ?? ''
+  if (!/\b6\b\D+\b5\b/.test(position)) throw new Error(`the parse issue does not show line 6 and column 5: "${position}"`)
 })
 export const IssuesValidating: S = story({ ...mixed, validateHang: true }, async (root) => {
   await open(root)

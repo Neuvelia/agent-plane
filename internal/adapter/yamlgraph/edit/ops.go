@@ -53,6 +53,18 @@ const (
 	OpSetLoopBindings     = "set_loop_bindings"
 )
 
+// Operation names of ops_version 1 added by F2.3 (Edge / Data Mapping Editor).
+const (
+	OpAddGraphInput           = "add_graph_input"
+	OpUpdateGraphInput        = "update_graph_input"
+	OpRemoveGraphInput        = "remove_graph_input"
+	OpAddGraphInputBinding    = "add_graph_input_binding"
+	OpRemoveGraphInputBinding = "remove_graph_input_binding"
+	OpSetGraphOutput          = "set_graph_output"
+	OpRemoveGraphOutput       = "remove_graph_output"
+	OpListConnections         = "list_connections"
+)
+
 // Port directions of the port operations.
 const (
 	DirectionInput  = "input"
@@ -109,7 +121,7 @@ type LoopBinding struct {
 // presentation operations never change the semantic version.
 func (o Op) presentation() bool { return o.Op == OpSetName || o.Op == OpSetLayout }
 
-func (o Op) query() bool { return o.Op == OpCanConnect }
+func (o Op) query() bool { return o.Op == OpCanConnect || o.Op == OpListConnections }
 
 // Decode parses a JSON array of operations strictly: unknown fields and unknown
 // operations are errors, and each operation's required fields are checked.
@@ -183,6 +195,18 @@ func (o Op) check() *Error {
 		return firstErr(need(o.Node != "", "node"), need(o.Port != "", "port"))
 	case OpSetLoopBindings:
 		return firstErr(need(o.Node != "", "node"), need(o.Bindings != nil, "bindings"))
+	case OpAddGraphInput:
+		return firstErr(need(o.ID != "", "id"), need(o.Type != "", "type"))
+	case OpUpdateGraphInput:
+		return firstErr(need(o.ID != "", "id"), need(o.NewID != "" || o.Type != "" || o.Required != nil, "at least one of new_id, type or required"))
+	case OpRemoveGraphInput, OpRemoveGraphOutput:
+		return need(o.ID != "", "id")
+	case OpAddGraphInputBinding, OpRemoveGraphInputBinding:
+		return firstErr(need(o.From != "", "from"), need(o.To != "", "to"))
+	case OpSetGraphOutput:
+		return firstErr(need(o.ID != "", "id"), need(o.From != "", "from"))
+	case OpListConnections:
+		return need((o.From != "") != (o.To != ""), "exactly one of from or to")
 	default:
 		return &Error{Code: CodeUnknownOp, Message: fmt.Sprintf("unknown operation %q", o.Op), OpIndex: -1, Suggestion: "operations of ops_version 1: " + strings.Join(opNames, ", ")}
 	}
@@ -191,7 +215,9 @@ func (o Op) check() *Error {
 // opNames lists the operations of ops_version 1, for the unknown-operation hint.
 var opNames = []string{OpAddNode, OpRemoveNode, OpRenameNode, OpSetName, OpSetLayout, OpAddEdge, OpRemoveEdge, OpCanConnect,
 	OpSetConfig, OpUnsetConfig, OpAddPort, OpUpdatePort, OpRemovePort, OpSetLoop, OpClearLoop, OpSetUnits,
-	OpSetLoopAttempts, OpSetLoopConfig, OpUnsetLoopConfig, OpSetLoopGateInput, OpRemoveLoopGateInput, OpSetLoopBindings}
+	OpSetLoopAttempts, OpSetLoopConfig, OpUnsetLoopConfig, OpSetLoopGateInput, OpRemoveLoopGateInput, OpSetLoopBindings,
+	OpAddGraphInput, OpUpdateGraphInput, OpRemoveGraphInput, OpAddGraphInputBinding, OpRemoveGraphInputBinding,
+	OpSetGraphOutput, OpRemoveGraphOutput, OpListConnections}
 
 func (o Op) portCheck(need func(bool, string) *Error) *Error {
 	return firstErr(need(o.Node != "", "node"), need(o.Direction == DirectionInput || o.Direction == DirectionOutput, "direction input or output"), need(o.Port != "", "port"))

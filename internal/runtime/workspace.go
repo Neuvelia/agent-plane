@@ -10,6 +10,8 @@ import (
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/gitlocate"
+	"agentplane/internal/gitstate"
 )
 
 type workspaceIdentity struct {
@@ -43,9 +45,13 @@ func inspectWorkspace(ctx context.Context, workspace string) workspaceIdentity {
 	result := workspaceIdentity{root: root}
 	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(bounded, "/usr/bin/git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "rev-parse", "--show-toplevel", "--absolute-git-dir")
+	gitPath, err := gitlocate.ResolveGit()
+	if err != nil {
+		return result
+	}
+	cmd := exec.CommandContext(bounded, gitPath, "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "rev-parse", "--show-toplevel", "--absolute-git-dir")
 	cmd.Dir = root
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "LC_ALL=C", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0", "GIT_TERMINAL_PROMPT=0"}
+	cmd.Env = append(gitstate.Environment(gitPath), "GIT_TERMINAL_PROMPT=0")
 	cmd.WaitDelay = time.Second
 	output := &identityOutput{}
 	cmd.Stdout = output

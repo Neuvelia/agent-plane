@@ -50,6 +50,10 @@ describe('ordering and filtering', () => {
   it('a parse error is one blocking issue with its line', () => {
     const p = parseIssue('bad', 3)
     expect(p).toMatchObject({ severity: 'error', line: 3, target: { kind: 'graph' } })
+    expect(p.column).toBeUndefined()
+  })
+  it('a parse issue carries the column only when given one', () => {
+    expect(parseIssue('bad', 3, 9)).toMatchObject({ line: 3, column: 9 })
   })
 })
 

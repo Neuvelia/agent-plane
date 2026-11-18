@@ -1,0 +1,11 @@
+{
+ "diagnostics": [],
+ "parse_column": 5,
+ "parse_error": "parse graph definition: yaml: unmarshal errors:\n  line 6: field colour not found in type graph.NodeDefinition",
+ "parse_line": 6,
+ "readonly_canvas": true,
+ "readonly_reasons": [
+  "parse_error"
+ ],
+ "status": "invalid"
+}
