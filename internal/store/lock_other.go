@@ -4,6 +4,6 @@ package store
 
 import "os"
 
-func tryLock(*os.File, bool) (bool, error) { return false, ErrLockUnsupported }
+func tryLock(*os.File, bool, bool) (bool, error) { return false, ErrLockUnsupported }
 
 func unlock(*os.File) error { return ErrLockUnsupported }

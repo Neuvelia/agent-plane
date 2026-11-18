@@ -9,16 +9,20 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// tryLock takes a non-blocking flock; held is false when another open file
-// description owns a conflicting lock. flock locks belong to the open file
-// description, so a second open in the same process conflicts as well.
-func tryLock(f *os.File, exclusive bool) (held bool, err error) {
+// tryLock takes a flock, without waiting unless block is set; held is false
+// when another open file description owns a conflicting lock. flock locks belong
+// to the open file description, so a second open in the same process conflicts
+// as well.
+func tryLock(f *os.File, exclusive, block bool) (held bool, err error) {
 	how := unix.LOCK_SH
 	if exclusive {
 		how = unix.LOCK_EX
 	}
+	if !block {
+		how |= unix.LOCK_NB
+	}
 	for {
-		err = unix.Flock(int(f.Fd()), how|unix.LOCK_NB)
+		err = unix.Flock(int(f.Fd()), how)
 		switch {
 		case err == nil:
 			return true, nil

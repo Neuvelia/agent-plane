@@ -22,8 +22,11 @@ import (
 const (
 	eventsFile = "events.jsonl"
 	graphFile  = "graph.yaml"
-	dirMode    = 0o700
-	fileMode   = 0o600
+	// creatingPrefix names a run directory under construction; it is not a
+	// valid run ID, so listing and reading ignore it.
+	creatingPrefix = ".creating-"
+	dirMode        = 0o700
+	fileMode       = 0o600
 )
 
 // Status values reported for a stored run. A log without a terminal event is
@@ -68,6 +71,7 @@ type fsOps interface {
 	WriteFileSync(path string, data []byte) error
 	CreateLog(path string) (logFile, error)
 	SyncDir(path string) error
+	Rename(oldPath, newPath string) error
 }
 
 func (s Store) ops() fsOps {
@@ -82,6 +86,8 @@ type osFS struct{}
 func (osFS) MkdirAll(path string) error { return os.MkdirAll(path, dirMode) }
 func (osFS) Mkdir(path string) error    { return os.Mkdir(path, dirMode) }
 func (osFS) SyncDir(path string) error  { return syncDir(path) }
+
+func (osFS) Rename(oldPath, newPath string) error { return os.Rename(oldPath, newPath) }
 
 func (osFS) WriteFileSync(path string, data []byte) error {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, fileMode)
@@ -213,38 +219,72 @@ func (w *Writer) open(first events.Event) error {
 		return err
 	}
 	dir := filepath.Join(w.store.Dir, id)
-	if err := fs.Mkdir(dir); err != nil {
+	if _, err := os.Stat(dir); err == nil {
+		return fmt.Errorf("create run directory: %w", os.ErrExist)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("stat run directory: %w", err)
+	}
+	build := dir
+	if publishByRename {
+		build = filepath.Join(w.store.Dir, creatingPrefix+id)
+	}
+	if err := fs.Mkdir(build); err != nil {
 		return fmt.Errorf("create run directory: %w", err)
 	}
-	lock, err := acquireRunLock(filepath.Join(dir, lockFile))
-	if err != nil {
-		return fmt.Errorf("lock run %s: %w", id, err)
-	}
-	w.lock = lock
-	if err := fs.WriteFileSync(filepath.Join(dir, graphFile), w.graph); err != nil {
-		return fmt.Errorf("write graph snapshot: %w", err)
-	}
-	f, err := fs.CreateLog(filepath.Join(dir, eventsFile))
-	if err != nil {
-		return fmt.Errorf("create event log: %w", err)
-	}
-	for _, d := range []string{dir, w.store.Dir} {
-		if err := fs.SyncDir(d); err != nil {
-			if cerr := f.Close(); cerr != nil {
-				err = errors.Join(err, cerr)
-			}
-			return fmt.Errorf("sync run directory entry: %w", err)
+	f, err := w.populate(fs, build, id)
+	if err == nil && build != dir {
+		if err = fs.Rename(build, dir); err != nil {
+			err = fmt.Errorf("publish run directory: %w", err)
 		}
+	}
+	if err == nil {
+		if err = fs.SyncDir(w.store.Dir); err != nil {
+			err = fmt.Errorf("sync store directory: %w", err)
+		}
+	}
+	if err != nil {
+		if f != nil {
+			err = errors.Join(err, f.Close())
+		}
+		if build != dir {
+			err = errors.Join(err, os.RemoveAll(build))
+		}
+		return err
 	}
 	w.file = f
 	return nil
 }
 
+// populate fills a run directory that no reader can list yet: the lock first, so
+// that nothing is ever visible without a holder, then graph.yaml and the log.
+func (w *Writer) populate(fs fsOps, dir, id string) (logFile, error) {
+	lock, err := acquireRunLock(filepath.Join(dir, lockFile), true)
+	if err != nil {
+		return nil, fmt.Errorf("lock run %s: %w", id, err)
+	}
+	w.lock = lock
+	if err := fs.WriteFileSync(filepath.Join(dir, graphFile), w.graph); err != nil {
+		return nil, fmt.Errorf("write graph snapshot: %w", err)
+	}
+	f, err := fs.CreateLog(filepath.Join(dir, eventsFile))
+	if err != nil {
+		return nil, fmt.Errorf("create event log: %w", err)
+	}
+	if err := fs.SyncDir(dir); err != nil {
+		return f, fmt.Errorf("sync run directory: %w", err)
+	}
+	return f, nil
+}
+
 // Durability scope: a lifecycle event is fsynced before Append returns, so it
 // survives the process being killed. Creation is ordered graph.yaml (synced),
-// event log, then the run and store directories, so after power loss a run
-// directory is either absent or has its graph snapshot. On Windows directory
-// entries cannot be synced (syncdir_windows.go); the log itself still is.
+// event log, run directory, then the store directory, so after power loss a run
+// directory is either absent or has its graph snapshot. Where a directory can be
+// renamed while files in it are open (not Windows) the run is built under a
+// hidden name and renamed into place, so a lister never sees a half-created
+// run; on Windows it is built in place and a locked run without a first event
+// is listed as starting, not corrupt. Directory sync is a no-op on Windows
+// (syncdir_windows.go); the log itself still is synced.
 
 // Close flushes and closes the log. It is safe to call without any Append.
 func (w *Writer) Close() error {
@@ -334,25 +374,27 @@ func (s Store) Read(runID string) (Record, error) {
 		return Record{}, fmt.Errorf("invalid run ID %q", runID)
 	}
 	dir := filepath.Join(s.Dir, runID)
-	// Probe the lock before reading the log: the writer releases it only after
-	// its final sync, so "not held" guarantees the log read below is complete.
+	// Open both files, then probe the lock, then read: a run that is visible has
+	// its lock held by the writer, and the writer releases it only after its
+	// final sync, so "not held" guarantees the log read below is complete.
+	graph, graphErr := os.ReadFile(filepath.Join(dir, graphFile))
+	var f *os.File
+	var logErr error
+	if graphErr == nil {
+		f, logErr = os.Open(filepath.Join(dir, eventsFile))
+	}
 	live, err := runLockHeld(filepath.Join(dir, lockFile))
 	if err != nil && !errors.Is(err, ErrLockUnsupported) {
-		return Record{}, err
+		return Record{}, closeAfter(f, err)
 	}
-	graph, err := os.ReadFile(filepath.Join(dir, graphFile))
-	if live && errors.Is(err, os.ErrNotExist) {
+	switch {
+	case graphErr != nil && live && errors.Is(graphErr, os.ErrNotExist),
+		logErr != nil && live && errors.Is(logErr, os.ErrNotExist):
 		return Record{}, ErrRunStarting
-	}
-	if err != nil {
-		return Record{}, fmt.Errorf("read graph snapshot: %w", err)
-	}
-	f, err := os.Open(filepath.Join(dir, eventsFile))
-	if live && errors.Is(err, os.ErrNotExist) {
-		return Record{}, ErrRunStarting
-	}
-	if err != nil {
-		return Record{}, fmt.Errorf("read event log: %w", err)
+	case graphErr != nil:
+		return Record{}, fmt.Errorf("read graph snapshot: %w", graphErr)
+	case logErr != nil:
+		return Record{}, fmt.Errorf("read event log: %w", logErr)
 	}
 	defer f.Close()
 	rec := Record{Graph: graph, Summary: Summary{RunID: runID, Status: StatusInterrupted}}
@@ -463,4 +505,12 @@ func (s Store) unsupportedSummary(runID string, cause error) Summary {
 		sum.GraphID, sum.GraphVersion, sum.StartedAt = header.GraphID, header.GraphVersion, header.Timestamp
 	}
 	return sum
+}
+
+// closeAfter closes f when it was opened and keeps err as the result.
+func closeAfter(f *os.File, err error) error {
+	if f == nil {
+		return err
+	}
+	return errors.Join(err, f.Close())
 }

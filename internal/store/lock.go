@@ -24,13 +24,15 @@ var (
 type runLock struct{ f *os.File }
 
 // acquireRunLock creates path (0600, empty) if needed and takes the exclusive
-// lock without blocking.
-func acquireRunLock(path string) (*runLock, error) {
+// lock. With wait it blocks instead of failing on a conflict: the writer owns a
+// freshly created run directory, so the only possible holder is a reader's
+// momentary shared probe, which must never make a writer fail to start.
+func acquireRunLock(path string, wait bool) (*runLock, error) {
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, fileMode)
 	if err != nil {
 		return nil, fmt.Errorf("create run lock: %w", err)
 	}
-	held, err := tryLock(f, true)
+	held, err := tryLock(f, true, wait)
 	if err == nil && held {
 		return &runLock{f: f}, nil
 	}
@@ -68,7 +70,7 @@ func runLockHeld(path string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("open run lock: %w", err)
 	}
-	acquired, err := tryLock(f, false)
+	acquired, err := tryLock(f, false, false)
 	if err == nil && acquired {
 		err = unlock(f)
 	}

@@ -18,7 +18,7 @@ func TestWriterHoldsTheRunLockUntilClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	path := filepath.Join(s.Dir, runA, lockFile)
-	if second, err := acquireRunLock(path); !errors.Is(err, ErrRunLocked) {
+	if second, err := acquireRunLock(path, false); !errors.Is(err, ErrRunLocked) {
 		if err == nil {
 			if rerr := second.release(); rerr != nil {
 				t.Fatal(rerr)
@@ -32,7 +32,7 @@ func TestWriterHoldsTheRunLockUntilClose(t *testing.T) {
 	if err := w.Close(); err != nil {
 		t.Fatal(err)
 	}
-	again, err := acquireRunLock(path)
+	again, err := acquireRunLock(path, false)
 	if err != nil {
 		t.Fatalf("lock must be free after Close: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestLockedRunWithNoValidFirstLineIsSkippedNotCorrupt(t *testing.T) {
 			if err := os.MkdirAll(dir, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			lock, err := acquireRunLock(filepath.Join(dir, lockFile))
+			lock, err := acquireRunLock(filepath.Join(dir, lockFile), false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -283,7 +283,7 @@ func TestSecondWriterRefusesAnExistingRunDirectory(t *testing.T) {
 	if rec, rerr := s.Read(runA); rerr != nil || rec.Summary.EventCount != 1 {
 		t.Fatalf("the live run must be untouched: %v %+v", rerr, rec.Summary)
 	}
-	_, lerr := acquireRunLock(filepath.Join(s.Dir, runA, lockFile))
+	_, lerr := acquireRunLock(filepath.Join(s.Dir, runA, lockFile), false)
 	if !errors.Is(lerr, ErrRunLocked) {
 		t.Fatalf("an already locked run.lock must report ErrRunLocked: %v", lerr)
 	}

@@ -9,10 +9,14 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// tryLock locks byte range [0,1) without waiting; the range is a convention,
-// the file is never read. ERROR_LOCK_VIOLATION means another handle holds it.
-func tryLock(f *os.File, exclusive bool) (held bool, err error) {
-	flags := uint32(windows.LOCKFILE_FAIL_IMMEDIATELY)
+// tryLock locks byte range [0,1), without waiting unless block is set; the
+// range is a convention, the file is never read. ERROR_LOCK_VIOLATION means
+// another handle holds it.
+func tryLock(f *os.File, exclusive, block bool) (held bool, err error) {
+	var flags uint32
+	if !block {
+		flags |= windows.LOCKFILE_FAIL_IMMEDIATELY
+	}
 	if exclusive {
 		flags |= windows.LOCKFILE_EXCLUSIVE_LOCK
 	}

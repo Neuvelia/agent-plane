@@ -9,6 +9,10 @@ import (
 	"syscall"
 )
 
+// publishByRename: a directory with open files can be renamed here, so a run is
+// built under a hidden name and published atomically.
+const publishByRename = true
+
 // syncDir flushes a directory so a newly created entry survives power loss.
 // Filesystems that cannot sync a directory report EINVAL or ENOTSUP; that is
 // not a failure of the store.

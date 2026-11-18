@@ -406,6 +406,11 @@ func (r *recFS) CreateLog(path string) (logFile, error) {
 	return &faultLog{File: f.(*os.File), failSync: r.failSync, short: r.short}, nil
 }
 
+func (r *recFS) Rename(oldPath, newPath string) error {
+	r.ops = append(r.ops, "rename-run")
+	return r.osFS.Rename(oldPath, newPath)
+}
+
 func (r *recFS) SyncDir(path string) error {
 	if path == r.dir {
 		r.ops = append(r.ops, "sync-store-dir")
@@ -451,7 +456,10 @@ func TestCreationOrderSyncsGraphBeforeLogThenDirectories(t *testing.T) {
 	rec := &recFS{dir: dir}
 	s := Store{Dir: dir, fs: rec}
 	write(t, s, runA, started(runA, time.Now().UTC()))
-	want := "mkdir-run,write-sync-graph.yaml,create-log,sync-run-dir,sync-store-dir"
+	want := "mkdir-run,write-sync-graph.yaml,create-log,sync-run-dir,rename-run,sync-store-dir"
+	if !publishByRename {
+		want = "mkdir-run,write-sync-graph.yaml,create-log,sync-run-dir,sync-store-dir"
+	}
 	if got := strings.Join(rec.ops, ","); got != want {
 		t.Fatalf("creation sequence = %s, want %s", got, want)
 	}
