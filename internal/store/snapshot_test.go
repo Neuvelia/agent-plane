@@ -110,6 +110,34 @@ func TestWriterThatNeverCreatedARunWritesNoSnapshot(t *testing.T) {
 	}
 }
 
+func TestConcurrentSnapshotWritersNeverCollideOnATempFile(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	finishedRun(t, s, runA, time.Now().UTC())
+	rec := readSnapshot(t, s, runA)
+	dir := filepath.Join(s.Dir, runA)
+	const writers = 16
+	start := make(chan struct{})
+	errs := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			<-start // all writers begin together, as concurrent listings do
+			errs <- writeSnapshotFile(osFS{}, dir, rec.Summary, rec.LogBytes)
+		}()
+	}
+	close(start)
+	for i := 0; i < writers; i++ {
+		if err := <-errs; err != nil {
+			t.Fatalf("a concurrent snapshot write failed: %v", err)
+		}
+	}
+	if matches, _ := filepath.Glob(filepath.Join(dir, "*.tmp")); len(matches) != 0 {
+		t.Fatalf("temporary files left behind: %v", matches)
+	}
+	if got := readSnapshot(t, s, runA); got.LogBytes != rec.LogBytes || got.Status != rec.Status {
+		t.Fatalf("the final snapshot is damaged: %+v", got)
+	}
+}
+
 func TestListParsesNoLogWhenTheSnapshotIsValid(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	now := time.Now().UTC()
