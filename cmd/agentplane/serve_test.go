@@ -42,12 +42,14 @@ func startServe(t *testing.T, extra ...string) *servedAPI {
 	serveStdin = stdinR
 	t.Cleanup(func() { serveStdin = old })
 	exit := make(chan int, 1)
+	exited := make(chan struct{}) // closed once serve has returned, whoever reads exit
 	hubc := make(chan *api.Hub, 1)
 	oldHook := onServe
 	onServe = func(srv *api.Server) { hubc <- srv.Hub }
 	t.Cleanup(func() { onServe = oldHook })
 	go func() {
 		exit <- runCommand(context.Background(), append([]string{"serve", "--store-dir", dir}, extra...), stdoutW, io.Discard)
+		close(exited)
 		stdoutW.Close()
 	}()
 	line, err := bufio.NewReader(stdoutR).ReadString('\n')
@@ -68,7 +70,17 @@ func startServe(t *testing.T, extra ...string) *servedAPI {
 			stdinW.Close()
 		}
 	}}
-	t.Cleanup(s.closeStdin)
+	// serve finishes the runs it started (and now writes a snapshot at each terminal
+	// event) after its stdin closes; wait for that before the store's TempDir is
+	// removed, or the cleanup races a run still writing into its directory.
+	t.Cleanup(func() {
+		s.closeStdin()
+		select {
+		case <-exited:
+		case <-time.After(30 * time.Second):
+			t.Error("serve did not stop after its stdin closed")
+		}
+	})
 	return s
 }
 
