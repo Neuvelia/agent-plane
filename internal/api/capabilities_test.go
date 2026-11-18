@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"agentplane/internal/capability"
+	"agentplane/internal/gitlocate"
 )
 
 func fixedReport(n int32) capability.Report {
@@ -83,15 +84,15 @@ func TestCapabilityCheckLeavesTheTempDirUnchanged(t *testing.T) {
 	if os.TempDir() != tmp {
 		t.Fatalf("os.TempDir() = %q, want %q", os.TempDir(), tmp)
 	}
-	// The production Git path; where it is absent, detection starts no
+	// Git resolved from PATH; where it is absent, detection starts no
 	// process, which still satisfies the assertion.
-	s.Capabilities = &capability.Service{Detect: capability.Detector{GitPath: capability.GitPath}.Detect}
+	s.Capabilities = &capability.Service{Detect: capability.Detector{}.Detect}
 	resp, body := do(t, ts, "POST", "/capabilities/check", "", true)
 	var r capability.Report
 	if err := json.Unmarshal([]byte(body), &r); resp.StatusCode != http.StatusOK || err != nil || len(r.Tools) == 0 {
 		t.Fatalf("check: %d %s", resp.StatusCode, body)
 	}
-	if _, err := os.Stat(capability.GitPath); err == nil && goruntime.GOOS == "linux" && r.Tools[0].Status != capability.StatusAvailable {
+	if _, err := gitlocate.ResolveGit(); err == nil && goruntime.GOOS == "linux" && r.Tools[0].Status != capability.StatusAvailable {
 		t.Fatalf("expected a real Git probe, got %+v", r.Tools[0])
 	}
 	entries, err := os.ReadDir(tmp)

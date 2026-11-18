@@ -27,6 +27,7 @@ func TestConfigFieldsEqualTheExecutor(t *testing.T) {
 			"agent.config.allowed_paths":    []any{"src", "docs/a.md"},
 			"agent.config.context_refs":     []any{"docs/spec.md"},
 			"agent.config.environment_refs": []any{"API_TOKEN"},
+			"agent.config.isolation":        "worktree",
 		},
 		Validate: func(n graph.NodeDefinition) error { return Executor{}.ValidateNodeConfig("n", n) },
 	})
@@ -56,7 +57,20 @@ func TestOutputPortsEqualTheExecutor(t *testing.T) {
 }
 
 func TestConfigKeysArePinnedToTheSpec(t *testing.T) {
-	fieldstest.PinKeys(t, ConfigFields(), "adapter", "workspace", "task", "allowed_paths", "context_refs", "environment_refs")
+	fieldstest.PinKeys(t, ConfigFields(), "adapter", "workspace", "task", "allowed_paths", "context_refs", "environment_refs", "isolation")
+}
+
+func TestIsolationValueIsValidatedAtTheExecutorBoundary(t *testing.T) {
+	for _, tc := range []struct {
+		value any
+		ok    bool
+	}{{"none", true}, {"worktree", true}, {"clone", false}, {"", false}, {true, false}, {1, false}} {
+		n := agentBase(t.TempDir())
+		n.Config["isolation"] = tc.value
+		if err := (Executor{}).ValidateNodeConfig("n", n); (err == nil) != tc.ok {
+			t.Fatalf("isolation %#v: accepted=%t err=%v", tc.value, err == nil, err)
+		}
+	}
 }
 
 func TestTaskDescriptorStatesItsAlternative(t *testing.T) {

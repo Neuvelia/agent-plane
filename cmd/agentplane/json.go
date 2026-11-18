@@ -37,6 +37,29 @@ type cliFailure struct {
 	Diagnostics []graph.Diagnostic `json:"diagnostics"`
 }
 
+// cliIsolation is the optional F3.1 result object. It is absent, not empty,
+// for a run in which no node used isolation, so existing documents are unchanged.
+type cliIsolation struct {
+	BaseSHA          string            `json:"base_sha"`
+	IntegratedRef    string            `json:"integrated_ref,omitempty"`
+	IntegratedCommit string            `json:"integrated_commit,omitempty"`
+	Units            []cliIsolatedUnit `json:"units"`
+	Retained         []cliRetained     `json:"retained"`
+}
+
+type cliIsolatedUnit struct {
+	NodeID     string `json:"node_id"`
+	Ref        string `json:"ref"`
+	Commit     string `json:"commit"`
+	Integrated bool   `json:"integrated"`
+}
+
+type cliRetained struct {
+	NodeID string `json:"node_id"`
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
+}
+
 type cliDocument struct {
 	SchemaVersion int                `json:"cli_schema_version"`
 	Command       string             `json:"command"`
@@ -48,6 +71,7 @@ type cliDocument struct {
 	Nodes         *[]cliNode         `json:"nodes,omitempty"`
 	Outputs       *[]cliOutput       `json:"outputs,omitempty"`
 	Events        *[]events.Event    `json:"events,omitempty"`
+	Isolation     *cliIsolation      `json:"workspace_isolation,omitempty"`
 	Runs          *[]store.Summary   `json:"runs,omitempty"`
 	Truncated     bool               `json:"truncated,omitempty"`
 	Failure       *cliFailure        `json:"failure"`
@@ -86,6 +110,7 @@ func documentForRun(result run.Result, diagnostics []graph.Diagnostic) cliDocume
 		entry := cliOutput{Name: output.Name, Type: output.Value.Type(), Value: valueForJSON(output.Value)}
 		outputs = append(outputs, entry)
 	}
+	doc.Isolation = isolationForJSON(result.Isolation)
 	if result.Failure != nil {
 		failure := result.Failure
 		doc.Failure = &cliFailure{NodeID: failure.NodeID, Kind: failure.Kind, Diagnostics: nonNilDiagnostics(failure.Diagnostics)}
@@ -94,6 +119,20 @@ func documentForRun(result run.Result, diagnostics []graph.Diagnostic) cliDocume
 		}
 	}
 	return doc
+}
+
+func isolationForJSON(iso *run.IsolationResult) *cliIsolation {
+	if iso == nil {
+		return nil
+	}
+	out := &cliIsolation{BaseSHA: iso.BaseSHA, IntegratedRef: iso.IntegratedRef, IntegratedCommit: iso.IntegratedCommit, Units: []cliIsolatedUnit{}, Retained: []cliRetained{}}
+	for _, u := range iso.Units {
+		out.Units = append(out.Units, cliIsolatedUnit{NodeID: u.NodeID, Ref: u.Ref, Commit: u.Commit, Integrated: u.Integrated})
+	}
+	for _, r := range iso.Retained {
+		out.Retained = append(out.Retained, cliRetained{NodeID: r.NodeID, Path: r.Path, Reason: r.Reason})
+	}
+	return out
 }
 
 func valueForJSON(value graph.Value) any {

@@ -76,6 +76,8 @@ export interface NodeView {
   nodeRunId?: string
   status: NodeStatus
   attempts: Attempt[]
+  /** The check of a standalone Gate node: its gate_check carries no attempt ID, so it has no Attempt. */
+  check?: CheckView
   log: string
   approval?: ApprovalView
   failureKind?: string
@@ -270,6 +272,8 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
           })),
         }
         if (a) a.check = view
+        // A standalone Gate (no loop) emits its check without an attempt ID.
+        else if (!event.attempt_id) n.check = view
       }
       break
     case 'log_chunk':

@@ -145,9 +145,8 @@ design, and `RequireUnixPermissions` for permission-bit assertions. On Linux
 and macOS nothing is skipped. Skips on Windows mark product work that waits
 for an owner decision on native Windows support:
 
-- Production code starts `/usr/bin/git` (`internal/gitstate/snapshot.go:64`,
-  `internal/runtime/workspace.go:45`), so git-evidence and changed-files tests
-  skip.
+- Production code resolves Git from `PATH` (`gitlocate.ResolveGit`), but test helpers still start
+  `/usr/bin/git`, so git-evidence and changed-files tests skip.
 - The Codex adapter accepts only Darwin and Linux
   (`internal/agent/codex/adapter.go:75`).
 - The command Gate requires `/usr/bin/diff` and `/dev/fd/3`
@@ -158,8 +157,17 @@ for an owner decision on native Windows support:
 - Shell-node fixtures and `.agents/graphs/demo-vertical.yaml` start
   `/usr/bin/printf`, `/usr/bin/printenv` and `/bin/sh`.
 
-Still failing on Windows: `internal/api/docs_test.go:407,448` assert Unix file
-modes after a save (`-rw-rw-rw-` on Windows).
+Tests that cannot hold on Windows skip with a reason rather than fail:
+`testenv.RequireUnixPermissions` and `testenv.HasUnixPermissions` for file-mode
+assertions (`internal/api` save tests), and `testenv.SkipOnWindows` for
+fixtures the platform cannot create (a file name with a newline, an invalid
+UTF-8 argv byte in `scripts/verifychanges`). Path comparisons against a child's
+working directory resolve both sides with `filepath.EvalSymlinks`, so 8.3 short
+names (`RUNNER~1`) compare equal.
+
+A local `go test ./...` on Windows (Go 1.27) passes with these guards. The
+`windows-x64` job has not been observed green on a GitHub runner since they
+landed, so `experimental` stays until one run of that job is green.
 
 ## Review session
 

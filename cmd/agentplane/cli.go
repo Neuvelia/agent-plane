@@ -57,7 +57,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -136,6 +136,8 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	var approveNodes, rejectNodes inputFlags
 	storeDir := fs.String("store-dir", "", "persist the run under this directory (events.jsonl + graph.yaml)")
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
+	var isolation isolationFlags
+	isolation.register(fs)
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
 	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
@@ -151,6 +153,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	if *concurrency < 1 {
 		return usageError("run", errors.New("--max-concurrency must be at least 1"), *jsonMode, stdout, stderr)
+	}
+	if _, err := isolation.policy(); err != nil {
+		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
 	if err := validateInputSyntax(inputs); err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
@@ -191,6 +196,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
 	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
+	if err := isolation.configure(def, &opts); err != nil {
+		return usageError("run", err, *jsonMode, stdout, stderr)
+	}
 	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}
@@ -291,6 +299,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		if _, err := fmt.Fprintln(stderr, persistFailure); err != nil {
 			return presentationError(err, stderr)
 		}
+	}
+	if err := renderIsolation(stderr, result.Isolation); err != nil {
+		return presentationError(err, stderr)
 	}
 	return code
 }

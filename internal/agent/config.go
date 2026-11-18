@@ -20,6 +20,18 @@ type nodeConfig struct {
 	environmentRefs []string
 }
 
+// Values of the Agent config.isolation key (ADR-0024).
+const (
+	IsolationNone     = "none"
+	IsolationWorktree = "worktree"
+)
+
+// RequestsWorktreeIsolation reports whether an Agent node asks for its own
+// worktree; the CLI composition and config validation share this definition.
+func RequestsWorktreeIsolation(node graph.NodeDefinition) bool {
+	return node.Type == "agent" && node.Config["isolation"] == IsolationWorktree
+}
+
 func parseNode(node graph.NodeDefinition, inputs map[string]graph.Value) (nodeConfig, error) {
 	var cfg nodeConfig
 	if node.Type != "agent" {
@@ -46,6 +58,11 @@ func parseNode(node graph.NodeDefinition, inputs map[string]graph.Value) (nodeCo
 		return cfg, errors.New("config.workspace must be an absolute local path")
 	}
 	cfg.workspace = workspace
+	if raw, present := node.Config["isolation"]; present {
+		if mode, ok := raw.(string); !ok || (mode != IsolationNone && mode != IsolationWorktree) {
+			return cfg, errors.New(`config.isolation must be "none" or "worktree"`)
+		}
+	}
 	if literal, present := node.Config["task"]; present {
 		value, ok := literal.(string)
 		if !ok || strings.TrimSpace(value) == "" {

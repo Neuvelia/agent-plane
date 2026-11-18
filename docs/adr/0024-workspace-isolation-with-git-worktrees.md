@@ -112,7 +112,7 @@ declared-scope conflicts are not reported between isolated nodes.
 ### 7. Git hygiene (security-relevant)
 
 All Git calls reuse the controlled invocation of `internal/gitstate`
-(`/usr/bin/git`, structured argv, minimal environment, no system/global config,
+(git resolved from PATH, structured argv, minimal environment, no system/global config,
 `core.hooksPath=/dev/null`, `core.fsmonitor=false`, bounded time and output).
 Hooks never run in runtime-created checkouts or snapshot commits.
 
