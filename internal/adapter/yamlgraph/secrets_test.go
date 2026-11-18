@@ -1,6 +1,7 @@
 package yamlgraph_test
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -197,5 +198,78 @@ func TestParseOtherSecretsShapesStillFailCleanly(t *testing.T) {
 	_, err := yamlgraph.Parse([]byte(secretsGraph("secrets: [a, b]\n", shellNode("a", ""))))
 	if err == nil || errors.Is(err, yamlgraph.ErrMissingSchemaVersion) {
 		t.Fatalf("secrets as a list must be a parse error, got %v", err)
+	}
+}
+
+// leakedLiterals are values someone might paste where a name belongs.
+var leakedLiterals = []string{"ghp_LiteralTokenPasted1", "Xx-Not_A_Name.9", "123456789012345678"}
+
+func assertNoLiteral(t *testing.T, label, literal string, result graph.ValidationResult) {
+	t.Helper()
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), literal) {
+		t.Errorf("%s: diagnostics echo %q: %s", label, literal, encoded)
+	}
+}
+
+func TestSecretEnvUndeclaredNeverEchoesTheValue(t *testing.T) {
+	for _, literal := range leakedLiterals {
+		result := validateText(t, secretsGraph(oneSecret, shellNode("a", "      secret_env: {GH_TOKEN: \""+literal+"\"}\n")))
+		d := diagnosticFor(t, result, "E_SECRET_ENV_UNDECLARED")
+		if !strings.Contains(d.Message, `"a"`) || !strings.Contains(d.Message, "GH_TOKEN") {
+			t.Errorf("message must still name the node and variable: %+v", d)
+		}
+		assertNoLiteral(t, "undeclared", literal, result)
+	}
+	// A well-formed undeclared name is still named so the author can fix it.
+	result := validateText(t, secretsGraph(oneSecret, shellNode("a", "      secret_env: {GH_TOKEN: nope}\n")))
+	if d := diagnosticFor(t, result, "E_SECRET_ENV_UNDECLARED"); !strings.Contains(d.Message, `"nope"`) {
+		t.Errorf("a valid secret name is named: %+v", d)
+	}
+}
+
+func TestSecretEnvWithoutSecretsBlockIsUndeclared(t *testing.T) {
+	result := validateText(t, secretsGraph("", shellNode("a", "      secret_env: {GH_TOKEN: gh_token}\n")))
+	d := diagnosticFor(t, result, "E_SECRET_ENV_UNDECLARED")
+	if result.Valid() || !strings.Contains(d.Message, `"a"`) {
+		t.Fatalf("valid=%v diagnostic=%+v", result.Valid(), d)
+	}
+}
+
+func TestTopLevelSecretsOfAnotherShapeNeverEchoesTheContent(t *testing.T) {
+	for _, c := range []struct{ name, literal, doc string }{
+		{"scalar", "ghp_LiteralTokenPasted1", "secrets: ghp_LiteralTokenPasted1\n"},
+		{"number-looking", "123456789012345678", "secrets: 123456789012345678\n"},
+		{"multi-line", "line-two-of-a-key", "secrets: |\n  -----BEGIN KEY-----\n  line-two-of-a-key\n"},
+		{"list", "ghp_LiteralTokenPasted1", "secrets: [ghp_LiteralTokenPasted1]\n"},
+		{"entry key not scalar", "ghp_LiteralTokenPasted1", "secrets:\n  ? [ghp_LiteralTokenPasted1]\n  : {secret_ref: env/X}\n"},
+	} {
+		_, err := yamlgraph.Parse([]byte(secretsGraph(c.doc, shellNode("a", ""))))
+		if err == nil {
+			t.Errorf("%s: want a parse error", c.name)
+			continue
+		}
+		// yaml.v3 truncates the quoted scalar, so a prefix is a leak too.
+		if strings.Contains(err.Error(), c.literal[:6]) || strings.Contains(err.Error(), "-----BE") {
+			t.Errorf("%s: error echoes the content: %v", c.name, err)
+		}
+	}
+}
+
+func TestSecretNameAndKeyTextIsQuotedOnlyWhenItMatchesTheGrammar(t *testing.T) {
+	const bad = "ghp_Pasted-Token.9"
+	cases := []struct{ name, secrets, nodes, code string }{
+		{"invalid secret name", "secrets:\n  " + bad + ":\n    secret_ref: env/X\n", shellNode("a", ""), "E_SECRET_NAME_INVALID"},
+		{"invalid secret name scalar entry", "secrets:\n  " + bad + ": plain\n", shellNode("a", ""), "E_SECRET_ENTRY_INVALID"},
+		{"unknown entry key", "secrets:\n  gh_token:\n    secret_ref: env/X\n    " + bad + ": v\n", shellNode("a", ""), "E_SECRET_ENTRY_INVALID"},
+		{"invalid env variable", oneSecret, shellNode("a", "      secret_env: {\""+bad+"=\": gh_token}\n"), "E_SECRET_ENV_NAME_INVALID"},
+	}
+	for _, c := range cases {
+		result := validateText(t, secretsGraph(c.secrets, c.nodes))
+		diagnosticFor(t, result, c.code)
+		assertNoLiteral(t, c.name, bad, result)
 	}
 }

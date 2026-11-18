@@ -44,47 +44,61 @@ func (v *definitionValidator) validateSecrets() {
 // validateSecretDeclarations returns the references of the valid declarations.
 func (v *definitionValidator) validateSecretDeclarations() map[string]secrets.Ref {
 	refs := map[string]secrets.Ref{}
-	for _, name := range sortedKeys(v.definition.Secrets) {
-		entry := v.definition.Secrets[name]
-		path := mapPath("secrets", name)
-		loc := DiagnosticLocation{Path: path}
-		nameValid := secrets.ValidName(name)
-		if !nameValid {
-			v.error("E_SECRET_NAME_INVALID", fmt.Sprintf("secret name %q is invalid", name), loc, "use lowercase letters, digits and underscores, starting with a letter, at most 64 characters")
-		}
-		if entry.NotMapping {
-			v.error("E_SECRET_ENTRY_INVALID", fmt.Sprintf("secret %q must be a mapping with exactly one field, secret_ref", name), loc, "write secret_ref: <provider>/<name>; a graph never holds a secret value")
-			continue
-		}
-		if len(entry.Unknown) > 0 {
-			v.error("E_SECRET_ENTRY_INVALID", fmt.Sprintf("secret %q has unsupported %s; only secret_ref is allowed", name, quotedList(entry.Unknown)), loc, "remove the extra fields; a graph never holds a secret value")
-			continue
-		}
-		ref, ok := v.validateSecretRef(name, entry.SecretRef, loc)
-		if ok && nameValid {
+	for i, name := range sortedKeys(v.definition.Secrets) {
+		if ref, ok := v.validateSecretEntry(i, name); ok {
 			refs[name] = ref
 		}
 	}
 	return refs
 }
 
-func (v *definitionValidator) validateSecretRef(name, text string, loc DiagnosticLocation) (secrets.Ref, bool) {
+// secretLabel names a secret in a message. Names are map keys the author typed,
+// so text that does not match the name grammar might be a pasted secret and is
+// replaced by its position; the same rule applies to the path.
+func secretLabel(i int, name string) (label, path string) {
+	if secrets.ValidName(name) {
+		return fmt.Sprintf("secret %q", name), mapPath("secrets", name)
+	}
+	return fmt.Sprintf("the secret at secrets[%d]", i), fmt.Sprintf("secrets[%d]", i)
+}
+
+func (v *definitionValidator) validateSecretEntry(i int, name string) (secrets.Ref, bool) {
+	entry := v.definition.Secrets[name]
+	label, path := secretLabel(i, name)
+	loc := DiagnosticLocation{Path: path}
+	nameValid := secrets.ValidName(name)
+	if !nameValid {
+		v.error("E_SECRET_NAME_INVALID", fmt.Sprintf("the name of %s is invalid", label), loc, "use lowercase letters, digits and underscores, starting with a letter, at most 64 characters")
+	}
+	if entry.NotMapping {
+		v.error("E_SECRET_ENTRY_INVALID", fmt.Sprintf("%s must be a mapping with exactly one field, secret_ref", label), loc, "write secret_ref: <provider>/<name>; a graph never holds a secret value")
+		return secrets.Ref{}, false
+	}
+	if len(entry.Unknown) > 0 {
+		v.error("E_SECRET_ENTRY_INVALID", fmt.Sprintf("%s has unsupported %s; only secret_ref is allowed", label, describeFields(entry.Unknown)), loc, "remove the extra fields; a graph never holds a secret value")
+		return secrets.Ref{}, false
+	}
+	ref, ok := v.validateSecretRef(label, entry.SecretRef, loc)
+	return ref, ok && nameValid
+}
+
+func (v *definitionValidator) validateSecretRef(label, text string, loc DiagnosticLocation) (secrets.Ref, bool) {
 	loc.Path += ".secret_ref"
 	if text == "" {
-		v.error("E_SECRET_REF_REQUIRED", fmt.Sprintf("secret %q has no secret_ref", name), loc, "add secret_ref: env/<VARIABLE_NAME> to name where the runner finds the value")
+		v.error("E_SECRET_REF_REQUIRED", fmt.Sprintf("%s has no secret_ref", label), loc, "add secret_ref: env/<VARIABLE_NAME> to name where the runner finds the value")
 		return secrets.Ref{}, false
 	}
 	ref, err := secrets.ParseRef(text)
 	if err != nil {
-		v.error("E_SECRET_REF_INVALID", fmt.Sprintf("secret %q has an invalid secret_ref: %v", name, err), loc, "use <provider>/<name>, for example env/GITHUB_TOKEN; never write the secret value here")
+		v.error("E_SECRET_REF_INVALID", fmt.Sprintf("%s has an invalid secret_ref: %v", label, err), loc, "use <provider>/<name>, for example env/GITHUB_TOKEN; never write the secret value here")
 		return secrets.Ref{}, false
 	}
 	switch secrets.StatusOf(ref.Provider) {
 	case secrets.ProviderUnknown:
-		v.error("E_SECRET_PROVIDER_UNKNOWN", fmt.Sprintf("secret %q uses unknown provider %q", name, ref.Provider), loc, "use the env provider: env/<VARIABLE_NAME>")
+		v.error("E_SECRET_PROVIDER_UNKNOWN", fmt.Sprintf("%s uses unknown provider %q", label, ref.Provider), loc, "use the env provider: env/<VARIABLE_NAME>")
 		return ref, false
 	case secrets.ProviderReserved:
-		v.error("E_SECRET_PROVIDER_UNAVAILABLE", fmt.Sprintf("secret %q uses provider %q, which is reserved and not available yet", name, ref.Provider), loc, "use the env provider: env/<VARIABLE_NAME>")
+		v.error("E_SECRET_PROVIDER_UNAVAILABLE", fmt.Sprintf("%s uses provider %q, which is reserved and not available yet", label, ref.Provider), loc, "use the env provider: env/<VARIABLE_NAME>")
 		return ref, false
 	}
 	return ref, true
@@ -114,10 +128,10 @@ func (v *definitionValidator) validateNodeSecretEnv(nodeID string, node NodeDefi
 	}
 	var assigned []string
 	seen := map[string]string{}
-	for _, variable := range sortedKeys(entries) {
+	for i, variable := range sortedKeys(entries) {
 		secret := entries[variable]
 		if !secrets.ValidEnvName(variable) {
-			v.error("E_SECRET_ENV_NAME_INVALID", fmt.Sprintf("node %q: %q is not a valid secret_env variable name", nodeID, variable), loc, "use a non-empty name without '=' that is not AGENTPLANE_ATTEMPT")
+			v.error("E_SECRET_ENV_NAME_INVALID", fmt.Sprintf("node %q: secret_env entry %d has an invalid variable name", nodeID, i), loc, "use a non-empty name without '=' that is not AGENTPLANE_ATTEMPT")
 			continue
 		}
 		if other, dup := seen[strings.ToUpper(variable)]; dup {
@@ -126,7 +140,7 @@ func (v *definitionValidator) validateNodeSecretEnv(nodeID string, node NodeDefi
 		}
 		seen[strings.ToUpper(variable)] = variable
 		if _, declared := v.definition.Secrets[secret]; !declared {
-			v.error("E_SECRET_ENV_UNDECLARED", fmt.Sprintf("node %q: secret_env[%s] names secret %q, which the graph does not declare", nodeID, variable, secret), loc, "declare the secret under top-level secrets with a secret_ref")
+			v.error("E_SECRET_ENV_UNDECLARED", fmt.Sprintf("node %q: secret_env[%s] names %s, which the graph does not declare", nodeID, variable, secretNameText(secret)), loc, "declare the secret under top-level secrets with a secret_ref")
 			continue
 		}
 		assigned = append(assigned, secret)
@@ -250,15 +264,36 @@ func envList(value any) []string {
 	return nil
 }
 
-func quotedList(items []string) string {
+// secretNameText quotes a secret name only when it matches the name grammar; a
+// value pasted in its place is never echoed.
+func secretNameText(name string) string {
+	if secrets.ValidName(name) {
+		return fmt.Sprintf("secret %q", name)
+	}
+	return "an invalid secret name"
+}
+
+// describeFields lists unsupported field names, quoting only those that match
+// the name grammar and counting the rest.
+func describeFields(items []string) string {
 	sorted := append([]string(nil), items...)
 	sort.Strings(sorted)
-	quoted := make([]string, len(sorted))
-	for i, s := range sorted {
-		quoted[i] = fmt.Sprintf("%q", s)
+	var quoted []string
+	other := 0
+	for _, s := range sorted {
+		if secrets.ValidName(s) {
+			quoted = append(quoted, fmt.Sprintf("%q", s))
+		} else {
+			other++
+		}
 	}
-	if len(quoted) == 1 {
+	switch {
+	case other == 0 && len(quoted) == 1:
 		return "field " + quoted[0]
+	case other == 0:
+		return "fields " + strings.Join(quoted, ", ")
+	case len(quoted) == 0:
+		return fmt.Sprintf("fields (%d, names not shown)", other)
 	}
-	return "fields " + strings.Join(quoted, ", ")
+	return fmt.Sprintf("fields %s and %d more (names not shown)", strings.Join(quoted, ", "), other)
 }

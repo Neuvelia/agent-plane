@@ -4,6 +4,7 @@
 package yamlgraph
 
 import (
+	"fmt"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -19,7 +20,7 @@ import (
 
 type definitionDTO struct {
 	Units              []string               `yaml:"units,omitempty"`
-	Secrets            map[string]secretDTO   `yaml:"secrets,omitempty"`
+	Secrets            secretsDTO             `yaml:"secrets,omitempty"`
 	SchemaVersion      graph.SchemaVersion    `yaml:"schema_version"`
 	ID                 string                 `yaml:"id"`
 	Name               string                 `yaml:"name,omitempty"`
@@ -58,6 +59,40 @@ func (s *secretDTO) UnmarshalYAML(node *yaml.Node) error {
 			s.SecretRef = value.Value
 		}
 	}
+	return nil
+}
+
+// secretsDTO reads the top-level secrets field leniently for the same reason:
+// the default decode error quotes a prefix of the offending scalar. Errors
+// here describe the shape and never the content.
+type secretsDTO map[string]secretDTO
+
+func (m *secretsDTO) UnmarshalYAML(node *yaml.Node) error {
+	for node.Kind == yaml.AliasNode && node.Alias != nil {
+		node = node.Alias
+	}
+	if node.Kind == yaml.ScalarNode && node.ShortTag() == "!!null" {
+		return nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("line %d: secrets must be a mapping of secret names to {secret_ref: provider/name}", node.Line)
+	}
+	out := make(secretsDTO, len(node.Content)/2)
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i]
+		if key.Kind != yaml.ScalarNode {
+			return fmt.Errorf("line %d: a secrets key must be a plain secret name", key.Line)
+		}
+		if _, dup := out[key.Value]; dup {
+			return fmt.Errorf("line %d: secrets declares the same name twice", key.Line)
+		}
+		var entry secretDTO
+		if err := node.Content[i+1].Decode(&entry); err != nil {
+			return fmt.Errorf("line %d: secrets entry is not readable", key.Line)
+		}
+		out[key.Value] = entry
+	}
+	*m = out
 	return nil
 }
 
