@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -39,7 +40,7 @@ func finishedAgo(t *testing.T, s Store, n, days int) string {
 
 func planIDs(t *testing.T, s Store) []string {
 	t.Helper()
-	plan, err := s.PlanPrune(pruneNow)
+	plan, err := s.PlanPrune(context.Background(), pruneNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,8 +88,8 @@ func TestPruneNeverRemovesAnUnterminatedRunWhateverItsAge(t *testing.T) {
 	if got := planIDs(t, s); !reflect.DeepEqual(got, []string{old}) {
 		t.Fatalf("only the finished run may be planned, got %v", got)
 	}
-	plan, _ := s.PlanPrune(pruneNow)
-	if _, err := s.Prune(plan); err != nil {
+	plan, _ := s.PlanPrune(context.Background(), pruneNow)
+	if _, err := s.Prune(context.Background(), plan); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{interrupted, live} {
@@ -100,7 +101,7 @@ func TestPruneNeverRemovesAnUnterminatedRunWhateverItsAge(t *testing.T) {
 
 func TestSelectForPruneHonoursEachLimitOldestFirst(t *testing.T) {
 	run := func(id string, days int, deletable bool, bytes int64) prunable {
-		return prunable{runID: id, startedAt: daysAgo(days), deletable: deletable, bytes: bytes}
+		return prunable{runID: id, startedAt: daysAgo(days), finishedAt: daysAgo(days), deletable: deletable, bytes: bytes}
 	}
 	// oldest first, as the inventory delivers them
 	runs := []prunable{
@@ -156,11 +157,11 @@ func TestPruneHonoursMaxRunsMaxAgeAndMaxTotalBytesOnDisk(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			s, ids := build()
 			setRetention(t, s, c.limits)
-			plan, err := s.PlanPrune(pruneNow)
+			plan, err := s.PlanPrune(context.Background(), pruneNow)
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := s.Prune(plan)
+			result, err := s.Prune(context.Background(), plan)
 			if err != nil || len(result.Failed) != 0 {
 				t.Fatalf("%v %+v", err, result)
 			}
@@ -184,14 +185,14 @@ func TestPlanIsReadOnlyAndMatchesWhatPruneRemoves(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	a, b := finishedAgo(t, s, 1, 90), finishedAgo(t, s, 2, 1)
 	setRetention(t, s, Retention{MaxAgeDays: 30})
-	plan, err := s.PlanPrune(pruneNow)
+	plan, err := s.PlanPrune(context.Background(), pruneNow)
 	if err != nil || len(plan.Remove) != 1 || plan.Remove[0].RunID != a {
 		t.Fatalf("%v %+v", err, plan)
 	}
 	if !exists(t, filepath.Join(s.Dir, a)) || !exists(t, snapshotPath(s, b)) {
 		t.Fatal("planning must delete and rewrite nothing")
 	}
-	result, err := s.Prune(plan)
+	result, err := s.Prune(context.Background(), plan)
 	if err != nil || !reflect.DeepEqual(result.Removed, []string{a}) || exists(t, filepath.Join(s.Dir, a)) {
 		t.Fatalf("%v %+v", err, result)
 	}
@@ -219,7 +220,7 @@ func TestPruneNeverRemovesALockedCorruptOrUnsupportedRun(t *testing.T) {
 	t.Cleanup(func() { closeWriter(t, w) })
 	setRetention(t, s, Retention{MaxAgeDays: 1})
 
-	plan, err := s.PlanPrune(pruneNow)
+	plan, err := s.PlanPrune(context.Background(), pruneNow)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +230,7 @@ func TestPruneNeverRemovesALockedCorruptOrUnsupportedRun(t *testing.T) {
 		}
 	}
 	// The locked run reads as finished, so it is planned; the lock still stops it.
-	result, err := s.Prune(plan)
+	result, err := s.Prune(context.Background(), plan)
 	if err != nil || !reflect.DeepEqual(result.Skipped, []string{locked}) || len(result.Removed) != 0 {
 		t.Fatalf("%v %+v", err, result)
 	}
@@ -258,11 +259,11 @@ func TestPruneSkipsForeignDirectoriesAndSymlinks(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	setRetention(t, s, Retention{MaxAgeDays: 1})
-	plan, err := s.PlanPrune(pruneNow)
+	plan, err := s.PlanPrune(context.Background(), pruneNow)
 	if err != nil || len(plan.Remove) != 1 || plan.Remove[0].RunID != real {
 		t.Fatalf("%v %+v", err, plan)
 	}
-	if _, err := s.Prune(plan); err != nil {
+	if _, err := s.Prune(context.Background(), plan); err != nil {
 		t.Fatal(err)
 	}
 	if !exists(t, filepath.Join(foreign, "notes.txt")) || !exists(t, link) || !exists(t, filepath.Join(outside, seededRunID(3), eventsFile)) {
@@ -289,11 +290,11 @@ func TestPruneContinuesAfterOneFailure(t *testing.T) {
 	setRetention(t, s, Retention{MaxAgeDays: 1})
 	sharing := errors.New("injected sharing violation")
 	s.fs = removalFS{failing: map[string]error{b: sharing}}
-	plan, err := s.PlanPrune(pruneNow)
+	plan, err := s.PlanPrune(context.Background(), pruneNow)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := s.Prune(plan)
+	result, err := s.Prune(context.Background(), plan)
 	if !errors.Is(err, sharing) {
 		t.Fatalf("the aggregate error must carry the failure: %v", err)
 	}
@@ -311,14 +312,88 @@ func TestRetentionValuesAreValidatedAndANewerStoreIsRefused(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.Dir, formatFile), []byte(`{"store_format":1,"retention":{"max_runs":-1}}`), fileMode); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PlanPrune(pruneNow); err == nil {
+	if _, err := s.PlanPrune(context.Background(), pruneNow); err == nil {
 		t.Fatal("a negative limit must be refused")
 	}
 	if err := os.WriteFile(filepath.Join(s.Dir, formatFile), []byte(`{"store_format":99,"retention":{"max_runs":1}}`), fileMode); err != nil {
 		t.Fatal(err)
 	}
 	var formatErr *FormatError
-	if _, err := s.PlanPrune(pruneNow); !errors.As(err, &formatErr) {
+	if _, err := s.PlanPrune(context.Background(), pruneNow); !errors.As(err, &formatErr) {
 		t.Fatalf("a store from a newer build must not be pruned: %v", err)
+	}
+}
+
+func finishedBetween(t *testing.T, s Store, n, startedDaysAgo, finishedDaysAgo int) string {
+	t.Helper()
+	id := seededRunID(n)
+	write(t, s, id, started(id, daysAgo(startedDaysAgo)), finished(id, 2, "succeeded", daysAgo(finishedDaysAgo)))
+	return id
+}
+
+func TestAgeLimitCountsFromWhenTheRunFinished(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	// started long ago but finished yesterday: young, however long it ran
+	longRun := finishedBetween(t, s, 1, 90, 1)
+	oldRun := finishedBetween(t, s, 2, 100, 50)
+	setRetention(t, s, Retention{MaxAgeDays: 30})
+	if got := planIDs(t, s); !reflect.DeepEqual(got, []string{oldRun}) {
+		t.Fatalf("plan %v: the long run (%s) finished yesterday and must stay", got, longRun)
+	}
+}
+
+func TestSummaryRecordsWhenARunFinished(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	finishedAt := daysAgo(2)
+	write(t, s, runA, started(runA, daysAgo(5)), finished(runA, 2, "succeeded", finishedAt))
+	record, err := s.Read(runA)
+	if err != nil || record.Summary.FinishedAt == nil || !record.Summary.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("Read: %v %+v", err, record.Summary.FinishedAt)
+	}
+	if rec := readSnapshot(t, s, runA); rec.FinishedAt == nil || !rec.FinishedAt.Equal(finishedAt) {
+		t.Fatalf("snapshot: %+v", rec.FinishedAt)
+	}
+	unfinished := seededRunID(9)
+	write(t, s, unfinished, started(unfinished, daysAgo(1)))
+	if rec, err := s.Read(unfinished); err != nil || rec.Summary.FinishedAt != nil {
+		t.Fatalf("a run without run_finished has no finish time: %v %+v", err, rec.Summary.FinishedAt)
+	}
+}
+
+func TestSnapshotWithoutAFinishTimeIsNotTrusted(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	finishedRun(t, s, runA, time.Now().UTC())
+	rewriteSnapshot(t, s, runA, func(r *snapshotRecord) { r.FinishedAt = nil }) // as an earlier build wrote it
+	parsed := parseCounter(&s)
+	list, err := s.List()
+	if err != nil || len(list) != 1 || list[0].FinishedAt == nil || len(*parsed) != 1 {
+		t.Fatalf("a snapshot that cannot say when the run ended must be rebuilt from the log: %v %+v parsed=%v", err, list, *parsed)
+	}
+	if rec := readSnapshot(t, s, runA); rec.FinishedAt == nil {
+		t.Fatal("the rebuilt snapshot must carry the finish time")
+	}
+}
+
+func TestPlanAndPruneStopWhenTheContextIsCancelled(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	a, b := finishedAgo(t, s, 1, 90), finishedAgo(t, s, 2, 80)
+	setRetention(t, s, Retention{MaxAgeDays: 1})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := s.PlanPrune(ctx, pruneNow); !errors.Is(err, context.Canceled) {
+		t.Fatalf("PlanPrune must stop on a cancelled context: %v", err)
+	}
+	plan, err := s.PlanPrune(context.Background(), pruneNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Prune(ctx, plan)
+	if !errors.Is(err, context.Canceled) || len(result.Removed) != 0 {
+		t.Fatalf("Prune must remove nothing once cancelled: %v %+v", err, result)
+	}
+	for _, id := range []string{a, b} {
+		if !exists(t, filepath.Join(s.Dir, id)) {
+			t.Fatalf("%s was removed after cancellation", id)
+		}
 	}
 }

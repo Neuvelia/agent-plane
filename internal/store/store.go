@@ -122,9 +122,12 @@ type Summary struct {
 	// from the first event; empty for an unreadable run.
 	GraphVersion string    `json:"graph_version,omitempty"`
 	StartedAt    time.Time `json:"started_at"`
-	Status       string    `json:"status"`
-	EventCount   int       `json:"event_count"`
-	Truncated    bool      `json:"truncated,omitempty"`
+	// FinishedAt is the timestamp of the run_finished event; nil for a run that
+	// has none. Retention measures a run's age from it (F3.2 requirement 7).
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Status     string     `json:"status"`
+	EventCount int        `json:"event_count"`
+	Truncated  bool       `json:"truncated,omitempty"`
 	// LastSequence is the sequence of the last durable event; MinSchema and
 	// MaxSchema bound the event schema versions present in the log.
 	LastSequence uint64 `json:"last_sequence,omitempty"`

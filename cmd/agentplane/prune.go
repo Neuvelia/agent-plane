@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -27,7 +29,7 @@ type cliPruneFailure struct {
 // runsPruneCommand applies the store's own retention (`store.json`) once.
 // Exit 0 on success (including a dry run and a store with no retention), 1 when
 // any deletion failed, 2 on usage.
-func runsPruneCommand(args []string, stdout, stderr io.Writer) int {
+func runsPruneCommand(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	const name = "runs prune"
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
@@ -38,13 +40,13 @@ func runsPruneCommand(args []string, stdout, stderr io.Writer) int {
 		return usageError(name, err, *jsonMode || wantsJSON(args), stdout, stderr)
 	}
 	runStore := store.Store{Dir: *dir}
-	plan, err := runStore.PlanPrune(system.Clock{}.Now())
+	plan, err := runStore.PlanPrune(ctx, system.Clock{}.Now())
 	if err != nil {
 		return commandError(name, "error", "internal", err, nil, *jsonMode, stdout, stderr, exitInternal)
 	}
 	result, pruneErr := plannedResult(plan), error(nil)
 	if !*dryRun {
-		result, pruneErr = runStore.Prune(plan)
+		result, pruneErr = runStore.Prune(ctx, plan)
 	}
 	code := exitOK
 	if pruneErr != nil {
@@ -121,29 +123,33 @@ func renderPrune(w io.Writer, result store.PruneResult, dryRun bool, planned int
 	return nil
 }
 
-// pruneOnServeStart applies retention once when `serve` starts, and only when
-// store.json configures it. It reports to stderr; stdout stays the single
-// announcement line the desktop waits for. A planning or deletion failure is a
-// warning and never stops serve; only a failure to write the report is returned.
-func pruneOnServeStart(runStore store.Store, stderr io.Writer) error {
-	format, err := runStore.ReadFormat()
-	if err != nil || format.Retention == nil {
-		return nil // a bad or newer store.json is reported by the first write, not here
-	}
-	plan, err := runStore.PlanPrune(system.Clock{}.Now())
+// pruneOnServeStart applies the store's retention once after `serve` has
+// announced itself. With no retention configured the plan is empty and nothing
+// happens. It reports to stderr (stdout stays the single announcement line). A
+// planning or deletion failure, including an unreadable store.json, is a
+// warning and never stops serve; a cancelled ctx is the server shutting down and
+// is not reported. Only a failure to write the report is returned.
+func pruneOnServeStart(ctx context.Context, runStore store.Store, stderr io.Writer) error {
+	plan, err := runStore.PlanPrune(ctx, system.Clock{}.Now())
 	if err != nil {
-		_, writeErr := fmt.Fprintf(stderr, "warning: retention could not be planned: %v\n", err)
-		return writeErr
+		return warnRetention(stderr, "retention could not be planned", err)
 	}
-	result, err := runStore.Prune(plan)
+	result, err := runStore.Prune(ctx, plan)
 	if len(result.Removed) > 0 {
 		if _, writeErr := fmt.Fprintf(stderr, "retention removed %d run(s)\n", len(result.Removed)); writeErr != nil {
 			return writeErr
 		}
 	}
 	if err != nil {
-		_, writeErr := fmt.Fprintf(stderr, "warning: retention could not remove every planned run: %v\n", err)
-		return writeErr
+		return warnRetention(stderr, "retention could not remove every planned run", err)
 	}
 	return nil
+}
+
+func warnRetention(w io.Writer, what string, err error) error {
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+	_, writeErr := fmt.Fprintf(w, "warning: %s: %v\n", what, err)
+	return writeErr
 }

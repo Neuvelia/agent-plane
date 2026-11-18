@@ -66,9 +66,6 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err := runStore.Check(); err != nil {
 		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
 	}
-	if err := pruneOnServeStart(runStore, stderr); err != nil {
-		return presentationError(err, stderr)
-	}
 	token, err := api.NewToken()
 	if err != nil {
 		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
@@ -107,8 +104,18 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if _, err := fmt.Fprintf(stdout, "%s\n", line); err != nil {
 		return presentationError(err, stderr)
 	}
-	if err := server.Serve(serveCtx, listener); err != nil {
-		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
+	// Retention runs after the announcement the desktop waits for, so a large
+	// store never delays startup. The goroutine ends with serveCtx and is awaited.
+	pruned := make(chan error, 1)
+	go func() { pruned <- pruneOnServeStart(serveCtx, runStore, stderr) }()
+	serveErr := server.Serve(serveCtx, listener)
+	cancel()
+	pruneErr := <-pruned
+	if serveErr != nil {
+		return commandError("serve", "error", "internal", serveErr, nil, false, stdout, stderr, exitInternal)
+	}
+	if pruneErr != nil {
+		return presentationError(pruneErr, stderr)
 	}
 	return exitOK
 }
