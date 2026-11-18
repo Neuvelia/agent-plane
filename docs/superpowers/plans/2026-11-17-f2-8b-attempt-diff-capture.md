@@ -169,6 +169,18 @@ answer; the plan assumes the recommendation.
   new ADR number (schema 12 is an amendment of ADR-0026), so it adds no
   conflict. Whoever merges second re-checks `docs/adr/` for free numbers.
 
+## Follow-ups after PRs #124-#128 merge (owner froze store, serve and desktop files)
+
+- TODO: update the schema header comment in `desktop/src/types.ts` (schema 12,
+  `attempt_diff`, ADR-0026) and add the desktop reducer tolerance test for
+  `attempt_diff` in `desktop/test/insight.test.ts`.
+- TODO: the store schema fixture `internal/store/testdata/schemas/v12.jsonl`
+  (kept minimal on this branch only because `TestSchemaFixturesRoundTrip`
+  requires one per schema) should gain an `attempt_diff` line, plus a store
+  round trip of a 16 KiB patch.
+- `desktop/test/fixtures/agent-scope-retry.json` carries only the schema number
+  bump 11 to 12 (required by `TestDesktopAgentScopeRetryFixture`).
+
 ## Task order and dependencies
 
 ```text

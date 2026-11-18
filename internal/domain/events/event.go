@@ -10,7 +10,7 @@ import (
 
 // SchemaVersion is the event schema new events are stamped with. Readers
 // accept every earlier schema with its historical shape.
-const SchemaVersion = 11
+const SchemaVersion = 12
 
 type RunID string
 type NodeRunID string
@@ -211,6 +211,14 @@ func (e Event) Validate() error {
 		if err := p.Validate(); err != nil {
 			return err
 		}
+	case AttemptDiffPayload:
+		payloadType = AttemptDiff
+		if err := validateAttemptDiffEnvelope(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
 	case AttemptStartedPayload:
 		payloadType = AttemptStarted
 		if err := validateAttempt(e); err != nil {
@@ -351,6 +359,8 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = WorkspaceReleasedPayload{}
 	case SourceWorkspaceChanged:
 		payload = SourceWorkspaceChangedPayload{}
+	case AttemptDiff:
+		payload = AttemptDiffPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -441,6 +451,11 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		payload = p
 	case SourceWorkspaceChangedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case AttemptDiffPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}
