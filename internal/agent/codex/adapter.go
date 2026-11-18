@@ -16,13 +16,19 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/domain/events"
+	"agentplane/internal/proctree"
 )
 
 const maxRecord = 1 << 20
 const resultSchema = `{"type":"object","additionalProperties":false,"required":["summary","artifacts"],"properties":{"summary":{"type":"string"},"artifacts":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["ref","name"],"properties":{"ref":{"type":"string"},"name":{"type":"string"}}}}}}`
 
 // Adapter never forwards the ambient environment. Binary must be absolute.
-type Adapter struct{ Binary string }
+type Adapter struct {
+	Binary string
+	// Termination tunes how a cancelled process tree is stopped. The zero value
+	// selects proctree's defaults.
+	Termination proctree.Policy
+}
 
 func (Adapter) ID() agent.AdapterID { return "codex" }
 
@@ -89,7 +95,7 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 		pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		b := limitedBuffer{limit: maxRecord}
-		err := runProcess(pctx, a.Binary, args, []string{}, "", nil, &b)
+		err := runProcess(pctx, a.Binary, args, []string{}, "", nil, &b, a.Termination)
 		if err != nil || b.overflow {
 			return "", fail("detection", "Codex capability probe failed or exceeded bounds", err)
 		}
@@ -201,17 +207,17 @@ func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, log 
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream := progress{log: log, normalized: normalized, cancel: cancel}
-	err = runProcess(pctx, a.Binary, args, env, workspace, strings.NewReader(task), &stream)
+	err = runProcess(pctx, a.Binary, args, env, workspace, strings.NewReader(task), &stream, a.Termination)
 	if stream.err != nil {
 		return out, stream.err
 	}
 	if err != nil {
-		if ctx.Err() != nil {
-			return out, fail("cancelled", "execution cancelled", err)
-		}
 		var typed *agent.ExecutionError
 		if errors.As(err, &typed) {
 			return out, err
+		}
+		if ctx.Err() != nil {
+			return out, fail("cancelled", "execution cancelled", err)
 		}
 		return out, fail("process_exit", "Codex execution failed; raw provider output withheld", err)
 	}

@@ -55,6 +55,8 @@ behavior.
   exposing only finite diagnostic codes in lifecycle events. Do not put task
   text, environment values, raw metadata, provider errors or full outputs
   into events. A failed invocation publishes no accepted graph outputs.
+  `ExecutionError.ProcessTermination()` exposes the `proctree.Outcome` of an
+  adapter-owned process tree, also through a wrapping `ExecutionError`.
   Concrete adapters own process termination, safe observation and any
   provider-specific environment resolution.
 

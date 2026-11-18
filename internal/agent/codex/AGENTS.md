@@ -12,7 +12,7 @@ F1.3/ADR-0011 before changing process, result, Git or progress behavior.
 | Private JSONL progress parsing and supported event projection | `adapter.go`, `progress.go` |
 | Duplicate-key, UTF-8 and JSON-depth checks | `json.go` |
 | Workspace and invocation-relative Git evidence wrappers | `git.go`, `internal/gitstate/snapshot.go` |
-| Process group launch, cancellation and cleanup on Darwin/Linux | `process_unix.go` |
+| Process tree launch (through `internal/proctree`), cancellation and cleanup on Darwin/Linux | `process_unix.go` |
 | Fail-closed behavior on other platforms | `process_other.go` |
 | Neutral adapter contract and graph output conversion | `internal/agent/AGENTS.md` |
 
@@ -34,9 +34,14 @@ F1.3/ADR-0011 before changing process, result, Git or progress behavior.
   these references; this adapter does. An absolute workspace must resolve
   to the root of an initialized, non-bare Git worktree with HEAD before
   execution. Process execution is supported on Darwin/Linux in a fresh
-  process group. On cancellation and ordinary exit, terminate owned group
-  members with bounded TERM/KILL and reap handling. Deliberately escaped
-  groups are outside this contract; process groups are not a sandbox.
+  process group started through `internal/proctree`. On cancellation the
+  tree is terminated (request, grace, force) and the failure is classified from
+  that record: `codex_cancelled` when it was emptied, `codex_shutdown` when it
+  could not be. `agent.ExecutionError.ProcessTermination()` returns the
+  outcome; `Adapter.Termination` tunes the grace (default 5 s). After an
+  ordinary leader exit, remaining group members are swept the same way.
+  Deliberately escaped groups are outside this contract; process groups are
+  not a sandbox. Windows keeps failing closed.
 - Keep provider JSONL and stderr private. Each progress record and final
   result is bounded to 1 MiB. `uniqueJSON` rejects duplicate keys, invalid
   UTF-8, excessive nesting and trailing values. A successful final result
@@ -88,7 +93,7 @@ changes should use the deterministic fake-CLI and temporary-Git tests first.
 - Detection, argv/environment, result boundaries, Git evidence and ignore
   transitions: `adapter_test.go`.
 - Owned child cancellation, normal-exit cleanup and process observation:
-  `process_test.go`.
+  `process_test.go`; termination record and forced kill: `process_tree_test.go`.
 - Supported normalized records, malformed optional progress and safe
   failures: `progress_test.go`.
 - Shared snapshot behavior: `internal/gitstate/snapshot_test.go`;

@@ -360,24 +360,27 @@ leader success with an inherited pipe returns nil within `WaitDelay`, typed
 `shutdown`/`cancelled`. New: the default grace is the shared 5 s instead of the
 fixed 500 ms (`Adapter.Termination.Grace` can pin it for tests), `Outcome` and
 `LeakError` flow into the typed `agent.ExecutionError` so the runtime can emit
-`process_terminated`, and `Execute` maps `run.ReasonOf(context.Cause(ctx)) ==
-node_timeout` to `codex_timeout` (new code in the `fail` allow-list at
-`adapter.go:39`, new `agent.ErrorTimeout`) before the generic `cancelled`
-mapping at `adapter.go:210`.
+`process_terminated`. (Mapping `run.ReasonOf(context.Cause(ctx)) == node_timeout`
+to `codex_timeout` and the new `agent.ErrorTimeout` move to Task 7: the cause
+types arrive with Task 5, so B3 does not add them.)
 
-- [ ] Red: `TestExecuteNodeDeadlineIsCodexTimeout` and the grace test, plus the
-  runtime-visible `ProcessTermination()` on a cancelled execution.
-- [ ] Refactor `runProcess` onto `proctree`; run the unmodified existing tests
+- [x] Red: `TestCancelledExecutionCarriesGracefulTermination` (runtime-visible
+  `ProcessTermination()` on a cancelled execution) and the forced-kill grace test.
+  `TestExecuteNodeDeadlineIsCodexTimeout` moves to Task 7.
+- [x] Refactor `runProcess` onto `proctree`; run the existing tests (the cancel
+  case of `TestOwnedChildCancellationAndOrdinaryExit` pins `Termination.Grace`
+  to 200 ms because its descendant ignores TERM and the 5 s default exceeds its
+  3 s bound)
   (`TestOwnedChildCancellationAndOrdinaryExit`,
   `TestOwnedChildReapedBetweenTerminationObservations`,
   `TestInitiallyIgnoredSpecialEntryIsNotRead`,
   `TestOwnedChildTerminationObservationFailsClosedForLiveProcess`).
 
 **Tests:** the four existing process tests unchanged;
-`TestCancelledExecutionCarriesGracefulTermination`,
-`TestDeadlineCauseMapsToCodexTimeoutNotCancelled`,
+`TestCancelledExecutionCarriesGracefulTermination` (also asserts the shared
+5 s default grace on the record),
 `TestCodexForcedKillAfterGraceWithDescendant` (fake CLI with a TERM-ignoring
-descendant), `TestSharedGraceDefaultIsFiveSeconds` (policy value only, no wait).
+descendant). `TestDeadlineCauseMapsToCodexTimeoutNotCancelled` moves to Task 7.
 
 ---
 
