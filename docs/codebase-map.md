@@ -9,48 +9,60 @@ durable contract.
 
 | Area | Owns | Start here |
 | --- | --- | --- |
-| `internal/graph` | YAML definitions, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
-| `internal/graph/edit` | In-memory, fidelity-preserving graph YAML operations | `apply.go`, `ops.go`, `doc.go` |
+| `internal/domain/graph` | Graph definition types, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
+| `internal/domain/events` | Typed event payloads, schema compatibility, ordering and delivery | `event.go`, `delivery.go` |
+| `internal/domain/run` | Run and node states with legal transitions, results, approval requests, correlation and feedback values | `state.go`, `result.go` |
+| `internal/adapter/yamlgraph` | YAML parsing of graph definitions into the domain types | `yamlgraph.go`, `dto.go` |
+| `internal/adapter/yamlgraph/edit` | The graph editor engine: in-memory, fidelity-preserving YAML operations (ADR-0020), served by the API | `apply.go`, `ops.go`, `doc.go` |
+| `internal/adapter/system` | Wall clock and random run identifiers behind engine ports | `system.go` |
+| `internal/app/trace` | Event collector that retains lifecycle, evidence and bounded logs | `collector.go` |
+| `internal/archtest` | Test that enforces the layer dependency rules over production imports | `archtest_test.go`, `baseline.txt` |
 | `internal/fields` | Field descriptor types for node configuration; each validator owns and exports its descriptors (`ConfigFields`, `OutputPorts`) | `fields.go`, `fieldstest/` |
-| `internal/events` | Typed event payloads, schema compatibility, ordering and collection | `event.go`, `emitter.go` |
 | `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording | `scheduler.go`, `loop.go`, `unit.go`, `values.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
 | `internal/agent/codex` | Installed Codex CLI process and result/progress translation | `adapter.go` |
 | `internal/shell` | Shell node process execution and configuration | `executor.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
+| `internal/gitlocate` | Resolution of the Git binary shared by the engine and the capability report | `gitlocate.go` |
 | `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
+| `internal/capability` | F2.11 read-only capability report: Git, agent adapters and agent CLIs, with bounded probes (ADR-0025) | `capability.go` |
 | `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (behind `runtime.WorkspaceManager`, composed by the CLI) | `preflight.go`, `worktree.go`, `integrate.go` |
-| `internal/store` | Local append-only JSONL run history | `store.go` |
-| `internal/api` | Authenticated loopback API for runs, approvals and granted graph documents | `server.go`, `docs.go`, `hub.go` |
+| `internal/store` | Local append-only JSONL run history (F3.2 in progress: durable creation, run lock, `store.json`) | `store.go`, `read.go`, `lock.go` |
+| `internal/api` | Authenticated loopback API: runs, approvals, the graph editor routes (`/graphs/validate`, `/graphs/grants`, `/graphs/open`, `/graphs/stat`, `/graphs/edit`, `/graphs/save`) and the capability report | `server.go`, `docs.go`, `capabilities.go`, `hub.go` |
 | `internal/version` | Build and runtime version metadata | `version.go` |
 | `cmd/agentplane` | CLI commands and composition of the engine, adapters, store and API | `main.go`, `cli.go`, `serve.go` |
 | `desktop/electron` | Sidecar lifecycle, local API token, IPC allowlist and narrow preload bridge | `main.cjs`, `preload.cjs` |
-| `desktop/src` | React presentation, typed bridge calls and event-derived run views | `api.ts`, `reducer.ts`, `App.tsx` |
+| `desktop/src` | React presentation, typed bridge calls and event-derived run views; the welcome screen and capability panel (`welcome.tsx`, `capabilities.ts`) | `api.ts`, `reducer.ts`, `App.tsx` |
+| `desktop/src/editor` | Graph editor: canvas, YAML view, Issues panel, node inspector and template picker, over the graph document API | `EditorScreen.tsx`, `useGraphDocument.ts`, `api.ts` |
 
 Current direct Go imports within this repository (`go list`, production
 packages only):
 
 | Importer | In-repository imports |
 | --- | --- |
-| `fields`, `events`, `gitstate`, `version` | none |
-| `graph` | `fields` |
+| `fields`, `gitlocate`, `version` | none |
+| `domain/graph` | `fields` |
+| `domain/run` | `domain/events`, `domain/graph` |
+| `adapter/yamlgraph` | `domain/graph` |
+| `adapter/yamlgraph/edit` | `adapter/yamlgraph`, `domain/graph`, `fields` |
+| `adapter/system`, `app/trace`, `store` | `domain/events` |
+| `gitstate` | `gitlocate` |
 | `worktree` | `gitstate` |
-| `graph/edit` | `graph` |
-| `runtime` | `events`, `gitstate`, `graph` |
-| `agent` | `events`, `fields`, `graph`, `runtime` |
-| `agent/codex` | `agent`, `events`, `gitstate` |
-| `shell` | `fields`, `graph` |
-| `gate` | `events`, `fields`, `gitstate`, `graph`, `runtime` |
-| `store` | `events` |
-| `api` | `events`, `graph`, `graph/edit`, `runtime`, `store` |
+| `capability` | `agent`, `gitlocate` |
+| `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `gitlocate`, `gitstate` |
+| `agent` | `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime` |
+| `agent/codex` | `agent`, `domain/events`, `gitstate` |
+| `shell` | `domain/graph`, `fields` |
+| `gate` | `domain/events`, `domain/graph`, `fields`, `gitstate`, `runtime` |
+| `api` | `adapter/yamlgraph`, `adapter/yamlgraph/edit`, `capability`, `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime`, `store` |
 | `cmd/agentplane` | composition of the Go packages above |
 
-Keep the core direction: `graph`, `events` and `gitstate` do not import the
-runtime; the runtime does not import concrete `agent`, `gate`, `shell`, `api`
+Keep the core direction: `domain/*`, `gitstate` and `gitlocate` do not import the
+runtime (the architecture test enforces the layers); the runtime does not import concrete `agent`, `gate`, `shell`, `api`
 or `store` packages. Executor interfaces belong to the runtime because it
 consumes them; concrete executors implement them. The API uses runtime
 contracts but does not own scheduling. `graph/edit` applies operations in
-memory; the API owns granted file saves. The desktop renderer calls the narrow
+memory (`adapter/yamlgraph/edit`); the API owns granted file saves. The desktop renderer calls the narrow
 preload bridge; Electron main owns the sidecar and loopback API token. The
 desktop is a client of that API, not a second execution engine.
 
