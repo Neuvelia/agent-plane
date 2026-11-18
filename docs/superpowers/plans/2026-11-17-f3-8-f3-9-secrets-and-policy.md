@@ -22,8 +22,8 @@ runner binary re-executed.
 
 **Specs:** `docs/features/F3.8-secrets-references.md`,
 `docs/features/F3.9-execution-policy-v0.md`.
-**ADR:** `docs/adr/00XX-secret-references-and-execution-policy.md` (proposed,
-number assigned at merge).
+**ADR:** `docs/adr/0029-secret-references-and-execution-policy.md` (proposed,
+number assigned by the owner).
 **Evidence:** spike report `experiments/spikes/2026-11-17-landlock-namespaces-jobobject.md`
 (branch `claude/spikes-landlock-jobobject`, not merged); it is the only
 platform evidence this plan relies on. Tarmind (in code today: agentplane)
@@ -806,7 +806,7 @@ ref, sorted evidence), `TestCodexArgsPinSandboxNetworkExplicitly`,
 **Files:** Edit `.github/workflows/ci.yml` (new job `enforce-linux`),
 `docs/features/F3.8-*.md`, `docs/features/F3.9-*.md` (status, tick criteria
 only for what a named test proves), `docs/features/README.md`,
-`docs/adr/00XX-*.md` -> `docs/adr/00NN-*.md` (number at merge) and
+`docs/adr/0029-*.md` (Accepted) and
 `docs/adr/README.md`, `docs/roadmap.md`, `docs/graph-spec.md`,
 `docs/security-model.md`, `docs/architecture.md`, `docs/codebase-map.md`,
 `internal/runtime/AGENTS.md`, `cmd/agentplane/AGENTS.md`, `AGENTS.md` (phase
