@@ -36,7 +36,7 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		limit = 1
 	}
 	redactions := append([]string(nil), options.LogRedactions...)
-	redactionTemplate, err := newLogRedactor(redactions)
+	redactionTemplate, err := newRedactionSet(redactions, nil)
 	if err != nil {
 		return runPreparation{}, fmt.Errorf("invalid log redactions: %w", err)
 	}
