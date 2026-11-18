@@ -1,0 +1,139 @@
+# Roadmap ledger - single source of truth for feature status.
+#
+# This file owns: ID, title, phase, priority, proposed dependencies, status,
+# coverage, spec/ADR links, known gaps and the commit at which a status was
+# last verified. Every other place that states a status (docs/roadmap.md tables,
+# docs/features/README.md, README.md "Status", AGENTS.md "Current product
+# phase", spec `**Status:**` headers, plan checkboxes, the public feed of REL2)
+# must be generated from this file or checked against it. Do not edit a status
+# anywhere else. See docs/audits/2026-11-18-roadmap-tracking-consistency.md.
+#
+# Two independent axes (they were conflated before, which is the main source
+# of disagreement between the repo docs and the 2026-11-18 review):
+#
+#   status    - the state of the repo's own contract (spec + ADR + code).
+#               planned     no spec
+#               draft       spec and/or ADR exist, no code merged
+#               accepted    spec accepted by the owner, no code merged
+#               in_progress some code merged, spec acceptance criteria still open
+#               implemented every acceptance criterion of the spec is covered
+#   coverage  - how much of the ORIGINAL product roadmap item (PDF scope) the
+#               implemented status delivers.
+#               full | partial | none
+#
+# A feature may be `implemented` with `coverage: partial` (the spec narrowed
+# the scope on purpose, e.g. JSONL instead of SQLite). Such gaps are listed in
+# `gaps`. Never encode "partially done" in `status`.
+#
+# `verified` is the short commit hash at which status was last checked against
+# code and tests. `source` says how: `code` (checked in this repo at that
+# commit) or `review@4578233` (taken from the 2026-11-18 spec-vs-repo review
+# and not re-verified). Update both whenever a status changes.
+
+schema_version: 1
+verified_head: fdaae01
+event_schema_version: 13   # internal/domain/events SchemaVersion; docs quote this, never copy it by hand
+
+phases:
+  - {id: 0, name: Execution Core, release: v0.1, state: done, exit: "CLI integration test: two concurrent Shell branches, data to a dependent node, reconstructable events, deterministic result"}
+  - {id: 1, name: Agent Loop, release: v0.2, state: done, exit: "Real-Codex F1.7 demo 2026-11-17 (Codex 0.169.0): red then green, only the failed unit corrected"}
+  - {id: 2, name: Local IDE, release: v0.3, state: now, exit: "Partial: flow works end to end without a terminal; Run Inspector lacks input/output and agent activity, no edge/bindings editor, no cancel from UI"}
+  - {id: 3, name: Local Production Ready, release: v0.4, state: now, exit: "Not met: no resume, timeouts in progress, no artifact store, no secrets or policy"}
+  - {id: 4, name: Connected Control Plane, release: v0.5, state: later, exit: "Not started; activate only after the exit criteria of phase 3"}
+  - {id: 5, name: Pro / Team, release: v1.0, state: later, exit: "Not started"}
+  - {id: 6, name: Post-v1, release: null, state: later, exit: "Not started"}
+
+features:
+  # ---- Phase 0 ---------------------------------------------------------
+  - {id: F0.1, title: Graph Definition Schema v0, phase: 0, prio: P0, status: implemented, coverage: partial, spec: F0.1-graph-definition-schema-v0, adr: [1], deps: [], gaps: ["JSON policy per node is not a separate test; per-node timeout moves to F3.4"], verified: fdaae01, source: review@4578233}
+  - {id: F0.2, title: Graph Validator and lint, phase: 0, prio: P0, status: implemented, coverage: full, spec: F0.2-graph-validator-and-lint, adr: [2], deps: [F0.1], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F0.3, title: Data bindings on edges, phase: 0, prio: P0, status: implemented, coverage: partial, spec: F0.3-data-bindings, adr: [3, 8], deps: [F0.1], gaps: ["artifact_ref is only a pass-through reference until F3.5"], verified: fdaae01, source: review@4578233}
+  - {id: F0.4, title: DAG Scheduler in-memory, phase: 0, prio: P0, status: implemented, coverage: full, spec: F0.4-dag-scheduler, adr: [4], deps: [F0.1, F0.3], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F0.5, title: Shell Node, phase: 0, prio: P0, status: implemented, coverage: partial, spec: F0.5-shell-node, adr: [5], deps: [F0.4], gaps: ["process-tree termination for Shell is delivered by F3.4 tasks 1-2 (merged); full log as artifact needs F3.5"], verified: fdaae01, source: code}
+  - {id: F0.6, title: Event Model and Run/Node IDs, phase: 0, prio: P0, status: implemented, coverage: full, spec: F0.6-event-model, adr: [6], deps: [F0.4], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F0.7, title: CLI Runner, phase: 0, prio: P0, status: implemented, coverage: full, spec: F0.7-cli-runner, adr: [7], deps: [F0.5, F0.6], gaps: [], verified: fdaae01, source: review@4578233}
+
+  # ---- Phase 1 ---------------------------------------------------------
+  - {id: F1.1, title: Agent Adapter Contract, phase: 1, prio: P0, status: implemented, coverage: full, spec: F1.1-agent-adapter-contract, adr: [9], deps: [F0.7], gaps: ["contract is exercised by a mock; only one real adapter exists"], verified: fdaae01, source: review@4578233}
+  - {id: F1.2, title: First coding-agent adapter (Codex), phase: 1, prio: P0, status: implemented, coverage: full, spec: F1.2-first-coding-agent-adapter, adr: [10], deps: [F1.1], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F1.3, title: Unified Streaming, phase: 1, prio: P0, status: implemented, coverage: full, spec: F1.3-unified-streaming, adr: [11], deps: [F1.1, F1.2], gaps: ["bounded progress with an explicit loss counter instead of scheduler backpressure"], verified: fdaae01, source: review@4578233}
+  - {id: F1.4, title: Gate Node, phase: 1, prio: P0, status: implemented, coverage: full, spec: F1.4-gate-node, adr: [12], deps: [F0.7], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F1.5, title: Check Result Contract, phase: 1, prio: P0, status: implemented, coverage: full, spec: F1.5-check-result-contract, adr: [13], deps: [F1.4], gaps: ["spec header still says 'pending independent review'; no review record found (review L3)"], verified: fdaae01, source: review@4578233}
+  - {id: F1.6, title: Correction Loop + maxAttempts, phase: 1, prio: P0, status: implemented, coverage: full, spec: F1.6-correction-loop, adr: [14], deps: [F1.1, F1.4, F1.5], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F1.7, title: Return Envelope / scoped retry, phase: 1, prio: P0, status: implemented, coverage: partial, spec: F1.7-return-envelope-scoped-retry, adr: [15], deps: [F1.5, F1.6], gaps: ["static units only: no dynamic foreach/fan-out"], verified: fdaae01, source: review@4578233}
+  - {id: F1.8, title: Changed-files Scope Check, phase: 1, prio: P1, status: implemented, coverage: full, spec: F1.8-changed-files-scope-check, adr: [16], deps: [F1.2, F1.4], gaps: ["detects after the fact; does not block writes"], verified: fdaae01, source: review@4578233}
+
+  # ---- Phase 2 ---------------------------------------------------------
+  - {id: F2.1, title: Graph Canvas, phase: 2, prio: P0, status: implemented, coverage: full, spec: F2.1-graph-canvas, adr: [20, 21, 22], deps: [F0.1], gaps: ["auto-layout and groups (P1 in PDF)"], verified: fdaae01, source: review@4578233}
+  - {id: F2.2, title: Node Inspector, phase: 2, prio: P0, status: implemented, coverage: full, spec: F2.2-node-inspector, adr: [20, 21], deps: [F2.1], gaps: ["permissions section waits for F3.9"], verified: fdaae01, source: review@4578233}
+  - {id: F2.3, title: Edge/Data Mapping Editor, phase: 2, prio: P0, status: in_progress, coverage: partial, spec: F2.3-edge-data-mapping-editor, adr: [20, 23], deps: [F2.1, F0.3], gaps: ["E5a.2 bindings panel", "E5a.3 graph inputs/outputs and parallelism hint", "E5b.1-E5b.2 edge inspector with value"], verified: fdaae01, source: review@4578233}
+  - {id: F2.3-E6, title: Recorded run values (slice of F2.3), phase: 2, prio: P0, status: implemented, coverage: full, spec: F2.3-E6-recorded-run-values, adr: [23], deps: [F2.3], gaps: [], extra: true, verified: fdaae01, source: review@4578233}
+  - {id: F2.4, title: Graph Validation UI, phase: 2, prio: P0, status: implemented, coverage: full, spec: F2.4-graph-validation-ui, adr: [21], deps: [F2.1, F2.2, F2.3, F0.2], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F2.5, title: Live Execution Map, phase: 2, prio: P0, status: implemented, coverage: full, spec: F2.5-live-map, adr: [19], deps: [F1.3, F2.1], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F2.5a, title: Desktop redesign (PL/EN, design system), phase: 2, prio: P1, status: implemented, coverage: full, spec: F2.5a-desktop-redesign, adr: [], deps: [F2.5], gaps: [], extra: true, verified: fdaae01, source: review@4578233}
+  - {id: F2.6, title: Run Inspector - Overview, phase: 2, prio: P0, status: in_progress, coverage: partial, spec: F2.6-run-inspector-overview, adr: [], deps: [F0.6, F1.5], gaps: ["attempts on timeline", "agent time vs wait time, critical path", "slow filter", "run identity (ID, start, graph version)"], verified: fdaae01, source: review@4578233}
+  - {id: F2.7, title: Run Inspector - Node Detail, phase: 2, prio: P0, status: in_progress, coverage: partial, spec: F2.7-run-inspector-node-detail, adr: [19], deps: [F2.6, F1.6], gaps: ["resolved input/output values", "artifacts (needs F3.5)", "normalized agent activity", "changed files outside compare view", "adapter and version, timings", "ADR-0019 amendment still proposed"], verified: fdaae01, source: review@4578233}
+  - {id: F2.8, title: Attempt Compare, phase: 2, prio: P1, status: in_progress, coverage: partial, spec: F2.8-attempt-compare, adr: [26], deps: [F2.7, F1.6], gaps: ["F2.8b content diff: line diff package and attempt_diff event merged (T1-T2 of the plan), capture and UI open; ADR-0026 proposed"], verified: fdaae01, source: code}
+  - {id: F2.9, title: Local Run History (JSONL store), phase: 2, prio: P0, status: implemented, coverage: partial, spec: F2.9-run-store, adr: [19, 27], deps: [F0.6, F2.6], gaps: ["PDF asked for SQLite; JSONL by decision (ADR-0019, ADR-0027 proposed)", "filters per repo/graph and branch/commit metadata"], verified: fdaae01, source: review@4578233}
+  - {id: F2.10, title: Human Gate UI, phase: 2, prio: P0, status: implemented, coverage: partial, spec: F2.10-human-node, adr: [17], deps: [F2.5, F2.6], gaps: ["no blast radius, changed-files list or diff link in the panel", "reject always ends the run (no alternative path)"], verified: fdaae01, source: review@4578233}
+  - {id: F2.11, title: Onboarding + Capability Detection, phase: 2, prio: P1, status: implemented, coverage: partial, spec: F2.11-onboarding-capability-detection, adr: [25], deps: [F1.1, F1.2], gaps: ["Docker, repo list, self-check", "macOS/Windows verification (#24)", "graph does not declare required capabilities"], verified: fdaae01, source: review@4578233}
+  - {id: F2.12, title: Graph Templates, phase: 2, prio: P1, status: implemented, coverage: partial, spec: F2.12-graph-templates, adr: [], deps: [F2.1, F2.2, F2.3, F2.4], gaps: ["template set differs from the PDF (no fix issue, code review, dependency update, repo audit); product decision pending"], verified: fdaae01, source: review@4578233}
+  - {id: F1.6a, title: Shell node correction loop, phase: 2, prio: P1, status: implemented, coverage: full, spec: F1.6a-shell-loop, adr: [18], deps: [F1.6], gaps: [], extra: true, verified: fdaae01, source: review@4578233}
+
+  # ---- Phase 3 ---------------------------------------------------------
+  - {id: F3.1, title: Workspace Isolation / Git Worktrees, phase: 3, prio: P0, status: implemented, coverage: full, spec: F3.1-workspace-isolation, adr: [24], deps: [F1.7], gaps: ["opt-in, Agent nodes only; no upstream-file view downstream; Shell not isolated; not a sandbox; Linux/macOS"], verified: fdaae01, source: review@4578233}
+  - {id: F3.2, title: Durable Run State / Append-only Event Store, phase: 3, prio: P0, status: implemented, coverage: partial, spec: F3.2-durable-run-state, adr: [27], deps: [F0.6, F1.3], gaps: ["Windows store and kill tests not run", "ADR-0027 still proposed (owner must accept)"], verified: fdaae01, source: code}
+  - {id: F3.3, title: Resume / Recovery, phase: 3, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F3.1, F3.2], gaps: ["no spec: side-effect policy and reuse of accepted outputs undecided; required by Demo D and v1.0 criterion 1"], verified: fdaae01, source: review@4578233}
+  - {id: F3.4, title: Cancellation and Timeouts, phase: 3, prio: P0, status: in_progress, coverage: partial, spec: F3.4-cancellation-and-timeouts, adr: [28], deps: [F1.2, F1.6], gaps: ["tasks 1-6 of the plan merged (proctree, Shell/Codex/Gate tree kill, cause types, timeout_seconds in graph); tasks 7-11 open: runtime deadlines and classification, CLI/serve composition, built-binary proof, API cancel endpoint and desktop Cancel button, Windows (F3.4a)", "spec header still says 'draft, no implementation'"], verified: fdaae01, source: code}
+  - {id: F3.5, title: Artifact Store Local, phase: 3, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F1.2, F3.2], gaps: ["no spec; artifact_ref and the artifact evidence type are only references"], verified: fdaae01, source: review@4578233}
+  - {id: F3.6, title: Graph Versioning and Run Reproducibility, phase: 3, prio: P0, status: planned, coverage: partial, spec: null, adr: [], deps: [F0.6, F3.2], gaps: ["no spec; semantic hash and graph.yaml snapshot exist", "missing: commit/branch, runtime version, prompt version per node"], verified: fdaae01, source: review@4578233}
+  - {id: F3.7, title: Export JSON/CSV, phase: 3, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F3.2, F3.5], gaps: ["no spec; `runs show --json` has no stable export schema; experiments/run-log.csv is header only; blocks RQ1-RQ5 analysis"], verified: fdaae01, source: review@4578233}
+  - {id: F3.8, title: Secrets References, phase: 3, prio: P0, status: draft, coverage: none, spec: F3.8-secrets-references, adr: [29], deps: [F1.1, F3.1], gaps: ["plan exists (docs/superpowers/plans), no code; `--redact-env` is the only mechanism"], verified: fdaae01, source: code}
+  - {id: F3.9, title: Permissions / Execution Policy v0, phase: 3, prio: P0, status: draft, coverage: none, spec: F3.9-execution-policy-v0, adr: [29], deps: [F1.2, F3.1, F3.8], gaps: ["plan exists, no code; design together with F3.8"], verified: fdaae01, source: code}
+  - {id: F3.10, title: Cost/Usage Metadata, phase: 3, prio: P1, status: planned, coverage: partial, spec: null, adr: [], deps: [F1.1, F3.2], gaps: ["UsageMetadata contract exists; Codex reports no usage; no aggregation or export"], verified: fdaae01, source: review@4578233}
+  - {id: F3.11, title: Local Diagnostics, phase: 3, prio: P1, status: planned, coverage: partial, spec: null, adr: [], deps: [F3.2, F3.4], gaps: ["`agentplane version` and capability report only; no bundle or self-test"], verified: fdaae01, source: review@4578233}
+
+  # ---- Phase 4 (not started; activate only after phase 3 exit) ----------
+  - {id: F4.1, title: Account + Authentication, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F3.exit], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.2, title: Projects, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.1], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.3, title: Runner Enrollment, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.1, F4.2], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.4, title: Outbound Secure Connection, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.3], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.5, title: Runner Presence & Health, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.4], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.6, title: Remote Run Start, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.2, F4.4, F4.9], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.7, title: Cloud Run Metadata Sync, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F3.2, F4.4, F4.6], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.8, title: Web Human Approval, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F2.10, F4.4, F4.7, F4.9], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.9, title: Cloud Security Baseline, phase: 4, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.1, F4.2, F4.3, F4.4], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F4.10, title: Optional Artifact Sync, phase: 4, prio: P1, status: planned, coverage: none, spec: null, adr: [], deps: [F3.5, F4.7, F4.9], gaps: [], verified: fdaae01, source: review@4578233}
+
+  # ---- Phase 5 (not started) --------------------------------------------
+  - {id: F5.1, title: Plans + Billing, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.1, F4.2], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.2, title: Scheduling, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.6, F4.9], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.3, title: Alerts / Notifications, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.7, F5.2], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.4, title: Long-term History & Analytics, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.7], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.5, title: Organizations / Team Workspaces, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F4.1, F4.2], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.6, title: RBAC, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F5.5], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.7, title: Shared Graph Registry, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F3.6, F5.5, F5.6], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.8, title: Shared Constraints / Learning Edge v1, phase: 5, prio: P1, status: planned, coverage: none, spec: null, adr: [], deps: [F5.6, F5.7], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.9, title: Policy Engine v1, phase: 5, prio: P1, status: planned, coverage: none, spec: null, adr: [], deps: [F3.9, F5.6], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.10, title: Audit Log, phase: 5, prio: P0, status: planned, coverage: none, spec: null, adr: [], deps: [F5.5, F5.6], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.11, title: Budgets & Guardrails, phase: 5, prio: P1, status: planned, coverage: none, spec: null, adr: [], deps: [F3.10, F5.1, F5.9], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F5.12, title: Git Provider Integration, phase: 5, prio: P1, status: planned, coverage: none, spec: null, adr: [], deps: [F4.2, F5.6, F5.10], gaps: [], verified: fdaae01, source: review@4578233}
+
+  # ---- Phase 6 (not started; all P2) --------------------------------------
+  - {id: F6.1, title: Managed Ephemeral Runners, phase: 6, prio: P2, status: planned, coverage: none, spec: null, adr: [], deps: [F3.1, F3.9, F4.9, F5.1], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F6.2, title: Managed Artifact Storage, phase: 6, prio: P2, status: planned, coverage: none, spec: null, adr: [], deps: [F3.5, F4.10, F6.1], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F6.3, title: Enterprise Identity, phase: 6, prio: P2, status: planned, coverage: none, spec: null, adr: [], deps: [F4.1, F5.5, F5.6], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F6.4, title: Advanced Policy / Approval Chains, phase: 6, prio: P2, status: planned, coverage: none, spec: null, adr: [], deps: [F3.9, F4.8, F5.9, F6.3], gaps: [], verified: fdaae01, source: review@4578233}
+  - {id: F6.5, title: Plugin/Adapter SDK, phase: 6, prio: P2, status: planned, coverage: none, spec: null, adr: [], deps: [F1.1, F1.2, F5.7], gaps: [], verified: fdaae01, source: review@4578233}
+
+  # ---- Release engineering (not roadmap F-IDs) --------------------------
+  - {id: REL1, title: Release engineering (and agentplane to tarmind rename), phase: null, prio: P1, status: draft, coverage: none, spec: REL1-release-engineering, adr: [30], deps: [], gaps: [], extra: true, verified: fdaae01, source: code}
+  - {id: REL2, title: Public roadmap status feed, phase: null, prio: P1, status: draft, coverage: none, spec: REL2-public-roadmap-status, adr: [31], deps: [], gaps: ["its source of truth (spec Status lines + roadmap.md) is superseded by this ledger; amend before implementing"], extra: true, verified: fdaae01, source: code}
+
+# Demo milestones (PDF section 12). Evidence is a file under docs/validation/.
+demos:
+  - {id: A, name: "Graph naprawde ma znaczenie", state: done, evidence: "cmd/agentplane/integration_test.go; desktop KPI parallelism saved"}
+  - {id: B, name: "Loop naprawia unit, nie batch", state: done, evidence: "docs/validation/F1.7-real-codex-demo.md"}
+  - {id: C, name: "Debugger zamiast terminala", state: partial, evidence: "docs/validation/F2.5-desktop-demo.md", missing: "input/output and diff in Run Inspector (F2.6, F2.7, F2.8b)"}
+  - {id: D, name: "Produkcyjnosc lokalna", state: open, missing: "F3.3 resume, F3.2 verified on Windows"}
+  - {id: E, name: "Cloud nie musi miec repo", state: open, missing: "phase 4"}
