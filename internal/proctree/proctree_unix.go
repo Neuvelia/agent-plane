@@ -46,7 +46,13 @@ func (t *Tree) groupEmpty() bool {
 		t.gone = true
 		return true
 	}
-	if errors.Is(t.kill(-t.pgid, 0), syscall.ESRCH) {
+	err := t.kill(-t.pgid, 0)
+	if errors.Is(err, syscall.ESRCH) || (err == nil && countLiveGroup(t.pgid) == 0) {
+		// kill(-pgid, 0) also succeeds while a zombie nobody has reaped yet is in
+		// the group (an orphan under an init that does not reap, as in many
+		// containers). A zombie cannot run, so a group of only zombies is empty.
+		// Where the group cannot be listed countLiveGroup answers 1: never "empty"
+		// on a guess.
 		t.gone = true
 	}
 	return t.gone
