@@ -237,5 +237,10 @@ describe('stale and unreachable results (F2.4)', () => {
   it('carries the parse line', () => {
     const s = analyzed(type(start(), 'x [\n', 5000), 'x [\n', { status: 'invalid', diagnostics: [], parse_error: 'bad', parse_line: 4 })
     expect(s.analysis.parseLine).toBe(4)
+    expect(s.analysis.parseColumn).toBeUndefined()
+  })
+  it('carries the parse column when the engine reports one', () => {
+    const s = analyzed(type(start(), 'x [\n', 5000), 'x [\n', { status: 'invalid', diagnostics: [], parse_error: 'bad', parse_line: 4, parse_column: 7 })
+    expect(s.analysis).toMatchObject({ parseLine: 4, parseColumn: 7 })
   })
 })

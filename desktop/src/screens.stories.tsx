@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
-import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
 import { Dashboard } from './dashboardView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
@@ -60,6 +60,16 @@ export const InspectorCompareScopeIndeterminate: S = {
   render: () => <RunInspector runId={rid(agentScopeIndeterminate)} onBack={noop} />,
   play: openCompare('work'),
 }
+// A standalone Gate has no attempts: its red verdict, reason and evidence show in node detail.
+export const InspectorStandaloneGateRed: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(standaloneGateRed, 'failed'), graph: standaloneGateGraph, yaml: standaloneGateYaml, events: standaloneGateRed, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(standaloneGateRed)} onBack={noop} />,
+  play: async (ctx) => {
+    await new Promise((r) => setTimeout(r, 300))
+    ctx.canvasElement.querySelector<HTMLButtonElement>('[data-testid="node-accept"]')?.click()
+    await new Promise((r) => setTimeout(r, 100))
+  },
+}
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
 export const InspectorConnectionLost: S = inspector(waitingForHuman, 'running', 'lost')
@@ -105,20 +115,20 @@ const choose: S['play'] = async ({ canvasElement }) => {
 }
 export const NewRunNoFile: S = { parameters: { bridge: { runs: [] } }, render: () => <RunConfig onStarted={noop} /> }
 export const NewRunReady: S = {
-  parameters: { bridge: { runs: [], pickedGraph: '/work/.agents/graphs/demo-vertical.yaml' } satisfies BridgeData },
+  parameters: { bridge: { runs: [], pickedGraph: 'demo-vertical.yaml' } satisfies BridgeData },
   render: () => <RunConfig onStarted={noop} />,
   play: choose,
 }
 export const NewRunWarnings: S = {
   parameters: {
-    bridge: { runs: [], pickedGraph: '/work/graph.yaml', validate: { status: 'valid', diagnostics: [{ severity: 'warning', code: 'W_UNUSED_OUTPUT', message: 'output "stdout" is never consumed', suggestion: 'bind it to a downstream input or remove it', location: { node_id: 'fast' } }] } } satisfies BridgeData,
+    bridge: { runs: [], pickedGraph: 'graph.yaml', validate: { status: 'valid', diagnostics: [{ severity: 'warning', code: 'W_UNUSED_OUTPUT', message: 'output "stdout" is never consumed', suggestion: 'bind it to a downstream input or remove it', location: { node_id: 'fast' } }] } } satisfies BridgeData,
   },
   render: () => <RunConfig onStarted={noop} />,
   play: choose,
 }
 export const NewRunBlocked: S = {
   parameters: {
-    bridge: { runs: [], pickedGraph: '/work/graph.yaml', validate: { status: 'invalid', diagnostics: [{ severity: 'error', code: 'E_GRAPH_FIELD_REQUIRED', message: 'graph is missing required "edges" collection', suggestion: 'declare the collection, using an empty list when there are no edges' }] } } satisfies BridgeData,
+    bridge: { runs: [], pickedGraph: 'graph.yaml', validate: { status: 'invalid', diagnostics: [{ severity: 'error', code: 'E_GRAPH_FIELD_REQUIRED', message: 'graph is missing required "edges" collection', suggestion: 'declare the collection, using an empty list when there are no edges' }] } } satisfies BridgeData,
   },
   render: () => <RunConfig onStarted={noop} />,
   play: choose,
@@ -163,7 +173,7 @@ export const DashboardError: S = dashboard(down)
 export const ApprovalsLoading: S = { parameters: { bridge: hang }, render: () => <Approvals onOpen={noop} /> }
 export const ApprovalsError: S = { parameters: { bridge: down }, render: () => <Approvals onOpen={noop} /> }
 export const NewRunValidating: S = {
-  parameters: { bridge: { runs: [], pickedGraph: '/work/graph.yaml', hang: true } satisfies BridgeData },
+  parameters: { bridge: { runs: [], pickedGraph: 'graph.yaml', hang: true } satisfies BridgeData },
   render: () => <RunConfig onStarted={noop} />,
   play: choose,
 }

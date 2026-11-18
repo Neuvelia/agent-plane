@@ -11,6 +11,7 @@ package edits a graph document in memory; it does not save a file.
 | Atomic batch and typed/tree safety net | `apply.go` |
 | Node, edge and layout operations | `nodes.go`, `edges.go`, `layout.go` |
 | Inspector operations: config, ports and their references, loop (whole and targeted), units (F2.2) | `config.go`, `ports.go`, `refs.go`, `loop.go`, `values.go` |
+| Graph inputs, graph input bindings, graph outputs and the `list_connections` query (F2.3 E5a.1) | `graphdata.go`, with `can_connect` in `edges.go` |
 | YAML tree helpers and read-only constructs | `tree.go` |
 | Config value text for the inspector's Advanced section (read-only) | `snippets.go` |
 | Blank lines, BOM, line endings and encoding | `envelope.go` |
@@ -18,7 +19,8 @@ package edits a graph document in memory; it does not save a file.
 
 ## Preserve these contracts
 
-- `ops.go` defines the current version-1 operation vocabulary (F2.1 and F2.2).
+- `ops.go` defines the current version-1 operation vocabulary (F2.1, F2.2 and
+  F2.3 E5a.1).
   A JSON value enters through `values.go`, which keeps object key order and
   writes numbers so YAML reads them as the same type; nested config mappings
   are `graph.NodeConfig` in the typed prediction, as `graph.Parse` reads them.
@@ -41,8 +43,9 @@ package edits a graph document in memory; it does not save a file.
   YAML; this refusal does not prohibit raw text handling by the caller. A
   parseable graph may still have semantic diagnostics; the caller runs
   `graph.Validate`.
-- `can_connect` must agree with `graph.Validate` on references, types,
-  providers and cycles. `Apply` returns text and operation results but never
+- `can_connect` and every `list_connections` entry must agree with
+  `graph.Validate` on references, types, providers and cycles, for a graph
+  input source as for a node output (`TestConnectionAnswersAgreeWithTheValidator`). `Apply` returns text and operation results but never
   writes a file; granted, conflict-checked atomic saving belongs to
   `internal/api/docs.go`, not this package.
 
