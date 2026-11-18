@@ -13,6 +13,7 @@ const G: Record<string, ReactNode> = {
   docs: <path d="M5 4a2 2 0 0 1 2-2h12v17H7a2 2 0 0 0-2 2zm2 15h10V4H7z" />,
   settings: <path d="M4 7h10v2H4zM16 5h2v6h-2zM18 7h2v2h-2zM4 15h4v2H4zM10 13h2v6h-2zM12 15h8v2h-8z" />,
   editor: <path d="M4 5h6v5H4zM14 14h6v5h-6zM10 7.5h2.5a1.5 1.5 0 0 1 1.5 1.5v5h-2V9.5h-2z" />,
+  welcome: <path d="M5 3h2v18H5zM8 4h11l-2.5 4 2.5 4H8z" />,
   back: <path d="m14 6-6 6 6 6-1.4 1.4L5.2 12l7.4-7.4z" />,
   lock: <path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z" />,
 }

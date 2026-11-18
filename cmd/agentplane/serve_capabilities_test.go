@@ -25,13 +25,22 @@ func TestServeRejectsARelativeCodexBinBeforeAnnouncing(t *testing.T) {
 	}
 }
 
-func TestServeCapabilityCompositionReportsGitThenCodex(t *testing.T) {
+func TestServeCapabilityCompositionReportsGitCodexThenAgentCLIs(t *testing.T) {
 	r := capabilityDetector("").Detect(context.Background())
 	if r.Version != 1 || r.Engine.Version != version.String() || r.Engine.OS != goruntime.GOOS || r.Engine.Arch != goruntime.GOARCH {
 		t.Fatalf("report header %+v", r)
 	}
-	if len(r.Tools) != 2 || r.Tools[0].ID != "git" || r.Tools[1].ID != "codex" {
+	ids := make([]string, len(r.Tools))
+	for i, tool := range r.Tools {
+		ids[i] = tool.ID
+	}
+	if strings.Join(ids, ",") != "git,codex,claude,cursor-agent,gemini" {
 		t.Fatalf("tools %+v", r.Tools)
+	}
+	for _, tool := range r.Tools[2:] {
+		if tool.Kind != "agent_cli" || (tool.Status != capability.StatusMissing && tool.Status != capability.StatusDetectedNoAdapter) {
+			t.Fatalf("agent CLI row %+v", tool)
+		}
 	}
 	posix := goruntime.GOOS == "linux" || goruntime.GOOS == "darwin"
 	if want := map[bool]capability.Status{true: capability.StatusNotConfigured, false: capability.StatusUnsupportedPlatform}[posix]; r.Tools[1].Status != want {
@@ -51,7 +60,7 @@ func TestServeExposesTheCapabilityReport(t *testing.T) {
 		t.Fatalf("GET /capabilities: %d %s", status, body)
 	}
 	var r capability.Report
-	if err := json.Unmarshal([]byte(body), &r); err != nil || len(r.Tools) != 2 || r.Engine.Version != version.String() {
+	if err := json.Unmarshal([]byte(body), &r); err != nil || len(r.Tools) != 5 || r.Engine.Version != version.String() {
 		t.Fatalf("report %s (%v)", body, err)
 	}
 	if status, _ := s.call(t, "POST", "/capabilities/check", ""); status != http.StatusOK {

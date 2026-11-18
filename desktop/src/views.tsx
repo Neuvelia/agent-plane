@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { listApprovals, listRuns, startRun, validateGraph, type ApiFailure } from './api'
 import { useConnectionReport } from './connection'
 import { EngineErrorState, LoadingState } from './states'
@@ -10,7 +10,7 @@ import { ApprovalBox, NodePanel } from './NodePanel'
 import { nodeView, displayStatus, type RunView } from './reducer'
 import { filterEvents, formatDuration, runKpis, timeline, type EventFilter } from './insight'
 import { RunPill } from './status'
-import type { Diagnostic } from './types'
+import type { ChosenGraph, Diagnostic } from './types'
 import { CodeView, DotTimeline, EventLog, type EventRow } from './ui/data'
 import { canStart, preflightState } from './preflight'
 import { Button, Card, Field, HelpTip, KPI, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
@@ -265,44 +265,70 @@ export function Approvals({ onOpen }: { onOpen: (runId: string) => void }) {
 
 const SEVERITY_TONE: Record<string, 'x' | 'w' | 'n'> = { error: 'x', warning: 'w' }
 
-export function RunConfig({ onStarted, initialPath }: { onStarted: (runId: string) => void; initialPath?: string }) {
+export function RunConfig({ onStarted, initialGraph }: { onStarted: (runId: string) => void; initialGraph?: ChosenGraph }) {
   const { t } = useI18n()
-  const [path, setPath] = useState(initialPath ?? '')
+  // The graph is addressed by grant only; its path stays in the main process (ADR-0021).
+  const [graph, setGraph] = useState<ChosenGraph | null>(initialGraph ?? null)
+  const current = useRef(graph)
+  const mounted = useRef(false)
   const [inputs, setInputs] = useState('')
   const [result, setResult] = useState<{ status: string; diagnostics: Diagnostic[] } | null>(null)
   const [error, setError] = useState<ApiFailure | null>(null)
   const [busy, setBusy] = useState(false)
   const [validating, setValidating] = useState(false)
 
-  async function validate(p = path) {
+  const release = (g: ChosenGraph) => void window.agentplane.closeGraph(g.grant).catch(() => undefined)
+
+  async function validate(g: ChosenGraph) {
     setError(null)
     setResult(null)
     setValidating(true)
-    const r = await validateGraph(p).finally(() => setValidating(false))
+    const r = await validateGraph(g.grant).finally(() => {
+      if (current.current?.grant === g.grant) setValidating(false)
+    })
+    if (current.current?.grant !== g.grant) return // another graph was chosen meanwhile
     if ('message' in r) setError(r)
     else setResult(r)
   }
   async function choose() {
-    const picked = await window.agentplane.pickGraph()
-    if (picked) {
-      setPath(picked)
-      void validate(picked)
+    const picked = await window.agentplane.openGraph()
+    if ('canceled' in picked) return
+    if (!picked.ok) {
+      setError({ message: picked.message, diagnostics: [] })
+      return
     }
+    const chosen = { grant: picked.grant, label: picked.label }
+    const previous = current.current
+    current.current = chosen
+    setGraph(chosen)
+    if (previous) release(previous)
+    void validate(chosen)
   }
   async function run() {
+    if (!graph) return
     setBusy(true)
     setError(null)
     const lines = inputs.split('\n').map((l) => l.trim()).filter(Boolean)
-    const r = await startRun(path, lines)
+    const r = await startRun(graph.grant, lines)
     setBusy(false)
     if ('message' in r) setError(r)
     else onStarted(r.runId)
   }
   // Opened with a graph already chosen (Dashboard "Open graph"): validate it right away.
   useEffect(() => {
-    if (initialPath) void validate(initialPath)
+    if (initialGraph) void validate(initialGraph)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPath])
+  }, [initialGraph])
+  // Leaving the screen revokes the grant. StrictMode re-runs the effect synchronously, so only a real unmount releases.
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      queueMicrotask(() => {
+        if (!mounted.current && current.current) release(current.current)
+      })
+    }
+  }, [])
   const state = preflightState(result)
   const diagnostics = [...(result?.diagnostics ?? []), ...(error?.diagnostics ?? [])]
   const pill = state === 'ready' ? <Pill tone="p" testId="preflight-status">{t('config.ready')}</Pill> : state === 'warnings' ? <Pill tone="w" testId="preflight-status">{t('config.warnings')}</Pill> : state === 'blocked' ? <Pill tone="x" testId="preflight-status">{t('config.blocked')}</Pill> : null
@@ -310,11 +336,11 @@ export function RunConfig({ onStarted, initialPath }: { onStarted: (runId: strin
     <section className="config">
       <h1>{t('config.title')}</h1>
       <Step n={1} title={t('config.step.graph')}>
-        <Field label={t('config.graphFile')} htmlFor="graph-path">
+        <Field label={t('config.graphFile')} htmlFor="graph-label">
           <div className="row">
-            <input id="graph-path" data-testid="graph-path" value={path} placeholder="/path/to/graph.yaml" onChange={(e) => { setPath(e.target.value); setResult(null) }} />
+            <output id="graph-label" data-testid="graph-label" className={graph ? 'mono' : 'mu'} style={{ flex: 1 }}>{graph?.label ?? t('config.noGraph')}</output>
             <Button data-testid="choose" onClick={choose}>{t('config.choose')}</Button>
-            <Button data-testid="validate" disabled={!path} onClick={() => validate()}>{t('config.validate')}</Button>
+            <Button data-testid="validate" disabled={!graph} onClick={() => graph && validate(graph)}>{t('config.validate')}</Button>
           </div>
         </Field>
       </Step>
@@ -347,7 +373,7 @@ export function RunConfig({ onStarted, initialPath }: { onStarted: (runId: strin
         ))}
       </Step>
       <div className="row">
-        <Button variant="primary" data-testid="run" disabled={!canStart(state) || busy} onClick={run}>{t('config.run')}</Button>
+        <Button variant="primary" data-testid="run" disabled={!graph || !canStart(state) || busy} onClick={run}>{t('config.run')}</Button>
       </div>
     </section>
   )

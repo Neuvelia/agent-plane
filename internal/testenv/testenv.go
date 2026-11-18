@@ -50,7 +50,20 @@ func RequireDarwinOrLinux(t testing.TB, what string) {
 // permission bits (Windows reports 0666/0444 for files and 0777 for dirs).
 func RequireUnixPermissions(t testing.TB) {
 	t.Helper()
-	if runtime.GOOS == "windows" {
+	if !HasUnixPermissions() {
 		t.Skip("Windows does not report Unix permission bits")
+	}
+}
+
+// HasUnixPermissions reports whether Stat returns meaningful Unix permission
+// bits; use it to guard a single assertion instead of skipping the whole test.
+func HasUnixPermissions() bool { return runtime.GOOS != "windows" }
+
+// SkipOnWindows skips t with reason on Windows, for fixtures the platform
+// cannot create (file names or argv bytes its APIs reject or rewrite).
+func SkipOnWindows(t testing.TB, reason string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip(reason)
 	}
 }

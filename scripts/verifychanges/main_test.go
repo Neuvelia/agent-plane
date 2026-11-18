@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"agentplane/internal/testenv"
 )
 
 type testReport struct {
@@ -131,6 +133,7 @@ func TestInventoryReportsBothSidesOfStagedRename(t *testing.T) {
 }
 
 func TestInventoryFromSubdirectoryPreservesUnusualNames(t *testing.T) {
+	testenv.SkipOnWindows(t, "Windows file names cannot contain a newline")
 	dir := newRepo(t)
 	writeFile(t, dir, "nested/line\nbreak.go", "new")
 	writeFile(t, dir, "nested/with space.go", "new")
@@ -162,6 +165,7 @@ func TestInventoryOutsideRepositoryDoesNotEmitJSON(t *testing.T) {
 }
 
 func TestInventoryRejectsInvalidUTF8PathWithoutJSON(t *testing.T) {
+	testenv.SkipOnWindows(t, "Windows argv is UTF-16, so git cannot receive the invalid byte")
 	dir := newRepo(t)
 	name := string([]byte{'b', 'a', 'd', 0xff})
 	hashCommand := exec.Command("git", "-C", dir, "hash-object", "-w", "--stdin")

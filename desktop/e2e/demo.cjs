@@ -1,19 +1,44 @@
 'use strict'
 // End-to-end check of the real Electron app against the real Go sidecar.
 //   xvfb-run -a node e2e/demo.cjs [screenshot-dir]
-// Requires `make build` (bin/agentplane) and `npm run build` (dist/).
+// Requires `make build` (bin/agentplane, bin/agentplane.exe on Windows) and `npm run build` (dist/).
 const { _electron } = require('playwright')
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const os = require('node:os')
 const path = require('node:path')
+const { binaryName } = require('../electron/sidecar.cjs')
 
 const root = path.resolve(__dirname, '..', '..')
-const graph = path.join(root, '.agents', 'graphs', 'demo-vertical.yaml')
 const shots = process.argv[2]
 const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ap-e2e-'))
-const env = { ...process.env, AGENTPLANE_BIN: path.join(root, 'bin', 'agentplane'), AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
+const engine = path.join(root, 'bin', binaryName(process.platform))
+const env = { ...process.env, AGENTPLANE_BIN: engine, AGENTPLANE_STORE_DIR: path.join(work, 'runs') }
 delete env.NODE_OPTIONS
+delete env.AGENTPLANE_CODEX_BIN
+const win = process.platform === 'win32'
+const q = JSON.stringify
+// The demo graph and the editor round trip run POSIX tools by absolute path. Windows has none,
+// so there the same graph structure runs the node binary that runs this script instead.
+const nodeBin = q(process.execPath)
+const nodeCmd = (script) => `command: ${nodeBin}\n      args: ["-e", ${q(script)}]`
+const shellConfig = win ? `{command: ${nodeBin}, args: ["-e", ${q("process.stdout.write('hello\\n')")}]}` : '{command: /usr/bin/printf, args: ["hello\\n"]}'
+function demoGraph() {
+  const file = path.join(root, '.agents', 'graphs', 'demo-vertical.yaml')
+  if (!win) return file
+  const swap = (text, pattern, script) => {
+    assert.match(text, pattern, 'the demo graph changed: update the Windows variant in demo.cjs')
+    return text.replace(pattern, nodeCmd(script))
+  }
+  let text = fs.readFileSync(file, 'utf8')
+  text = swap(text, /command: \/usr\/bin\/printf\n\s+args: \["fast branch done"\]/, "process.stdout.write('fast branch done')")
+  text = swap(text, /command: \/bin\/sh\n\s+args:\n\s+- -c\n\s+- '.*'/, "console.log(JSON.stringify({ready: process.env.AGENTPLANE_ATTEMPT !== '1'}))")
+  text = swap(text, /command: \/usr\/bin\/printf\n\s+args: \["applied\\n"\]/, "console.log('applied')")
+  const out = path.join(work, 'demo-vertical.yaml')
+  fs.writeFileSync(out, text)
+  return out
+}
+const graph = demoGraph()
 
 async function launch() {
   const app = await _electron.launch({
@@ -39,15 +64,48 @@ async function launch() {
   await page.waitForFunction(() => document.hasFocus(), null, { timeout: 15000 })
   return { app, page }
 }
+// The engine processes started by this app: agentplane descendants of the launched Electron process.
+function sidecarPid(app) {
+  const root = app.process().pid
+  const run = require('node:child_process').execFileSync
+  const table = win
+    ? run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Get-CimInstance Win32_Process | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.Name)" }'], { encoding: 'utf8' })
+    : run('ps', ['-e', '-o', 'pid=,ppid=,comm='], { encoding: 'utf8' })
+  const rows = table.split(/\r?\n/).map((l) => l.trim().split(/\s+/)).filter((f) => /^\d+$/.test(f[0]))
+  const procs = new Map(rows.map(([pid, ppid, name]) => [Number(pid), { ppid: Number(ppid), name }]))
+  const below = (pid) => {
+    for (let p = procs.get(pid)?.ppid, hops = 0; p && hops < 64; p = procs.get(p)?.ppid, hops++) if (p === root) return true
+    return false
+  }
+  const pids = [...procs].filter(([pid, p]) => /^agentplane(\.exe)?$/.test(p.name) && below(pid)).map(([pid]) => pid)
+  assert.equal(pids.length, 1, `expected exactly one sidecar below the app, found ${JSON.stringify(pids)}`)
+  return pids[0]
+}
+// Pointer drags start only once the element has stopped moving (fit-view and layout animate in a real window).
+async function settledBox(page, selector) {
+  const handle = await page.locator(selector).elementHandle()
+  await page.waitForFunction(
+    (el) => new Promise((resolve) => {
+      const at = () => JSON.stringify(el.getBoundingClientRect())
+      const before = at()
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve(at() === before)))
+    }),
+    handle,
+  )
+  return handle.boundingBox()
+}
 const shot = async (page, name) => shots && (fs.mkdirSync(shots, { recursive: true }), page.screenshot({ path: path.join(shots, name + '.png') }))
 const status = (page, id) => page.locator(`[data-testid="node-${id}"]`).getAttribute('data-status')
 const waitStatus = (page, id, want) =>
   page.waitForFunction(([i, w]) => document.querySelector(`[data-testid="node-${i}"]`)?.getAttribute('data-status') === w, [id, want], { timeout: 15000 })
 
-async function startDemo(page) {
+// The native dialog is replaced in the main process, from this test process only: a renderer cannot reach it.
+const stubOpenDialog = (app, file) => app.evaluate(({ dialog }, f) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [f] }) }, file)
+
+async function startDemo(app, page) {
+  await stubOpenDialog(app, graph)
   await page.click('[data-testid="nav-new"]')
-  await page.fill('[data-testid="graph-path"]', graph)
-  await page.click('[data-testid="validate"]')
+  await page.click('[data-testid="choose"]')
   await page.waitForSelector('[data-testid="preflight-status"]')
   assert.equal(await page.textContent('[data-testid="preflight-status"]'), 'Ready')
   await page.click('[data-testid="run"]')
@@ -61,21 +119,39 @@ async function startDemo(page) {
     const leaked = await page.evaluate(() => ({ require: typeof require, process: typeof process, token: JSON.stringify(window.agentplane).includes('token') }))
     assert.deepEqual(leaked, { require: 'undefined', process: 'undefined', token: false })
 
-    // R3 keyboard: the first Tab stop is the skip link; Enter moves focus into the content.
+    // F2.11: a first launch opens the welcome screen with the engine's capability report, keyboard only.
+    await page.waitForSelector('[data-testid="cap-engine"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H1')
+    const engineVersion = require('node:child_process').execFileSync(env.AGENTPLANE_BIN, ['version'], { encoding: 'utf8' }).trim()
+    assert.ok((await page.textContent('[data-testid="cap-engine-version"]')).includes(engineVersion.split(/\s+/).pop()), 'Engine row shows the sidecar version')
+    const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="cap-list"] > li')].map((li) => [li.dataset.testid, li.dataset.status]))
+    assert.deepEqual(rows.map((r) => r[0]), ['cap-engine', 'cap-git', 'cap-codex', 'cap-claude', 'cap-cursor-agent', 'cap-gemini'])
+    assert.ok(['available', 'missing', 'error', 'unsupported_platform'].includes(rows[1][1]), `git status ${rows[1][1]}`)
+    assert.equal(rows[2][1], 'not_configured')
+    for (const [, st] of rows.slice(3)) assert.ok(['missing', 'detected_no_adapter'].includes(st), st)
+    const firstCheck = await page.textContent('[data-testid="cap-announce"]')
+    assert.match(firstCheck, /Check finished/)
     await page.keyboard.press('Tab')
-    assert.equal(await page.evaluate(() => document.activeElement?.className), 'skip-link')
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), 'check-again')
     await page.keyboard.press('Enter')
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'content')
-    // Disabled entries are not tab stops; enabled navigation entries are real buttons.
-    assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
+    await page.waitForFunction(() => /Check finished/.test(document.querySelector('[data-testid="cap-announce"]')?.textContent || '') && !document.querySelector('[data-testid="check-again"]')?.disabled)
+    assert.equal(await page.getAttribute('[data-testid="cap-announce"]', 'aria-live'), 'polite')
+    for (const id of ['welcome-template', 'welcome-open', 'welcome-skip']) {
+      await page.keyboard.press('Tab')
+      assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), id)
+    }
+    await shot(page, '0-welcome')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="dashboard"]')
+    assert.equal(await page.evaluate(() => localStorage.getItem('agentplane.welcome.v1')), 'done')
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
-    const refused = await page.evaluate(async () => ({
-      grants: await window.agentplane.request('POST', '/graphs/grants', { path: '/tmp/never.yaml', mode: 'create' }),
+    const refused = await page.evaluate(async (never) => ({
+      grants: await window.agentplane.request('POST', '/graphs/grants', { path: never, mode: 'create' }),
       revoke: await window.agentplane.request('DELETE', '/graphs/grants/abc'),
       wrongMethod: await window.agentplane.request('PUT', '/runs', {}),
       climb: await window.agentplane.request('GET', '/runs/%2e%2e'),
-    }))
+    }), path.join(os.tmpdir(), 'never.yaml'))
     for (const [name, r] of Object.entries(refused)) {
       assert.equal(r.status, 400, `${name} must be refused by the main process`)
       assert.equal(r.body.error.message, 'path not allowed', name)
@@ -85,7 +161,7 @@ async function startDemo(page) {
     const original = fs.readFileSync(graph, 'utf8')
     const editable = path.join(graphDir, 'demo.yaml')
     fs.writeFileSync(editable, original)
-    const stubOpen = (p) => app.evaluate(({ dialog }, file) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [file] }) }, p)
+    const stubOpen = (p) => stubOpenDialog(app, p)
     const stubSave = (p) => app.evaluate(({ dialog }, file) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: file }) }, p)
     await stubOpen(editable)
     const opened = await page.evaluate(() => window.agentplane.openGraph())
@@ -180,6 +256,7 @@ async function startDemo(page) {
     // A new graph is create-only and starts from a valid skeleton.
     await stubSave(path.join(graphDir, 'brand-new'))
     await page.click('[data-testid="editor-new"]')
+    await page.click('[data-testid="picker-create"]') // F2.12: "Blank graph" is the default choice
     await page.waitForSelector('[data-testid="yaml-content"]')
     assert.equal(fs.existsSync(path.join(graphDir, 'brand-new.yaml')), false, 'nothing is written before the first save')
     await page.keyboard.press(`${mod}+s`)
@@ -203,7 +280,7 @@ async function startDemo(page) {
     // Every edge of the demo is drawn (React Flow draws none when it loses handle measurements).
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 3)
     const versionBefore = await page.textContent('text=/Version [0-9a-f]{8}/')
-    const box = await page.locator('[data-testid="node-fast"]').boundingBox()
+    const box = await settledBox(page, '[data-testid="node-fast"]')
     await page.mouse.move(box.x + box.width / 2, box.y + 10)
     await page.mouse.down()
     await page.mouse.move(box.x + box.width / 2 + 70, box.y + 50, { steps: 8 })
@@ -278,8 +355,8 @@ async function startDemo(page) {
     await stubOpen(dragged)
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="node-a"]')
-    const from = await page.locator('[data-testid="handle-a.outputs.stdout"]').boundingBox()
-    const to = await page.locator('[data-testid="handle-b.inputs.text"]').boundingBox()
+    const from = await settledBox(page, '[data-testid="handle-a.outputs.stdout"]')
+    const to = await settledBox(page, '[data-testid="handle-b.inputs.text"]')
     await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
     await page.mouse.down()
     await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 })
@@ -325,6 +402,7 @@ async function startDemo(page) {
     const made2 = path.join(graphDir, 'roundtrip')
     await stubSave(made2)
     await page.click('[data-testid="editor-new"]')
+    await page.click('[data-testid="picker-create"]')
     await page.waitForSelector('[data-testid="yaml-content"]')
     await page.click('[data-testid="add-shell"]')
     await page.waitForSelector('[data-testid="node-shell_1"]')
@@ -332,17 +410,79 @@ async function startDemo(page) {
     await page.click('[data-testid="yaml-content"]')
     await page.keyboard.press(`${mod}+a`)
     // insertText keeps the text exactly; typing Enter in CodeMirror would auto-indent.
-    await page.evaluate((t) => document.execCommand('insertText', false, t), 'schema_version: 0\nid: roundtrip\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: {command: /usr/bin/printf, args: ["hello\\n"]}\nedges: []\noutputs: {}\n')
+    await page.evaluate((t) => document.execCommand('insertText', false, t), 'schema_version: 0\nid: roundtrip\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: ' + shellConfig + '\nedges: []\noutputs: {}\n')
     await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
     await page.click('[data-testid="editor-save-run"]')
     await page.waitForSelector('[data-testid="run-status"]')
     await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
     const exec = require('node:child_process').execFileSync
-    const bin = path.join(__dirname, '..', '..', 'bin', 'agentplane')
+    const bin = engine
     exec(bin, ['graph', 'validate', path.join(graphDir, 'roundtrip.yaml')])
     exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
     await page.click('[data-testid="nav-editor"]')
     await page.click('[data-testid="editor-close"]').catch(() => {})
+    await page.click('[data-testid="nav-dashboard"]')
+
+    // F2.12: New graph offers templates; the welcome screen opens the same picker.
+    const readTemplate = (id) => fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', `${id}.yaml`), 'utf8')
+    const activeTestId = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid'))
+    await page.click('[data-testid="nav-welcome"]')
+    await page.click('[data-testid="welcome-template"]')
+    await page.waitForSelector('[data-testid="template-picker"]')
+    assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
+    assert.deepEqual(
+      await page.$$eval('[data-testid^="picker-entry-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('picker-entry-', ''))),
+      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'],
+    )
+    // Without Codex configured the agent entry says so; the report is the engine's, so this is Linux only.
+    assert.match(await page.textContent('[data-testid="picker-entry-agent-scoped-approval"]'), /Needs Codex: Not configured\./)
+    // Tab stays inside the dialog; Escape closes it and creates nothing.
+    for (let i = 0; i < 8; i++) {
+      await page.keyboard.press('Tab')
+      assert.equal(await page.evaluate(() => !!document.activeElement?.closest('[data-testid="template-picker"]')), true, 'focus is trapped in the dialog')
+    }
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="template-picker"]'))
+    assert.equal(await page.isVisible('[data-testid="editor-empty"]'), true, 'cancel creates nothing')
+
+    // Keyboard only: arrow to a template, Enter, save, Save and run. The saved file is the template with only the id line changed.
+    await stubSave(path.join(graphDir, 'from-template'))
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'editor-new', 'Escape returns focus to the New graph trigger')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="template-picker"]')
+    await page.keyboard.press('ArrowDown')
+    assert.equal(await page.isChecked('[data-testid="template-parallel-shell"]'), true)
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="yaml-content"]')
+    assert.equal(fs.existsSync(path.join(graphDir, 'from-template.yaml')), false, 'nothing is written before the first save')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
+    await page.focus('[data-testid="editor-save-run"]')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="run-status"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
+    assert.equal(fs.readFileSync(path.join(graphDir, 'from-template.yaml'), 'utf8'), readTemplate('parallel-shell').replace(/^id: parallel-shell$/m, 'id: from-template'))
+    exec(bin, ['graph', 'validate', path.join(graphDir, 'from-template.yaml')])
+    // The desktop does not show output values; the same saved file run through the CLI yields the template's result.
+    const cliRun = JSON.parse(exec(bin, ['run', path.join(graphDir, 'from-template.yaml'), '--store-dir', path.join(work, 'cli-runs'), '--json'], { encoding: 'utf8' }))
+    assert.equal(cliRun.outputs[0].value, 'left branch done + right branch done\n')
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-close"]').catch(() => {})
+
+    // The agent template has one placeholder: one blocking issue on "implement", and Run stays disabled with the reason.
+    await stubSave(path.join(graphDir, 'agent-draft'))
+    await page.click('[data-testid="editor-new"]')
+    await page.check('[data-testid="template-agent-scoped-approval"]')
+    await page.click('[data-testid="picker-create"]')
+    await page.waitForSelector('[data-testid="issue"]')
+    await page.waitForFunction(() => document.querySelectorAll('[data-testid="issue"][data-severity="error"]').length === 1)
+    assert.equal(await page.locator('[data-testid="issue"]').count(), 1)
+    assert.equal(await page.getAttribute('[data-testid="issue"]', 'data-code'), 'E_NODE_CONFIG_INVALID')
+    assert.match(await page.textContent('[data-testid="issue"]'), /implement/)
+    assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
+    assert.match(await page.textContent('[data-testid="run-blocked"]'), /Cannot run: 1 error\./)
+    assert.equal(await page.locator('[data-testid="canvas-readonly"]').count(), 0, 'a template opens with an editable canvas')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-dashboard"]')
 
     // F2.4: the Issues panel. Config errors show before any run; issues take you to their element and line.
@@ -355,7 +495,7 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="issue"]')
     // Same diagnostics as the CLI, and the config error is there before any run.
-    const cliOut = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', issuesFile, '--json'], { encoding: 'utf8' }).stdout)
+    const cliOut = JSON.parse(require('node:child_process').spawnSync(engine, ['graph', 'validate', issuesFile, '--json'], { encoding: 'utf8' }).stdout)
     const panelCodes = await page.$$eval('[data-testid="issue"]', (els) => els.map((e) => e.getAttribute('data-code')).sort())
     assert.deepEqual(panelCodes, cliOut.diagnostics.map((d) => d.code).sort(), 'the panel shows exactly the CLI diagnostics')
     assert.ok(panelCodes.includes('E_NODE_CONFIG_INVALID'))
@@ -471,7 +611,7 @@ async function startDemo(page) {
       assert.ok(inspectedText.includes(want), `${want} in\n${inspectedText}`)
     }
     // The saved file is accepted by the CLI, apart from the Advanced key the Shell executor rejects.
-    const validated = JSON.parse(require('node:child_process').spawnSync(path.join(__dirname, '..', '..', 'bin', 'agentplane'), ['graph', 'validate', inspected, '--json'], { encoding: 'utf8' }).stdout)
+    const validated = JSON.parse(require('node:child_process').spawnSync(engine, ['graph', 'validate', inspected, '--json'], { encoding: 'utf8' }).stdout)
     assert.deepEqual(validated.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message.includes('retries')), [true], JSON.stringify(validated.diagnostics))
     // The Advanced section shows the unknown key as it is in the file; removing it makes the graph valid.
     assert.match(await page.textContent('[data-testid="advanced-entry-retries"]'), /\{max: 2, on: \[timeout\]\}/)
@@ -495,6 +635,110 @@ async function startDemo(page) {
     await page.click('[data-testid="editor-close"]')
     await page.click('[data-testid="nav-dashboard"]')
 
+    // F2.2: every gate kind the inspector offers is configured through the inspector, on a loop and on a standalone Gate,
+    // and the saved file is accepted by `graph validate`. The kinds are read from the kind selector, not listed here.
+    const cli = path.join(__dirname, '..', '..', 'bin', 'agentplane')
+    const validateErrors = (file) => JSON.parse(require('node:child_process').spawnSync(cli, ['graph', 'validate', file, '--json'], { encoding: 'utf8' }).stdout).diagnostics.filter((d) => d.severity === 'error')
+    const producer = 'schema_version: 0\nid: kinds\ninputs: {}\nnodes:\n  build:\n    type: shell\n    config: {command: /usr/bin/true, stdout_json: true}\n    outputs:\n      stdout: {type: string}\n      stderr: {type: string}\n      json: {type: json}\n'
+    const standalone = `${producer}  chk:\n    type: gate\n    inputs:\n      s1: {type: string, required: true}\n      s2: {type: string, required: true}\n      j: {type: json, required: true}\nedges:\n  - {from: build.outputs.stdout, to: chk.inputs.s1}\n  - {from: build.outputs.stderr, to: chk.inputs.s2}\n  - {from: build.outputs.json, to: chk.inputs.j}\noutputs: {}\n`
+    const invalid = () => page.evaluate(() => /error/i.test(document.querySelector('[data-testid="inspector-status"]')?.textContent || ''))
+    // Fills required fields that are still empty, in order, with the control the inspector rendered for each, until the node shows no error.
+    const fillMissing = async (scope) => {
+      // A locked value (the command Gate's /usr/bin/diff) is set with the button the inspector offers for it.
+      for (const use = page.locator(`${scope} [data-field-key]:has(input[readonly]) button`); await use.count(); ) {
+        await use.first().click()
+        await page.waitForFunction((x) => !document.querySelector(x), `${scope} [data-field-key]:has(input[readonly]) button`)
+      }
+      for (const done = new Set(); await invalid(); ) {
+        const k = await page.evaluate(([sc, skip]) => [...document.querySelectorAll(`${sc} [data-field-key]`)].find((f) => {
+          const key = f.getAttribute('data-field-key')
+          const control = f.querySelector('select, input:not([readonly])')
+          const empty = f.querySelector('.ins-list') ? !!f.querySelector('.ins-list > p.mu') : control?.value === ''
+          return f.querySelector('.ins-req') && empty && !skip.includes(key)
+        })?.getAttribute('data-field-key'), [scope, [...done]])
+        if (!k) return
+        done.add(k)
+        const before = await yamlText()
+        const field = `${scope} [data-field-key="${k}"]`
+        const adder = page.locator(`${field} [data-testid="list-${k}-add"]`)
+        if (await adder.count()) {
+          if ((await adder.evaluate((e) => e.tagName)) === 'SELECT') await adder.selectOption({ index: 1 })
+          else (await adder.focus(), await page.keyboard.type(/path/.test(k) ? 'src' : 'ok'), await page.keyboard.press('Enter'))
+        } else if (await page.locator(`${field} select`).count()) {
+          const taken = await page.evaluate((sc) => [...document.querySelectorAll(`${sc} select`)].map((x) => x.value), scope)
+          const option = await page.locator(`${field} select option`).evaluateAll((os, t) => os.map((o) => o.value).find((v) => v && !t.includes(v)), taken)
+          await page.selectOption(`${field} select`, option)
+        } else {
+          await page.focus(`${field} input`)
+          await page.keyboard.type(/cwd/.test(k) ? '/tmp' : 'x')
+          await page.keyboard.press('Enter')
+        }
+        // The next change is built on the file this one wrote, so wait for it to land.
+        await page.waitForFunction((t) => document.querySelector('[data-testid="yaml-content"]')?.textContent !== t, before)
+      }
+    }
+    // The selector shows the file's value, so it reads the chosen kind only once the engine has analysed the change.
+    const chooseKind = async (scope, kind) => {
+      await page.selectOption(`${scope} [data-field-key="kind"] select`, kind)
+      await page.waitForFunction(([sc, k]) => document.querySelector(`${sc} [data-field-key="kind"] select`)?.value === k, [scope, kind])
+      // The engine drops the old kind's keys with the kind change: nothing is left under Advanced.
+      assert.equal(await page.locator('[data-testid^="advanced-entry-"]').count(), 0, `${kind}: keys of the previous kind were left behind`)
+    }
+    const saveAndValidate = async (file, what) => {
+      await page.keyboard.press(`${mod}+s`)
+      await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+      assert.deepEqual(validateErrors(file), [], `${what} must validate:\n${fs.readFileSync(file, 'utf8')}`)
+    }
+    const openKinds = async (file, text, node) => {
+      fs.writeFileSync(file, text)
+      await stubOpen(file)
+      await key('editor-open')
+      await page.waitForSelector(`[data-testid="node-${node}"]`)
+      await key(`list-node-${node}`)
+      await page.waitForSelector('[data-testid="inspector-node"]')
+    }
+    await page.click('[data-testid="nav-editor"]')
+    let loopKinds = []
+    for (let i = 0; i === 0 || i < loopKinds.length; i++) {
+      const file = path.join(graphDir, `kinds-loop-${i}.yaml`)
+      await openKinds(file, `${producer}edges: []\noutputs: {}\n`, 'build')
+      await key('loop-enable')
+      await page.waitForSelector('[data-testid="loop-on"]')
+      const scope = '[data-testid="section-loop"]'
+      loopKinds = await page.locator(`${scope} [data-field-key="kind"] option`).evaluateAll((os) => os.map((o) => o.value).filter(Boolean))
+      assert.ok(loopKinds.length >= 3, `the loop offers every kind: ${loopKinds}`)
+      // Two string Gate inputs fed by the producer, beside the starter's json input, so any kind can find the inputs it takes.
+      for (const [name, from] of [['s1', 'stdout'], ['s2', 'stderr']]) {
+        await page.focus('[data-testid="loop-on"] form input')
+        await page.keyboard.type(name)
+        await page.selectOption('[data-testid="loop-on"] form select', 'string')
+        await page.keyboard.press('Enter')
+        await page.waitForSelector(`[data-testid="loop-on"] li:has-text("${name}")`)
+        await page.selectOption('[data-testid="binding-from"]', `candidate.outputs.${from}`)
+        await page.selectOption('[data-testid="binding-to"]', `gate.inputs.${name}`)
+        await page.waitForFunction((b) => document.querySelector('[data-testid="loop-bindings"]')?.textContent?.includes(b), `gate.inputs.${name}`)
+      }
+      await chooseKind(scope, loopKinds[i])
+      await fillMissing(scope)
+      await saveAndValidate(file, `a loop with a ${loopKinds[i]} Gate`)
+      assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${loopKinds[i]}`))
+      await page.click('[data-testid="editor-close"]')
+    }
+    let gateKinds = []
+    for (let i = 0; i === 0 || i < gateKinds.length; i++) {
+      const file = path.join(graphDir, `kinds-gate-${i}.yaml`)
+      await openKinds(file, standalone, 'chk')
+      const scope = '[data-testid="section-execution"]'
+      gateKinds = await page.locator(`${scope} [data-field-key="kind"] option`).evaluateAll((os) => os.map((o) => o.value).filter(Boolean))
+      assert.ok(gateKinds.length >= 3, `the standalone Gate offers every kind: ${gateKinds}`)
+      await chooseKind(scope, gateKinds[i])
+      await fillMissing(scope)
+      await saveAndValidate(file, `a standalone ${gateKinds[i]} Gate`)
+      assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${gateKinds[i]}`))
+      await page.click('[data-testid="editor-close"]')
+    }
+    await page.click('[data-testid="nav-dashboard"]')
+
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
@@ -511,7 +755,7 @@ async function startDemo(page) {
     await page.click('[data-testid="nav-runs"]')
 
     // 1. Run: two branches in parallel, one red -> retry, then a human gate.
-    await startDemo(page)
+    await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
     assert.equal(await status(page, 'fast'), 'succeeded')
     assert.equal(await status(page, 'flaky'), 'succeeded')
@@ -591,10 +835,19 @@ async function startDemo(page) {
 
     // 4. History survives an application restart and the map is rebuilt from events.
     ;({ app, page } = await launch())
+    // After Skip, a relaunch opens the dashboard, not the welcome screen.
     await page.waitForSelector('[data-testid="dashboard"]')
+    assert.equal(await page.isVisible('[data-testid="welcome"]'), false)
+    // R3 keyboard: the first Tab stop is the skip link; Enter moves focus into the content.
+    await page.keyboard.press('Tab')
+    assert.equal(await page.evaluate(() => document.activeElement?.className), 'skip-link')
+    await page.keyboard.press('Enter')
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'content')
+    // Disabled entries are not tab stops; enabled navigation entries are real buttons.
+    assert.equal(await page.evaluate(() => [...document.querySelectorAll('.nav.disabled')].every((n) => n.tabIndex < 0 && n.tagName === 'DIV')), true)
     await page.click('[data-testid="nav-runs"]')
     await page.waitForSelector('[data-testid="run-row"]')
-    assert.equal(await page.locator('[data-testid="run-row"]').count(), 2, "the demo run and the run started from the editor")
+    assert.equal(await page.locator('[data-testid="run-row"]').count(), 3, "the demo run and the two runs started from the editor")
     assert.match(await page.textContent('[data-testid="run-row"]'), /Succeeded/)
     await page.click('[data-testid="run-row"]')
     await waitStatus(page, 'apply', 'succeeded')
@@ -609,7 +862,7 @@ async function startDemo(page) {
     await shot(page, '5-after-restart')
 
     // 5. Reject: the run fails, the dependent node is skipped.
-    await startDemo(page)
+    await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
     await page.click('[data-testid="node-approve"]')
     await page.click('[data-testid="approval-box"] button.danger')
@@ -617,13 +870,48 @@ async function startDemo(page) {
     assert.equal(await status(page, 'approve'), 'failed')
     assert.equal(await status(page, 'apply'), 'skipped')
     await shot(page, '6-rejected')
+
+    // #56: New run chooses the graph in the native dialog and holds only a grant. It starts the run
+    // from the file as saved when the run starts, and the renderer cannot send a path at all.
+    const say = (word) => `schema_version: 0\nid: newrun\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: {command: /usr/bin/printf, args: ["${word}\\n"]}\nedges: []\noutputs: {}\n`
+    const chosen = path.join(graphDir, 'new-run.yaml')
+    fs.writeFileSync(chosen, say('first'))
+    await stubOpenDialog(app, chosen)
+    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="quick-open"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml', 'Open graph on the Dashboard lands on New run with the file chosen')
+    await page.click('[data-testid="nav-new"]')
+    assert.equal(await page.locator('[data-testid="graph-path"]').count(), 0, 'New run has no field for a path')
+    await page.click('[data-testid="choose"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml')
+    assert.equal((await page.content()).includes(work), false, 'the page never shows the path')
+    // The file is saved again after it was chosen and checked: the run reads the saved bytes.
+    fs.writeFileSync(chosen, say('second'))
+    await page.click('[data-testid="run"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="run-status"]')?.textContent === 'Succeeded', null, { timeout: 20000 })
+    const listed = (await page.evaluate(() => window.agentplane.request('GET', '/runs'))).body.runs
+    const started = listed.filter((r) => r.graph_id === 'newrun')
+    assert.equal(started.length, 1)
+    const detail = await page.evaluate((id) => window.agentplane.request('GET', `/runs/${id}`), started[0].run_id)
+    assert.ok(detail.body.graph.includes('second') && !detail.body.graph.includes('first'), 'the run used the saved bytes of the chosen file')
+    // A path is refused by main before it reaches the engine, on both routes, in any key spelling.
+    for (const [route, body] of [['/runs', { graph_path: chosen, inputs: [] }], ['/runs', { GRAPH_PATH: chosen }], ['/graphs/validate', { path: chosen }]]) {
+      const refusedBody = await page.evaluate(([r, b]) => window.agentplane.request('POST', r, b), [route, body])
+      assert.equal(refusedBody.status, 400, `${route} ${Object.keys(body)}`)
+      assert.equal(refusedBody.body.error.message, 'body not allowed')
+    }
+    const afterRefusals = (await page.evaluate(() => window.agentplane.request('GET', '/runs'))).body.runs
+    assert.equal(afterRefusals.length, listed.length, 'a refused path starts no run')
+
     // 6. If the engine dies mid-run the UI says the connection was lost and keeps
     //    the last events it received; it must not invent a run status.
-    await startDemo(page)
+    await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
     // SIGKILL simulates a crash (SIGTERM would be a graceful, complete shutdown).
-    // "[a]gentplane" keeps the pattern from matching pkill's own shell.
-    require('node:child_process').execSync(`pkill -9 -f "bin/[a]gentplane serve" || true`)
+    // Only the sidecar this app started is killed: it is the engine child of the Electron main process.
+    process.kill(sidecarPid(app), 'SIGKILL')
     await page.waitForSelector('[data-testid="connection-lost"]', { timeout: 15000 })
     assert.equal(await page.textContent('[data-testid="run-status"]'), 'Connection lost')
     assert.equal(await status(page, 'approve'), 'waiting_human')

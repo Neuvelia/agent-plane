@@ -55,7 +55,7 @@ func Preflight(ctx context.Context, sourceWorkspace, worktreeRoot string) (Sourc
 	}
 	version, err := gitstate.Run(ctx, root, gitstate.RunOptions{}, "--version")
 	if err != nil {
-		return Source{}, fail(CodeGitVersion, "cannot run /usr/bin/git; Git 2.38 or newer is required", err)
+		return Source{}, fail(CodeGitVersion, "cannot run git from PATH; Git 2.38 or newer is required", err)
 	}
 	if err := checkGitVersion(string(version.Stdout)); err != nil {
 		return Source{}, err

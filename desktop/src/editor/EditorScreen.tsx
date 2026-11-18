@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button, Card, HelpTip, ListRow, Pill, SegmentedControl, Tag } from '../ui/primitives'
 import { GraphCanvas } from './GraphCanvas'
@@ -7,13 +7,25 @@ import { firstError, issueCounts, type FocusReq, type Issue } from './issues'
 import { isDirty, runBlock, type DocState } from './doc'
 import type { GraphDocument } from './useGraphDocument'
 import { LoadingState } from '../states'
+import { TemplatePicker } from './TemplatePicker'
 
 // CodeMirror is loaded when the editor is first shown, not at application start.
 const YamlEditor = lazy(() => import('./YamlEditor').then((m) => ({ default: m.YamlEditor })))
 
-export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: string) => void }) {
+export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDocument; onRun?: (runId: string) => void; startWithPicker?: boolean }) {
   const { t } = useI18n()
   const { doc } = g
+  // "New graph" first offers Blank or a template (F2.12); the welcome screen can open it directly.
+  const [picker, setPicker] = useState(startWithPicker)
+  const newGraph = () => setPicker(true)
+  // When the picker was opened from the welcome screen its opener is gone, so a cancel lands on "New graph".
+  const cancelled = useRef(false)
+  const sectionRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (picker || !cancelled.current) return
+    cancelled.current = false
+    sectionRef.current?.querySelector<HTMLElement>('[data-testid="editor-new"]')?.focus()
+  }, [picker])
 
   // Ctrl/Cmd+S saves from anywhere on the screen; inside the editor CodeMirror has already handled it.
   useEffect(() => {
@@ -28,7 +40,7 @@ export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: s
   }, [doc, g])
 
   return (
-    <section className="editor" data-testid="editor">
+    <section ref={sectionRef} className="editor" data-testid="editor">
       <h1>{doc ? doc.label : t('editor.title')}</h1>
       {g.error && (
         <div className="banner" role="alert" data-testid="editor-error">
@@ -54,12 +66,24 @@ export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: s
           </span>
         </div>
       )}
-      {doc ? <Open g={g} doc={doc} onRun={onRun} /> : <Empty g={g} />}
+      {doc ? <Open g={g} doc={doc} onRun={onRun} onNew={newGraph} /> : <Empty g={g} onNew={newGraph} />}
+      {picker && (
+        <TemplatePicker
+          onCancel={() => {
+            cancelled.current = true
+            setPicker(false)
+          }}
+          onChoose={(draft) => {
+            setPicker(false)
+            g.create(draft)
+          }}
+        />
+      )}
     </section>
   )
 }
 
-function Empty({ g }: { g: GraphDocument }) {
+function Empty({ g, onNew }: { g: GraphDocument; onNew: () => void }) {
   const { t } = useI18n()
   return (
     <>
@@ -69,7 +93,7 @@ function Empty({ g }: { g: GraphDocument }) {
           <Button variant="primary" onClick={g.open} disabled={g.busy === 'opening'} data-testid="editor-open">
             {g.busy === 'opening' ? t('editor.opening') : t('editor.open')}
           </Button>
-          <Button onClick={g.create} data-testid="editor-new">
+          <Button onClick={onNew} data-testid="editor-new">
             {t('editor.new')}
           </Button>
         </div>
@@ -88,7 +112,7 @@ function Empty({ g }: { g: GraphDocument }) {
   )
 }
 
-function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (runId: string) => void }) {
+function Open({ g, doc, onRun, onNew }: { g: GraphDocument; doc: DocState; onRun?: (runId: string) => void; onNew: () => void }) {
   const { t } = useI18n()
   const dirty = isDirty(doc)
   const saving = g.busy === 'saving'
@@ -131,7 +155,7 @@ function Open({ g, doc, onRun }: { g: GraphDocument; doc: DocState; onRun?: (run
           <Button size="sm" onClick={g.open} data-testid="editor-open">
             {t('editor.open')}
           </Button>
-          <Button size="sm" onClick={g.create} data-testid="editor-new">
+          <Button size="sm" onClick={onNew} data-testid="editor-new">
             {t('editor.new')}
           </Button>
           <Button size="sm" onClick={g.close} data-testid="editor-close">
