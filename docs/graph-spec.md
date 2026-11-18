@@ -339,6 +339,33 @@ output declarations. Existing event shapes decode under schema 1 or 2;
 older schema 1/2 facts remain readable (ADR-0011). Failed invocations accept no outputs or
 success evidence. See ADR-0010 for process ownership and protocol limits.
 
+### Limits (F3.4, ADR-0028)
+
+Two optional integer fields bound wall-clock time. Both are whole seconds from 1
+through 86400 and both are absent by default: a graph without them has no limit
+and keeps its semantic version byte for byte.
+
+```yaml
+limits:
+  run_timeout_seconds: 3600   # the whole run, from run_started
+nodes:
+  build:
+    type: shell
+    timeout_seconds: 120      # one attempt of this node, from running
+```
+
+`nodes.<id>.timeout_seconds` bounds one attempt of a Shell, Agent or Gate node
+(for a loop producer it bounds the producer, not its embedded Gate). It is
+rejected on a `human` node. `limits.run_timeout_seconds` bounds the run. Both are
+semantic content: they change the semantic version, while name and
+`metadata.layout` still do not. An empty `limits: {}` block equals no block.
+
+A non-integer value (`1.5`, `"30"`, `true`, `null`) is a parse error and a value
+outside 1..86400, or a timeout on a `human` node, is a validation error. Both
+use code `E_TIMEOUT_INVALID` and name the path (`nodes.<id>.timeout_seconds` or
+`limits.run_timeout_seconds`). This slice only defines, validates and hashes the
+fields; the runtime does not enforce them yet (F3.4 Task 7).
+
 ## Edge definition
 
 An edge maps one declared source output to one declared target input.

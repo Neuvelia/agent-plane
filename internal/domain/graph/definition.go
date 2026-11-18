@@ -41,6 +41,14 @@ type Definition struct {
 	Edges              []EdgeDefinition
 	GraphInputBindings []GraphInputBindingDefinition
 	Outputs            map[string]OutputDefinition
+	// Limits is nil when the graph authors none (F3.4); a nil block and an
+	// empty one are the same graph.
+	Limits *LimitsDefinition
+}
+
+// LimitsDefinition holds opt-in, semantic run limits (F3.4, ADR-0028).
+type LimitsDefinition struct {
+	RunTimeoutSeconds *int
 }
 
 // InputDefinition declares one input accepted by the graph.
@@ -57,6 +65,8 @@ type NodeDefinition struct {
 	Inputs  map[string]PortDefinition
 	Config  NodeConfig
 	Outputs map[string]PortDefinition
+	// TimeoutSeconds bounds one attempt of the node; nil means no limit.
+	TimeoutSeconds *int
 }
 
 // PortDefinition declares a typed node input or output.

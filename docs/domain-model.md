@@ -20,7 +20,8 @@ Owns:
 An immutable semantic snapshot of a GraphDefinition used for a run.
 
 F0.6 identifies the schema-v0 semantic definition with a `sha256-v0:`
-fingerprint that excludes name and metadata. Repository context is later work.
+fingerprint that excludes name and metadata. Optional run limits (F3.4) are
+semantic and included when authored. Repository context is later work.
 
 ### NodeDefinition
 
@@ -34,7 +35,8 @@ A node has:
 - declared outputs;
 - type-specific configuration;
 - optional node-local correction loop (F1.6);
-- later: timeout, permission and policy configuration.
+- optional `timeout_seconds` bounding one attempt (F3.4);
+- later: permission and policy configuration.
 
 ### EdgeDefinition
 
