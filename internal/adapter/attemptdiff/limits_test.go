@@ -160,3 +160,14 @@ func TestReadFileRejectsPathSwappedForSymlink(t *testing.T) {
 		t.Fatal("a path swapped for a symlink after Lstat must be rejected")
 	}
 }
+
+func TestSnapshotOfANonGitDirectoryIsGitUnavailable(t *testing.T) {
+	dir, _ := filepath.EvalSymlinks(t.TempDir())
+	_, err := newRecorder(t).Snapshot(context.Background(), dir)
+	if DiagnosticCode(err) != events.DiffGitUnavailable {
+		t.Fatalf("code = %q (%v)", DiagnosticCode(err), err)
+	}
+	if _, err := newRecorder(t).Snapshot(context.Background(), "relative/path"); DiagnosticCode(err) != events.DiffGitUnavailable {
+		t.Fatalf("relative workspace code = %q", DiagnosticCode(err))
+	}
+}

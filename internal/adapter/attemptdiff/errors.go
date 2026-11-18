@@ -58,3 +58,13 @@ func classifyGit(err error) *Error {
 	}
 	return fail(events.DiffGitFailed, "git failed", err)
 }
+
+// unavailable maps a workspace that cannot be inspected as a Git worktree (not
+// a repository, no commit, not its root) to E_DIFF_GIT_UNAVAILABLE (FR18); only
+// a time bound keeps its own code.
+func unavailable(err error) *Error {
+	if classified := classifyGit(err); classified.Code == events.DiffTimeout {
+		return classified
+	}
+	return fail(events.DiffGitUnavailable, "workspace is not an inspectable Git worktree", err)
+}

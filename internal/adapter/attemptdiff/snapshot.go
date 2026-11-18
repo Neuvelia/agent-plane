@@ -84,7 +84,7 @@ func (r *Recorder) Snapshot(ctx context.Context, workspace string) (Snapshot, er
 	defer cancel()
 	root, err := gitstate.CanonicalWorkspace(ctx, workspace)
 	if err != nil {
-		return Snapshot{}, classifyGit(err)
+		return Snapshot{}, unavailable(err)
 	}
 	index, err := r.listIndex(ctx, root)
 	if err != nil {
