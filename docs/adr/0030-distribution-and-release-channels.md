@@ -1,4 +1,4 @@
-# ADR-0027 - Distribution channels, desktop shell and release tooling
+# ADR-0030 - Distribution channels, desktop shell and release tooling
 
 **Status:** proposed (shell, license, repository and bundle id decisions accepted by the owner)
 **Date:** 2026-11-16

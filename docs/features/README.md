@@ -63,13 +63,14 @@ feature contract.
 | Feature | Spec status |
 | --- | --- |
 | `F3.1-workspace-isolation.md` | Implemented (opt-in Agent worktree isolation, ADR-0024; event schema 11); real-Codex demo passed once, see `docs/validation/F3.1-real-codex-demo.md` |
+| `F3.2-durable-run-state.md` | Draft; ADR-0027 proposed (JSONL, no SQLite) |
 
 ## Release engineering - drafts (not roadmap F-IDs)
 
 | Feature | Spec status |
 | --- | --- |
-| `REL1-release-engineering.md` | Draft; ADR-0027 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
-| `REL2-public-roadmap-status.md` | Draft; ADR-0028 (proposed) |
+| `REL1-release-engineering.md` | Draft; ADR-0030 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
+| `REL2-public-roadmap-status.md` | Draft; ADR-0031 (proposed) |
 
 ## Later phases
 

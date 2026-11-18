@@ -24,7 +24,7 @@ landing repository, with no manual copying.
 - Publishing PR titles, branch names, issue text, internal plans or dates.
   The public view shows Now / Next / Later, never delivery dates.
 - A live API or a runtime fetch from the visitor's browser.
-- Voting, comments or an issue-tracker UI (see "Wider sharing" in ADR-0028).
+- Voting, comments or an issue-tracker UI (see "Wider sharing" in ADR-0031).
 - Changing how specs are written beyond one machine-readable status line.
 
 ## Source of truth
@@ -54,7 +54,7 @@ known limit. Nothing else from the specs is exported.
 5. `make roadmap` regenerates the file; `make check` fails if the committed file is
    stale (same pattern as the desktop token sync check).
 6. A workflow in this repository, on push to `main` that changes the roadmap or any
-   spec header, notifies the landing repository (mechanism in ADR-0028). The landing
+   spec header, notifies the landing repository (mechanism in ADR-0031). The landing
    repository opens a pull request that updates its copy of the file; a human
    merges it. No direct push to the landing `main`.
 7. The landing build renders the ledger, the rail and (new) a `/roadmap/` page from
@@ -126,7 +126,7 @@ body lists changed items (ID, old status, new status).
    renamed); the landing repository is private. The landing pulls the public file
    without a read credential and opens its sync PR with its own workflow token, so
    the cross-repository secret is not needed for the pull model.
-2. Resolved: pull on a schedule and on manual dispatch (ADR-0028); an optional
+2. Resolved: pull on a schedule and on manual dispatch (ADR-0031); an optional
    push-style nudge needs a token and is deferred.
 3. Which spec status shows as "Known limit" on the landing: only `Public note` lines,
    or also a fixed platform statement (Windows)?

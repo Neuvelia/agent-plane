@@ -1,4 +1,4 @@
-# ADR-0028 - Public roadmap status feed and landing synchronization
+# ADR-0031 - Public roadmap status feed and landing synchronization
 
 **Status:** proposed
 **Date:** 2026-11-16
