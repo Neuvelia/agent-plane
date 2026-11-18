@@ -6,7 +6,7 @@ Electron shell and React renderer over the local `agentplane serve` sidecar
 ## Run it
 
 ```bash
-make build                   # builds bin/agentplane (the sidecar)
+make build                   # builds bin/agentplane (bin/agentplane.exe on Windows)
 cd desktop && npm ci
 npm start                    # builds the renderer and opens the app
 ```
@@ -16,6 +16,45 @@ then **Run**. Two branches run concurrently, `flaky` is rejected by its Gate and
 retried alone, then the graph stops at the `approve` human node until you press
 **Approve** (or **Reject**). Runs are stored under the app's user-data directory
 (`AGENTPLANE_STORE_DIR` overrides it) and survive restarts.
+
+## Platforms and the sidecar binary
+
+Main resolves the sidecar in `electron/sidecar.cjs`: `AGENTPLANE_BIN` if set,
+otherwise `bin/agentplane` under the repository root (`bin/agentplane.exe` on
+Windows, where `go build` appends `.exe`). `make build` uses `go env GOEXE`, so the
+same target writes the right name on every platform; without `make`, run
+`go build -o bin/agentplane.exe ./cmd/agentplane`. A missing binary stops startup
+with an error naming the path that was tried and how to build it
+(`test/sidecar.test.ts`).
+
+Packaged app (not implemented): the repository-relative default holds only for a
+checkout (`npm start`). A packaged app is expected to ship the engine under
+`process.resourcesPath` and pass that path through the same resolver; that choice
+is deferred until packaging is activated.
+
+Verified platforms:
+
+| Platform | Status |
+| --- | --- |
+| Linux (xvfb) | `npm run check` and `make desktop-e2e` |
+| Windows 11 | engine build, `npm run check`, and the full `e2e/demo.cjs` (with the Windows variant described below) |
+| macOS | not verified |
+
+Windows notes (Windows 11, Go 1.27, Node 24, real window, unattended): `go build`
+wrote `bin/agentplane.exe`, `npm ci` and `npm run check` passed, and `node e2e/demo.cjs`
+ran to the end (two consecutive runs). `e2e/demo.cjs` is platform-aware: the engine
+binary comes from `binaryName`, temporary paths from `os.tmpdir()`, and the
+connection-lost step kills only the sidecar process that is a descendant of the
+launched app, by PID (`ps` on Linux, a process table query on Windows). The demo
+graph and the editor round trip name POSIX tools (`/usr/bin/printf`, `/bin/sh`) by
+absolute path, which Windows does not have, so on win32 the script derives the same
+graph in its temp directory with the shell commands replaced by the running `node`
+binary; the structure, loop, Gate and human node are unchanged. Steps that need
+Agent or command Gate processes (codex adapter, `/usr/bin/diff`) are not part of this
+scenario. Not verified on Windows: the missing-binary dialog in a real window (covered
+by the unit test). The Linux e2e still passes under `xvfb-run` after these changes.
+Shutdown itself is portable: closing the sidecar's stdin ends it, and the 1.5 s
+`kill()` fallback maps to `TerminateProcess`.
 
 ## Checks
 
@@ -76,14 +115,17 @@ a dev dependency and is never part of the packaged app.
 - **The renderer is sandboxed.** `contextIsolation` is on, `nodeIntegration` is
   off, the CSP allows only the bundle, and the sidecar port/token never leave
   the main process (`electron/main.cjs`). The preload exposes `request`,
-  `subscribe`, `pickGraph` and the graph-file calls (`openGraph`, `newGraph`,
+  `subscribe` and the graph-file calls (`openGraph`, `newGraph`,
   `recentGraphs`, `openRecentGraph`, `touchRecent`, `closeGraph`), and the main
   process forwards only an exact list of routes (`electron/allowlist.cjs`):
-  never `/graphs/grants`, which only main calls. Graph files for the editor are
-  chosen in native dialogs in main (`electron/graphs.cjs`) and reach the
-  renderer only as opaque grants and file names, never paths (ADR-0021). Recently
-  opened graphs are kept by main in the user data directory
-  (`electron/recents.cjs`).
+  never `/graphs/grants`, which only main calls. Graph files for the editor and
+  for New run are chosen in native dialogs in main (`electron/graphs.cjs`) and
+  reach the renderer only as opaque grants and file names, never paths
+  (ADR-0021). New run validates and starts with the grant; main refuses a
+  `graph_path` or `path` in the body of `POST /runs` and `POST /graphs/validate`
+  (the Go API still accepts them for non-renderer clients). Recently opened
+  graphs, including those chosen on New run, are kept by main in the user data
+  directory (`electron/recents.cjs`).
 - **Recording run values is opt-in.** Settings has a "Record run values" switch,
   off by default (ADR-0023). Main keeps it in user data (`electron/recording.cjs`)
   and starts the sidecar with `--record-values` and `--redact-env NAME` for the
@@ -91,6 +133,16 @@ a dev dependency and is never part of the packaged app.
   variable keeps recording off for that session. The renderer reaches it only
   through `recordingSettings`/`setRecordingSettings` and never sees environment
   values.
+- **Welcome and capability list (F2.11, ADR-0025).** On first launch (no
+  `agentplane.welcome.v1` in renderer `localStorage`) the app opens "Welcome and
+  setup", also reachable from the sidebar. It lists the engine (with the engine
+  and app versions; preload exposes the read-only `appVersion`), Git, Codex and
+  the agent CLIs without an adapter (Claude Code, Cursor Agent, Gemini CLI), as
+  reported by `GET /capabilities`; "Check again" calls `POST /capabilities/check`.
+  The CLIs are only looked up on the engine's `PATH`, never run. Main passes
+  `--codex-bin` only when `AGENTPLANE_CODEX_BIN` is an absolute path
+  (`electron/capabilities.cjs`). "Start from a template" opens the New graph
+  picker (F2.12, below).
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 
@@ -102,7 +154,20 @@ state and conflict handling live in `src/editor/doc.ts` and
 `useGraphDocument.ts`; validation is the engine's (`POST /graphs/validate`), the
 renderer holds no graph rules. Saving sends the hash of the text it opened
 (`base_hash`); a file changed on disk is reported as a conflict and is never
-overwritten silently. A new graph is create-only. The canvas, Visual/Split view
+overwritten silently. A new graph is create-only. "New graph" first opens a
+picker (F2.12, `src/editor/TemplatePicker.tsx`): Blank graph or one of the four
+templates of `.agents/templates/`, which the renderer bundles as text at build
+time (`src/templates.ts`). A template's draft is its text with only the
+`id: <template id>` line replaced by the id derived from the chosen file name;
+nothing else is parsed or changed in the renderer, and the engine validates the
+draft like any other. Each entry shows notices from the F2.11 capability report
+(platform, status of `git` and `codex`, "not checked" when there is no report)
+that inform and never disable an entry. The picker is a modal dialog with a
+native radio group (arrow keys), Enter to create and Escape to cancel; cancelling
+the dialog or the save dialog creates nothing, and with unsaved changes open the
+save / discard / cancel prompt runs once a choice is made, before the save
+dialog. Re-record the story answer for the agent template with
+`AP_RECORD=templates node scripts/record-graph-fixtures.cjs`. The canvas, Visual/Split view
 and "Save and run" come in later slices.
 
 ## Canvas (F2.1, slice E2.2)
@@ -153,7 +218,9 @@ programmable keymap without reimplementing an editor.
 
 F2.5a R0 provides the shell, design tokens, primitives, Storybook and PL/EN
 localisation. R1 redesigns Run Inspector (live graph card with Map / YAML / Split,
-node detail with one attempt shown at a time), Approvals (inbox and review panes)
+node detail with one attempt shown at a time; a standalone Gate node has no attempts,
+so its single `gate_check`, which carries no attempt ID, is kept on the node and shown
+there), Approvals (inbox and review panes)
 and New run (graph, inputs, preflight steps). R2 adds the Dashboard (needs attention,
 active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 (wall clock, node time, saved, retries, tokens always unknown), a per-second

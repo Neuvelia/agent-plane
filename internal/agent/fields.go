@@ -17,6 +17,7 @@ func ConfigFields() []fields.Field {
 		{ID: "agent.config.allowed_paths", Key: "allowed_paths", Kind: fields.PathList, Item: notBlank("agent.config.allowed_paths.item")},
 		{ID: "agent.config.context_refs", Key: "context_refs", Kind: fields.List, Item: notBlank("agent.config.context_refs.item")},
 		{ID: "agent.config.environment_refs", Key: "environment_refs", Kind: fields.List, Item: notBlank("agent.config.environment_refs.item")},
+		{ID: "agent.config.isolation", Key: "isolation", Kind: fields.Enum, Enum: []string{"none", "worktree"}, Default: "none"},
 	}
 }
 

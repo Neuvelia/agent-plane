@@ -81,6 +81,7 @@ export const YamlErrorWhileTyping: S = story(base, async (root) => {
 })
 export const NewGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
   await click(root, 'editor-new')
+  await click(root, 'picker-create')
   await until(root, '.cm-content')
 })
 export const SaveConflict: S = story({ ...base, save: 'conflict' }, async (root) => {

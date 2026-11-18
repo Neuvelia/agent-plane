@@ -10,6 +10,7 @@ import (
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/adapter/yamlgraph/edit"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/fields"
 	"agentplane/internal/gate"
 )
 
@@ -125,7 +126,12 @@ func gateKindCases(dir string) map[string]gateKindCase {
 
 func validateEdited(t *testing.T, start string, ops []edit.Op) {
 	t.Helper()
-	res, err := edit.Apply([]byte(start), ops)
+	validateEditedWith(t, start, ops, nil)
+}
+
+func validateEditedWith(t *testing.T, start string, ops []edit.Op, descriptors edit.ConfigFields) {
+	t.Helper()
+	res, err := edit.ApplyWith([]byte(start), ops, descriptors)
 	if err != nil {
 		t.Fatalf("operations refused: %v", err)
 	}
@@ -262,6 +268,90 @@ func assertCasesMatchDescriptors(t *testing.T, cases map[string]gateKindCase) {
 	for kind := range cases {
 		if !all[kind] {
 			t.Errorf("gateKindCases covers %q, which the Gate descriptors do not list", kind)
+		}
+	}
+}
+
+// catalogueFields is what the API hands the edit engine: the catalogue's config
+// descriptors of a node type, or of its loop Gate.
+func catalogueFields(nodeType string, loop bool) []fields.Field {
+	for _, nt := range nodeCatalogue() {
+		switch {
+		case nt.Type != nodeType:
+		case !loop:
+			return nt.Config
+		case nt.Loop != nil:
+			return nt.Loop.Gate
+		}
+	}
+	return nil
+}
+
+// Changing a Gate's kind leaves a file the validator accepts without any cleanup:
+// for every ordered pair of kinds, a Gate configured as one and re-pointed at
+// the other, with only the new kind's keys set, validates.
+func TestChangingAGateKindNeedsNoCleanup(t *testing.T) {
+	dir := t.TempDir()
+	start := inspectorStartGraph(dir)
+	cases := gateKindCases(dir)
+	kinds := kindEnum(t, catalogueByType(t)["gate"].Config)
+	feed := map[string][]string{"string": {"build.outputs.stdout", "build.outputs.stderr"}, "json": {"build.outputs.json"}}
+	config := func(node, kind string) []edit.Op {
+		full := map[string]any{}
+		if err := json.Unmarshal(withCheckID(t, kind, cases[kind].config), &full); err != nil {
+			t.Fatal(err)
+		}
+		keys := make([]string, 0, len(full))
+		for k := range full {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		var ops []edit.Op
+		for _, k := range keys {
+			v, err := json.Marshal(full[k])
+			if err != nil {
+				t.Fatal(err)
+			}
+			ops = append(ops, edit.Op{Op: edit.OpSetConfig, Node: node, Path: []string{k}, Value: v})
+		}
+		return ops
+	}
+	for _, from := range kinds {
+		for _, to := range kinds {
+			if from == to {
+				continue
+			}
+			t.Run(from+" to "+to, func(t *testing.T) {
+				ops := []edit.Op{{Op: edit.OpAddNode, ID: "chk", Type: "gate"}}
+				used := map[string]bool{}
+				next := map[string]int{}
+				for _, kind := range []string{from, to} {
+					for name, spec := range cases[kind].inputs {
+						if used[name] {
+							continue
+						}
+						used[name] = true
+						src := feed[spec.Type][next[spec.Type]%len(feed[spec.Type])]
+						next[spec.Type]++
+						required := spec.Required
+						ops = append(ops,
+							edit.Op{Op: edit.OpAddPort, Node: "chk", Direction: edit.DirectionInput, Port: name, Type: spec.Type, Required: &required},
+							edit.Op{Op: edit.OpAddEdge, From: src, To: "chk.inputs." + name})
+					}
+				}
+				ops = append(ops, config("chk", from)...)
+				kind, err := json.Marshal(to)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ops = append(ops, edit.Op{Op: edit.OpSetConfig, Node: "chk", Path: []string{"kind"}, Value: kind})
+				for _, op := range config("chk", to) {
+					if op.Path[0] != "kind" {
+						ops = append(ops, op)
+					}
+				}
+				validateEditedWith(t, start, ops, catalogueFields)
+			})
 		}
 	}
 }

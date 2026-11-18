@@ -161,6 +161,27 @@ func TestTemplatesFollowTheFileRules(t *testing.T) {
 	}
 }
 
+// The desktop picker's draft is the template with its id line replaced
+// (desktop/src/templates.ts); the engine must treat that draft as an ordinary,
+// editable graph: canvas not read-only and a no-op edit returns the same bytes.
+func TestTemplateDraftsOpenEditableAndRoundTrip(t *testing.T) {
+	for _, tpl := range loadTemplates(t) {
+		id := tpl.entry.ID
+		line := []byte("id: " + id + "\n")
+		if bytes.Count(tpl.text, line) != 1 {
+			t.Fatalf("%s: want one %q line", id, line)
+		}
+		draft := bytes.Replace(tpl.text, line, []byte("id: my-new-graph\n"), 1)
+		if reasons := edit.Inspect(draft); len(reasons) != 0 {
+			t.Errorf("%s draft: canvas would be read-only: %v", id, reasons)
+		}
+		res, err := edit.Apply(draft, nil)
+		if err != nil || !bytes.Equal(res.Text, draft) {
+			t.Errorf("%s draft: a no-op edit must return the same bytes (err %v)", id, err)
+		}
+	}
+}
+
 type diagKey struct{ Code, Path string }
 
 func diagKeys(diags []graph.Diagnostic) []diagKey {

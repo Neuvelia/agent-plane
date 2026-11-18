@@ -82,6 +82,16 @@ type Options struct {
 	// graph input and per accepted output port (ADR-0023). Off by default;
 	// LogRedactions apply and must be valid UTF-8 when it is on.
 	RecordValues bool
+	// Workspaces serves nodes with isolation: worktree (ADR-0024). A graph that
+	// asks for isolation and has no manager fails preflight; a graph that does
+	// not ask never touches it.
+	Workspaces WorkspaceManager
+	// RetainWorktrees selects which isolated worktrees outlive their node run.
+	// The zero value means RetainFailed.
+	RetainWorktrees RetainPolicy
+	// CleanupTimeout bounds each worktree removal so a hung Git cannot block
+	// run_finished. Zero means 30 seconds.
+	CleanupTimeout time.Duration
 	// GraphVersion is the canonical encoding hashed into the run's graph
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.
@@ -117,6 +127,10 @@ const maxEventLogChunk = 16 * 1024
 type runMachine struct {
 	units       unitRegistry
 	workspaces  map[string]workspaceIdentity
+	isolation   isolationPlan
+	worktrees   map[string]*isolatedWorkspace
+	tipRef      string
+	tipCommit   string
 	definition  *graph.Definition
 	ids         []string
 	nodes       map[string]*run.NodeResult
@@ -157,19 +171,19 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	for {
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(run.RunCancelled)
+			machine.finish(ctx, run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 		failures := machine.promoteReady(ctx, plan, graphInputs, dependencies)
 		if len(failures) > 0 {
 			machine.result.Failure = failures[0]
 			machine.skipUnstarted()
-			machine.finish(run.RunFailed)
+			machine.finish(ctx, run.RunFailed)
 			return machine.snapshot(), nil
 		}
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(run.RunCancelled)
+			machine.finish(ctx, run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 
@@ -179,15 +193,15 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 				outputs, resolution := plan.ResolveGraphOutputs(machine.outputs)
 				if !resolution.Valid() {
 					machine.result.Failure = &run.Failure{Kind: run.FailureGraphOutput, Diagnostics: resolution.Diagnostics}
-					machine.finish(run.RunFailed)
+					machine.finish(ctx, run.RunFailed)
 				} else {
 					machine.result.Outputs = sortedPortValues(outputs)
-					machine.finish(run.RunSucceeded)
+					machine.finish(ctx, run.RunSucceeded)
 				}
 			} else {
 				machine.result.Failure = &run.Failure{Kind: run.FailureScheduler, Err: errors.New("no runnable nodes remain in validated graph")}
 				machine.skipUnstarted()
-				machine.finish(run.RunFailed)
+				machine.finish(ctx, run.RunFailed)
 			}
 			return machine.snapshot(), nil
 		}
@@ -201,6 +215,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		for len(batch) > 0 {
 			results := machine.runBatchWorkers(ctx, executor, batch, &state, redactionTemplate)
 			retry := machine.acceptBatchResults(ctx, definition, results, &state)
+			machine.releaseIsolated(ctx)
 			failed := false
 			for _, id := range machine.ids {
 				if machine.nodes[id].State == run.NodeFailed {
@@ -228,12 +243,12 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 		}
 		if machine.result.Failure != nil {
 			machine.skipUnstarted()
-			machine.finish(run.RunFailed)
+			machine.finish(ctx, run.RunFailed)
 			return machine.snapshot(), nil
 		}
 		if ctx.Err() != nil {
 			machine.cancelUnstarted()
-			machine.finish(run.RunCancelled)
+			machine.finish(ctx, run.RunCancelled)
 			return machine.snapshot(), nil
 		}
 	}
@@ -267,6 +282,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 		nodeStarted: make(map[string]time.Time, len(ids)),
 		attemptIDs:  options.IDs,
 		clock:       options.Clock,
+		worktrees:   map[string]*isolatedWorkspace{},
 	}
 	for _, id := range ids {
 		nodeRunID, err := options.IDs.NewNodeRunID()
@@ -369,7 +385,9 @@ func (m *runMachine) transitionNode(id string, to run.NodeState) {
 	m.record(id, string(from), string(to))
 }
 
-func (m *runMachine) finish(to run.State) {
+func (m *runMachine) finish(ctx context.Context, to run.State) {
+	m.releaseIsolated(ctx)
+	m.reportSourceChanges(ctx)
 	if !run.ValidRunTransition(m.result.State, to) {
 		panic(fmt.Sprintf("invalid scheduler run transition: %s -> %s", m.result.State, to))
 	}
@@ -474,6 +492,7 @@ func (m *runMachine) snapshot() run.Result {
 	result.Events = m.emitter.Snapshot()
 	result.ProgressStats = m.emitter.Stats()
 	result.PersistError = m.emitter.PersistError()
+	result.Isolation = m.isolationResult()
 	result.Nodes = make([]run.NodeResult, 0, len(m.ids))
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])

@@ -37,9 +37,15 @@ Return Envelopes, immutable accepted runtime values/provenance and conservative
 shared-workspace Agent scheduling (ADR-0015). F1.8 adds opt-in Git-observed
 changed-files scope checking (ADR-0016; event schema 8). Shared files are not
 isolated; F1.8 detects out-of-scope changes after execution and neither prevents
-writes nor isolates the workspace (F3.1). Phase 1 features F1.1-F1.8 are
-implemented; the real-Codex F1.7 demo is prepared but not yet executed.
-A Phase 2 vertical slice is also active (event schema 10): F1.6a adds the bounded
+writes nor isolates the workspace by itself. Phase 1 features F1.1-F1.8 are
+implemented; the real-Codex F1.7 demo was executed on 2026-11-17 against Codex 0.169.0 (`docs/validation/F1.7-real-codex-demo.md`). F3.1
+(ADR-0024, event schema 11) adds opt-in `isolation: worktree` for loop Agent
+units: one linked Git worktree per node run, accepted units integrated onto a
+run-scoped ref, and a non-fatal `source_workspace_changed` guard. It is not a
+sandbox, gives downstream nodes no view of upstream files, does not isolate Shell
+nodes, and supports Linux/macOS only; a real-Codex run passed once
+(`docs/validation/F3.1-real-codex-demo.md`).
+A Phase 2 vertical slice is also active (event schema 11): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
 F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
@@ -47,7 +53,7 @@ F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
 schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
 Storybook; the API and event contracts are unchanged. Slice E6 of F2.3 adds
-opt-in, bounded and redacted `value_recorded` events (event schema 10,
+opt-in, bounded and redacted `value_recorded` events (event schema 11,
 ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
 starts the sidecar with it; the edge inspector (E5b) is not implemented. The graph
 editor (F2.1, F2.4 Issues panel) and the F2.2 node inspector edit graph files through
@@ -354,6 +360,8 @@ Before adding a dependency, explain:
 - whether the dependency is runtime or development-only.
 
 Do not add frameworks preemptively for future features.
+
+Upgrading the YAML library (`go.yaml.in/yaml/v3`) must include running the `ParseErrorColumn` tests in `internal/adapter/yamlgraph/edit` and `internal/api`: they pin error-message wording the parse-error column lookup depends on.
 
 ## Code style
 
