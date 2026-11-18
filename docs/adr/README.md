@@ -46,3 +46,7 @@ Onboarding (proposed): [ADR-0025 - Read-only capability report on the loopback A
 Phase 3:
 [ADR-0024 - Workspace isolation with Git worktrees and deterministic integration](0024-workspace-isolation-with-git-worktrees.md)
 (accepted; real-Codex sandbox spike passed).
+
+Release engineering (proposed):
+[ADR-0027 - Distribution channels, desktop shell and release tooling](0027-distribution-and-release-channels.md),
+[ADR-0028 - Public roadmap status feed and landing synchronization](0028-public-roadmap-status-feed.md).
