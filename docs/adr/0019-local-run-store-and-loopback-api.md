@@ -47,9 +47,11 @@ to clients, streams end with an `error` event, and the run is listed with an
 active runs and waits up to five seconds for their terminal events.
 
 `graph_path` is read by the sidecar with the local user's own permissions. The
-desktop allows a typed path as well as a picked one, so it is not bound to the
+desktop allowed a typed path as well as a picked one, so it was not bound to the
 file dialog; the trust model is that the person at the keyboard chooses which
-graph to execute, exactly as with `agentplane run`.
+graph to execute, exactly as with `agentplane run`. The desktop renderer no
+longer sends a path: it starts runs by grant (ADR-0021, decision 9), and the API
+keeps accepting `graph_path` for other clients.
 
 Durability scope: lifecycle events survive the process being killed. They are
 not guaranteed across power loss: the run directory entry and `graph.yaml` are

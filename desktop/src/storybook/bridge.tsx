@@ -41,7 +41,7 @@ export interface BridgeData {
   runs: BridgeRun[]
   approvals?: PendingApproval[]
   validate?: { status: string; diagnostics: unknown[] }
-  /** Path returned by the "Choose…" dialog. */
+  /** File name the "Choose…" dialog picks on New run (answered as a grant). */
   pickedGraph?: string | null
   /** Every request rejects, as when the sidecar is not running. */
   unreachable?: boolean
@@ -113,11 +113,11 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
         alive = false
       }
     },
-    pickGraph: async () => data.pickedGraph ?? null,
     openGraph: async () => {
       const g = data.graph
       if (g?.openError) return { ok: false, code: 'not_found', message: g.openError }
-      return g?.opened ? { ok: true, grant: 'story-grant', label: g.opened.label, exists: true } : { canceled: true }
+      if (g?.opened) return { ok: true, grant: 'story-grant', label: g.opened.label, exists: true }
+      return data.pickedGraph ? { ok: true, grant: 'story-picked', label: data.pickedGraph, exists: true } : { canceled: true }
     },
     newGraph: async () => (data.graph ? { ok: true, grant: 'story-new', label: 'new-graph.yaml', exists: false } : { canceled: true }),
     recentGraphs: async () => data.graph?.recent ?? [],

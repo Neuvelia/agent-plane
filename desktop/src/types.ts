@@ -61,6 +61,12 @@ export type GraphGrantResult =
   | { ok: false; code: string; message: string }
   | { canceled: true }
 
+/** A graph file the person chose: the grant addresses it, the label is its file name. */
+export interface ChosenGraph {
+  grant: string
+  label: string
+}
+
 export interface RecentGraph {
   id: string
   label: string
@@ -85,7 +91,6 @@ declare global {
     agentplane: {
       request: <T = unknown>(method: 'GET' | 'POST' | 'PUT', path: string, body?: unknown) => Promise<ApiResponse<T>>
       subscribe: (runId: string, onEvent: (e: ApEvent) => void, onEnd: (reason: string) => void) => () => void
-      pickGraph: () => Promise<string | null>
       openGraph: () => Promise<GraphGrantResult>
       newGraph: () => Promise<GraphGrantResult>
       recentGraphs: () => Promise<RecentGraph[]>

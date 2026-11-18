@@ -3,7 +3,7 @@ const { app, BrowserWindow, dialog, ipcMain } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
-const { isAllowed } = require('./allowlist.cjs')
+const { isAllowed, isBodyAllowed } = require('./allowlist.cjs')
 const { createGraphHandlers } = require('./graphs.cjs')
 const { createRecents } = require('./recents.cjs')
 const { createRecordingSettings, serveFlags } = require('./recording.cjs')
@@ -125,6 +125,9 @@ ipcMain.handle('ap:request', (_e, method, requestPath, body) => {
   if (!isAllowed(method, requestPath)) {
     return { status: 400, body: { error: { code: 'bad_request', message: 'path not allowed' } } }
   }
+  if (!isBodyAllowed(method, requestPath, body)) {
+    return { status: 400, body: { error: { code: 'bad_request', message: 'body not allowed' } } }
+  }
   return request(method, requestPath, body)
 })
 
@@ -153,15 +156,6 @@ ipcMain.handle('ap:setRecordingSettings', (_e, input) => {
 })
 ipcMain.on('ap:subscribe', (e, subId, runId) => void stream(e.sender, subId, String(runId)))
 ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.controller.abort())
-ipcMain.handle('ap:pickGraph', async (e) => {
-  const win = BrowserWindow.fromWebContents(e.sender)
-  const result = await dialog.showOpenDialog(win, {
-    title: 'Choose a graph definition',
-    properties: ['openFile'],
-    filters: [{ name: 'Graph', extensions: ['yaml', 'yml'] }],
-  })
-  return result.canceled ? null : result.filePaths[0]
-})
 
 function createWindow() {
   const win = new BrowserWindow({
