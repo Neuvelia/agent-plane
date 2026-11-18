@@ -73,6 +73,7 @@ type cliDocument struct {
 	Events        *[]events.Event    `json:"events,omitempty"`
 	Isolation     *cliIsolation      `json:"workspace_isolation,omitempty"`
 	Runs          *[]store.Summary   `json:"runs,omitempty"`
+	Prune         *cliPrune          `json:"prune,omitempty"`
 	Truncated     bool               `json:"truncated,omitempty"`
 	Failure       *cliFailure        `json:"failure"`
 	Error         *cliError          `json:"error"`

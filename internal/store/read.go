@@ -152,6 +152,8 @@ func (s *Summary) observe(e events.Event) (terminal bool) {
 	}
 	if p, ok := e.Payload.(events.RunFinishedPayload); ok {
 		s.Status = p.Status
+		finishedAt := e.Timestamp
+		s.FinishedAt = &finishedAt
 		terminal = true
 	}
 	s.LastSequence = e.Sequence

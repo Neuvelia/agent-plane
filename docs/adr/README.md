@@ -41,14 +41,14 @@ Graph editor (ADR-0020 to ADR-0022 accepted, ADR-0023 accepted; plan `docs/super
 F2.8 Attempt Compare (proposed for F2.8b; owner decisions recorded 2026-11-15):
 [ADR-0026 - Attempt diff capture for Attempt Compare](0026-attempt-diff-capture.md).
 
-Onboarding (proposed): [ADR-0025 - Read-only capability report on the loopback API](0025-capability-report.md).
+Onboarding (accepted): [ADR-0025 - Read-only capability report on the loopback API](0025-capability-report.md).
 
 Phase 3:
 [ADR-0024 - Workspace isolation with Git worktrees and deterministic integration](0024-workspace-isolation-with-git-worktrees.md)
 (accepted; real-Codex sandbox spike passed; implemented by F3.1, with a real-Codex run recorded in
 `docs/validation/F3.1-real-codex-demo.md`).
 
-F3.2 durable run state (proposed):
+F3.2 durable run state (proposed; implemented, awaiting owner acceptance):
 [ADR-0027 - Durable run state on an append-only JSONL log](0027-durable-run-state.md).
 
 F3.4 cancellation and timeouts (proposed):
