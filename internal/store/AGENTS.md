@@ -82,7 +82,8 @@ the root policy.
   `snapshot_test.go`, `list_bench_test.go`. Retention selection, safety rules
   and failure handling: `prune_test.go`.
 - Opt-in history, CLI replay, killed runs, secret refusal and persistence
-  errors: `cmd/agentplane/store_test.go`.
+  errors: `cmd/agentplane/store_test.go`. Real `kill -9` across processes and
+  the run lock as seen by another process: `cmd/agentplane/crash_test.go`.
 - Served-run persistence, corrupt lists and storage failure delivery:
   `cmd/agentplane/serve_test.go`, `internal/api/server_test.go`.
 
