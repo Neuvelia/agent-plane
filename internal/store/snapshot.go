@@ -134,7 +134,7 @@ func (s Store) trustedSnapshot(runID string) (Summary, bool) {
 // readable log, the only kind a snapshot may stand in for.
 func snapshotWorthy(summary Summary) bool {
 	return terminalStatus(summary.Status) && !summary.Truncated && summary.Error == "" &&
-		summary.EventCount > 0 && summary.LastSequence > 0 && summary.GraphID != "" &&
+		summary.EventCount > 0 && summary.LastSequence > 0 && summary.GraphID != "" && summary.FinishedAt != nil &&
 		summary.MaxSchema <= events.SchemaVersion
 }
 

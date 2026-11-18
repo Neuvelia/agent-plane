@@ -37,19 +37,28 @@ func (s Store) List() ([]Summary, error) {
 	return out, nil
 }
 
-// listEntry summarizes one run. The snapshot is only an optimisation: whenever
-// it is not trusted the log decides, and a correct snapshot is written back
-// best effort. listed is false for a run that is still being created.
+// listEntry summarizes one run for List and for prune's classification. The snapshot is only an optimisation:
+// whenever it is not trusted the log decides, and a correct snapshot is written
+// back best effort. listed is false for a run that is still being created.
 func (s Store) listEntry(runID string) (summary Summary, listed bool) {
 	if summary, ok := s.trustedSnapshot(runID); ok {
 		return summary, true
 	}
+	summary, listed = s.summaryFromLog(runID)
+	if listed {
+		s.refreshSnapshot(runID, summary)
+	}
+	return summary, listed
+}
+
+// summaryFromLog parses the log. A run that cannot be read is reported as
+// corrupt (or unsupported) with the reason, never dropped.
+func (s Store) summaryFromLog(runID string) (summary Summary, listed bool) {
 	if s.parsed != nil {
 		s.parsed(runID)
 	}
 	record, err := s.Read(runID)
 	if err == nil {
-		s.refreshSnapshot(runID, record.Summary)
 		return record.Summary, true
 	}
 	if errors.Is(err, ErrRunStarting) {
