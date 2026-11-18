@@ -93,7 +93,7 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
       {view === 'compare' && compared && <AttemptCompare run={run} node={n} kind={kind} from={compared.from} to={compared.to} onChange={setPair} />}
       {view === 'attempts' &&
         (n.attempts.length === 0 || !shown ? (
-          <div className="mu">{t('node.noLoop')}</div>
+          n.check ? <CheckResultView check={n.check} /> : <div className="mu">{t('node.noLoop')}</div>
         ) : (
           <>
             {n.attempts.length > 1 && (

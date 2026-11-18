@@ -78,8 +78,8 @@ go build -o bin/agentplane ./cmd/agentplane
 
 ```text
 agentplane graph validate PATH [--json]
-agentplane run PATH [--input key=value]... [--redact-env NAME]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--watch | --json]
-agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N]
+agentplane run PATH [--input key=value]... [--redact-env NAME]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json]
+agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always]
 agentplane version
 ```
 

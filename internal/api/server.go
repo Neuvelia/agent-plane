@@ -468,7 +468,7 @@ func (s *Server) validate(w http.ResponseWriter, r *http.Request) {
 	}
 	def, err := yamlgraph.Parse(text)
 	if err != nil {
-		out["status"], out["parse_error"] = "invalid", err.Error()
+		out["status"], out["parse_error"] = "invalid", parseErrorMessage(err)
 		if line := edit.ParseErrorLine(err.Error()); line > 0 {
 			out["parse_line"] = line
 		}

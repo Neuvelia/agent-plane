@@ -17,6 +17,7 @@ import '@xyflow/react/dist/style.css'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button, Card, Pill, Tag } from '../ui/primitives'
+import { queryConnectTargets } from './connect'
 import type { DocState } from './doc'
 import { NODE_TYPES, freeSpot, makeRef, nodeSize, parseRef, placements, removalImpact, rowY, suggestId, type Point } from './layout'
 import { badgesOf, type Badge, type Badges, type FocusReq } from './issues'
@@ -273,17 +274,12 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
     async (from: string): Promise<Record<string, QueryResult>> => {
       if (!def) return {}
       const targets = Object.entries(def.nodes).flatMap(([id, n]) => Object.keys(n.inputs ?? {}).map((p) => makeRef(id, 'inputs', p)))
-      if (targets.length === 0) return {}
-      const r = await g.applyOps(targets.map((to) => ({ op: 'can_connect', from, to })), { quiet: true })
-      if (!r.ok) return {}
-      const out: Record<string, QueryResult> = {}
-      r.results.forEach((res) => {
-        const to = targets[res.index]
-        if (to && res.query) out[to] = res.query
-      })
-      return out
+      const a = await queryConnectTargets((ops) => g.applyOps(ops, { quiet: true }), from, targets)
+      if (a.ok) return a.targets
+      setNotice(t('editor.connectTargetsFailed', { message: a.message }))
+      return {}
     },
-    [def, g],
+    [def, g, t],
   )
 
   const onConnectStart: OnConnectStart = (_, p) => {
