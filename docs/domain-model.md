@@ -68,6 +68,15 @@ An append-oriented fact describing an observable execution transition.
 Events are ordered within a run by sequence number, starting at 1. The
 combination of run ID and sequence identifies an event.
 
+### Cancel cause
+
+A stop has a typed reason from a closed set: `interrupt`, `user_cancel`,
+`run_timeout`, `sibling_failed`, `node_timeout` (`run.CancelReason`). It is passed
+as `run.CancelCause` through `context.WithCancelCause` and read with
+`run.ReasonOf`; error text, exit codes and bare `context.Canceled` never yield
+one. `Result.Reason` and `NodeResult.Reason` carry it, and terminal events carry
+an optional `reason` (ADR-0028).
+
 ### CheckResult
 
 F1.5 version-1 contract returned by deterministic Gates and retained as a

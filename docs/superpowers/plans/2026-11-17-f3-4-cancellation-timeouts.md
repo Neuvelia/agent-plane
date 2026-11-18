@@ -462,10 +462,11 @@ is `node`; `process_terminated` requires node correlation and bounded integers
 timeout-failed terminal; new types and fields rejected below the new schema;
 payloads detached on clone.
 
-- [ ] **Schema number.** 13 (proposed; next free number confirmed at merge).
-  Check `origin/main` for the highest `SchemaVersion` (expected 12 from F2.8b);
-  amend the ADR and spec text in the same PR if it differs.
-- [ ] Failing tests first, then the types.
+- [x] **Schema number.** B5 uses schema 13 and adds `internal/store/testdata/schemas/v13.jsonl`.
+  Schema 12 is F2.8b's `attempt_diff` (#130, fixture `v12.jsonl`); the first draft of B5 took
+  12 and was renumbered to 13 on 2026-11-18 (`schemaCancelTimeout`, `SchemaVersion`, the
+  fixture name, the golden CLI documents and the desktop fixture). The spec and ADR-0028 already say 13.
+- [x] Failing tests first, then the types.
 - [ ] Verify `desktop/src/reducer.ts` ignores unknown types and tolerates the new
   optional fields; add a reducer test with `cancel_requested` and
   `process_terminated`.
