@@ -31,7 +31,17 @@ const (
 const (
 	StatusInterrupted = "interrupted"
 	StatusCorrupt     = "corrupt"
+	// StatusUnsupported marks a run written with a newer event schema than this
+	// build decodes; its files are never modified.
+	StatusUnsupported = "unsupported"
 )
+
+// UnsupportedSchemaError reports an event from a schema newer than this build.
+type UnsupportedSchemaError struct{ Version int }
+
+func (e *UnsupportedSchemaError) Error() string {
+	return fmt.Sprintf("unsupported event schema version %d (this build reads up to %d); upgrade agentplane to read this run", e.Version, events.SchemaVersion)
+}
 
 var runIDPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
@@ -98,6 +108,11 @@ type Summary struct {
 	Status       string    `json:"status"`
 	EventCount   int       `json:"event_count"`
 	Truncated    bool      `json:"truncated,omitempty"`
+	// LastSequence is the sequence of the last durable event; MinSchema and
+	// MaxSchema bound the event schema versions present in the log.
+	LastSequence uint64 `json:"last_sequence,omitempty"`
+	MinSchema    int    `json:"min_schema,omitempty"`
+	MaxSchema    int    `json:"max_schema,omitempty"`
 	// Error explains a run that cannot be read or was stopped; Status is
 	// "corrupt" for an unreadable log.
 	Error string `json:"error,omitempty"`
@@ -179,6 +194,9 @@ func (w *Writer) open(first events.Event) error {
 	if err := fs.MkdirAll(w.store.Dir); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
 	}
+	if err := w.store.ensureFormat(); err != nil {
+		return err
+	}
 	dir := filepath.Join(w.store.Dir, id)
 	if err := fs.Mkdir(dir); err != nil {
 		return fmt.Errorf("create run directory: %w", err)
@@ -230,12 +248,17 @@ func (s Store) Check() error {
 	if err := os.MkdirAll(s.Dir, dirMode); err != nil {
 		return fmt.Errorf("create store directory: %w", err)
 	}
+	if _, err := s.ReadFormat(); err != nil {
+		return err
+	}
 	probe, err := os.CreateTemp(s.Dir, ".probe-*")
 	if err != nil {
 		return fmt.Errorf("store directory is not writable: %w", err)
 	}
 	name := probe.Name()
-	probe.Close()
+	if err := probe.Close(); err != nil {
+		return fmt.Errorf("close store probe: %w", err)
+	}
 	return os.Remove(name)
 }
 
@@ -256,6 +279,11 @@ func (s Store) List() ([]Summary, error) {
 		record, err := s.Read(entry.Name())
 		if err != nil {
 			// Never drop a run silently: an unreadable one is listed as corrupt.
+			var unsupported *UnsupportedSchemaError
+			if errors.As(err, &unsupported) {
+				out = append(out, s.unsupportedSummary(entry.Name(), err))
+				continue
+			}
 			out = append(out, Summary{RunID: entry.Name(), Status: StatusCorrupt, Error: err.Error()})
 			continue
 		}
@@ -270,9 +298,11 @@ func (s Store) List() ([]Summary, error) {
 	return out, nil
 }
 
-// Read loads one run. A corrupt or incomplete final line is reported through
-// Summary.Truncated while earlier events stay readable; corruption anywhere
-// else is an error because later events could not be trusted to follow it.
+// Read loads one run. A final line without a newline is never an event; it is
+// reported through Summary.Truncated while earlier events stay readable.
+// Corruption anywhere else is an error because later events could not be
+// trusted to follow it, and an event from a newer schema is a typed
+// *UnsupportedSchemaError.
 func (s Store) Read(runID string) (Record, error) {
 	if !ValidRunID(runID) {
 		return Record{}, fmt.Errorf("invalid run ID %q", runID)
@@ -293,18 +323,28 @@ func (s Store) Read(runID string) (Record, error) {
 	finished := false
 	for {
 		line, readErr := reader.ReadBytes('\n')
-		complete := len(line) > 0 && line[len(line)-1] == '\n'
+		if readErr != nil && readErr != io.EOF {
+			return Record{}, fmt.Errorf("read event log: %w", readErr)
+		}
+		// Only a newline-terminated line is an event: a final line without one
+		// may still be growing or torn, whether or not it happens to parse.
+		if len(line) == 0 || line[len(line)-1] != '\n' {
+			if len(bytes.TrimSpace(line)) > 0 {
+				rec.Summary.Truncated = true
+			}
+			break
+		}
 		line = bytes.TrimSpace(line)
 		if len(line) > 0 {
 			var e events.Event
 			// Unmarshal also validates the event envelope and payload, including
 			// the schema version, so an unsupported record is an error here.
 			if err := json.Unmarshal(line, &e); err != nil || string(e.RunID) != runID || e.Sequence <= lastSequence {
-				if readErr == io.EOF && !complete {
-					rec.Summary.Truncated = true
-					break
-				}
-				if err == nil {
+				if err != nil {
+					if v := peekSchemaVersion(line); v > events.SchemaVersion {
+						return Record{}, fmt.Errorf("event log %s: %w", runID, &UnsupportedSchemaError{Version: v})
+					}
+				} else {
 					err = errors.New("event out of order or from another run")
 				}
 				return Record{}, fmt.Errorf("corrupt event log %s: %w", runID, err)
@@ -326,12 +366,13 @@ func (s Store) Read(runID string) (Record, error) {
 				rec.Summary.Status = p.Status
 				finished = true
 			}
-		}
-		if readErr != nil {
-			if readErr != io.EOF {
-				return Record{}, fmt.Errorf("read event log: %w", readErr)
+			rec.Summary.LastSequence = e.Sequence
+			if rec.Summary.MinSchema == 0 || e.SchemaVersion < rec.Summary.MinSchema {
+				rec.Summary.MinSchema = e.SchemaVersion
 			}
-			break
+			if e.SchemaVersion > rec.Summary.MaxSchema {
+				rec.Summary.MaxSchema = e.SchemaVersion
+			}
 		}
 	}
 	if len(rec.Events) == 0 {
@@ -340,4 +381,37 @@ func (s Store) Read(runID string) (Record, error) {
 	}
 	rec.Summary.EventCount = len(rec.Events)
 	return rec, nil
+}
+
+func peekSchemaVersion(line []byte) int {
+	var v struct {
+		Version int `json:"event_schema_version"`
+	}
+	if err := json.Unmarshal(line, &v); err != nil {
+		return 0
+	}
+	return v.Version
+}
+
+// unsupportedSummary lists a run this build cannot decode using only the
+// identifying fields of its first line, so it still sorts and displays.
+func (s Store) unsupportedSummary(runID string, cause error) Summary {
+	sum := Summary{RunID: runID, Status: StatusUnsupported, Error: cause.Error()}
+	f, err := os.Open(filepath.Join(s.Dir, runID, eventsFile))
+	if err != nil {
+		return sum
+	}
+	line, err := bufio.NewReader(io.LimitReader(f, 1<<16)).ReadBytes('\n')
+	if cerr := f.Close(); cerr != nil || (err != nil && !errors.Is(err, io.EOF)) {
+		return sum
+	}
+	var header struct {
+		GraphID      string    `json:"graph_id"`
+		GraphVersion string    `json:"graph_version"`
+		Timestamp    time.Time `json:"timestamp"`
+	}
+	if json.Unmarshal(line, &header) == nil {
+		sum.GraphID, sum.GraphVersion, sum.StartedAt = header.GraphID, header.GraphVersion, header.Timestamp
+	}
+	return sum
 }

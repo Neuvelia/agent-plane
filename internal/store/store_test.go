@@ -295,8 +295,10 @@ func TestReaderRejectsAnUnsupportedSchemaVersion(t *testing.T) {
 	path := filepath.Join(s.Dir, runA, "events.jsonl")
 	data, _ := os.ReadFile(path)
 	os.WriteFile(path, []byte(strings.Replace(string(data), fmt.Sprintf(`"event_schema_version":%d`, events.SchemaVersion), `"event_schema_version":99`, 1)), 0o600)
-	if _, err := s.Read(runA); err == nil {
-		t.Fatal("an event from a future schema was accepted")
+	_, err := s.Read(runA)
+	var unsupported *UnsupportedSchemaError
+	if !errors.As(err, &unsupported) || unsupported.Version != 99 {
+		t.Fatalf("an event from a future schema must be a typed error, got %v", err)
 	}
 }
 
