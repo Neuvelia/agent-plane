@@ -56,7 +56,7 @@ feature contract.
 | `F2.7-run-inspector-node-detail.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (partly delivered by F2.5/F2.8a); additive `graph_summary` fields recorded as a proposed ADR-0019 amendment |
 | `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0026 (proposed, owner decisions recorded) |
 | `F2.11-onboarding-capability-detection.md` | Implemented (Go and desktop); ADR-0025 (accepted); Linux native check recorded, macOS verification pending (#24) |
-| `F2.12-graph-templates.md` | Implemented (template files, Go tests and desktop picker); no ADR |
+| `F2.12-graph-templates.md` | Implemented (four pattern and four domain templates, Go tests and desktop picker); no ADR |
 
 ## Phase 3 - Local Production Ready
 

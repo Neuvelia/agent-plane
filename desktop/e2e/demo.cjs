@@ -432,7 +432,7 @@ async function startDemo(app, page) {
     assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
     assert.deepEqual(
       await page.$$eval('[data-testid^="picker-entry-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('picker-entry-', ''))),
-      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'],
+      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval', 'fix-issue', 'code-review', 'dependency-update', 'repo-audit'],
     )
     // Without Codex configured the agent entry says so; the report is the engine's, so this is Linux only.
     assert.match(await page.textContent('[data-testid="picker-entry-agent-scoped-approval"]'), /Needs Codex: Not configured\./)
