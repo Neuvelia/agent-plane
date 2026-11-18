@@ -9,7 +9,8 @@ state; it does not run a graph, decide a Gate verdict or isolate a workspace.
 
 | Concern | Start here |
 | --- | --- |
-| Controlled Git invocation, workspace root and HEAD checks | `snapshot.go`: `git`, `CanonicalWorkspace` |
+| Controlled Git invocation (shared with `internal/worktree`) | `run.go`: `Run`, `RunOptions`, `RunError` |
+| Workspace root and HEAD checks | `snapshot.go`: `git`, `CanonicalWorkspace` |
 | Index/working-file snapshots, ignored inventory and path confinement | `snapshot.go`: `snapshotAfter`, `ignoredInventory`, `ConfinedPath` |
 | Runtime-owned scope baseline including ignored files | `snapshot.go`: `Capture`, `Changed` |
 | Adapter metadata snapshot excluding ignored contents | `snapshot.go`: `SnapshotNow`, `SnapshotAfter`, `IgnoredInventory`, `ChangedSnapshots` |
@@ -19,11 +20,15 @@ state; it does not run a graph, decide a Gate verdict or isolate a workspace.
 ## Preserve these contracts
 
 - Require an absolute workspace that resolves to the exact root of an
-  initialized, non-bare Git worktree with a committed HEAD. `git()` calls
-  `/usr/bin/git` with structured arguments, a controlled environment,
+  initialized, non-bare Git worktree with a committed HEAD. `git()` delegates
+  to the exported `Run`, the only way this repository starts Git: it calls
+  the `git` found on PATH (`gitlocate.ResolveGit`, `ErrGitNotFound` when absent; relative results refused, macOS shim guarded) with structured arguments, a controlled environment (`Environment`),
   disabled optional locks/fsmonitor and no configured hooks or global/system
-  config. Each Git subprocess has a five-second context bound and a 16 MiB
-  stdout bound. File hashing reads workspace contents separately; these Git
+  config. By default each Git subprocess has a five-second context bound and a
+  16 MiB stdout bound (callers such as `internal/worktree` pass larger
+  timeouts through `RunOptions`); `Run` exposes only `Write` to the process so
+  `io.Copy` cannot bypass the stdout limit through `bytes.Buffer.ReadFrom`.
+  Errors are `*RunError` with a class and exit code, never Git's stderr. File hashing reads workspace contents separately; these Git
   subprocess limits are not a global bound on files, memory or inspection
   time. Do not emit subprocess stderr as an event; callers own redaction and
   size limits when they expose validated paths as evidence.

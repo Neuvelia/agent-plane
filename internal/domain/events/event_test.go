@@ -2,28 +2,11 @@ package events
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
-
-func TestIDsAreUniqueAndUUIDShaped(t *testing.T) {
-	a, err := NewRunID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	b, err := NewRunID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	node, err := NewNodeRunID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if a == b || string(a) == string(node) || len(a) != 36 || a[14] != '4' {
-		t.Fatalf("IDs: %q %q %q", a, b, node)
-	}
-}
 
 func TestEventJSONRoundTripsTypedPayload(t *testing.T) {
 	e := Event{SchemaVersion: SchemaVersion, Type: LogChunk, Timestamp: time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC), Sequence: 3, RunID: "run", GraphID: "graph", GraphVersion: "sha256-v0:test", NodeID: "node", NodeRunID: "node-run", Payload: LogChunkPayload{Stream: Stdout, Data: []byte{0, 255, 'x'}}}
@@ -31,7 +14,7 @@ func TestEventJSONRoundTripsTypedPayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), `"type":"log_chunk"`) || !strings.Contains(string(data), `"event_schema_version":10`) || strings.Contains(string(data), "attempt_id") {
+	if !strings.Contains(string(data), `"type":"log_chunk"`) || !strings.Contains(string(data), fmt.Sprintf(`"event_schema_version":%d`, SchemaVersion)) || strings.Contains(string(data), "attempt_id") {
 		t.Fatalf("JSON = %s", data)
 	}
 	var got Event

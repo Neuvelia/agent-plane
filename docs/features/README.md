@@ -62,6 +62,13 @@ feature contract.
 | --- | --- |
 | `F3.1-workspace-isolation.md` | Draft; ADR-0024 accepted (Codex spike passed); ready for an implementation plan |
 
+## Release engineering - drafts (not roadmap F-IDs)
+
+| Feature | Spec status |
+| --- | --- |
+| `REL1-release-engineering.md` | Draft; ADR-0027 (proposed); includes the `agentplane` -> `tarmind` rename prerequisite |
+| `REL2-public-roadmap-status.md` | Draft; ADR-0028 (proposed) |
+
 ## Later phases
 
 F2-F6 remain roadmap scope. Their IDs and priorities are tracked in

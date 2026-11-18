@@ -9,11 +9,9 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
 
@@ -58,26 +56,15 @@ func fail(_ string, message string, cause error) error {
 }
 
 func git(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	argv := append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"}, args...)
-	cmd := exec.CommandContext(ctx, "/usr/bin/git", argv...)
-	cmd.Dir = dir
-	cmd.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C"}
-	var b limitedBuffer
-	b.limit = 16 << 20
-	cmd.Stdout = &b
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			err = errors.Join(err, ctx.Err(), context.Cause(ctx))
+	result, err := Run(ctx, dir, RunOptions{}, args...)
+	if err != nil {
+		var runErr *RunError
+		if errors.As(err, &runErr) && runErr.Class == RunOutputLimit {
+			return nil, fail("git", "Git workspace listing exceeds 16 MiB", nil)
 		}
 		return nil, fail("git", "inspect initialized Git workspace with HEAD", err)
 	}
-	if b.overflow {
-		return nil, fail("git", "Git workspace listing exceeds 16 MiB", nil)
-	}
-	return b.Bytes(), nil
+	return result.Stdout, nil
 }
 func CanonicalWorkspace(ctx context.Context, workspace string) (string, error) {
 	if !filepath.IsAbs(workspace) {

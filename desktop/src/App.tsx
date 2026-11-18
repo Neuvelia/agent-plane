@@ -8,11 +8,12 @@ import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
+import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
 import { Welcome } from './welcome'
 
-type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; path?: string } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
+type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
 
 export default function App() {
   // Every screen that cannot reach the engine reports here; the global bar says so while any does.
@@ -49,7 +50,7 @@ function Shell({ lost }: { lost: boolean }) {
   // After navigating, move focus to the content so keyboard and screen-reader users start there.
   const mainRef = useRef<HTMLElement>(null)
   const first = useRef(true)
-  const routeKey = route.name === 'run' ? `run:${route.id}` : route.name === 'new' ? `new:${route.path ?? ''}` : route.name
+  const routeKey = route.name === 'run' ? `run:${route.id}` : route.name === 'new' ? `new:${route.graph?.grant ?? ''}` : route.name
   useEffect(() => {
     if (first.current) {
       first.current = false
@@ -102,7 +103,7 @@ function Shell({ lost }: { lost: boolean }) {
             <Dashboard
               onOpenRun={(id) => setRoute({ name: 'run', id })}
               onNewRun={() => setRoute({ name: 'new' })}
-              onOpenGraph={(path) => setRoute({ name: 'new', path })}
+              onOpenGraph={(graph) => setRoute({ name: 'new', graph })}
               onAllRuns={go('runs')}
             />
           )}
@@ -112,7 +113,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor' }, editor.create)} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
-          {route.name === 'new' && <RunConfig key={route.path ?? ''} initialPath={route.path} onStarted={(id) => setRoute({ name: 'run', id })} />}
+          {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
     </div>

@@ -14,7 +14,7 @@ territory.
 
 Verified facts that bound the decision:
 
-- The engine runs Git only at `/usr/bin/git` (`internal/gitstate`, `internal/runtime/workspace.go`).
+- The engine runs the Git found on `PATH` (`gitlocate.ResolveGit`; see the amendment at the end).
 - Codex detection already exists as `codex.Adapter.Detect` (ADR-0009, ADR-0010): an absolute binary,
   `--version`, `--help` and `exec --help` probes with an empty environment, 10 seconds each, Linux and macOS
   only.
@@ -38,14 +38,14 @@ Verified facts that bound the decision:
    `^[0-9A-Za-z.+-]{1,64}$`. The report never contains a path, an environment value, error text or raw
    probe output. Adding the CLI rows, the `agent_cli` kind, the `detected_no_adapter` status and the
    `found_on_path` reason is additive within version 1: clients already show an unknown status verbatim.
-3. **Detection is the engine's own.** Git: on Linux/Darwin only, stat `/usr/bin/git`, then one bounded
+3. **Detection is the engine's own.** Git: on Linux/Darwin only, resolve Git as the engine does (`gitlocate.ResolveGit`), stat it, then one bounded
    `--version` probe with structured argv, the environment `GIT_CONFIG_NOSYSTEM=1`,
    `GIT_CONFIG_GLOBAL=/dev/null`, `LC_ALL=C` and nothing else, stdin closed, the temp directory as working
    directory, output capped at 4 KiB, a 10 second timeout with termination. Adapters: the existing
    `Detect`, with the error kind (never its text) selecting the status. On other operating systems no probe
-   process starts and the Git and adapter rows are `unsupported_platform`. Git and adapters are never
-   looked up on `PATH` for execution. On Darwin,
-   `/usr/bin/git` is an `xcrun` shim that opens the "install developer tools" dialog when no developer
+   process starts and the Git and adapter rows are `unsupported_platform`. Adapters are never
+   looked up on `PATH` for execution; Git is resolved as the engine does (see the amendment at the end).
+   On Darwin, if the resolved path is `/usr/bin/git`, it is an `xcrun` shim that opens the "install developer tools" dialog when no developer
    tools exist, so it is executed only after a stat (no execution) finds a real Git under the Command Line
    Tools, the `xcode_select_link` target or the default Xcode location; otherwise the row is `missing`
    with `developer_tools_missing`. This is unit-tested with injected stat/readlink and still needs a
@@ -150,3 +150,21 @@ marker strings, single flight under concurrency (race detector), no store writes
 rules, 503 without a detector, the `serve` flag and the composed report. The agent-CLI rows are covered by
 an injected lookup (found, missing, Codex found but not configured, Windows) and by a real `exec.LookPath`
 over marker-writing scripts that asserts no marker appears.
+
+## Amendment: Git is resolved from PATH
+
+Status: accepted. The engine used to run Git only at the fixed path `/usr/bin/git`, which blocked Git
+evidence and workspace isolation on Windows and on systems with Git elsewhere. `gitlocate.ResolveGit` now
+uses `exec.LookPath("git")`. The trust boundary moves from a fixed path to the user's `PATH`:
+
+- A relative or current-directory result (`exec.ErrDot`, or any non-absolute path) is refused, so a
+  repository cannot plant a `git` that the engine then runs. The error says so.
+- The child process still gets a minimal fixed environment, `core.hooksPath=/dev/null` and
+  `core.fsmonitor=false`; `PATH` is never inherited by Git.
+- One guard (package `internal/gitlocate`) serves `gitstate`, `internal/runtime` and capability detection: on Darwin, a result equal to
+  the `/usr/bin/git` shim is executed only after a stat-only check finds developer tools
+  (`gitlocate.Locator.Check`). A Git elsewhere on `PATH` (for example Homebrew) is not guarded.
+- Detection reports the Git the engine would run. The row stays `unsupported_platform` outside Linux and
+  Darwin (unchanged by this amendment).
+- The Windows environment adds `SystemRoot`, `TEMP`, `TMP` and Git's own directory on `PATH`. `/dev/null`
+  config paths rely on Git for Windows mapping them to NUL; not verified on a Windows runner.

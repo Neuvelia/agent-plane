@@ -1,7 +1,9 @@
 package runtime
 
 import (
+	"agentplane/internal/adapter/system"
 	"agentplane/internal/adapter/yamlgraph"
+	"agentplane/internal/domain/run"
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,9 +15,9 @@ import (
 	"agentplane/internal/domain/graph"
 )
 
-type providerFunc func(context.Context, ApprovalRequest) (Decision, error)
+type providerFunc func(context.Context, run.ApprovalRequest) (run.Decision, error)
 
-func (f providerFunc) Decide(ctx context.Context, r ApprovalRequest) (Decision, error) {
+func (f providerFunc) Decide(ctx context.Context, r run.ApprovalRequest) (run.Decision, error) {
 	return f(ctx, r)
 }
 
@@ -29,7 +31,7 @@ func humanDef(extra map[string]graph.NodeDefinition) *graph.Definition {
 	return definition(nodes)
 }
 
-func humanEvents(result RunResult) (requested, decided []events.Event) {
+func humanEvents(result run.Result) (requested, decided []events.Event) {
 	for _, e := range result.Events {
 		switch e.Type {
 		case events.ApprovalRequested:
@@ -53,14 +55,14 @@ func TestHumanApprovePublishesDecisionAndRequestPrecedesDecision(t *testing.T) {
 	})
 	def.Edges = []graph.EdgeDefinition{{From: "gate.outputs.decision", To: "after.inputs.decision"}}
 	requestSeen := make(chan struct{})
-	provider := providerFunc(func(ctx context.Context, r ApprovalRequest) (Decision, error) {
+	provider := providerFunc(func(ctx context.Context, _ run.ApprovalRequest) (run.Decision, error) {
 		// The decision is withheld until a live consumer has received the
 		// request, proving the wait is observable before any decision exists.
 		select {
 		case <-requestSeen:
-			return Decision{Approve: true, Comment: "lgtm"}, nil
+			return run.Decision{Approve: true, Comment: "lgtm"}, nil
 		case <-ctx.Done():
-			return Decision{}, ctx.Err()
+			return run.Decision{}, ctx.Err()
 		}
 	})
 	ch := make(chan events.Event, 256)
@@ -84,10 +86,10 @@ func TestHumanApprovePublishesDecisionAndRequestPrecedesDecision(t *testing.T) {
 		}
 		return map[string]graph.Value{}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2, Decisions: provider, LiveEvents: ch})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2, Decisions: provider, LiveEvents: ch})
 	close(ch)
 	<-done
-	if err != nil || result.State != RunSucceeded || ran != 1 {
+	if err != nil || result.State != run.RunSucceeded || ran != 1 {
 		t.Fatalf("err=%v state=%s ran=%d", err, result.State, ran)
 	}
 	req, dec := humanEvents(result)
@@ -111,13 +113,13 @@ func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 		}
 		return map[string]graph.Value{}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
-		return Decision{Approve: false, Comment: "no"}, nil
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
+		return run.Decision{Approve: false, Comment: "no"}, nil
 	})})
-	if err != nil || result.State != RunFailed || result.Failure == nil || result.Failure.Kind != FailureRejected {
+	if err != nil || result.State != run.RunFailed || result.Failure == nil || result.Failure.Kind != run.FailureRejected {
 		t.Fatalf("err=%v result=%+v", err, result.Failure)
 	}
-	if got := nodeResult(t, result, "after").State; got != NodeSkipped {
+	if got := nodeResult(t, result, "after").State; got != run.NodeSkipped {
 		t.Fatalf("after=%s", got)
 	}
 	var codes []string
@@ -142,15 +144,15 @@ func TestHumanWaitSharesBatchWithIndependentNode(t *testing.T) {
 		}
 		return map[string]graph.Value{}, nil
 	})
-	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, MaxConcurrency: 2, Decisions: providerFunc(func(ctx context.Context, _ ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2, Decisions: providerFunc(func(ctx context.Context, _ run.ApprovalRequest) (run.Decision, error) {
 		select {
 		case <-siblingDone:
-			return Decision{Approve: true}, nil
+			return run.Decision{Approve: true}, nil
 		case <-ctx.Done():
-			return Decision{}, ctx.Err()
+			return run.Decision{}, ctx.Err()
 		}
 	})})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("err=%v state=%s (a sequential schedule would deadlock here)", err, result.State)
 	}
 }
@@ -158,17 +160,17 @@ func TestHumanWaitSharesBatchWithIndependentNode(t *testing.T) {
 func TestHumanCancellationWhileWaitingEndsRunWithoutDecisionEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	waiting := make(chan struct{})
-	provider := providerFunc(func(ctx context.Context, _ ApprovalRequest) (Decision, error) {
+	provider := providerFunc(func(ctx context.Context, _ run.ApprovalRequest) (run.Decision, error) {
 		close(waiting)
 		<-ctx.Done()
-		return Decision{}, ctx.Err()
+		return run.Decision{}, ctx.Err()
 	})
 	go func() { <-waiting; cancel() }()
-	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: provider})
-	if err != nil || result.State != RunCancelled {
+	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: provider})
+	if err != nil || result.State != run.RunCancelled {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
-	if got := nodeResult(t, result, "gate").State; got != NodeCancelled {
+	if got := nodeResult(t, result, "gate").State; got != run.NodeCancelled {
 		t.Fatalf("gate=%s", got)
 	}
 	req, dec := humanEvents(result)
@@ -178,18 +180,18 @@ func TestHumanCancellationWhileWaitingEndsRunWithoutDecisionEvent(t *testing.T) 
 }
 
 func TestHumanWithoutProviderFailsPreflightNamingNode(t *testing.T) {
-	_, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal})
-	var pre *PreflightError
+	_, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	var pre *run.PreflightError
 	if !errors.As(err, &pre) || len(pre.Diagnostics.Diagnostics) != 1 || pre.Diagnostics.Diagnostics[0].Location.NodeID != "gate" || pre.Diagnostics.Diagnostics[0].Code != "E_HUMAN_NO_PROVIDER" {
 		t.Fatalf("err=%v", err)
 	}
 }
 
 func TestHumanProviderFailureIsFatalAndRedactsNothingRaw(t *testing.T) {
-	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
-		return Decision{}, errors.New("secret-token leaked in provider error")
+	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
+		return run.Decision{}, errors.New("secret-token leaked in provider error")
 	})})
-	if err != nil || result.State != RunFailed {
+	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
 	for _, e := range result.Events {
@@ -204,10 +206,10 @@ func TestHumanPromptContextAndCommentAreRedactedAndBounded(t *testing.T) {
 	n := def.Nodes["gate"]
 	n.Config = map[string]any{"prompt": "token=SUPERSECRET " + strings.Repeat("p", 900)}
 	def.Nodes["gate"] = n
-	result, err := Run(context.Background(), def, nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{"SUPERSECRET"}, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
-		return Decision{Approve: true, Comment: "SUPERSECRET " + strings.Repeat("c", 5000)}, nil
+	result, err := Run(context.Background(), def, nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SUPERSECRET"}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
+		return run.Decision{Approve: true, Comment: "SUPERSECRET " + strings.Repeat("c", 5000)}, nil
 	})})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
 	req, dec := humanEvents(result)
@@ -262,7 +264,7 @@ func TestHumanRedactionHappensBeforeTruncation(t *testing.T) {
 	def.Nodes["gate"] = n
 	context1 := strings.Repeat("c", events.MaxApprovalContextValue-4) + secret // and in a context value
 	comment := strings.Repeat("m", events.MaxApprovalComment-4) + secret       // and in the comment
-	result, err := Run(context.Background(), def, nil, srcExecutor(context1), Options{GraphVersion: yamlgraph.Marshal, LogRedactions: []string{secret}, Decisions: providerFunc(func(_ context.Context, r ApprovalRequest) (Decision, error) {
+	result, err := Run(context.Background(), def, nil, srcExecutor(context1), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{secret}, Decisions: providerFunc(func(_ context.Context, r run.ApprovalRequest) (run.Decision, error) {
 		for _, c := range r.Context {
 			if strings.Contains(c.Value, "QZ") {
 				t.Errorf("provider saw a secret prefix in context: %q", c.Value[len(c.Value)-12:])
@@ -271,9 +273,9 @@ func TestHumanRedactionHappensBeforeTruncation(t *testing.T) {
 		if strings.Contains(r.Prompt, "QZ") {
 			t.Errorf("provider saw a secret prefix in the prompt")
 		}
-		return Decision{Approve: true, Comment: comment}, nil
+		return run.Decision{Approve: true, Comment: comment}, nil
 	})})
-	if err != nil || result.State != RunSucceeded {
+	if err != nil || result.State != run.RunSucceeded {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
 	for _, e := range result.Events {
@@ -288,13 +290,13 @@ func TestHumanRedactionHappensBeforeTruncation(t *testing.T) {
 }
 
 func TestHumanProviderFailureFailsNodeWithSafeCodeAndNoDecisionEvent(t *testing.T) {
-	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
-		return Decision{}, errors.New("boom")
+	result, err := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
+		return run.Decision{}, errors.New("boom")
 	})})
-	if err != nil || result.State != RunFailed {
+	if err != nil || result.State != run.RunFailed {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
-	if got := nodeResult(t, result, "gate").State; got != NodeFailed {
+	if got := nodeResult(t, result, "gate").State; got != run.NodeFailed {
 		t.Fatalf("gate=%s", got)
 	}
 	var codes []string
@@ -317,11 +319,11 @@ func TestHumanProviderIsAskedOncePerNodeRun(t *testing.T) {
 	for _, approve := range []bool{true, false} {
 		var calls int
 		var mu sync.Mutex
-		result, _ := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+		result, _ := Run(context.Background(), humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
 			mu.Lock()
 			calls++
 			mu.Unlock()
-			return Decision{Approve: approve}, nil
+			return run.Decision{Approve: approve}, nil
 		})})
 		_, dec := humanEvents(result)
 		if calls != 1 || len(dec) != 1 {
@@ -334,14 +336,14 @@ func TestHumanProviderIsAskedOncePerNodeRun(t *testing.T) {
 // the person acted on: it is recorded and the node ends cancelled.
 func TestHumanDecisionReturnedDuringCancellationIsRecorded(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Decisions: providerFunc(func(context.Context, ApprovalRequest) (Decision, error) {
+	result, err := Run(ctx, humanDef(nil), nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
 		cancel()
-		return Decision{Approve: true, Comment: "late"}, nil
+		return run.Decision{Approve: true, Comment: "late"}, nil
 	})})
-	if err != nil || result.State != RunCancelled {
+	if err != nil || result.State != run.RunCancelled {
 		t.Fatalf("err=%v state=%s", err, result.State)
 	}
-	if got := nodeResult(t, result, "gate").State; got != NodeCancelled {
+	if got := nodeResult(t, result, "gate").State; got != run.NodeCancelled {
 		t.Fatalf("gate=%s", got)
 	}
 	_, dec := humanEvents(result)

@@ -209,3 +209,22 @@ Adjustments to the plan, with reasons:
   external tests (`yamlgraph_test`); domain-only tests stay in `domain/graph`.
 
 Remaining baseline after stage 2 (`internal/archtest/baseline.txt`): 8 entries.
+
+## 11. Stage 3 progress
+
+- **3a (stack 3a/N):** `internal/domain/run` holds the run vocabulary.
+- **3b (stack 3b/N):** Clock and ID generation are ports. `internal/app/trace`
+  owns the event `Collector` (timestamps come from an injected `trace.Clock`,
+  `domain/events` no longer reads time or randomness); `internal/adapter/system`
+  provides `Clock` and `IDs`; `runtime.Options` requires `GraphVersion`, `Clock`
+  and `IDs`; `time.Since` calls in the engine now use the injected clock.
+  `domain/events` lost `crypto/rand` (baseline entry removed). `ClonePayload` is
+  exported from the domain and split into two small functions; `Collector.Append`
+  was split into `finalize`, `retain` and `enqueueLive`. Collector-dependent
+  tests moved to `app/trace`.
+- **3b-2 (next):** workspace port. `runtime/workspace.go` still runs `git` via
+  `os/exec` and `ExecutionObservation` still carries `gitstate.Baseline`; both
+  need a `WorkspaceObserver` port and a domain `Baseline` type (baseline entries
+  `runtime -> os/exec`, `runtime -> gitstate`).
+- **3c:** split `scheduler.go`, `invoke`, `Run`, `cycle`; remove the temporary
+  `nolint` markers.

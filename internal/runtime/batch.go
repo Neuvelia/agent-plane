@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"agentplane/internal/domain/run"
 	"context"
 	"sort"
 
@@ -12,7 +13,7 @@ import (
 type batchState struct {
 	attempts  map[string]events.AttemptID
 	numbers   map[string]int
-	feedbacks map[string]*CorrectionFeedback
+	feedbacks map[string]*run.CorrectionFeedback
 	baselines map[string]*gitstate.Baseline
 }
 
@@ -25,20 +26,20 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 		if ctx.Err() != nil {
 			break
 		}
-		if m.nodes[id].State == NodeReady {
-			m.transitionNode(id, NodeRunning)
+		if m.nodes[id].State == run.NodeReady {
+			m.transitionNode(id, run.NodeRunning)
 		}
 		if l := m.definition.Nodes[id].Loop; l != nil {
-			aid, e := events.NewAttemptID()
+			aid, e := m.attemptIDs.NewAttemptID()
 			if e != nil {
-				m.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
-				m.transitionNode(id, NodeFailed)
+				m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureScheduler, Err: e}
+				m.transitionNode(id, run.NodeFailed)
 				continue
 			}
 			if m.units[id] != nil {
 				if e := m.units.begin(id, aid); e != nil {
-					m.nodes[id].Failure = &Failure{NodeID: id, Kind: FailureScheduler, Err: e}
-					m.transitionNode(id, NodeFailed)
+					m.nodes[id].Failure = &run.Failure{NodeID: id, Kind: run.FailureScheduler, Err: e}
+					m.transitionNode(id, run.NodeFailed)
 					continue
 				}
 			}

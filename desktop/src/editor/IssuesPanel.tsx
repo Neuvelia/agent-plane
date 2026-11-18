@@ -11,7 +11,7 @@ import { filterIssues, issueCounts, parseIssue, toIssues, type Filter, type Issu
 
 /** The issues a panel shows for an analysis: one blocking issue when the text does not parse. */
 export function issuesOf(a: Analysis): Issue[] {
-  if (a.parseError) return [parseIssue(a.parseError, a.parseLine)]
+  if (a.parseError) return [parseIssue(a.parseError, a.parseLine, a.parseColumn)]
   return toIssues(a.diagnostics, a.definition)
 }
 
@@ -76,7 +76,7 @@ export function IssuesPanel({ analysis, onFocus, onRetry }: { analysis: Analysis
                   {i.suggestion && <span className="mu">{i.suggestion}</span>}
                   <span className="row" style={{ gap: 6 }}>
                     <Tag>{i.element || t('issues.graphLevel')}</Tag>
-                    {i.line !== undefined && i.line > 0 && <span className="mu mono">{t('issues.line', { line: i.line })}</span>}
+                    {i.line !== undefined && i.line > 0 && <span className="mu mono">{i.column ? t('issues.lineColumn', { line: i.line, column: i.column }) : t('issues.line', { line: i.line })}</span>}
                   </span>
                 </span>
               </button>
