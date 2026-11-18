@@ -61,8 +61,13 @@ opt-in, bounded and redacted `value_recorded` events (event schema 11,
 ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
 starts the sidecar with it; the edge inspector (E5b) is not implemented. The graph
 editor (F2.1, F2.4 Issues panel) and the F2.2 node inspector edit graph files through
-versioned operations (ADR-0020, ADR-0021); inspector fields come from
-descriptors owned by the validators (`internal/fields`). Read the
+versioned operations (ADR-0020, ADR-0021) served by `POST /graphs/open`, `/graphs/stat`,
+`/graphs/edit` and `PUT /graphs/save` on granted files (`desktop/src/editor`,
+`internal/adapter/yamlgraph/edit`); inspector fields come from
+descriptors owned by the validators (`internal/fields`). F2.11 adds the read-only
+capability report (`GET /capabilities`, `POST /capabilities/check`, ADR-0025) and the
+desktop welcome screen; F2.12 adds bundled graph templates and the template picker.
+Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 
 The Phase 0 objective was to prove graph/node/edge/run semantics without
@@ -151,10 +156,14 @@ Expected high-level layout:
 
 ```text
 cmd/agentplane/          CLI entrypoint
-internal/graph/          graph schema, parsing, validation, bindings
+internal/domain/         graph (schema, validation, bindings), events and run vocabulary
+internal/adapter/        YAML graph parsing and edit operations, system clock and IDs
+internal/app/            application services shared by the engine (trace collector)
+internal/archtest/       layer dependency rules enforced as a test
 internal/fields/         node configuration field descriptors for editors
 internal/runtime/        scheduler and execution state transitions
-internal/events/         event contracts and event emission
+internal/capability/     read-only capability report (Git, agent adapters, agent CLIs)
+internal/gitlocate/      resolution of the Git binary
 internal/agent/          provider-neutral Agent contract and adapters
 internal/shell/          Shell execution
 internal/gate/           deterministic checks
