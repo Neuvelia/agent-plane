@@ -24,6 +24,7 @@ durable contract.
 | `internal/shell` | Shell node process execution and configuration | `executor.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
 | `internal/gitlocate` | Resolution of the Git binary shared by the engine and the capability report | `gitlocate.go` |
+| `internal/proctree` | Neutral process-tree ownership: start a child in its own Unix process group, terminate by request, grace, force, verify (ADR-0028; Windows is an interim direct-process stub until F3.4a) | `proctree.go`, `proctree_unix.go`, `policy.go` |
 | `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
 | `internal/capability` | F2.11 read-only capability report: Git, agent adapters and agent CLIs, with bounded probes (ADR-0025) | `capability.go` |
 | `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (behind `runtime.WorkspaceManager`, composed by the CLI) | `preflight.go`, `worktree.go`, `integrate.go` |
