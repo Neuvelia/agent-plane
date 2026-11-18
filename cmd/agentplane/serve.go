@@ -107,7 +107,13 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	// Retention runs after the announcement the desktop waits for, so a large
 	// store never delays startup. The goroutine ends with serveCtx and is awaited.
 	pruned := make(chan error, 1)
-	go func() { pruned <- pruneOnServeStart(serveCtx, runStore, stderr) }()
+	go func() {
+		err := pruneOnServeStart(serveCtx, runStore, stderr)
+		if onRetentionApplied != nil {
+			onRetentionApplied()
+		}
+		pruned <- err
+	}()
 	serveErr := server.Serve(serveCtx, listener)
 	cancel()
 	pruneErr := <-pruned
@@ -223,6 +229,10 @@ func capabilityDetector(codexBin string) capability.Detector {
 // onServe lets tests reach the running server (for example its Hub) without
 // polling HTTP; it is nil in production.
 var onServe func(*api.Server)
+
+// onRetentionApplied lets tests wait for the start-up retention pass, which runs
+// in the background and is cancelled by a shutdown, without sleeping.
+var onRetentionApplied func()
 
 // serveExecutor mirrors `run` without an agent adapter: shell, gate and human
 // graphs are served; an agent node fails with the adapter's own error.
