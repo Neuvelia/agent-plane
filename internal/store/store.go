@@ -27,14 +27,19 @@ const (
 )
 
 // Status values reported for a stored run. A log without a terminal event is
-// "interrupted" for a store reader; a live server overlays "running" itself.
+// "running" while a writer holds its run lock and "interrupted" otherwise.
 const (
+	StatusRunning     = "running"
 	StatusInterrupted = "interrupted"
 	StatusCorrupt     = "corrupt"
 	// StatusUnsupported marks a run written with a newer event schema than this
 	// build decodes; its files are never modified.
 	StatusUnsupported = "unsupported"
 )
+
+// ErrRunStarting means a live writer has created the run but has not yet made
+// its first event durable; the run cannot be shown yet and is not corrupt.
+var ErrRunStarting = errors.New("run is starting: no durable event yet")
 
 // UnsupportedSchemaError reports an event from a schema newer than this build.
 type UnsupportedSchemaError struct{ Version int }
@@ -113,6 +118,9 @@ type Summary struct {
 	LastSequence uint64 `json:"last_sequence,omitempty"`
 	MinSchema    int    `json:"min_schema,omitempty"`
 	MaxSchema    int    `json:"max_schema,omitempty"`
+	// InterruptedAtSequence is the last durable sequence of a run that has no
+	// terminal event and no live writer.
+	InterruptedAtSequence uint64 `json:"interrupted_at_sequence,omitempty"`
 	// Error explains a run that cannot be read or was stopped; Status is
 	// "corrupt" for an unreadable log.
 	Error string `json:"error,omitempty"`
@@ -131,6 +139,7 @@ type Writer struct {
 	store Store
 	graph []byte
 	file  logFile
+	lock  *runLock
 	err   error
 }
 
@@ -158,14 +167,12 @@ func (w *Writer) Append(e events.Event) error {
 	}
 	if w.file == nil {
 		if err := w.open(e); err != nil {
-			w.err = err
-			return err
+			return w.fail(err)
 		}
 	}
 	line, err := json.Marshal(e)
 	if err != nil {
-		w.err = fmt.Errorf("encode event: %w", err)
-		return w.err
+		return w.fail(fmt.Errorf("encode event: %w", err))
 	}
 	line = append(line, '\n')
 	n, err := w.file.Write(line)
@@ -173,16 +180,24 @@ func (w *Writer) Append(e events.Event) error {
 		err = io.ErrShortWrite
 	}
 	if err != nil {
-		w.err = fmt.Errorf("write event log: %w", err)
-		return w.err
+		return w.fail(fmt.Errorf("write event log: %w", err))
 	}
 	if !events.IsProgress(e.Type) {
 		if err := w.file.Sync(); err != nil {
-			w.err = fmt.Errorf("sync event log: %w", err)
-			return w.err
+			return w.fail(fmt.Errorf("sync event log: %w", err))
 		}
 	}
 	return nil
+}
+
+// fail latches err and releases the run lock: a writer that can never append
+// again must not make its run look live.
+func (w *Writer) fail(err error) error {
+	w.err = err
+	if lerr := w.lock.release(); lerr != nil {
+		w.err = errors.Join(err, lerr)
+	}
+	return w.err
 }
 
 func (w *Writer) open(first events.Event) error {
@@ -201,6 +216,11 @@ func (w *Writer) open(first events.Event) error {
 	if err := fs.Mkdir(dir); err != nil {
 		return fmt.Errorf("create run directory: %w", err)
 	}
+	lock, err := acquireRunLock(filepath.Join(dir, lockFile))
+	if err != nil {
+		return fmt.Errorf("lock run %s: %w", id, err)
+	}
+	w.lock = lock
 	if err := fs.WriteFileSync(filepath.Join(dir, graphFile), w.graph); err != nil {
 		return fmt.Errorf("write graph snapshot: %w", err)
 	}
@@ -236,6 +256,9 @@ func (w *Writer) Close() error {
 		err = cerr
 	}
 	w.file = nil
+	if lerr := w.lock.release(); err == nil {
+		err = lerr
+	}
 	if w.err != nil {
 		return w.err
 	}
@@ -279,6 +302,9 @@ func (s Store) List() ([]Summary, error) {
 		record, err := s.Read(entry.Name())
 		if err != nil {
 			// Never drop a run silently: an unreadable one is listed as corrupt.
+			if errors.Is(err, ErrRunStarting) {
+				continue
+			}
 			var unsupported *UnsupportedSchemaError
 			if errors.As(err, &unsupported) {
 				out = append(out, s.unsupportedSummary(entry.Name(), err))
@@ -308,11 +334,23 @@ func (s Store) Read(runID string) (Record, error) {
 		return Record{}, fmt.Errorf("invalid run ID %q", runID)
 	}
 	dir := filepath.Join(s.Dir, runID)
+	// Probe the lock before reading the log: the writer releases it only after
+	// its final sync, so "not held" guarantees the log read below is complete.
+	live, err := runLockHeld(filepath.Join(dir, lockFile))
+	if err != nil && !errors.Is(err, ErrLockUnsupported) {
+		return Record{}, err
+	}
 	graph, err := os.ReadFile(filepath.Join(dir, graphFile))
+	if live && errors.Is(err, os.ErrNotExist) {
+		return Record{}, ErrRunStarting
+	}
 	if err != nil {
 		return Record{}, fmt.Errorf("read graph snapshot: %w", err)
 	}
 	f, err := os.Open(filepath.Join(dir, eventsFile))
+	if live && errors.Is(err, os.ErrNotExist) {
+		return Record{}, ErrRunStarting
+	}
 	if err != nil {
 		return Record{}, fmt.Errorf("read event log: %w", err)
 	}
@@ -329,7 +367,8 @@ func (s Store) Read(runID string) (Record, error) {
 		// Only a newline-terminated line is an event: a final line without one
 		// may still be growing or torn, whether or not it happens to parse.
 		if len(line) == 0 || line[len(line)-1] != '\n' {
-			if len(bytes.TrimSpace(line)) > 0 {
+			// A live writer's partial line is simply not written yet.
+			if !live && len(bytes.TrimSpace(line)) > 0 {
 				rec.Summary.Truncated = true
 			}
 			break
@@ -376,10 +415,20 @@ func (s Store) Read(runID string) (Record, error) {
 		}
 	}
 	if len(rec.Events) == 0 {
+		if live {
+			return Record{}, ErrRunStarting
+		}
 		// Nothing readable was ever recorded: not a run that can be shown.
 		return Record{}, fmt.Errorf("corrupt event log %s: no readable events", runID)
 	}
 	rec.Summary.EventCount = len(rec.Events)
+	if !finished {
+		if live {
+			rec.Summary.Status = StatusRunning
+		} else {
+			rec.Summary.InterruptedAtSequence = rec.Summary.LastSequence
+		}
+	}
 	return rec, nil
 }
 
