@@ -30,6 +30,10 @@ export interface RunSummary {
   status: string
   event_count: number
   truncated?: boolean
+  /** Last durable sequence of a run that has no terminal event and no live writer. */
+  interrupted_at_sequence?: number
+  /** Reason a run is listed as corrupt or unsupported. */
+  error?: string
 }
 
 export interface PendingApproval {
