@@ -1,0 +1,161 @@
+[
+ {
+  "event_schema_version": 11,
+  "type": "run_started",
+  "timestamp": "2026-11-17T07:41:06.483916101Z",
+  "sequence": 1,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "payload": {
+   "node_count": 2
+  }
+ },
+ {
+  "event_schema_version": 11,
+  "type": "node_ready",
+  "timestamp": "2026-11-17T07:41:06.483997167Z",
+  "sequence": 2,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "build",
+  "node_run_id": "eed79a06-ad40-4b4b-a837-4bfd70e4c0ee",
+  "payload": {}
+ },
+ {
+  "event_schema_version": 11,
+  "type": "node_started",
+  "timestamp": "2026-11-17T07:41:06.4840109Z",
+  "sequence": 3,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "build",
+  "node_run_id": "eed79a06-ad40-4b4b-a837-4bfd70e4c0ee",
+  "payload": {}
+ },
+ {
+  "event_schema_version": 11,
+  "type": "log_chunk",
+  "timestamp": "2026-11-17T07:41:06.485158816Z",
+  "sequence": 4,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "build",
+  "node_run_id": "eed79a06-ad40-4b4b-a837-4bfd70e4c0ee",
+  "payload": {
+   "stream": "stdout",
+   "data": "eyJyZWFkeSI6ZmFsc2V9Cg=="
+  }
+ },
+ {
+  "event_schema_version": 11,
+  "type": "node_finished",
+  "timestamp": "2026-11-17T07:41:06.485586343Z",
+  "sequence": 5,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "build",
+  "node_run_id": "eed79a06-ad40-4b4b-a837-4bfd70e4c0ee",
+  "payload": {
+   "status": "succeeded",
+   "duration_ms": 1
+  }
+ },
+ {
+  "event_schema_version": 11,
+  "type": "node_ready",
+  "timestamp": "2026-11-17T07:41:06.485639197Z",
+  "sequence": 6,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "accept",
+  "node_run_id": "007c4746-d0f0-4dc2-a87c-979a161b35ac",
+  "payload": {}
+ },
+ {
+  "event_schema_version": 11,
+  "type": "node_started",
+  "timestamp": "2026-11-17T07:41:06.48565809Z",
+  "sequence": 7,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "accept",
+  "node_run_id": "007c4746-d0f0-4dc2-a87c-979a161b35ac",
+  "payload": {}
+ },
+ {
+  "event_schema_version": 11,
+  "type": "gate_check",
+  "timestamp": "2026-11-17T07:41:06.485948909Z",
+  "sequence": 8,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "accept",
+  "node_run_id": "007c4746-d0f0-4dc2-a87c-979a161b35ac",
+  "payload": {
+   "check_result_version": 1,
+   "scope": {
+    "checked_inputs": [
+     "candidate"
+    ]
+   },
+   "duration_ns": 3492,
+   "check_id": "build-ready",
+   "kind": "json_predicate",
+   "verdict": "red",
+   "reason": "predicate mismatch",
+   "evidence": [
+    {
+     "kind": "json_predicate",
+     "source": "json_predicate"
+    }
+   ]
+  }
+ },
+ {
+  "event_schema_version": 11,
+  "type": "node_finished",
+  "timestamp": "2026-11-17T07:41:06.485968275Z",
+  "sequence": 9,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "node_id": "accept",
+  "node_run_id": "007c4746-d0f0-4dc2-a87c-979a161b35ac",
+  "payload": {
+   "status": "failed",
+   "failure_kind": "executor",
+   "diagnostic_codes": [
+    "E_GATE_RED"
+   ],
+   "duration_ms": 0
+  }
+ },
+ {
+  "event_schema_version": 11,
+  "type": "run_finished",
+  "timestamp": "2026-11-17T07:41:06.48598052Z",
+  "sequence": 10,
+  "run_id": "4b59b600-9ef4-4077-9d8d-e208bdd99807",
+  "graph_id": "standalone-gate-red",
+  "graph_version": "sha256-v0:0fe81292205820ba87efe8e2677191d3d728d0a8661c4b53fadef58a20df9ae4",
+  "payload": {
+   "status": "failed",
+   "duration_ms": 2,
+   "node_counts": {
+    "succeeded": 1,
+    "failed": 1,
+    "skipped": 0,
+    "cancelled": 0
+   },
+   "failure_kind": "executor"
+  }
+ }
+]

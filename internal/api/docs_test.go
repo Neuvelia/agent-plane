@@ -3,16 +3,20 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 const pairGraph = `schema_version: 0
@@ -364,6 +368,58 @@ func TestEditAppliesOperationsWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestEditGraphDataOperationsRoundTrip(t *testing.T) {
+	_, ts, dir := docServer(t)
+	g := grantFor(t, ts, writeGraph(t, dir, "pair.yaml", pairGraph), "open")
+	_, doc := call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g})
+	hash := doc["hash"].(string)
+	send := func(hash, ops string) (int, map[string]any) {
+		return call(t, ts, "POST", "/graphs/edit", map[string]any{"grant": g, "base_hash": hash, "ops_version": 1, "ops": json.RawMessage(ops)})
+	}
+
+	status, out := send(hash, `[{"op":"add_graph_input","id":"words","type":"string","required":true},{"op":"add_graph_input_binding","from":"inputs.words","to":"b.inputs.text"},{"op":"set_graph_output","id":"shout","from":"a.outputs.stdout"}]`)
+	if status != 200 {
+		t.Fatalf("edit: %d %v", status, out)
+	}
+	text := out["text"].(string)
+	for _, want := range []string{"  words: {type: string, required: true}", "graph_input_bindings:", "    to: b.inputs.text", "  shout:", "    from: a.outputs.stdout"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("edited text lacks %q:\n%s", want, text)
+		}
+	}
+	def := out["definition"].(map[string]any)
+	if def["inputs"] == nil || def["graph_input_bindings"] == nil || def["outputs"] == nil {
+		t.Errorf("definition lacks the new data: %v", def)
+	}
+	next := out["hash"].(string)
+
+	// list_connections is a query: it answers and changes nothing.
+	status, out = send(next, `[{"op":"list_connections","to":"b.inputs.text"}]`)
+	if status != 200 || out["hash"] != next {
+		t.Fatalf("query: %d %v", status, out)
+	}
+	query := out["results"].([]any)[0].(map[string]any)["query"].(map[string]any)
+	options := query["options"].([]any)
+	first := options[0].(map[string]any)
+	if query["ok"] != true || first["ref"] != "inputs.words" || first["ok"] != false || first["code"] != "E_INPUT_MULTIPLE_PROVIDERS" || first["message"] == "" {
+		t.Errorf("options: %v", options)
+	}
+
+	// A refused operation is the F2.1 error shape and keeps the held text.
+	status, out = send(next, `[{"op":"remove_graph_input_binding","from":"inputs.words","to":"a.inputs.zzz"}]`)
+	detail, _ := out["detail"].(map[string]any)
+	if status != 422 || errCode(out) != "E_EDIT_BINDING_NOT_FOUND" || detail["op_index"] != float64(0) {
+		t.Errorf("refusal: %d %v", status, out)
+	}
+	// A stale base hash is handled as before.
+	if status, out = send(hash, `[]`); status != 409 || errCode(out) != "stale_base" {
+		t.Errorf("stale base: %d %v", status, out)
+	}
+	if status, out = send(next, `[{"op":"list_connections"}]`); status != 422 || errCode(out) != "E_EDIT_INVALID_OP" {
+		t.Errorf("list_connections without from or to: %d %v", status, out)
+	}
+}
+
 func TestEditCanStartFromTextTheClientTyped(t *testing.T) {
 	_, ts, dir := docServer(t)
 	g := grantFor(t, ts, writeGraph(t, dir, "pair.yaml", pairGraph), "open")
@@ -428,7 +484,7 @@ func TestSaveCreatesThenReplacesWithConflictDetection(t *testing.T) {
 	if status != 200 || out["hash"] != hashOf([]byte(pairGraph)) {
 		t.Fatalf("create: %d %v", status, out)
 	}
-	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o644 {
+	if info, err := os.Stat(path); err != nil || (testenv.HasUnixPermissions() && info.Mode().Perm() != 0o644) {
 		t.Errorf("a new graph file is 0644, got %v %v", info, err)
 	}
 	if _, out := call(t, ts, "POST", "/graphs/stat", map[string]string{"grant": g}); out["exists"] != true || out["hash"] != hashOf([]byte(pairGraph)) {
@@ -462,6 +518,7 @@ func TestSaveCreatesThenReplacesWithConflictDetection(t *testing.T) {
 }
 
 func TestSavePreservesTheFileMode(t *testing.T) {
+	testenv.RequireUnixPermissions(t)
 	_, ts, dir := docServer(t)
 	path := writeGraph(t, dir, "x.yaml", pairGraph)
 	if err := os.Chmod(path, 0o600); err != nil {
@@ -633,4 +690,47 @@ func TestRevokedGrantsStopWorkingAndFreeASlot(t *testing.T) {
 		}
 	}
 	grantFor(t, ts, p, "open") // the slot freed by the revoke is usable
+}
+
+func TestParseErrorMessageIsValidUTF8(t *testing.T) {
+	_, ts, dir := docServer(t)
+	text := "schema_version: 0\nid: g\ninputs: żółćżółćżółć\n"
+	path := writeGraph(t, dir, "utf8.yaml", text)
+	g := grantFor(t, ts, path, "open")
+
+	// The validate/open checks below passed before the fix (JSON encoding replaces invalid bytes); only this direct assertion proves it.
+	if got := parseErrorMessage(errors.New("cannot unmarshal into \xc5 value")); !utf8.ValidString(got) || !strings.Contains(got, "\uFFFD") {
+		t.Errorf("parseErrorMessage kept invalid UTF-8: %q", got)
+	}
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": text})
+	if msg, _ := out["parse_error"].(string); !utf8.ValidString(msg) || msg == "" {
+		t.Errorf("validate: parse_error %q", out["parse_error"])
+	}
+	_, out = call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g})
+	if msg, _ := out["parse_error"].(string); !utf8.ValidString(msg) || msg == "" {
+		t.Errorf("open: parse_error %q", out["parse_error"])
+	}
+}
+
+// graphValidateParseColumnFixture is the desktop story recording; it is engine
+// output, so this test fails when the file drifts from what the API returns.
+const graphValidateParseColumnFixture = "../../desktop/test/fixtures/graph-validate-parse-column.json"
+
+func TestParseColumnFixtureMatchesEngineOutput(t *testing.T) {
+	_, ts, _ := docServer(t)
+	text := "schema_version: 0\nid: g\nnodes:\n  a:\n    type: shell\n    colour: red\n"
+	_, out := call(t, ts, "POST", "/graphs/validate", map[string]any{"text": text})
+	raw, err := os.ReadFile(graphValidateParseColumnFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture map[string]any
+	if err := json.Unmarshal(raw, &fixture); err != nil {
+		t.Fatal(err)
+	}
+	for _, k := range []string{"status", "parse_error", "parse_line", "parse_column", "diagnostics", "readonly_canvas", "readonly_reasons"} {
+		if !reflect.DeepEqual(fixture[k], out[k]) {
+			t.Errorf("fixture %s = %v, engine returns %v (re-record with desktop/scripts/record-graph-fixtures.cjs)", k, fixture[k], out[k])
+		}
+	}
 }
