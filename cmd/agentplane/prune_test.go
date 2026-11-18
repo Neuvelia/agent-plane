@@ -142,9 +142,15 @@ func TestServeStartPrunesOnlyWhenRetentionIsConfigured(t *testing.T) {
 	configured, plain := t.TempDir(), t.TempDir()
 	oldConfigured, oldPlain := finishedStoredRun(t, configured, 1, 90), finishedStoredRun(t, plain, 1, 90)
 	configureRetention(t, configured, store.Retention{MaxAgeDays: 30})
-	for _, served := range []*servedAPI{startServe(t, "--store-dir", configured), startServe(t, "--store-dir", plain)} {
-		// Retention runs after the announcement; serve waits for it before it
-		// exits, so a clean shutdown is the signal that it has finished.
+	for _, dir := range []string{configured, plain} {
+		// Retention runs in the background after the announcement and a shutdown
+		// cancels it, so wait for the pass to finish before stopping the server.
+		applied := make(chan struct{}, 1)
+		previous := onRetentionApplied
+		onRetentionApplied = func() { applied <- struct{}{} }
+		t.Cleanup(func() { onRetentionApplied = previous })
+		served := startServe(t, "--store-dir", dir)
+		<-applied
 		served.closeStdin()
 		if code := <-served.exit; code != exitOK {
 			t.Fatalf("serve exit %d", code)
