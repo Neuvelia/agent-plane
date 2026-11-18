@@ -52,6 +52,8 @@ feature contract.
 | `F2.3-edge-data-mapping-editor.md` | Accepted for implementation; E6 and E5a.1 (engine operations) implemented; E5a.2-E5a.3 and E5b.1-E5b.2 specified, not started; ADR-0020, ADR-0023 (accepted) |
 | `F2.3-E6-recorded-run-values.md` | Implemented (engine slice E6 and desktop switch, opt-in); ADR-0023 (accepted) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
+| `F2.6-run-inspector-overview.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (overview largely delivered by F2.5/F2.5a/F2.9); no ADR |
+| `F2.7-run-inspector-node-detail.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (partly delivered by F2.5/F2.8a); additive `graph_summary` fields recorded as a proposed ADR-0019 amendment |
 | `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b needs ADR-0026 (proposed, owner decisions recorded) |
 | `F2.11-onboarding-capability-detection.md` | Go side implemented; ADR-0025 (proposed); desktop pending |
 | `F2.12-graph-templates.md` | Templates and Go tests implemented; no ADR; desktop picker pending |
