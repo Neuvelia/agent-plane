@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -140,12 +142,47 @@ func TestServeStartPrunesOnlyWhenRetentionIsConfigured(t *testing.T) {
 	configured, plain := t.TempDir(), t.TempDir()
 	oldConfigured, oldPlain := finishedStoredRun(t, configured, 1, 90), finishedStoredRun(t, plain, 1, 90)
 	configureRetention(t, configured, store.Retention{MaxAgeDays: 30})
-	startServe(t, "--store-dir", configured)
-	startServe(t, "--store-dir", plain)
+	for _, served := range []*servedAPI{startServe(t, "--store-dir", configured), startServe(t, "--store-dir", plain)} {
+		// Retention runs after the announcement; serve waits for it before it
+		// exits, so a clean shutdown is the signal that it has finished.
+		served.closeStdin()
+		if code := <-served.exit; code != exitOK {
+			t.Fatalf("serve exit %d", code)
+		}
+	}
 	if runOnDisk(configured, oldConfigured) {
 		t.Fatal("serve must apply the configured retention at start")
 	}
 	if !runOnDisk(plain, oldPlain) {
 		t.Fatal("serve must not prune a store that configures no retention")
+	}
+}
+
+func TestServeStartRetentionReportsToStderrAndNeverFailsServe(t *testing.T) {
+	var stderr bytes.Buffer
+	dir := t.TempDir()
+	old := finishedStoredRun(t, dir, 1, 90)
+	configureRetention(t, dir, store.Retention{MaxAgeDays: 30})
+	if err := pruneOnServeStart(context.Background(), store.Store{Dir: dir}, &stderr); err != nil || !strings.Contains(stderr.String(), "retention removed 1 run(s)") || runOnDisk(dir, old) {
+		t.Fatalf("err=%v stderr=%q", err, stderr.String())
+	}
+
+	// an unreadable store.json is a warning, not silence and not a failure
+	stderr.Reset()
+	bad := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bad, "store.json"), []byte(`{"store_format":1,"retention":{"max_runs":-1}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := pruneOnServeStart(context.Background(), store.Store{Dir: bad}, &stderr); err != nil || !strings.Contains(stderr.String(), "warning: retention could not be planned") {
+		t.Fatalf("err=%v stderr=%q", err, stderr.String())
+	}
+
+	// a server shutting down is not a retention failure
+	stderr.Reset()
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	configureRetention(t, dir, store.Retention{MaxAgeDays: 30})
+	if err := pruneOnServeStart(cancelled, store.Store{Dir: dir}, &stderr); err != nil || stderr.Len() != 0 {
+		t.Fatalf("err=%v stderr=%q", err, stderr.String())
 	}
 }

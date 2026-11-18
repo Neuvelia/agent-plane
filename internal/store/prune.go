@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -46,16 +47,17 @@ type PruneResult struct {
 
 // prunable is what selection needs to know about one run.
 type prunable struct {
-	runID     string
-	startedAt time.Time
-	deletable bool
-	bytes     int64
+	runID      string
+	startedAt  time.Time
+	finishedAt time.Time // when the run ended; its age is measured from here
+	deletable  bool
+	bytes      int64
 }
 
 // PlanPrune decides which runs the store's retention removes at now. A store
 // with no retention, or only zero limits, plans nothing. A store written by a
 // newer build is refused (ReadFormat), as it is read-only here.
-func (s Store) PlanPrune(now time.Time) (PrunePlan, error) {
+func (s Store) PlanPrune(ctx context.Context, now time.Time) (PrunePlan, error) {
 	format, err := s.ReadFormat()
 	if err != nil {
 		return PrunePlan{}, err
@@ -64,7 +66,7 @@ func (s Store) PlanPrune(now time.Time) (PrunePlan, error) {
 	if limits == nil || (limits.MaxRuns == 0 && limits.MaxAgeDays == 0 && limits.MaxTotalBytes == 0) {
 		return PrunePlan{}, nil
 	}
-	runs, err := s.pruneInventory(limits.MaxTotalBytes > 0)
+	runs, err := s.pruneInventory(ctx, limits.MaxTotalBytes > 0)
 	if err != nil {
 		return PrunePlan{}, err
 	}
@@ -83,7 +85,7 @@ func (s Store) PlanPrune(now time.Time) (PrunePlan, error) {
 // first. Only real directories named like a run ID that hold an events.jsonl
 // count: a symlink or a foreign directory is never read, counted or deleted.
 // A run still being created is skipped. measure adds each run's size.
-func (s Store) pruneInventory(measure bool) ([]prunable, error) {
+func (s Store) pruneInventory(ctx context.Context, measure bool) ([]prunable, error) {
 	entries, err := os.ReadDir(s.Dir)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -93,6 +95,9 @@ func (s Store) pruneInventory(measure bool) ([]prunable, error) {
 	}
 	var runs []prunable
 	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if !entry.IsDir() || !ValidRunID(entry.Name()) {
 			continue
 		}
@@ -127,7 +132,10 @@ func (s Store) inspectForPrune(runID string, measure bool) (run prunable, ok boo
 	if !listed {
 		return prunable{}, false, nil
 	}
-	run = prunable{runID: runID, startedAt: summary.StartedAt, deletable: terminalStatus(summary.Status) && summary.Error == ""}
+	run = prunable{runID: runID, startedAt: summary.StartedAt, finishedAt: summary.StartedAt, deletable: terminalStatus(summary.Status) && summary.Error == ""}
+	if summary.FinishedAt != nil {
+		run.finishedAt = *summary.FinishedAt
+	}
 	if measure {
 		if run.bytes, err = directoryBytes(dir); err != nil {
 			return prunable{}, false, fmt.Errorf("measure run %s: %w", runID, err)
@@ -181,10 +189,11 @@ func selectForPrune(runs []prunable, limits Retention, now time.Time) []string {
 	return ids
 }
 
-// markExpired marks every deletable run that started before cutoff.
+// markExpired marks every deletable run that finished before cutoff. Age counts
+// from the end of the run: a run that took days is not expired the moment it ends.
 func markExpired(runs []prunable, cutoff time.Time, marked map[string]bool) {
 	for _, r := range runs {
-		if r.deletable && r.startedAt.Before(cutoff) {
+		if r.deletable && r.finishedAt.Before(cutoff) {
 			marked[r.runID] = true
 		}
 	}
@@ -228,11 +237,16 @@ func markOverBytes(runs []prunable, limit int64, marked map[string]bool) {
 // Prune removes the planned runs. Each is locked first: a held lock means a
 // writer owns it, so it is skipped. A deletion that fails (a Windows sharing
 // violation, a permission error) is recorded and the rest continue. The error
-// is nil only when nothing failed.
-func (s Store) Prune(plan PrunePlan) (PruneResult, error) {
+// is nil only when nothing failed. A cancelled ctx stops before the next run and
+// is part of the error.
+func (s Store) Prune(ctx context.Context, plan PrunePlan) (PruneResult, error) {
 	var result PruneResult
 	var failures []error
 	for _, candidate := range plan.Remove {
+		if err := ctx.Err(); err != nil {
+			failures = append(failures, err)
+			break
+		}
 		err := s.removeRun(candidate.RunID)
 		switch {
 		case err == nil:

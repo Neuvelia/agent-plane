@@ -55,7 +55,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return runsCommand(args[1], args[2:], stdout, stderr)
 	}
 	if len(args) >= 2 && args[0] == "runs" && args[1] == "prune" {
-		return runsPruneCommand(args[2:], stdout, stderr)
+		return runsPruneCommand(ctx, args[2:], stdout, stderr)
 	}
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
