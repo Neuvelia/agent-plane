@@ -20,8 +20,7 @@ derives. No new event type, no event schema change.
 trace, CLI, API and desktop reducer.
 
 **Spec:** `docs/features/F3.2-durable-run-state.md` (PR #108).
-**ADR:** `docs/adr/00XX-durable-run-state.md` (proposed; number is the next free
-at merge, assigned with `scripts/new-adr.sh` conventions in Task 9).
+**ADR:** `docs/adr/0027-durable-run-state.md` (proposed; number assigned by the owner).
 
 Tarmind (in code today: agentplane) keeps this feature local-first: no
 database, no service, no network.
@@ -537,9 +536,8 @@ reported, not retried. A Unix fault-seam test covers the same logic.
 
 ### Task 9: Docs, ADR number and closure
 
-**Files:** Rename `docs/adr/00XX-durable-run-state.md` to the next free number
-at merge (currently `0027`, but follow `docs/adr/README.md` at merge time; F3.4
-and F3.8/F3.9 also hold `00XX` ADRs), update `docs/features/F3.2-durable-run-state.md`,
+**Files:** The ADR is already `docs/adr/0027-durable-run-state.md` (owner-assigned;
+F3.4 is 0028, F3.8/F3.9 is 0029); update `docs/features/F3.2-durable-run-state.md`,
 `docs/features/README.md`, `docs/adr/README.md`, `internal/store/AGENTS.md`,
 `docs/domain-model.md` (interrupted is a derived read state; state wording),
 `docs/architecture.md` (replace the "future durable event store" sentence and the
@@ -639,8 +637,8 @@ nothing. Never follows symlinks; never touches Git worktrees or refs.
 - **F3.4** (`claude/f3-4-plan`): next free event schema after 12, additive; its
   "needs the durable store" criteria consume F3.2's persist-before-act boundary
   and `interrupted` derivation. No code overlap; F3.4 should land after T1-T4.
-- **F3.8/F3.9** (`claude/f3-8-f3-9-plan`): `00XX` ADR collision only; resolved by
-  renaming at merge.
+- **F3.8/F3.9** (`claude/f3-8-f3-9-plan`): ADR numbers are assigned (0027, 0028, 0029),
+  so no ADR collision remains.
 - Merge order. Decided 2026-11-17 (lead, delegated by the product owner); the team
   may revisit: F3.1 stack -> F2.8b -> F3.2 -> F3.4 T1-T9 -> F3.8/F3.9 -> F3.4
   T10-T13. Event schemas (proposed, confirmed against `events.SchemaVersion` at
