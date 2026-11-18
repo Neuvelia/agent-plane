@@ -16,6 +16,7 @@ import (
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
+	"agentplane/internal/testenv"
 )
 
 const pairGraph = `schema_version: 0
@@ -483,7 +484,7 @@ func TestSaveCreatesThenReplacesWithConflictDetection(t *testing.T) {
 	if status != 200 || out["hash"] != hashOf([]byte(pairGraph)) {
 		t.Fatalf("create: %d %v", status, out)
 	}
-	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o644 {
+	if info, err := os.Stat(path); err != nil || (testenv.HasUnixPermissions() && info.Mode().Perm() != 0o644) {
 		t.Errorf("a new graph file is 0644, got %v %v", info, err)
 	}
 	if _, out := call(t, ts, "POST", "/graphs/stat", map[string]string{"grant": g}); out["exists"] != true || out["hash"] != hashOf([]byte(pairGraph)) {
@@ -517,6 +518,7 @@ func TestSaveCreatesThenReplacesWithConflictDetection(t *testing.T) {
 }
 
 func TestSavePreservesTheFileMode(t *testing.T) {
+	testenv.RequireUnixPermissions(t)
 	_, ts, dir := docServer(t)
 	path := writeGraph(t, dir, "x.yaml", pairGraph)
 	if err := os.Chmod(path, 0o600); err != nil {
