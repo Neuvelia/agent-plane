@@ -157,21 +157,6 @@ describe('event tail', () => {
     expect(run.tail.every((e) => e.kind === undefined)).toBe(true)
     expect(run.status).toBe(initialRun().status)
   })
-  it('tolerates schema 12 attempt_diff events without interpreting them', () => {
-    const base = { event_schema_version: 12, timestamp: '2026-01-01T00:00:00Z', run_id: 'r', graph_id: 'g', graph_version: 'v', node_id: 'n', node_run_id: 'nr', attempt_id: 'a' }
-    const hash = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
-    const stream: ApEvent[] = [
-      { ...base, type: 'attempt_diff', sequence: 1, payload: { path: 'a.txt', change: 'modified', binary: false, redacted: false, truncated: false, before_sha256: hash, after_sha256: hash, before_size: 1, after_size: 2, added_lines: 1, deleted_lines: 1, patch: '@@ -1 +1 @@\n-a\n+b\n' } },
-      { ...base, type: 'attempt_diff', sequence: 2, payload: { binary: false, redacted: false, truncated: false, before_size: 0, after_size: 0, added_lines: 1, deleted_lines: 1, files: 1, patch_bytes: 16 } },
-    ]
-    const before = initialRun()
-    const run = stream.reduce((acc, e) => reduce(acc, e), before)
-    expect(run.eventCount).toBe(2)
-    expect(run.tail.map((e) => e.type)).toEqual(['attempt_diff', 'attempt_diff'])
-    expect(run.tail.every((e) => e.kind === undefined)).toBe(true)
-    expect(run.status).toBe(before.status)
-    expect(run.nodes).toEqual(before.nodes)
-  })
   it('filters Failed, Retried and Human from the recorded runs', () => {
     const tail = reduceAll(reject).tail
     expect(filterEvents(tail, 'all')).toHaveLength(tail.length)

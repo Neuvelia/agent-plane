@@ -1,10 +1,9 @@
-// Wire shapes of the AgentPlane event stream (event schema 12; schemas 1-11 are
+// Wire shapes of the AgentPlane event stream (event schema 11; schemas 1-10 are
 // still delivered for older stored runs). Payloads are kept loose on purpose:
 // the reducer reads only the fields it needs and ignores the rest, so additive
 // schema changes never break the renderer. Schema 10 adds opt-in
 // value_recorded events (ADR-0023) and schema 11 workspace isolation facts
-// (ADR-0024); schema 12 adds opt-in attempt_diff events (ADR-0026). The run
-// views display none of them.
+// (ADR-0024); the run views display neither.
 export interface ApEvent {
   event_schema_version: number
   type: string

@@ -114,7 +114,7 @@ func (p AttemptDiffPayload) Validate() error {
 
 func (p AttemptDiffPayload) validateFile() error {
 	if !validDiffPath(p.Path) {
-		return errors.New("attempt diff path must be a bounded relative repository path")
+		return errors.New("attempt diff path must be a bounded relative repository path without backslash or colon")
 	}
 	if err := p.validateSides(); err != nil {
 		return err
@@ -190,7 +190,7 @@ func (p AttemptDiffPayload) validateSummary() error {
 }
 
 func validDiffPath(p string) bool {
-	if p == "" || len(p) > MaxAttemptDiffPathBytes || !utf8.ValidString(p) || strings.ContainsRune(p, 0) || strings.HasPrefix(p, "/") {
+	if p == "" || len(p) > MaxAttemptDiffPathBytes || !utf8.ValidString(p) || strings.ContainsRune(p, 0) || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\:") {
 		return false
 	}
 	for _, segment := range strings.Split(p, "/") {

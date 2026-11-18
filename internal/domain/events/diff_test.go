@@ -199,6 +199,10 @@ func TestAttemptDiffRejectsHostilePaths(t *testing.T) {
 		"trailing slash":  "a/",
 		"too long":        strings.Repeat("x", MaxAttemptDiffPathBytes+1),
 		"invalid utf8":    "bad\xff",
+		"backslash":       "a\\b",
+		"drive prefix":    "C:/x",
+		"drive relative":  "C:x",
+		"colon inside":    "a/b:c",
 	} {
 		if marshals(AttemptDiffPayload{Path: path, Change: DiffAdded}) {
 			t.Errorf("%s: path %q must be rejected", name, path)
@@ -323,5 +327,29 @@ func TestAttemptDiffSixteenKiBPatchSurvivesJSONEscaping(t *testing.T) {
 	}
 	if got.Payload.(AttemptDiffPayload).Patch != patch {
 		t.Fatal("patch changed in the JSON round trip")
+	}
+}
+
+// One JSONL line per schema 1..12, the last one an attempt_diff with a 16 KiB patch.
+func TestAttemptDiffJSONLinesOfEverySchemaDecode(t *testing.T) {
+	unit := "+say \"héllo\" \\ 日本\t\n"
+	patch := strings.ToValidUTF8(strings.Repeat(unit, 1000)[:MaxAttemptDiffPatchBytes], "")
+	line, err := json.Marshal(diffEvent(SchemaVersion, AttemptDiffPayload{Path: "q.txt", Change: DiffModified, Patch: patch}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	for version := 1; version < AttemptDiffSchema; version++ {
+		lines = append(lines, fmt.Sprintf(`{"event_schema_version":%d,"type":"run_started","timestamp":"2026-11-17T09:00:00Z","sequence":1,"run_id":"r","graph_id":"g","graph_version":"v","payload":{"node_count":1}}`, version))
+	}
+	lines = append(lines, string(line))
+	for i, l := range lines {
+		var e Event
+		if err := json.Unmarshal([]byte(l), &e); err != nil {
+			t.Fatalf("line %d: %v", i+1, err)
+		}
+		if got, ok := e.Payload.(AttemptDiffPayload); ok && got.Patch != patch {
+			t.Fatal("16 KiB patch changed in the round trip")
+		}
 	}
 }
