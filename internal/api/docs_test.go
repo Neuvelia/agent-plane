@@ -364,6 +364,58 @@ func TestEditAppliesOperationsWithoutWriting(t *testing.T) {
 	}
 }
 
+func TestEditGraphDataOperationsRoundTrip(t *testing.T) {
+	_, ts, dir := docServer(t)
+	g := grantFor(t, ts, writeGraph(t, dir, "pair.yaml", pairGraph), "open")
+	_, doc := call(t, ts, "POST", "/graphs/open", map[string]string{"grant": g})
+	hash := doc["hash"].(string)
+	send := func(hash, ops string) (int, map[string]any) {
+		return call(t, ts, "POST", "/graphs/edit", map[string]any{"grant": g, "base_hash": hash, "ops_version": 1, "ops": json.RawMessage(ops)})
+	}
+
+	status, out := send(hash, `[{"op":"add_graph_input","id":"words","type":"string","required":true},{"op":"add_graph_input_binding","from":"inputs.words","to":"b.inputs.text"},{"op":"set_graph_output","id":"shout","from":"a.outputs.stdout"}]`)
+	if status != 200 {
+		t.Fatalf("edit: %d %v", status, out)
+	}
+	text := out["text"].(string)
+	for _, want := range []string{"  words: {type: string, required: true}", "graph_input_bindings:", "    to: b.inputs.text", "  shout:", "    from: a.outputs.stdout"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("edited text lacks %q:\n%s", want, text)
+		}
+	}
+	def := out["definition"].(map[string]any)
+	if def["inputs"] == nil || def["graph_input_bindings"] == nil || def["outputs"] == nil {
+		t.Errorf("definition lacks the new data: %v", def)
+	}
+	next := out["hash"].(string)
+
+	// list_connections is a query: it answers and changes nothing.
+	status, out = send(next, `[{"op":"list_connections","to":"b.inputs.text"}]`)
+	if status != 200 || out["hash"] != next {
+		t.Fatalf("query: %d %v", status, out)
+	}
+	query := out["results"].([]any)[0].(map[string]any)["query"].(map[string]any)
+	options := query["options"].([]any)
+	first := options[0].(map[string]any)
+	if query["ok"] != true || first["ref"] != "inputs.words" || first["ok"] != false || first["code"] != "E_INPUT_MULTIPLE_PROVIDERS" || first["message"] == "" {
+		t.Errorf("options: %v", options)
+	}
+
+	// A refused operation is the F2.1 error shape and keeps the held text.
+	status, out = send(next, `[{"op":"remove_graph_input_binding","from":"inputs.words","to":"a.inputs.zzz"}]`)
+	detail, _ := out["detail"].(map[string]any)
+	if status != 422 || errCode(out) != "E_EDIT_BINDING_NOT_FOUND" || detail["op_index"] != float64(0) {
+		t.Errorf("refusal: %d %v", status, out)
+	}
+	// A stale base hash is handled as before.
+	if status, out = send(hash, `[]`); status != 409 || errCode(out) != "stale_base" {
+		t.Errorf("stale base: %d %v", status, out)
+	}
+	if status, out = send(next, `[{"op":"list_connections"}]`); status != 422 || errCode(out) != "E_EDIT_INVALID_OP" {
+		t.Errorf("list_connections without from or to: %d %v", status, out)
+	}
+}
+
 func TestEditCanStartFromTextTheClientTyped(t *testing.T) {
 	_, ts, dir := docServer(t)
 	g := grantFor(t, ts, writeGraph(t, dir, "pair.yaml", pairGraph), "open")

@@ -16,6 +16,8 @@ type QueryResult struct {
 	OK      bool   `json:"ok"`
 	Code    string `json:"code,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Options is the answer of list_connections.
+	Options []ConnectionOption `json:"options,omitempty"`
 }
 
 // OpResult reports one operation of a batch.
@@ -165,6 +167,22 @@ func (s *session) apply(op Op) (*QueryResult, *Error) {
 		return nil, s.removeEdge(op)
 	case OpCanConnect:
 		return s.canConnect(op.From, op.To), nil
+	case OpListConnections:
+		return s.listConnections(op), nil
+	case OpAddGraphInput:
+		return nil, s.addGraphInput(op)
+	case OpUpdateGraphInput:
+		return nil, s.updateGraphInput(op)
+	case OpRemoveGraphInput:
+		return nil, s.removeGraphInput(op)
+	case OpAddGraphInputBinding:
+		return nil, s.addGraphInputBinding(op)
+	case OpRemoveGraphInputBinding:
+		return nil, s.removeGraphInputBinding(op)
+	case OpSetGraphOutput:
+		return nil, s.setGraphOutput(op)
+	case OpRemoveGraphOutput:
+		return nil, s.removeGraphOutput(op)
 	case OpSetConfig:
 		return nil, s.setConfig(op)
 	case OpUnsetConfig:
