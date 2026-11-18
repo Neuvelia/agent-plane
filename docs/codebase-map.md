@@ -18,6 +18,7 @@ durable contract.
 | `internal/agent/codex` | Installed Codex CLI process and result/progress translation | `adapter.go` |
 | `internal/shell` | Shell node process execution and configuration | `executor.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
+| `internal/proctree` | Neutral process-tree ownership: start a child in its own Unix process group, terminate by request, grace, force, verify (ADR-0028; Windows is an interim direct-process stub until F3.4a) | `proctree.go`, `proctree_unix.go`, `policy.go` |
 | `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
 | `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (behind `runtime.WorkspaceManager`, composed by the CLI) | `preflight.go`, `worktree.go`, `integrate.go` |
 | `internal/store` | Local append-only JSONL run history | `store.go` |
