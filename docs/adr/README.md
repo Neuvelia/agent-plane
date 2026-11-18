@@ -49,3 +49,6 @@ Phase 3:
 
 F3.2 durable run state (proposed):
 [ADR-0027 - Durable run state on an append-only JSONL log](0027-durable-run-state.md).
+
+F3.4 cancellation and timeouts (proposed):
+[ADR-0028 - Cancel and timeout reasons, cross-platform process ownership](0028-cancel-timeout-reasons-and-process-ownership.md).

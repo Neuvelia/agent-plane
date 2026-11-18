@@ -1,6 +1,6 @@
-# ADR-00XX - Cancel and Timeout Reasons, Cross-Platform Process Ownership
+# ADR-0028 - Cancel and Timeout Reasons, Cross-Platform Process Ownership
 
-**Status:** proposed (number assigned at merge)
+**Status:** proposed
 **Date:** 2026-11-17
 
 Product name: Tarmind (in code today: agentplane).
