@@ -19,7 +19,7 @@ durable contract.
 | `internal/shell` | Shell node process execution and configuration | `executor.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
 | `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
-| `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (not yet used by the runtime) | `preflight.go`, `worktree.go`, `integrate.go` |
+| `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (behind `runtime.WorkspaceManager`, composed by the CLI) | `preflight.go`, `worktree.go`, `integrate.go` |
 | `internal/store` | Local append-only JSONL run history | `store.go` |
 | `internal/api` | Authenticated loopback API for runs, approvals and granted graph documents | `server.go`, `docs.go`, `hub.go` |
 | `internal/version` | Build and runtime version metadata | `version.go` |
@@ -90,5 +90,5 @@ the checks documented in `desktop/README.md`.
 `AGENTS.md`, `prompts/`, `scripts/` and `.github/` guide contributors and
 coding agents working on this repository. They are separate from the
 AgentPlane graph/runtime product under `internal/`. A developer's Git
-worktree does not implement product workspace isolation (F3.1), and neither
-worktrees nor instructions are a security sandbox for untrusted code.
+worktree is not the product's workspace isolation (F3.1, `internal/worktree`), and
+neither worktrees nor instructions are a security sandbox for untrusted code.

@@ -258,3 +258,35 @@ func (r *eventRenderer) flushAll() error {
 	clear(r.pending)
 	return nil
 }
+
+// renderIsolation prints the F3.1 summary after the run. A worktree is a
+// separate directory, not a sandbox, and the integrated ref is never merged for
+// the user, so both facts are stated where the result is shown.
+func renderIsolation(w io.Writer, iso *run.IsolationResult) error {
+	if iso == nil {
+		return nil
+	}
+	lines := []string{fmt.Sprintf("Workspace isolation: base commit %s", iso.BaseSHA)}
+	if iso.IntegratedRef != "" {
+		lines = append(lines, fmt.Sprintf("  integrated ref %s at %s", iso.IntegratedRef, iso.IntegratedCommit))
+	}
+	for _, u := range iso.Units {
+		state := "integrated"
+		if !u.Integrated {
+			state = "not integrated"
+		}
+		lines = append(lines, fmt.Sprintf("  unit %s: %s at %s (%s)", u.NodeID, u.Ref, u.Commit, state))
+	}
+	for _, r := range iso.Retained {
+		lines = append(lines, fmt.Sprintf("  retained worktree for %s (%s): %s", r.NodeID, r.Reason, r.Path))
+		if r.Reason == events.ReleaseCleanupError {
+			lines = append(lines, fmt.Sprintf("    removal failed; delete it manually: git worktree remove --force %s", r.Path))
+		}
+	}
+	if iso.IntegratedCommit != "" {
+		lines = append(lines, fmt.Sprintf("  to apply the result yourself: git merge %s (AgentPlane never changes your branch)", iso.IntegratedCommit))
+	}
+	lines = append(lines, "  note: a worktree is not a sandbox; an agent can still write outside it")
+	_, err := fmt.Fprintln(w, strings.Join(lines, "\n"))
+	return err
+}

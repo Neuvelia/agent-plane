@@ -7,7 +7,7 @@ part (F2.8a) is implemented
 ## Context
 
 F2.8 Attempt Compare must show whether a correction attempt fixed what the Gate rejected. The engine on
-`main` (event schema 9) records per attempt: `attempt_started`, `attempt_input` (feedback linkage, no raw
+`main` (event schema 11) records per attempt: `attempt_started`, `attempt_input` (feedback linkage, no raw
 task), `gate_check` (CheckResult v1, ADR-0013), `attempt_finished`, and for Agent producers a
 `node_evidence` with `attempt_id` listing Git-observed changed **paths** for that one invocation
 (ADR-0010, ADR-0014). The feedback a retried producer receives is a clone of the previous `gate_check`
@@ -27,8 +27,8 @@ Constraints:
   run hooks, filters or monitors (ADR-0010).
 - Edits persist across attempts; there is no isolation until F3.1 (ADR-0014, ADR-0015). Concurrent writers
   in the shared workspace can be attributed to the attempt (ADR-0016).
-- `gitstate` calls `/usr/bin/git` with `/dev/null` config paths: it works on Linux, macOS (Command Line
-  Tools shim) and WSL, not on a native Windows engine.
+- `gitstate` calls the Git found on `PATH` (ADR-0025 amendment) with `/dev/null` config paths: it works on
+  Linux, macOS and WSL; native Windows is unverified.
 
 ## Options
 
@@ -66,7 +66,7 @@ object directory is configured.
   discovery (D5). Line endings: patches compare bytes as stored on disk; `\r\n` changes appear as changes.
 - **Cost:** one extra read of dirty/untracked files at each snapshot (already read for hashing), small
   copies, Go diff over changed files only. Clean tracked files cost one `cat-file` read when they change.
-- **Event schema:** one new event type `attempt_diff`, additive schema 11.
+- **Event schema:** one new event type `attempt_diff`, additive schema 12 (pending owner confirmation).
 - **What the UI can show:** per-attempt per-file patches, line counts, hashes, change kinds, omissions.
   For consecutive attempts the later patch is the change from the earlier result; for non-consecutive
   attempts the UI lists intermediate patches rather than composing them.
@@ -145,7 +145,7 @@ F2.8b part until that part is implemented and validated.
 - **D5 - Native Windows:** accept "not available"; Git discovery for `gitstate` is tracked separately.
 - **D6 - Shell producers:** Agent producers only.
 - **Budgets:** 16 KiB per event, 256 KiB per attempt, 4 MiB per run, 1 MiB per file, accepted.
-- **Schema number:** ADR-0023's `value_recorded` is schema 10, so `attempt_diff` is schema 11.
+- **Schema number:** ADR-0023's `value_recorded` is schema 10 and F3.1 workspace isolation took schema 11, so `attempt_diff` is schema 12 (proposed 2026-11-17, pending owner confirmation; an earlier decision said 11).
 
 ## Consequences
 
@@ -172,8 +172,8 @@ F2.8b part until that part is implemented and validated.
 ## Compatibility and migration
 
 - Option C: no change to events, store, API, graph schema or CLI envelope.
-- Option A: one additive event type and event schema 11 (schema 10 is ADR-0023's `value_recorded`).
-  Readers of schema 1-10 streams are unchanged; older readers reject the new
+- Option A: one additive event type and event schema 12 (schema 10 is ADR-0023's `value_recorded`, schema 11 is F3.1; number pending owner confirmation).
+  Readers of schema 1-11 streams are unchanged; older readers reject the new
   schema as they do for any new contract. Default CLI and serve streams are unchanged without
   `--record-diffs`. Stored runs are never rewritten. A later SQLite or F3.2 store ingests the events as-is.
 - Option B would additionally introduce a blob store layout and API route that F3.2 must migrate.

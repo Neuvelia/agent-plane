@@ -23,7 +23,8 @@ export interface GraphDocument {
   recent: RecentGraph[]
   leave: Leave | null
   open: () => void
-  create: () => void
+  /** New graph through the native save dialog; `draft` builds the text from the chosen file name (a template, F2.12), default blank. */
+  create: (draft?: (label: string) => string | null) => void
   openRecent: (id: string) => void
   close: () => void
   type: (text: string) => void
@@ -72,7 +73,7 @@ export function useGraphDocument(): GraphDocument {
   // Replace the open document with a freshly chosen one; the old grant is revoked
   // only once the new one is in place.
   const adopt = useCallback(
-    async (result: GraphGrantResult, kind: 'open' | 'new') => {
+    async (result: GraphGrantResult, kind: 'open' | 'new', draft: (label: string) => string | null = newGraphText) => {
       if ('canceled' in result) return
       if (!result.ok) {
         setError({ kind: 'open', message: result.message })
@@ -80,7 +81,13 @@ export function useGraphDocument(): GraphDocument {
       }
       const previous = docRef.current
       if (kind === 'new') {
-        setDoc(fromNew(result.grant, result.label, newGraphText(result.label)))
+        const text = draft(result.label)
+        if (text === null) {
+          closeGrant(result.grant)
+          setError({ kind: 'open', message: 'the template is unavailable' })
+          return
+        }
+        setDoc(fromNew(result.grant, result.label, text))
       } else {
         setBusy('opening')
         const opened = await openDocument(result.grant)
@@ -107,7 +114,7 @@ export function useGraphDocument(): GraphDocument {
   }, [])
 
   const open = useCallback(() => guarded(async () => adopt(await window.agentplane.openGraph(), 'open')), [adopt, guarded])
-  const create = useCallback(() => guarded(async () => adopt(await window.agentplane.newGraph(), 'new')), [adopt, guarded])
+  const create = useCallback((draft?: (label: string) => string | null) => guarded(async () => adopt(await window.agentplane.newGraph(), 'new', draft)), [adopt, guarded])
   const openRecent = useCallback((id: string) => guarded(async () => adopt(await window.agentplane.openRecentGraph(id), 'open')), [adopt, guarded])
   const close = useCallback(
     () =>
