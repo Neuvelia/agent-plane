@@ -113,7 +113,7 @@ func (p AttemptDiffPayload) Validate() error {
 }
 
 func (p AttemptDiffPayload) validateFile() error {
-	if !validDiffPath(p.Path) {
+	if !ValidAttemptDiffPath(p.Path) {
 		return errors.New("attempt diff path must be a bounded relative repository path without backslash or colon")
 	}
 	if err := p.validateSides(); err != nil {
@@ -189,7 +189,9 @@ func (p AttemptDiffPayload) validateSummary() error {
 	return nil
 }
 
-func validDiffPath(p string) bool {
+// ValidAttemptDiffPath reports whether p may appear as the path of an
+// attempt_diff file event, so producers can drop paths no event can carry.
+func ValidAttemptDiffPath(p string) bool {
 	if p == "" || len(p) > MaxAttemptDiffPathBytes || !utf8.ValidString(p) || strings.ContainsRune(p, 0) || strings.HasPrefix(p, "/") || strings.ContainsAny(p, "\\:") {
 		return false
 	}
