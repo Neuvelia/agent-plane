@@ -319,6 +319,21 @@ the existing CheckResult; the Return Envelope and correction loop use their
 established path. This is post-execution detection, not filesystem isolation.
 External writers can still alter the shared workspace. See ADR-0016.
 
+## Cancellation and timeout facts (F3.4)
+
+Event schema 12 (renumber to 13 if F2.8b's schema 12 merges first) adds two
+bounded facts and one optional field. `cancel_requested` carries `scope`
+(`run|node`), a closed `reason` (`interrupt|user_cancel|run_timeout|
+sibling_failed|node_timeout`) and `source` (`signal|api|deadline|failure`); it is
+node-correlated only for node scope. `process_terminated` is node-correlated and
+carries `method` (`graceful|forced|already_exited`), `grace_ms`, `elapsed_ms` and a
+`leaked` descendant count, never paths, environment or command lines. `reason` is
+an optional field of `node_finished`, `node_terminated` and `run_finished`, valid
+only on a `cancelled` status or a `timeout` failure. `attempt_finished.outcome`
+gains `timeout`. Readers of schemas 1-11 are unchanged. The reason is derived from
+a typed `run.CancelCause` read with `run.ReasonOf`, never from error text. This
+change defines the shapes only; the runtime emits them in a later F3.4 task.
+
 ## Workspace isolation facts (F3.1)
 
 Event schema 11 adds five typed, bounded facts for isolated Agent units:

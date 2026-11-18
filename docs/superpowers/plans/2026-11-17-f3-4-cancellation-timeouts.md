@@ -462,10 +462,14 @@ is `node`; `process_terminated` requires node correlation and bounded integers
 timeout-failed terminal; new types and fields rejected below the new schema;
 payloads detached on clone.
 
-- [ ] **Schema number.** 13 (proposed; next free number confirmed at merge).
+- [x] **Schema number.** B5 bumps `events.SchemaVersion` from 11 to 12 (the next
+  number on its base) and adds `internal/store/testdata/schemas/v12.jsonl`. Renumber
+  to 13 if #130 (F2.8b, schema 12) merges first: whoever merges later bumps
+  `schemaCancelTimeout` and `SchemaVersion`, renames the fixture and greps literals
+  in tests (tests derive from the constants). Superseded plan text: 13 (proposed; next free number confirmed at merge).
   Check `origin/main` for the highest `SchemaVersion` (expected 12 from F2.8b);
   amend the ADR and spec text in the same PR if it differs.
-- [ ] Failing tests first, then the types.
+- [x] Failing tests first, then the types.
 - [ ] Verify `desktop/src/reducer.ts` ignores unknown types and tolerates the new
   optional fields; add a reducer test with `cancel_requested` and
   `process_terminated`.
