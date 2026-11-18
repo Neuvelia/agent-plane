@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getRun } from './api'
+import { getRun, lookupRun } from './api'
 import { watchLiveElsewhere } from './liveElsewhere'
 import { classifyEnd, initialRun, presentRun, reduce, streamLost, type RunView } from './reducer'
 import type { ApEvent, GraphSummary } from './types'
@@ -44,6 +44,8 @@ export interface RunStream {
   yaml: string
   following: boolean
   notFound: boolean
+  /** The run was written by a newer engine than this one can read. */
+  unsupported: boolean
   /** Set (to a StreamEnd code) when the stream ended for any reason other than the run's normal end. */
   lost: string | null
   reconnect: () => void
@@ -57,6 +59,7 @@ export function useRunStream(runId: string): RunStream {
   const [graph, setGraph] = useState<GraphSummary | null>(null)
   const [yaml, setYaml] = useState('')
   const [notFound, setNotFound] = useState(false)
+  const [unsupported, setUnsupported] = useState(false)
   const [storeStatus, setStoreStatus] = useState<string | undefined>(undefined)
   const [lost, setLost] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
@@ -67,6 +70,7 @@ export function useRunStream(runId: string): RunStream {
     setEnded(false)
     setLost(null)
     setNotFound(false)
+    setUnsupported(false)
     setStoreStatus(undefined)
     let pending: ApEvent[] = []
     let timer: ReturnType<typeof setTimeout> | undefined
@@ -77,8 +81,9 @@ export function useRunStream(runId: string): RunStream {
       pending = []
       if (batch.length) setRun((r) => batch.reduce(reduce, r))
     }
-    getRun(runId).then((d) => {
-      if (!d) return setNotFound(true)
+    lookupRun(runId).then((d) => {
+      if (d.kind === 'unsupported') return setUnsupported(true)
+      if (d.kind === 'missing') return setNotFound(true)
       setGraph(d.summary)
       setYaml(d.graph)
       setStoreStatus(d.run.status)
@@ -118,5 +123,5 @@ export function useRunStream(runId: string): RunStream {
   // without a terminal event is not settled: it would flash "interrupted".
   const shown = useMemo(() => (storeStatus === undefined ? run : presentRun(run, ended, lost !== null, storeStatus)), [run, ended, lost, storeStatus])
   const activeLost = streamLost(shown, lost)
-  return { run: shown, graph, yaml, following: !ended && !activeLost, notFound, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
+  return { run: shown, graph, yaml, following: !ended && !activeLost, notFound, unsupported, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
 }

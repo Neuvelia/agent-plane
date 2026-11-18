@@ -170,6 +170,7 @@ export const en = {
   'run.liveGraphHelp': 'The graph this run used, not the current file. Node states are rebuilt from the event log, so they are identical after a refresh or restart.',
   'run.loadingGraph': 'Loading graph…',
   'run.notFound': 'This run is not in the local store.',
+  'run.unsupported': 'This run was written by a newer version of the engine and cannot be shown here. Upgrade to read it.',
   'run.lostBanner': '{message} Node states below are the last events received, not the current state.',
   'run.reconnect': 'Reconnect',
   'run.lost.connection': 'The connection to the engine ended unexpectedly.',
