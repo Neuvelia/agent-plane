@@ -42,7 +42,9 @@ spec before changing a screen, API wrapper or event view. The sibling
   a loss after `run_finished` does not reopen a completed run. A nonempty,
   normally ended log without a terminal run event is interrupted, and so is
   every node that started and never finished, unless the store reports the run
-  as `running` (a writer in another process holds it). `usePoll`
+  as `running` (a writer in another process holds it); then `liveElsewhere.ts`
+  re-reads only the run's status every few seconds and re-subscribes when it
+  changes, and nothing is settled before the store has answered. `usePoll`
   is for lists, and a failed list read is an error with Retry, never an empty
   list or stale data shown as current. Preflight displays the engine's
   diagnostics rather than validating graph semantics in TypeScript.

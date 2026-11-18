@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getRun } from './api'
+import { watchLiveElsewhere } from './liveElsewhere'
 import { classifyEnd, initialRun, presentRun, reduce, streamLost, type RunView } from './reducer'
 import type { ApEvent, GraphSummary } from './types'
 
@@ -102,8 +103,20 @@ export function useRunStream(runId: string): RunStream {
     }
   }, [runId, attempt])
 
+  // A run the store says is live in another process: when its writer finishes or
+  // dies, replay the stored events by subscribing again (replays are idempotent).
+  useEffect(() => {
+    if (!ended || storeStatus !== 'running') return undefined
+    return watchLiveElsewhere(
+      () => getRun(runId).then((d) => d?.run.status ?? null),
+      () => setAttempt((n) => n + 1),
+    )
+  }, [ended, storeStatus, runId])
+
   // Memoized so an unchanged stream keeps the same object and downstream memos hold.
-  const shown = useMemo(() => presentRun(run, ended, lost !== null, storeStatus), [run, ended, lost, storeStatus])
+  // Until the store has said whether another process still holds the run, a log
+  // without a terminal event is not settled: it would flash "interrupted".
+  const shown = useMemo(() => (storeStatus === undefined ? run : presentRun(run, ended, lost !== null, storeStatus)), [run, ended, lost, storeStatus])
   const activeLost = streamLost(shown, lost)
   return { run: shown, graph, yaml, following: !ended && !activeLost, notFound, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
 }
