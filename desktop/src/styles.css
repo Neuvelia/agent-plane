@@ -77,6 +77,7 @@ textarea{min-height:64px;resize:vertical}
 .seg{display:inline-flex;gap:2px;padding:3px;border-radius:var(--radius-pill);background:var(--fill-6)}
 .seg button{height:24px;padding:0 12px;border-radius:var(--radius-pill);border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;font-weight:500;cursor:pointer}
 .seg button[aria-pressed=true]{background:var(--raised);color:var(--fg)}
+.seg button:disabled{opacity:.45;cursor:default}
 .tabs{display:flex;gap:6px}
 .tabs .btn{background:transparent;color:var(--muted)}.tabs .btn.on{background:var(--raised);color:var(--fg)}
 .tip{position:relative;display:inline-flex}
@@ -328,3 +329,13 @@ main:focus{outline:none}
 .picker-actions{justify-content:flex-end}
 .val-picker{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8)}
 .val-picker select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);max-width:100%}
+.ap-node.dim{opacity:.45}
+.tl-btn{font:inherit;color:inherit;background:transparent;border:0;border-radius:var(--radius-10);padding:2px var(--space-4);width:100%;text-align:left;cursor:pointer}
+.tl-btn:hover{background:var(--fill-4)}.tl-btn.sel{box-shadow:var(--ring-selected)}
+.tl-name{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden}
+.d-t-queued{background:transparent;box-shadow:inset 0 0 0 1px var(--muted)}.d-t-running,.d-t-attempt{background:var(--brand)}.d-t-retry{background:var(--brand);box-shadow:0 0 0 1px var(--fg)}.d-t-human{background:var(--warn)}
+.ov-grid{display:flex;flex-direction:column;gap:var(--space-8);padding:0 var(--space-12)}
+.ov-line{display:flex;flex-wrap:wrap;gap:var(--space-8);align-items:baseline}
+.ov-id{user-select:all}
+.outcome-entry{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;width:100%;font:inherit;color:inherit;background:transparent;border:0;border-radius:var(--radius-10);padding:var(--space-8) var(--space-10);cursor:pointer}
+.outcome-entry:hover{background:var(--fill-4)}

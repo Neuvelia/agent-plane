@@ -796,6 +796,17 @@ async function startDemo(app, page) {
     await page.click('[data-testid="node-fast"]')
     assert.match(await page.textContent('[data-testid="node-panel"]'), /no correction loop/)
     await page.click('[data-testid="node-flaky"]')
+    // F2.6: the overview. A succeeded run has no outcome card; a timeline row selects its node; the Retried filter leaves flaky.
+    assert.equal(await page.locator('[data-testid="run-outcome"]').count(), 0)
+    assert.match(await page.textContent('[data-testid="critical-path-nodes"]'), /approve/)
+    await page.click('[data-testid="timeline-row-fast"]')
+    assert.equal(await page.locator('[data-testid="node-fast"].sel').count(), 1)
+    await page.click('[data-testid="nodes-retried"]')
+    assert.equal(await page.locator('[data-testid="node-apply"][data-dimmed="true"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="timeline-row-flaky"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="timeline-row-apply"]').count(), 0)
+    await page.click('[data-testid="nodes-all"]')
+    await page.click('[data-testid="node-flaky"]')
     await shot(page, '2-attempts-reason-evidence')
 
     // R2: run summary, timeline and event log come from the event stream.

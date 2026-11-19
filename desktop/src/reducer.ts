@@ -90,6 +90,11 @@ export interface NodeView {
   /** Event timestamps (ISO) of node_started / node_finished, for the timeline. */
   startedAt?: string
   finishedAt?: string
+  /** Event timestamp (ISO) of node_ready: when the scheduler could first start the node (F2.6 FR1). */
+  readyAt?: string
+  /** Event timestamps (ISO) of approval_requested / approval_decided of a human node. */
+  approvalRequestedAt?: string
+  approvalDecidedAt?: string
 }
 
 /** Which EventLog filter an event belongs to. Decided here, once, from the event itself. */
@@ -110,6 +115,8 @@ export const MAX_EVENT_ROWS = 200
 export interface RunView {
   runId?: string
   graphId?: string
+  /** Semantic version of the graph the run executed, from the events' graph_version (F2.6 FR1). */
+  graphVersion?: string
   status: RunStatus
   nodeCount: number
   nodes: Record<string, NodeView>
@@ -179,6 +186,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
   state.eventCount += 1
   state.runId = event.run_id
   state.graphId = event.graph_id
+  state.graphVersion = event.graph_version || state.graphVersion
   state.lastEventAt = event.timestamp
   const p = event.payload
   const id = event.node_id
@@ -194,7 +202,11 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
       if (p.failure_kind) state.failureKind = str(p.failure_kind)
       break
     case 'node_ready':
-      if (id) node(state, id).status = 'ready'
+      if (id) {
+        const n = node(state, id)
+        n.status = 'ready'
+        n.readyAt = event.timestamp
+      }
       break
     case 'node_started':
       if (id) {
@@ -292,6 +304,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
         const n = node(state, id)
         n.nodeRunId = event.node_run_id
         n.status = 'waiting_human'
+        n.approvalRequestedAt = event.timestamp
         n.approval = {
           prompt: str(p.prompt),
           context: (Array.isArray(p.context) ? p.context : []) as ApprovalView['context'],
@@ -301,6 +314,7 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
     case 'approval_decided':
       if (id) {
         const n = node(state, id)
+        n.approvalDecidedAt = event.timestamp
         n.approval = { ...(n.approval ?? { prompt: '', context: [] }), decision: str(p.decision), comment: str(p.comment) || undefined }
         // The node is no longer waiting; node_finished carries its terminal status.
         if (n.status === 'waiting_human') n.status = 'running'

@@ -252,3 +252,36 @@ describe('stream end classification', () => {
     expect(presentRun(reduceAll(approve), true, false).status).toBe('succeeded')
   })
 })
+
+// F2.6 FR1: the facts the overview's waits and run identity are computed from.
+describe('timestamps and identity kept for the run overview', () => {
+  const run = reduceAll(approve)
+  const stamp = (type: string, node: string) => approve.find((e) => e.type === type && e.node_id === node)!.timestamp
+
+  it('keeps node_ready, approval_requested and approval_decided timestamps per node', () => {
+    expect(run.nodes.fast!.readyAt).toBe(stamp('node_ready', 'fast'))
+    expect(run.nodes.approve!.readyAt).toBe(stamp('node_ready', 'approve'))
+    expect(run.nodes.approve!.approvalRequestedAt).toBe(stamp('approval_requested', 'approve'))
+    expect(run.nodes.approve!.approvalDecidedAt).toBe(stamp('approval_decided', 'approve'))
+    expect(run.nodes.fast!.approvalRequestedAt).toBeUndefined()
+  })
+
+  it('keeps the run id and the graph version from the events', () => {
+    expect(run.runId).toBe(approve[0]!.run_id)
+    expect(run.graphVersion).toBe(approve[0]!.graph_version)
+    expect(run.graphVersion).toMatch(/^sha256-v0:/)
+    expect(initialRun().graphVersion).toBeUndefined()
+  })
+
+  it('leaves an unreached timestamp unknown, not empty', () => {
+    const waiting = reduceAll(approve.slice(0, firstIndex(approve, (e) => e.type === 'approval_requested') + 1))
+    expect(waiting.nodes.approve!.approvalRequestedAt).toBeDefined()
+    expect(waiting.nodes.approve!.approvalDecidedAt).toBeUndefined()
+    expect(waiting.nodes.apply).toBeUndefined()
+  })
+
+  it('is unchanged by a replayed or duplicated delivery', () => {
+    const replayed = reduceAll(approve, reduceAll(approve.slice(0, 15)))
+    expect(replayed).toEqual(run)
+  })
+})
