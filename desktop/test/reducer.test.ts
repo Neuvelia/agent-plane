@@ -68,7 +68,7 @@ describe('demo run reduced from events', () => {
     expect(flaky.attempts.map((a) => a.changedFiles)).toEqual([undefined, undefined])
   })
 
-  it('attaches node_evidence only to the attempt it names, and ignores it without an attempt ID', () => {
+  it('attaches node_evidence to the attempt it names, and keeps one without an attempt ID on the node, never on an attempt', () => {
     const [a1, a2] = run.nodes.flaky!.attempts.map((a) => a.id)
     const base = approve.find((e) => e.type === 'attempt_finished' && e.attempt_id === a1)!
     const evidence = (attempt: string | undefined, seq: number): ApEvent => ({ ...base, sequence: seq, type: 'node_evidence', attempt_id: attempt, payload: { adapter_id: 'x', adapter_version: '', changed_files: [{ path: 'b.go', provenance: 'observed' }, { path: 'a.go', provenance: 'observed' }] } })
@@ -76,6 +76,8 @@ describe('demo run reduced from events', () => {
     state = reduce(state, evidence(a2, 1000))
     state = reduce(state, evidence(undefined, 1001))
     expect(state.nodes.flaky!.attempts.map((a) => a.changedFiles)).toEqual([undefined, ['a.go', 'b.go']])
+    expect(state.nodes.flaky!.changedFiles).toEqual(['a.go', 'b.go'])
+    expect(state.nodes.flaky!.adapter).toEqual({ id: 'x', version: '' })
   })
 
   it('derives "retrying" from the second attempt, not from stored state', () => {

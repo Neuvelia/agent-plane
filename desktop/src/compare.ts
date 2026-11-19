@@ -52,6 +52,11 @@ export interface CompareModel {
   to: CompareSide
   /** Feedback that started the To attempt, when it had any. */
   feedback?: FeedbackView
+  /**
+   * Whether both attempts had the same task fingerprint (F2.7 FR15). A statement of equality of two
+   * hashes only; unknown when either attempt has no attempt_input.
+   */
+  taskInput: 'same' | 'different' | 'unknown'
 }
 
 export const canCompare = (n: NodeView): boolean => n.attempts.length >= 2
@@ -69,7 +74,8 @@ const ms = (iso: string | undefined): number | undefined => {
   return Number.isNaN(t) ? undefined : t
 }
 
-function scopeOf(check: CheckView | undefined): ScopeView {
+/** The scope result of a check, from the engine's evidence only: the UI never evaluates allowed paths. */
+export function scopeOf(check: CheckView | undefined): ScopeView {
   if (!check || check.kind !== 'changed_files_scope') return { kind: 'not_checked' }
   const items = check.evidence.filter((e) => e.kind === 'changed_files_scope')
   // An unavailable reference with neither a path nor an omitted count is the
@@ -82,7 +88,8 @@ function scopeOf(check: CheckView | undefined): ScopeView {
   return { kind: 'checked', paths, omitted }
 }
 
-function notObserved(a: Attempt, kind: string | undefined, runActive: boolean): NotObserved {
+/** Why an attempt has no changed-file list (F2.8a). */
+export function notObserved(a: Attempt, kind: string | undefined, runActive: boolean): NotObserved {
   if (kind === 'shell') return 'shell'
   if (a.outcome === 'execution_error' || a.outcome === 'cancelled') return 'failed'
   if (a.outcome === undefined && runActive) return 'running'
@@ -110,12 +117,17 @@ function side(run: RunView, n: NodeView, a: Attempt, other: Attempt, kind: strin
   return s
 }
 
+function taskInputOf(a: Attempt, b: Attempt): CompareModel['taskInput'] {
+  if (!a.input?.fingerprint || !b.input?.fingerprint) return 'unknown'
+  return a.input.fingerprint === b.input.fingerprint ? 'same' : 'different'
+}
+
 /** The compare model for two attempts of a node, or undefined when either ID is unknown. */
 export function compareModel(run: RunView, n: NodeView, fromId: string, toId: string, kind?: string): CompareModel | undefined {
   const a = n.attempts.find((x) => x.id === fromId)
   const b = n.attempts.find((x) => x.id === toId)
   if (!a || !b) return undefined
-  const model: CompareModel = { from: side(run, n, a, b, kind), to: side(run, n, b, a, kind) }
+  const model: CompareModel = { from: side(run, n, a, b, kind), to: side(run, n, b, a, kind), taskInput: taskInputOf(a, b) }
   if (b.previousAttemptId) {
     const prev = n.attempts.find((x) => x.id === b.previousAttemptId)
     const check = prev?.check && prev.check.checkId === b.previousCheckId ? prev.check : undefined

@@ -863,6 +863,17 @@ async function startDemo(app, page) {
     assert.equal(await page.locator('[data-testid="timeline-row-apply"]').count(), 0)
     await page.click('[data-testid="nodes-all"]')
     await page.click('[data-testid="node-flaky"]')
+    // F2.7: facts header and changed-file block render for a finished node; with recording off the Data tab says "not recorded" and links to Settings.
+    await page.click('[data-testid="node-fast"]')
+    assert.match(await page.textContent('[data-testid="fact-node-run"]'), /[0-9a-f-]{36}/)
+    assert.match(await page.textContent('[data-testid="fact-duration"]'), /ms|s/)
+    assert.equal(await page.locator('[data-testid="changed-not-observed"]').count(), 1)
+    await page.click('[data-testid="node-approve"]')
+    await page.click('[data-testid="tab-data"]')
+    assert.equal(await page.locator('[data-testid="value-state-notRecorded"]').count() >= 2, true)
+    assert.equal(await page.locator('[data-testid="data-open-settings"]').count() > 0, true)
+    await page.click('[data-testid="tab-attempts"]')
+    await page.click('[data-testid="node-flaky"]')
     await shot(page, '2-attempts-reason-evidence')
 
     // R2: run summary, timeline and event log come from the event stream.

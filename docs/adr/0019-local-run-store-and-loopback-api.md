@@ -108,7 +108,7 @@ test, `make check` and race run.
 
 ## Amendment (proposed, 2026-11-17): additive `graph_summary` fields
 
-**Status:** proposed amendment; becomes accepted when the F2.7 implementation PR is merged. Proposed by the lead
+**Status:** proposed amendment; implemented by the F2.7 node-detail PR (`internal/api/graph_summary.go`, `graph_summary_test.go`) and becomes accepted when that PR is merged. Proposed by the lead
 on the product owner's delegation (decision 3 of `docs/features/F2.7-run-inspector-node-detail.md`); the team may
 revisit.
 

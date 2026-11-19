@@ -10,6 +10,9 @@ import demoYaml from '../../../.agents/graphs/demo-vertical.yaml?raw'
 import exhaustedYaml from '../../test/fixtures/exhausted.yaml?raw'
 import standaloneGateYaml from '../../test/fixtures/standalone-gate-red.yaml?raw'
 // Recorded from the engine runtime with the test fake Agent adapter (see the YAML header).
+import approveValues from '../../test/fixtures/demo-approve-values.json'
+import agentProgress from '../../test/fixtures/agent-progress.json'
+import agentProgressYaml from '../../test/fixtures/agent-progress.yaml?raw'
 import agentScope from '../../test/fixtures/agent-scope-retry.json'
 import agentScopeYaml from '../../test/fixtures/agent-scope-retry.yaml?raw'
 import { pendingApprovals, reduceAll } from '../reducer'
@@ -47,12 +50,25 @@ export const agentScopeIndeterminate: ApEvent[] = agentScopeRetry.map((e) =>
     : e,
 )
 
+// Recorded with `--record-values`: schema 10, the same graph as demoApprove.
+export const demoApproveValues = approveValues as unknown as ApEvent[]
+// Recorded from the engine runtime with a fake Agent executor that reports progress (agent-progress.yaml).
+export const agentProgressRun = agentProgress as unknown as ApEvent[]
+export { agentProgressYaml }
+export const agentProgressGraph: GraphSummary = { nodes: [{ id: 'scout', type: 'agent', inputs: [], outputs: [] }], edges: [], bindings: [] }
+
+const port = (name: string, type: string, required = true) => ({ name, type, required })
 export const demoGraph: GraphSummary = {
   nodes: [
-    { id: 'fast', type: 'shell' },
-    { id: 'flaky', type: 'shell', max_attempts: 3 },
-    { id: 'approve', type: 'human' },
-    { id: 'apply', type: 'shell' },
+    { id: 'fast', type: 'shell', inputs: [], outputs: [port('stdout', 'string')] },
+    { id: 'flaky', type: 'shell', max_attempts: 3, inputs: [], outputs: [port('json', 'json')] },
+    { id: 'approve', type: 'human', inputs: [port('evidence', 'json'), port('summary', 'string')], outputs: [port('decision', 'string')] },
+    { id: 'apply', type: 'shell', inputs: [port('decision', 'string')], outputs: [] },
+  ],
+  bindings: [
+    { source: { node: 'flaky', port: 'json' }, target: { node: 'approve', input: 'evidence' } },
+    { source: { node: 'fast', port: 'stdout' }, target: { node: 'approve', input: 'summary' } },
+    { source: { node: 'approve', port: 'decision' }, target: { node: 'apply', input: 'decision' } },
   ],
   edges: [
     { from: 'fast', to: 'approve' },

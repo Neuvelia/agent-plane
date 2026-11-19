@@ -3,6 +3,7 @@ import { getRun, lookupRun } from './api'
 import { watchLiveElsewhere } from './liveElsewhere'
 import { classifyEnd, initialRun, presentRun, reduce, streamLost, type RunView } from './reducer'
 import type { ApEvent, GraphSummary } from './types'
+import { initialValues, reduceValues, type RunValues } from './values'
 
 export type PollStatus = 'loading' | 'ready' | 'error'
 
@@ -40,6 +41,8 @@ export function usePoll<T>(read: () => Promise<T>, ms = 1500): Polled<T> {
 
 export interface RunStream {
   run: RunView
+  /** Recorded values of the same events, reduced separately from `run` (F2.7 FR11). Never persisted. */
+  values: RunValues
   graph: GraphSummary | null
   yaml: string
   following: boolean
@@ -55,6 +58,7 @@ export interface RunStream {
 // returned RunView is a pure reduction of those events (src/reducer.ts).
 export function useRunStream(runId: string): RunStream {
   const [run, setRun] = useState<RunView>(initialRun())
+  const [values, setValues] = useState<RunValues>(() => initialValues(runId))
   const [ended, setEnded] = useState(false)
   const [graph, setGraph] = useState<GraphSummary | null>(null)
   const [yaml, setYaml] = useState('')
@@ -79,7 +83,10 @@ export function useRunStream(runId: string): RunStream {
       timer = undefined
       const batch = pending
       pending = []
-      if (batch.length) setRun((r) => batch.reduce(reduce, r))
+      if (batch.length) {
+        setRun((r) => batch.reduce(reduce, r))
+        setValues((v) => batch.reduce(reduceValues, v))
+      }
     }
     lookupRun(runId).then((d) => {
       if (d.kind === 'unsupported') return setUnsupported(true)
@@ -123,5 +130,5 @@ export function useRunStream(runId: string): RunStream {
   // without a terminal event is not settled: it would flash "interrupted".
   const shown = useMemo(() => (storeStatus === undefined ? run : presentRun(run, ended, lost !== null, storeStatus)), [run, ended, lost, storeStatus])
   const activeLost = streamLost(shown, lost)
-  return { run: shown, graph, yaml, following: !ended && !activeLost, notFound, unsupported, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
+  return { run: shown, values, graph, yaml, following: !ended && !activeLost, notFound, unsupported, lost: activeLost, reconnect: () => setAttempt((n) => n + 1) }
 }

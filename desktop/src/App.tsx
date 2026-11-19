@@ -108,7 +108,7 @@ function Shell({ lost }: { lost: boolean }) {
             />
           )}
           {route.name === 'runs' && <RunsList onOpen={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
+          {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} onOpenSettings={go('settings')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}

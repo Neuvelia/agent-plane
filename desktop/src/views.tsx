@@ -120,9 +120,9 @@ function EventsCard({ run }: { run: RunView }) {
   )
 }
 
-export function RunInspector({ runId, onBack }: { runId: string; onBack: () => void }) {
+export function RunInspector({ runId, onBack, onOpenSettings }: { runId: string; onBack: () => void; onOpenSettings?: () => void }) {
   const { t } = useI18n()
-  const { run, graph, yaml, following, notFound, unsupported, lost, reconnect } = useRunStream(runId)
+  const { run, values, graph, yaml, following, notFound, unsupported, lost, reconnect } = useRunStream(runId)
   const [selected, setSelected] = useState<string | null>(null)
   const [view, setView] = useState<GraphView>('map')
   const [nodeFilter, setNodeFilter] = useState<NodeFilter>('all')
@@ -200,7 +200,7 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
         <TimelineCard run={run} graph={graph} filter={nodeFilter} onFilter={setNodeFilter} hidden={dimmed} selected={focus} critical={critical} onSelect={setSelected} />
         </div>
         <div className="stack">
-          <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} />
+          <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} values={values} graph={graph} onOpenSettings={onOpenSettings} />
           <EventsCard run={run} />
         </div>
       </div>

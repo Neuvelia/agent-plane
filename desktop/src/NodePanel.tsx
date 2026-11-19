@@ -2,11 +2,16 @@ import { useState } from 'react'
 import { decide } from './api'
 import { AttemptCompare } from './AttemptCompare'
 import { CheckResultView } from './check'
-import { canCompare, defaultPair } from './compare'
+import { canCompare, defaultPair, notObserved } from './compare'
+import { DataTab } from './DataTab'
+import { nodeData } from './dataModel'
+import { ActivityView, AttemptInputView, ChangedFilesBlock, FactsHeader, nodeNotObserved } from './nodeDetail'
 import { useI18n } from './i18n/context'
 import { displayStatus, nodeView, type RunView } from './reducer'
 import { ApprovalPill, NodePill, OutcomePill } from './status'
+import type { GraphSummary } from './types'
 import { Button, Card, KeyValue, SegmentedControl, Tag } from './ui/primitives'
+import { initialValues, type RunValues } from './values'
 
 export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = false }: { runId: string; nodeRunId: string; prompt: string; context: { name: string; value: string }[]; disabled?: boolean }) {
   const { t } = useI18n()
@@ -43,9 +48,9 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
 }
 
 /** Detail of one node. Keyed by node id by the caller, so the chosen attempt and tab reset per node. */
-export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; nodeId: string | null; lost?: boolean; kind?: string }) {
+export function NodePanel({ run, nodeId, lost = false, kind, values, graph = null, onOpenSettings }: { run: RunView; nodeId: string | null; lost?: boolean; kind?: string; values?: RunValues; graph?: GraphSummary | null; onOpenSettings?: () => void }) {
   const { t } = useI18n()
-  const [tab, setTab] = useState<'attempts' | 'compare' | 'log'>('attempts')
+  const [tab, setTab] = useState<'attempts' | 'compare' | 'activity' | 'data' | 'log'>('attempts')
   const [chosen, setChosen] = useState<string | null>(null)
   // The compared pair is view state only. Until the person picks, it follows the default (FR2).
   const [pair, setPair] = useState<{ from: string; to: string } | null>(null)
@@ -80,6 +85,7 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
           {n.approval.comment && <span className="mu">{n.approval.comment}</span>}
         </div>
       )}
+      <FactsHeader n={n} />
       <SegmentedControl
         label={t('node.view')}
         value={view}
@@ -87,13 +93,18 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
         segments={[
           { value: 'attempts', label: n.attempts.length ? t('node.attemptsCount', { count: n.attempts.length }) : t('node.attempts'), testId: 'tab-attempts' },
           ...(comparable ? [{ value: 'compare' as const, label: t('compare.tab'), testId: 'tab-compare' }] : []),
+          { value: 'activity', label: t('node.activity'), testId: 'tab-activity' },
+          { value: 'data', label: t('node.data'), testId: 'tab-data' },
           { value: 'log', label: t('node.log'), testId: 'tab-log' },
         ]}
       />
       {view === 'compare' && compared && <AttemptCompare run={run} node={n} kind={kind} from={compared.from} to={compared.to} onChange={setPair} />}
       {view === 'attempts' &&
         (n.attempts.length === 0 || !shown ? (
-          n.check ? <CheckResultView check={n.check} /> : <div className="mu">{t('node.noLoop')}</div>
+          <>
+            {n.check ? <CheckResultView check={n.check} /> : <div className="mu">{t('node.noLoop')}</div>}
+            <ChangedFilesBlock files={n.changedFiles} reason={nodeNotObserved(n, kind, run.status === 'running')} check={n.check} activity={n.activity} />
+          </>
         ) : (
           <>
             {n.attempts.length > 1 && (
@@ -101,7 +112,7 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
                 label={t('node.attemptsOf')}
                 value={shown.id}
                 onChange={setChosen}
-                segments={n.attempts.map((a) => ({ value: a.id, label: t('node.attemptTab', { n: a.number }), testId: `attempt-tab-${a.number}` }))}
+                segments={n.attempts.map((a) => ({ value: a.id, label: a.outcome ? t('node.attemptTabOutcome', { n: a.number, outcome: a.outcome }) : t('node.attemptTabRunning', { n: a.number }), testId: `attempt-tab-${a.number}` }))}
               />
             )}
             <div className="attempt" key={shown.id} data-testid="attempt">
@@ -109,12 +120,21 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
                 <b>{t('node.attempt', { n: shown.number, max: shown.max })}</b>
                 <OutcomePill outcome={shown.outcome} />
               </div>
+              <AttemptInputView input={shown.input} />
               {shown.check && <CheckResultView check={shown.check} />}
+              <ChangedFilesBlock files={shown.changedFiles} reason={notObserved(shown, kind, run.status === 'running')} check={shown.check} activity={shown.activity} />
               {shown.log && <pre className="log small">{shown.log}</pre>}
             </div>
           </>
         ))}
-      {view === 'log' && <pre className="log" data-testid="node-log" tabIndex={0}>{n.log || t('node.noLog')}</pre>}
+      {view === 'activity' && <ActivityView run={run} n={n} />}
+      {view === 'data' && <DataTab data={nodeData(values ?? initialValues(run.runId ?? ''), graph, n.id)} kind={kind} onOpenSettings={onOpenSettings} />}
+      {view === 'log' && (
+        <>
+          {n.logDropped > 0 && <div className="mu" data-testid="log-dropped">{t('node.logDropped', { count: n.logDropped })}</div>}
+          <pre className="log" data-testid="node-log" tabIndex={0}>{n.log || t('node.noLog')}</pre>
+        </>
+      )}
     </Card>
   )
 }

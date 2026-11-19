@@ -95,6 +95,7 @@ export function AttemptCompare({ run, node, kind, from, to, onChange }: { run: R
   const verdict = (s: CompareSide) => (s.check ? <VerdictPill verdict={s.check.verdict} /> : notChecked)
   const reason = (s: CompareSide) => (s.check ? <span data-testid="cmp-reason">{s.check.reason}</span> : notChecked)
   const evidence = (s: CompareSide) => (s.check ? s.check.evidence.length ? <EvidenceList check={s.check} /> : <span className="mu">{t('compare.noEvidence')}</span> : notChecked)
+  const fingerprintCell = (s: CompareSide) => (s.attempt.input?.fingerprint ? s.attempt.input.fingerprint.slice(0, 12) : t('kpi.unknown'))
   const feedbackCell = (s: CompareSide) => (s.feedbackFrom === undefined ? t('compare.feedbackNone') : s.feedbackFrom === 0 ? t('compare.feedbackMissingShort') : t('compare.feedbackFrom', { n: s.feedbackFrom }))
   const duration = (v?: number) => (v === undefined ? <span className="mu">{unknown}</span> : <span className="mono">{t('compare.ms', { v })}</span>)
   return (
@@ -148,6 +149,7 @@ export function AttemptCompare({ run, node, kind, from, to, onChange }: { run: R
             <Row label={t('compare.files')} testId="cmp-files" from={<Files side={a} other={b} />} to={<Files side={b} other={a} />} />
             <Row label={t('compare.scope')} testId="cmp-scope" from={<Scope side={a} />} to={<Scope side={b} />} />
             <Row label={t('compare.feedback')} testId="cmp-feedback" from={feedbackCell(a)} to={feedbackCell(b)} />
+            <Row label={t('compare.taskInput')} testId="cmp-task-input" from={fingerprintCell(a)} to={`${fingerprintCell(b)} · ${t(`compare.taskInput.${model.taskInput}` as MessageKey)}`} />
           </tbody>
         </table>
       </div>

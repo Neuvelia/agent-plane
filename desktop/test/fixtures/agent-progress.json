@@ -1,0 +1,206 @@
+[
+ {
+  "event_schema_version": 13,
+  "type": "run_started",
+  "timestamp": "2026-11-19T05:30:49.016728005Z",
+  "sequence": 1,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "payload": {
+   "node_count": 1
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "node_ready",
+  "timestamp": "2026-11-19T05:30:49.016794722Z",
+  "sequence": 2,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {}
+ },
+ {
+  "event_schema_version": 13,
+  "type": "node_started",
+  "timestamp": "2026-11-19T05:30:49.016806188Z",
+  "sequence": 3,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {}
+ },
+ {
+  "event_schema_version": 13,
+  "type": "text_delta",
+  "timestamp": "2026-11-19T05:30:49.016875061Z",
+  "sequence": 4,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "source_id": "msg-1",
+   "text": "Looking at "
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "text_delta",
+  "timestamp": "2026-11-19T05:30:49.016900682Z",
+  "sequence": 5,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "source_id": "msg-1",
+   "text": "the failing test."
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "tool_call_started",
+  "timestamp": "2026-11-19T05:30:49.016908992Z",
+  "sequence": 6,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "call_id": "call-1",
+   "name": "read_file",
+   "status": "in_progress"
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "tool_call_finished",
+  "timestamp": "2026-11-19T05:30:49.016915042Z",
+  "sequence": 7,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "call_id": "call-1",
+   "name": "read_file",
+   "status": "completed"
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "command_started",
+  "timestamp": "2026-11-19T05:30:49.016923394Z",
+  "sequence": 8,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "command_id": "cmd-1",
+   "status": "in_progress"
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "command_finished",
+  "timestamp": "2026-11-19T05:30:49.016977987Z",
+  "sequence": 9,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "command_id": "cmd-1",
+   "status": "completed",
+   "exit_code": 0
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "file_changed",
+  "timestamp": "2026-11-19T05:30:49.017001402Z",
+  "sequence": 10,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "path": "src/claimed.go",
+   "action": "update",
+   "provenance": "reported"
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "node_evidence",
+  "timestamp": "2026-11-19T05:30:49.017022479Z",
+  "sequence": 11,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "adapter_id": "fake",
+   "adapter_version": "1.0.0",
+   "changed_files": [
+    {
+     "path": "src/a.go",
+     "provenance": "observed"
+    },
+    {
+     "path": "src/b.go",
+     "provenance": "observed"
+    }
+   ]
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "node_finished",
+  "timestamp": "2026-11-19T05:30:49.017043413Z",
+  "sequence": 12,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "node_id": "scout",
+  "node_run_id": "fcc9082c-4058-4c97-8423-88844cf8a476",
+  "payload": {
+   "status": "succeeded",
+   "duration_ms": 0
+  }
+ },
+ {
+  "event_schema_version": 13,
+  "type": "run_finished",
+  "timestamp": "2026-11-19T05:30:49.017058496Z",
+  "sequence": 13,
+  "run_id": "497cecd8-a5ec-438b-a7a4-6e743927aeea",
+  "graph_id": "agent-progress",
+  "graph_version": "sha256-v0:abc038afd44967457d284d4748667495743f426b03ddea6386d206914e587fd4",
+  "payload": {
+   "status": "succeeded",
+   "duration_ms": 0,
+   "node_counts": {
+    "succeeded": 1,
+    "failed": 0,
+    "skipped": 0,
+    "cancelled": 0
+   }
+  }
+ }
+]
