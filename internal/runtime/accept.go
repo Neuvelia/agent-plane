@@ -57,6 +57,14 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 				machine.appendEvent(events.Event{Type: events.NodeEvidence, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: *work.evidence})
 				work.evidence = nil
 			}
+			machine.emitAttemptDiff(work.id, work.attemptID, work.diff)
+			if work.diff != nil {
+				if work.diff.after == nil {
+					delete(state.diffs, work.id)
+				} else {
+					state.diffs[work.id] = work.diff.after
+				}
+			}
 			checkID := ""
 			if work.check != nil {
 				checkID = work.check.CheckID

@@ -39,6 +39,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	dir := fs.String("store-dir", defaultStoreDir, "run store directory")
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes per run")
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
+	recordDiffs := fs.Bool("record-diffs", false, "record bounded, redacted per-attempt file diffs of Agent loop nodes as events")
 	var redactEnv inputFlags
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
 	var isolation isolationFlags
@@ -62,6 +63,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		return usageError("serve", err, false, stdout, stderr)
 	}
+	announceRecordDiffs(*recordDiffs, stderr)
 	runStore := store.Store{Dir: *dir}
 	if err := runStore.Check(); err != nil {
 		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
@@ -87,7 +89,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Validate:           validateForAPI,
 		ValidateDefinition: diagnosticsFor,
 		NodeTypes:          nodeCatalogue(),
-		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues, isolation: isolation}),
+		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues, recordDiffs: *recordDiffs, isolation: isolation}),
 		Capabilities:       &capability.Service{Detect: capabilityDetector(*codexBin).Detect},
 	}
 	if onServe != nil {
@@ -147,6 +149,7 @@ type serveRunOptions struct {
 	concurrency  int
 	redactions   []string
 	recordValues bool
+	recordDiffs  bool
 	isolation    isolationFlags
 }
 
@@ -196,6 +199,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 		if err := config.isolation.configure(def, &opts); err != nil {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 		}
+		configureAttemptDiffs(config.recordDiffs, def, &opts)
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr

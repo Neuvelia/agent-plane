@@ -38,7 +38,7 @@ Graph editor (ADR-0020 to ADR-0022 accepted, ADR-0023 accepted; plan `docs/super
 [ADR-0023 - Recorded run values for edge inspection](0023-recorded-run-values.md)
 (accepted; recording is opt-in, off by default).
 
-F2.8 Attempt Compare (proposed for F2.8b; owner decisions recorded 2026-11-15):
+F2.8 Attempt Compare (accepted 2026-11-19 for the F2.8b engine capture; opt-in `--record-diffs`):
 [ADR-0026 - Attempt diff capture for Attempt Compare](0026-attempt-diff-capture.md).
 
 Onboarding (accepted): [ADR-0025 - Read-only capability report on the loopback API](0025-capability-report.md).

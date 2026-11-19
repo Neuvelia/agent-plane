@@ -15,6 +15,7 @@ The root `AGENTS.md` still applies. This file adds rules for
 | Workspace identity and changed-file baselines | `workspace.go`, `loop.go` |
 | Bounded progress, logs and redaction | `progress.go`, `log_redactor.go` |
 | Opt-in recorded run values (ADR-0023) | `values.go`, called from `preflight.go` and `accept.go` |
+| Opt-in attempt diff capture port, budget and emission (ADR-0026) | `attemptdiff.go`, called from `preflight.go`, `loop.go` and `accept.go` |
 | Opt-in worktree isolation (ADR-0024): port, preflight, lifecycle, integration, release | `isolation.go`, called from `preflight.go`, `batch.go`, `accept.go`, `scheduler.go` (`finish`) |
 | Source checkout guard for isolated runs (`source_workspace_changed`) | `source_guard.go` |
 
@@ -45,6 +46,15 @@ The root `AGENTS.md` still applies. This file adds rules for
   work. Redact the whole text with the configured redactor before cutting,
   hash the redacted text, cut at a rune boundary and charge the per-run
   budget on the coordinator only.
+- `Options.AttemptDiffs` is nil by default: no snapshot, Git call, file or
+  `attempt_diff` event exists. When set, the session opens last in preflight (a
+  failure is a `PreflightError` before `run_started`) and `Run` closes it on
+  every exit path. Workers snapshot around a loop Agent producer only when it
+  returned without error and the context is live; the previous attempt's after
+  snapshot is the next before snapshot. The coordinator emits the file events
+  and then the summary between `node_evidence` and `attempt_finished`, charging
+  the run budget there. Capture failures become a summary-only result with a
+  diagnostic code and never change an outcome, verdict, retry or acceptance.
 - `isolation: worktree` (ADR-0024) is opt-in and valid only on an enrolled loop
   Agent; everything is validated in preflight before `run_started`, including a
   single source repository per run. The coordinator alone creates worktrees
