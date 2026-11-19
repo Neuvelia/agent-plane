@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"strings"
@@ -36,13 +36,19 @@ func preflightValueRecording(enabled bool, redactions []string, redactor *logRed
 	if !enabled {
 		return nil
 	}
+	return preflightUTF8Redactions("value-recording", redactions, redactor)
+}
+
+// preflightUTF8Redactions is the shared rule of every feature that rewrites
+// redacted text: secrets and the marker must be valid UTF-8.
+func preflightUTF8Redactions(feature string, redactions []string, redactor *logRedactor) error {
 	for _, value := range redactions {
 		if !utf8.ValidString(value) {
-			return errors.New("invalid value-recording redactions: values must be valid UTF-8")
+			return fmt.Errorf("invalid %s redactions: values must be valid UTF-8", feature)
 		}
 	}
 	if !utf8.Valid(redactor.marker) {
-		return errors.New("invalid value-recording redactions: no UTF-8-safe secret-absent marker is available")
+		return fmt.Errorf("invalid %s redactions: no UTF-8-safe secret-absent marker is available", feature)
 	}
 	return nil
 }

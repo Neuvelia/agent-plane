@@ -15,6 +15,7 @@ type batchState struct {
 	numbers   map[string]int
 	feedbacks map[string]*run.CorrectionFeedback
 	baselines map[string]*gitstate.Baseline
+	diffs     map[string]DiffSnapshot // previous attempt's after snapshot
 }
 
 func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, batch []string, state *batchState, redactor *logRedactor) []completedNode {
@@ -59,9 +60,9 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 			node = isolatedNode(node, w.path)
 		}
 		resolved := m.resolved[id]
-		aid, feedback, baseline, number := state.attempts[id], state.feedbacks[id], state.baselines[id], state.numbers[id]
+		aid, feedback, baseline, number, carried := state.attempts[id], state.feedbacks[id], state.baselines[id], state.numbers[id], state.diffs[id]
 		go func(id string) {
-			completed <- m.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, redactor)
+			completed <- m.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, carried, redactor)
 		}(id)
 		started++
 	}

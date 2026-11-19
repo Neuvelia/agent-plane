@@ -558,6 +558,14 @@ export const en = {
   'templates.human-approval.description': 'A summary, a person approves it, and only then the last step runs.',
   'templates.agent-scoped-approval.title': 'Agent with scope and approvals',
   'templates.agent-scoped-approval.description': 'A person approves the start, a Codex agent edits only allowed paths with a file-scope gate, and a person approves the result.',
+  'templates.fix-issue.title': 'Fix an issue',
+  'templates.fix-issue.description': 'A person approves the start, a Codex agent fixes the issue within allowed paths under a file-scope gate, and a person approves the result.',
+  'templates.code-review.title': 'Read-only code review',
+  'templates.code-review.description': 'A person approves the start, a Codex agent reviews without changing files (a scope gate rejects any change), and a person reads the findings.',
+  'templates.dependency-update.title': 'Dependency update',
+  'templates.dependency-update.description': 'A person approves the start, a Codex agent may change only manifest and lock files under a file-scope gate, and a person approves the result.',
+  'templates.repo-audit.title': 'Read-only repository audit',
+  'templates.repo-audit.description': 'A person approves the start, a Codex agent audits the repository without changing files, and a person reads the report.',
 } as const
 
 export type MessageKey = keyof typeof en

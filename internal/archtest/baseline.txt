@@ -5,6 +5,7 @@ internal/api -> agentplane/internal/adapter/yamlgraph : R1 delivery must not imp
 internal/api -> agentplane/internal/adapter/yamlgraph/edit : R1 delivery must not import adapters
 internal/api -> agentplane/internal/capability : R1 delivery must not import adapters
 internal/api -> agentplane/internal/store : R1 delivery must not import adapters
+internal/adapter/attemptdiff -> agentplane/internal/gitstate : R2 adapters must not import other adapters
 internal/capability -> agentplane/internal/agent : R2 adapters must not import other adapters
 internal/gate -> agentplane/internal/gitstate : R2 adapters must not import other adapters
 internal/runtime -> agentplane/internal/gitstate : R1 app imports only domain and app
