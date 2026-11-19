@@ -367,6 +367,62 @@ async function startDemo(app, page) {
     await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-dashboard"]')
 
+    // F2.3 E5a.2: the Bindings panel. Add, replace and remove with the keyboard only; a refused target shows the engine's reason.
+    const bound = path.join(graphDir, 'bindings.yaml')
+    fs.writeFileSync(bound, 'schema_version: 0\nid: bindings\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  c:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  b:\n    type: shell\n    config: {command: "true"}\n    inputs:\n      text: {type: string}\n      count: {type: number}\nedges: []\noutputs: {}\n')
+    await stubOpen(bound)
+    await page.click('[data-testid="nav-editor"]')
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="bindings-empty"]')
+    const rowCount = () => page.locator('[data-testid="binding-row"]').count()
+    await key('add-binding-open')
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'binding-source')
+    await page.selectOption('[data-testid="binding-source"]', 'a.outputs.stdout')
+    await page.waitForSelector('[data-testid="connect-option-b.inputs.text"]:not([aria-disabled])')
+    // A refused target stays in the list with the engine's own reason, and Enter on it sends nothing.
+    const reason = await page.locator('[data-testid="target-option"][data-ref="b.inputs.count"] [data-testid="target-reason"]').textContent()
+    assert.match(reason, /string.*number/, 'the refusal is the engine message')
+    assert.equal(await page.getAttribute('[data-testid="connect-option-b.inputs.count"]', 'aria-disabled'), 'true')
+    await key('connect-option-b.inputs.count')
+    assert.equal(await rowCount(), 0, 'a refused target is never sent')
+    await key('connect-option-b.inputs.text')
+    await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"][data-to="b.inputs.text"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'binding-select', 'focus lands on the new row')
+    assert.ok((await page.locator('[data-testid="yaml-content"]').textContent()).includes('a.outputs.stdout'), 'the YAML shows the new edge')
+    // Escape cancels the form.
+    await key('add-binding-open')
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="add-binding"]'))
+    // Replace the provider in one undoable step: the old edge goes, the new one comes.
+    await key('add-binding-open')
+    await page.selectOption('[data-testid="binding-source"]', 'c.outputs.stdout')
+    await page.waitForSelector('[data-testid="replace-b.inputs.text"]')
+    await key('replace-b.inputs.text')
+    await page.waitForSelector('[data-testid="replace-apply"]')
+    assert.match(await page.textContent('[data-testid="replace-confirm"]'), /removes a\.outputs\.stdout → b\.inputs\.text and adds c\.outputs\.stdout → b\.inputs\.text/)
+    await key('replace-apply')
+    await page.waitForSelector('[data-testid="binding-row"][data-from="c.outputs.stdout"][data-to="b.inputs.text"]')
+    assert.equal(await rowCount(), 1, 'the old provider is gone')
+    await page.click('[data-testid="editor-undo"]')
+    await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"]')
+    assert.equal(await rowCount(), 1, 'one undo restores the old provider')
+    // Selecting a row selects the edge on the canvas, and the reverse.
+    await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1)
+    await page.click('[data-testid="binding-select"]')
+    await page.waitForSelector('.react-flow__edge.ed-edge-sel')
+    assert.match(await page.textContent('.react-flow__edge-text'), /string/, 'a selected edge is labelled with its type')
+    await page.click('.react-flow__pane')
+    await page.waitForFunction(() => !document.querySelector('.react-flow__edge.ed-edge-sel'))
+    assert.equal(await page.getAttribute('[data-testid="binding-select"]', 'aria-pressed'), 'false')
+    await page.locator('.react-flow__edge').first().dispatchEvent('click')
+    await page.waitForFunction(() => document.querySelector('[data-testid="binding-select"]')?.getAttribute('aria-pressed') === 'true')
+    // Remove from the keyboard: focus moves to the panel heading when no row is left.
+    await key('remove-binding')
+    await page.waitForSelector('[data-testid="bindings-empty"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'bindings-heading')
+    await page.click('[data-testid="editor-close"]') // the edit was undone by the removal: nothing unsaved
+    await page.click('[data-testid="nav-dashboard"]')
+
     // E2.3: window focus finds outside changes; Save and run runs the SAVED file.
     const focusIt = () => page.evaluate(() => window.dispatchEvent(new Event('focus')))
     const watched = path.join(graphDir, 'watched.yaml')
@@ -432,7 +488,7 @@ async function startDemo(app, page) {
     assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
     assert.deepEqual(
       await page.$$eval('[data-testid^="picker-entry-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('picker-entry-', ''))),
-      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'],
+      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval', 'fix-issue', 'code-review', 'dependency-update', 'repo-audit'],
     )
     // Without Codex configured the agent entry says so; the report is the engine's, so this is Linux only.
     assert.match(await page.textContent('[data-testid="picker-entry-agent-scoped-approval"]'), /Needs Codex: Not configured\./)

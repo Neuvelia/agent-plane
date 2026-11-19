@@ -82,6 +82,11 @@ type Options struct {
 	// graph input and per accepted output port (ADR-0023). Off by default;
 	// LogRedactions apply and must be valid UTF-8 when it is on.
 	RecordValues bool
+	// AttemptDiffs enables opt-in attempt_diff capture for loop Agent
+	// producers (F2.8b, ADR-0026). Nil, the default, records nothing and does no
+	// Git or filesystem work. LogRedactions apply to file content and paths and
+	// must be valid UTF-8 when it is set.
+	AttemptDiffs AttemptDiffer
 	// Workspaces serves nodes with isolation: worktree (ADR-0024). A graph that
 	// asks for isolation and has no manager fails preflight; a graph that does
 	// not ask never touches it.
@@ -119,6 +124,7 @@ type completedNode struct {
 	check        *events.GateCheckPayload
 	checkInvalid bool
 	diagnostics  []graph.Diagnostic
+	diff         *attemptDiffResult
 	err          error
 }
 
@@ -142,6 +148,7 @@ type runMachine struct {
 	nodeStarted map[string]time.Time
 	decisions   DecisionProvider
 	values      *valueRecorder
+	diffs       *diffRecorder
 	attemptIDs  IDGenerator
 	clock       trace.Clock
 }
@@ -156,6 +163,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err != nil {
 		return run.Result{}, err
 	}
+	defer prepared.diffs.close() // every exit path, including a panic, removes scratch
 	machine, dependencies, err := initializeRun(ctx, definition, options, prepared)
 	if err != nil {
 		return run.Result{}, err
@@ -211,6 +219,7 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 			numbers:   map[string]int{},
 			feedbacks: map[string]*run.CorrectionFeedback{},
 			baselines: map[string]*gitstate.Baseline{},
+			diffs:     map[string]DiffSnapshot{},
 		}
 		for len(batch) > 0 {
 			results := machine.runBatchWorkers(ctx, executor, batch, &state, redactionTemplate)

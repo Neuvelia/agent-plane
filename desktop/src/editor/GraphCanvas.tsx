@@ -17,11 +17,14 @@ import '@xyflow/react/dist/style.css'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button, Card, Pill, Tag } from '../ui/primitives'
-import { queryConnectTargets } from './connect'
+import { BindingsPanel } from './BindingsPanel'
+import { removeOp, sourceType, type Binding } from './bindings'
+import { listConnections, verdictsOf } from './connections'
 import type { DocState } from './doc'
 import { NODE_TYPES, freeSpot, makeRef, nodeSize, parseRef, placements, removalImpact, rowY, suggestId, type Point } from './layout'
 import { badgesOf, type Badge, type Badges, type FocusReq } from './issues'
-import type { Definition, Op, QueryResult } from './types'
+import type { Selection, SelectionOwner } from './selection'
+import type { Definition, EdgeDef, Op, QueryResult } from './types'
 import type { GraphDocument } from './useGraphDocument'
 import { Inspector } from './inspector/Inspector'
 
@@ -146,11 +149,10 @@ function mergeNodes(prev: Node<EdData>[], next: Node<EdData>[]): Node<EdData>[] 
 }
 
 type Mode = null | { kind: 'rename' } | { kind: 'delete' } | { kind: 'connect'; from?: string; checks?: Record<string, QueryResult> }
-type Sel = { kind: 'node'; id: string } | { kind: 'edge'; from: string; to: string } | null
 
 export type CanvasBlock = 'parse' | 'anchors' | null
 
-export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null }) {
+export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner }) {
   return (
     <ReactFlowProvider>
       <Inner {...props} />
@@ -158,14 +160,15 @@ export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: 
   )
 }
 
-function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null }) {
+function Inner({ g, doc, focusReq, selection }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner }) {
   const { t } = useI18n()
   const def = doc.analysis.definition
   // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
   const block: CanvasBlock = doc.analysis.parseError ? 'parse' : doc.analysis.readonlyReasons?.length ? 'anchors' : null
   const readOnly = block !== null || !def
   const flow = useReactFlow()
-  const [sel, setSel] = useState<Sel>(null)
+  const sel = selection.selection
+  const setSel = selection.select
   const [mode, setMode] = useState<Mode>(null)
   const [renameTo, setRenameTo] = useState('')
   const [notice, setNotice] = useState<string | null>(null)
@@ -182,40 +185,20 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
     setNodes((prev) => mergeNodes(prev, desired))
   }, [desired, resetKey])
 
-  // A selection that no longer exists in the definition is dropped.
-  useEffect(() => {
-    if (!def) return setSel(null)
-    setSel((s) => {
-      if (!s) return s
-      if (s.kind === 'node') return s.id in def.nodes ? s : null
-      return def.edges.some((e) => e.from === s.from && e.to === s.to) ? s : null
-    })
-  }, [def])
-
   const badges = useMemo(() => badgesOf(doc.analysis.diagnostics, def), [doc.analysis.diagnostics, def])
   const [focusPort, setFocusPort] = useState<string | null>(null)
   const [focusTick, setFocusTick] = useState(0)
-  const ctx = useMemo<CanvasState>(() => ({ selectedNode: sel?.kind === 'node' ? sel.id : null, badges, focusPort, readOnly, reasons }), [sel, badges, focusPort, readOnly, reasons])
+  // A graph input binding has no edge to draw: its target node is the one outlined.
+  const outlined = sel?.kind === 'node' ? sel.id : sel?.kind === 'binding' ? (parseRef(sel.to)?.node ?? null) : null
+  const ctx = useMemo<CanvasState>(() => ({ selectedNode: outlined, badges, focusPort, readOnly, reasons }), [outlined, badges, focusPort, readOnly, reasons])
   const graphHead = useRef<HTMLDivElement>(null)
   const selectedHead = useRef<HTMLElement>(null)
 
-  // An issue was chosen: select and reveal its element, then move keyboard focus to its heading.
+  // An issue was chosen (the editor already selected its element): outline its port, then move keyboard focus to its heading.
   useEffect(() => {
     if (!focusReq || !def) return
     const t = focusReq.target
-    setFocusPort(null)
-    if (t.kind === 'node') setSel({ kind: 'node', id: t.id })
-    else if (t.kind === 'port') {
-      setSel({ kind: 'node', id: t.node })
-      setFocusPort(makeRef(t.node, t.side, t.port))
-    } else if (t.kind === 'edge') setSel({ kind: 'edge', from: t.from, to: t.to })
-    else if (t.kind === 'binding') {
-      const to = parseRef(t.to)
-      if (to) {
-        setSel({ kind: 'node', id: to.node })
-        setFocusPort(t.to)
-      }
-    } else setSel(null)
+    setFocusPort(t.kind === 'port' ? makeRef(t.node, t.side, t.port) : t.kind === 'binding' ? t.to : null)
     setFocusTick(focusReq.nonce) // focus once the selection below has rendered
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusReq?.nonce])
@@ -233,7 +216,9 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
         if (!a || !b) return []
         const selected = sel?.kind === 'edge' && sel.from === e.from && sel.to === e.to
         const badge = badges.edges[`${e.from} -> ${e.to}`]
-        const label = badge ? (badge.errors > 0 ? `✖ ${t('editor.nodeErrors', { count: badge.errors })}` : `⚠ ${t('editor.nodeWarnings', { count: badge.warnings })}`) : undefined
+        const issue = badge ? (badge.errors > 0 ? `✖ ${t('editor.nodeErrors', { count: badge.errors })}` : `⚠ ${t('editor.nodeWarnings', { count: badge.warnings })}`) : ''
+        // A selected edge says what it carries (F2.3 requirement 8).
+        const label = [selected && def ? sourceType(def, e.from) : '', issue].filter(Boolean).join(' · ') || undefined
         return [{ id: `${e.from}->${e.to}`, source: a.node, target: b.node, sourceHandle: `out:${a.port}`, targetHandle: `in:${b.port}`, selected, ariaLabel: `${e.from} → ${e.to}`, className: selected ? 'ed-edge-sel' : '', label, labelStyle: { fill: 'var(--fg)', fontSize: 11 }, labelBgStyle: { fill: 'var(--raised)' } }]
       }),
     [def, sel, badges, t],
@@ -273,9 +258,8 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
   const queryTargets = useCallback(
     async (from: string): Promise<Record<string, QueryResult>> => {
       if (!def) return {}
-      const targets = Object.entries(def.nodes).flatMap(([id, n]) => Object.keys(n.inputs ?? {}).map((p) => makeRef(id, 'inputs', p)))
-      const a = await queryConnectTargets((ops) => g.applyOps(ops, { quiet: true }), from, targets)
-      if (a.ok) return a.targets
+      const a = await listConnections((ops) => g.applyOps(ops, { quiet: true }), { from })
+      if (a.ok) return verdictsOf(a.options)
       setNotice(t('editor.connectTargetsFailed', { message: a.message }))
       return {}
     },
@@ -534,11 +518,13 @@ function Inner({ g, doc, focusReq }: { g: GraphDocument; doc: DocState; focusReq
           ))}
         </ul>
         {def && sel && (
-          <Selected headRef={selectedHead} def={def} sel={sel} onRemoveEdge={(from, to) => void run([{ op: 'remove_edge', from, to }]).then((r) => r.ok && sel.kind === 'edge' && setSel(null))} readOnly={readOnly} />
+          <Selected headRef={selectedHead} def={def} sel={sel} onRemove={(b) => void run([removeOp(b)]).then((r) => r.ok && sel.kind !== 'node' && setSel(null))} readOnly={readOnly} />
         )}
       </Card>
 
-      <Inspector g={g} doc={doc} nodeId={selectedId} readOnly={readOnly} onRenamed={(id) => setSel({ kind: 'node', id })} />
+      {def && <BindingsPanel g={g} def={def} diagnostics={doc.analysis.diagnostics} selection={selection} readOnly={readOnly} />}
+
+      <Inspector g={g} doc={doc} nodeId={outlined} readOnly={readOnly} onRenamed={(id) => setSel({ kind: 'node', id })} />
     </div>
   )
 }
@@ -549,9 +535,15 @@ function placementsAuto(def: Definition): Record<string, Point> {
   return Object.fromEntries(Object.entries(auto).map(([id, p]) => [id, { x: p.x, y: p.y }]))
 }
 
-function Selected({ def, sel, onRemoveEdge, readOnly, headRef }: { def: Definition; sel: NonNullable<Sel>; onRemoveEdge: (from: string, to: string) => void; readOnly: boolean; headRef: React.RefObject<HTMLElement | null> }) {
+function Selected({ def, sel, onRemove, readOnly, headRef }: { def: Definition; sel: NonNullable<Selection>; onRemove: (b: Binding) => void; readOnly: boolean; headRef: React.RefObject<HTMLElement | null> }) {
   const { t } = useI18n()
-  const conns = sel.kind === 'node' ? def.edges.filter((e) => parseRef(e.from)?.node === sel.id || parseRef(e.to)?.node === sel.id) : def.edges.filter((e) => e.from === sel.from && e.to === sel.to)
+  const edge = (e: EdgeDef): Binding => ({ kind: 'edge', from: e.from, to: e.to })
+  const conns: Binding[] =
+    sel.kind === 'node'
+      ? def.edges.filter((e) => parseRef(e.from)?.node === sel.id || parseRef(e.to)?.node === sel.id).map(edge)
+      : sel.kind === 'edge'
+        ? def.edges.filter((e) => e.from === sel.from && e.to === sel.to).map(edge)
+        : (def.graph_input_bindings ?? []).filter((b) => b.from === sel.from && b.to === sel.to).map((b): Binding => ({ kind: 'binding', from: b.from, to: b.to }))
   const node = sel.kind === 'node' ? def.nodes[sel.id] : undefined
   return (
     <div className="ed-selected" data-testid="selected">
@@ -570,11 +562,11 @@ function Selected({ def, sel, onRemoveEdge, readOnly, headRef }: { def: Definiti
       <div className="mu">{sel.kind === 'node' ? t('editor.connections') : t('editor.connection')}</div>
       {conns.length === 0 && <div className="mu">{t('editor.connections.none')}</div>}
       {conns.map((e) => (
-        <div className="row between" key={`${e.from}->${e.to}`} data-testid="connection">
+        <div className="row between" key={`${e.kind}:${e.from}->${e.to}`} data-testid="connection">
           <span className="mono">
-            {e.from} → {e.to}
+            {e.from} → {e.to} <span className="mu">{sourceType(def, e.from)}</span>
           </span>
-          <Button size="sm" variant="danger" disabled={readOnly} onClick={() => onRemoveEdge(e.from, e.to)} aria-label={t('editor.connection.removeLabel', { from: e.from, to: e.to })} data-testid="remove-edge">
+          <Button size="sm" variant="danger" disabled={readOnly} onClick={() => onRemove(e)} aria-label={t('editor.connection.removeLabel', { from: e.from, to: e.to })} data-testid="remove-edge">
             {t('editor.connection.remove')}
           </Button>
         </div>
