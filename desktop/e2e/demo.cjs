@@ -428,6 +428,44 @@ async function startDemo(app, page) {
     await page.click('[data-testid="editor-close"]') // the edit was undone by the removal: nothing unsaved
     await page.click('[data-testid="nav-dashboard"]')
 
+    // F2.3 E5a.3: hints. An unused output binds to a compatible unbound required input in two actions.
+    const hinted = path.join(graphDir, 'hints.yaml')
+    const hintText = (extra) => 'schema_version: 0\nid: hints\ninputs: {}\nnodes:\n' + extra + '  b:\n    type: shell\n    config: {command: "true"}\n    inputs:\n      text: {type: string, required: true}\nedges: []\noutputs: {}\n'
+    const hintProducer = '  a:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n'
+    fs.writeFileSync(hinted, hintText(hintProducer))
+    await stubOpen(hinted)
+    await page.click('[data-testid="nav-editor"]')
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="hint"][data-kind="unused-output"][data-ref="a.outputs.stdout"]')
+    await page.click('[data-testid="hint"][data-ref="a.outputs.stdout"] [data-testid="hint-options"]')
+    await page.click('[data-testid="hint-option-b.inputs.text"]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="hint"]'))
+    await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"][data-to="b.inputs.text"]')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
+    // Adding a required graph input from an unbound-input hint: one click, one batch, the warning goes.
+    fs.writeFileSync(hinted, hintText(''))
+    await stubOpen(hinted)
+    await page.click('[data-testid="editor-open"]')
+    await page.waitForSelector('[data-testid="hint"][data-kind="unbound-input"]')
+    await page.click('[data-testid="hint-add-input"]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="hint"]'))
+    await page.waitForSelector('[data-testid="graph-input"][data-name="text"]')
+    const withInput = await page.locator('[data-testid="yaml-content"]').textContent()
+    assert.ok(/inputs:\s*\n?\s*text:.*required: true/s.test(withInput) || withInput.includes('text: {type: string, required: true}'), 'the YAML shows the new input')
+    assert.ok(withInput.includes('inputs.text') && withInput.includes('b.inputs.text'), 'the YAML shows the binding')
+    // The graph inputs card edits and removes it; removal previews the binding that goes.
+    await page.click('[data-testid="remove-graph-input-text"]')
+    await page.waitForSelector('[data-testid="graph-input-preview"]')
+    assert.match(await page.textContent('[data-testid="graph-input-preview"]'), /inputs\.text → b\.inputs\.text/)
+    await page.click('[data-testid="graph-input-preview-apply"]')
+    await page.waitForSelector('[data-testid="graph-inputs-empty"]')
+    await page.waitForSelector('[data-testid="hint"][data-kind="unbound-input"]')
+    await page.click('[data-testid="editor-undo"]')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
+    await page.click('[data-testid="nav-dashboard"]')
+
     // E2.3: window focus finds outside changes; Save and run runs the SAVED file.
     const focusIt = () => page.evaluate(() => window.dispatchEvent(new Event('focus')))
     const watched = path.join(graphDir, 'watched.yaml')
@@ -856,6 +894,17 @@ async function startDemo(app, page) {
     await page.click('[data-testid="view-map"]')
     await page.click('[data-testid="node-fast"]')
     assert.match(await page.textContent('[data-testid="node-panel"]'), /no correction loop/)
+    await page.click('[data-testid="node-flaky"]')
+    // F2.6: the overview. A succeeded run has no outcome card; a timeline row selects its node; the Retried filter leaves flaky.
+    assert.equal(await page.locator('[data-testid="run-outcome"]').count(), 0)
+    assert.match(await page.textContent('[data-testid="critical-path-nodes"]'), /approve/)
+    await page.click('[data-testid="timeline-row-fast"]')
+    assert.equal(await page.locator('[data-testid="node-fast"].sel').count(), 1)
+    await page.click('[data-testid="nodes-retried"]')
+    assert.equal(await page.locator('[data-testid="node-apply"][data-dimmed="true"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="timeline-row-flaky"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="timeline-row-apply"]').count(), 0)
+    await page.click('[data-testid="nodes-all"]')
     await page.click('[data-testid="node-flaky"]')
     await shot(page, '2-attempts-reason-evidence')
 

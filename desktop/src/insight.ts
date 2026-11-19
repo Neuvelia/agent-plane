@@ -1,15 +1,12 @@
+import { eventTimeMs as ms } from './eventTime'
 import type { Locale } from './i18n'
-import type { EventSummary, RunView } from './reducer'
+import type { EventSummary, NodeStatus, RunView } from './reducer'
+import { cellsOf, nodeSegments, type CellTone, type TimelineSegment } from './timelineSegments'
+import type { GraphSummary } from './types'
 
 // Pure functions over the reduced run view. They are computed from events, are
 // labelled as such in the UI, and have no authority over run state. A value that
 // cannot be known is `undefined` and shown as unknown, never as 0.
-
-const ms = (iso: string | undefined): number | undefined => {
-  if (!iso) return undefined
-  const t = Date.parse(iso)
-  return Number.isNaN(t) ? undefined : t
-}
 
 export interface Kpis {
   /** Run start to its end, or to the newest event while it is still going. Never extrapolated. */
@@ -37,6 +34,23 @@ export function runKpis(run: RunView): Kpis {
   return { wallClockMs, nodeTimeMs, savedMs, retries }
 }
 
+export type AgentTime = { kind: 'unknown' } | { kind: 'notApplicable' } | { kind: 'value'; ms: number }
+
+/**
+ * Sum of the durations of finished nodes whose graph type is `agent` (F2.6 requirement 3).
+ * Not applicable for a graph with no agent node; unknown without a graph or until one has finished.
+ */
+export function agentTime(run: RunView, graph: GraphSummary | null): AgentTime {
+  if (!graph) return { kind: 'unknown' }
+  const agents = graph.nodes.filter((n) => n.type === 'agent')
+  if (agents.length === 0) return { kind: 'notApplicable' }
+  const finished = agents.flatMap((a) => {
+    const n = run.nodes[a.id]
+    return n?.finishedAt !== undefined && n.durationMs !== undefined ? [n.durationMs] : []
+  })
+  return finished.length === 0 ? { kind: 'unknown' } : { kind: 'value', ms: finished.reduce((a, b) => a + b, 0) }
+}
+
 /** "820 ms", "48.3s", "1m 12s". Units are the same in every language. */
 export function formatDuration(durationMs: number, locale: Locale): string {
   if (durationMs < 1000) return `${Math.round(durationMs)} ms`
@@ -50,8 +64,21 @@ export function formatDuration(durationMs: number, locale: Locale): string {
 
 export const MAX_TIMELINE_COLUMNS = 600
 
+export interface TimelineRow {
+  name: string
+  /** One flag per column: the node was running (started, not yet finished) in that bucket. */
+  active: boolean[]
+  /** One tone per column from the node's segments; a column the segments do not cover but the node spanned is "running". */
+  cells: (CellTone | undefined)[]
+  segments: TimelineSegment[]
+  attempts: number
+  status: NodeStatus
+  startSeconds: number
+  durationMs?: number
+}
+
 export interface Timeline {
-  rows: { name: string; active: boolean[] }[]
+  rows: TimelineRow[]
   /** Seconds one dot stands for: 1 unless the run is longer than the column cap. */
   bucketSeconds: number
   columns: number
@@ -75,7 +102,9 @@ export function timeline(run: RunView, maxColumns = MAX_TIMELINE_COLUMNS): Timel
       const bucketEnd = bucketStart + bucketSeconds * 1000
       return from < bucketEnd && to >= bucketStart
     })
-    return [{ name: id, active }]
+    const segments = nodeSegments(run, n, start, end)
+    const cells = cellsOf(segments, columns, bucketSeconds).map((tone, c) => tone ?? (active[c] ? ('running' as const) : undefined))
+    return [{ name: id, active, cells, segments, attempts: n.attempts.length, status: n.status, startSeconds: (from - start) / 1000, durationMs: n.durationMs }]
   })
   return { rows, bucketSeconds, columns }
 }

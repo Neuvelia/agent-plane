@@ -83,6 +83,7 @@ as implemented merely because the full spec describes it.
   schema-10 `value_recorded` streams leave run views unchanged:
   `desktop/test/schema10.test.ts`.
 - Settings recording switch: `desktop/test/recording.test.tsx`.
+- Run overview selectors and views (F2.6: waits, critical path, outcome, node filters, timeline segments): `desktop/test/overview.test.ts`, `desktop/test/overview.test.tsx`.
 - Recorded values (F2.3 E5b.1: `values.ts` reducer, `valuePicker.ts` picker rules, `useRunValues.ts`, `ValuePicker.tsx`; values stay out of `reducer.ts` and never touch storage or console): `desktop/test/edge-values.test.ts`, `desktop/test/edge-values-view.test.tsx`.
 - Edge inspector (F2.3 E5b.2: the ten states and their precedence, `\uXXXX` marks for control and bidirectional characters, JSON formatting that never changes a literal, Copy only on click, text only, no link or storage): `desktop/test/edge-inspector.test.tsx`, stories `editor/edgeValue.stories.tsx`.
 - Welcome screen, capability text and first-run flag: `desktop/test/capabilities.test.tsx`.

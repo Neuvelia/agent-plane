@@ -52,7 +52,8 @@ before changing a document, operation or save flow.
   notice, never as an empty target list. Selection (node, edge, graph input
   binding) has one owner, `selection.ts`, held by the open editor and shared by
   the canvas, node list and `BindingsPanel.tsx` (F2.3 E5a.2); replace is one
-  atomic batch built by `bindings.ts`. `layout.ts`
+  atomic batch built by `bindings.ts`. `hints.ts` is the one renderer file that
+  names validator codes (the two "needs a connection" hints). `layout.ts`
   computes drawing positions and tolerates malformed metadata; moving or
   arranging updates draft `metadata.layout` through `set_layout`, and Save
   persists it without changing the graph's semantic version. When the engine
@@ -98,27 +99,4 @@ The contracts are `docs/features/F2.1-graph-canvas.md`,
 `docs/adr/0021-local-graph-document-api-and-write-trust.md`,
 `docs/adr/0022-graph-layout-metadata.md`, and `docs/graph-spec.md`. F2.1
 slices E1 and E2.1-E2.3 are present; F2.2 (`docs/features/F2.2-node-inspector.md`)
-and the F2.4 Issues panel are present; F2.3 E5a.2 (Bindings panel) and E5b.2 (edge inspector) are present; the rest of F2.3 (E5a.3) remains a separate scope.
-
-## Choose regression tests
-
-- Edge inspector states, text safety, JSON formatting and Copy: `desktop/test/edge-inspector.test.tsx`; stories `edgeValue.stories.tsx`.
-- Draft/history, stale validation and run gating: `desktop/test/editor-doc.test.ts`.
-- Template picker and draft text: `desktop/test/templates.test.tsx`, stories in `picker.stories.tsx`.
-- Layout, ID suggestion and deletion counts: `desktop/test/editor-layout.test.ts`.
-- Guard against renderer graph rules: `desktop/test/no-graph-rules.test.ts`.
-- Inspector model, help catalogue and stories: `desktop/test/inspector-model.test.ts`,
-  `desktop/test/inspector-text.test.ts`, `inspector/inspector.stories.tsx`.
-- Story states and recorded responses: `editor.stories.tsx`,
-  `desktop/test/stories.test.ts`.
-- Real grant, edit, keyboard, conflict and Save and run path:
-  `desktop/e2e/demo.cjs`.
-- Go edit semantics, layout-version stability and write conflicts:
-  `internal/graph/edit/edit_test.go`, `internal/api/docs_test.go`.
-
-Run focused Vitest files first, then `npm run check` in `desktop/` and
-repository `make check`. For behavior changes to the editor or bridge, run
-the relevant real Electron/story checks from `desktop/README.md`. Add a
-focused behavior test for a rejected canvas target when changing that path;
-the static no-graph-rules test does not prove the refusal UI. Update this
-guide when a named owner or contract changes.
+and the F2.4 Issues panel are present; F2.3 E5a.2-E5a.3 (Bindings panel, graph input and output cards, hints) and E5b.2 (edge inspector) are present.

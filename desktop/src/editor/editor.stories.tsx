@@ -14,6 +14,9 @@ import editAddNode from '../../test/fixtures/graph-edit-add-node.json'
 import editListConnections from '../../test/fixtures/graph-edit-list-connections-demo.json'
 import editListBindings from '../../test/fixtures/graph-edit-list-connections-bindings.json'
 import editReplace from '../../test/fixtures/graph-edit-replace-bindings.json'
+import listPairFrom from '../../test/fixtures/graph-edit-list-connections-pair-from.json'
+import listMixedTo from '../../test/fixtures/graph-edit-list-connections-mixed-to.json'
+import removeInput from '../../test/fixtures/graph-edit-remove-graph-input-with-inputs.json'
 import bindingsOpen from '../../test/fixtures/graph-open-bindings.json'
 import bindingsValidate from '../../test/fixtures/graph-validate-bindings.json'
 import editDelete from '../../test/fixtures/graph-edit-delete-demo.json'
@@ -329,4 +332,38 @@ export const BindingsConflict: S = story({ ...withBindings, save: 'conflict' }, 
   await wait(500)
   await click(root, 'editor-save')
   await until(root, '[data-testid="conflict-banner"]')
+})
+
+// ---- graph inputs, graph outputs and hints (F2.3 E5a.3) --------------------------------
+const hinted = (opened: unknown): GraphStory => ({
+  ...base,
+  opened: opened as OpenResponse,
+  edit: (ops) => (ops[0]?.op === 'list_connections' ? ('from' in ops[0] ? listPairFrom : listMixedTo) : ops[0]?.op === 'remove_graph_input' ? removeInput : undefined),
+})
+
+export const GraphInputsCard: S = story(hinted(inputsOpen), async (root) => {
+  await open(root)
+  await until(root, '[data-testid="graph-input"]')
+})
+export const GraphInputRemovalPreview: S = story(hinted(inputsOpen), async (root) => {
+  await open(root)
+  await click(root, 'remove-graph-input-topic')
+  await until(root, '[data-testid="graph-input-preview-apply"]')
+})
+export const GraphOutputsCard: S = story(hinted(configErrorOpen), async (root) => {
+  await open(root)
+  await until(root, '[data-testid="graph-output"]')
+})
+export const HintUnusedOutputOptions: S = story(hinted(pairOpen), async (root) => {
+  await open(root)
+  const hint = (await until(root, '[data-testid="hint"][data-kind="unused-output"] [data-testid="hint-options"]')) as HTMLElement
+  hint.click()
+  await until(root, '[data-testid^="hint-option-"]')
+})
+export const HintUnboundInputOptions: S = story(hinted(mixedOpen), async (root) => {
+  await open(root)
+  const hint = (await until(root, '[data-testid="hint"][data-ref="b.inputs.free"] [data-testid="hint-options"]')) as HTMLElement
+  hint.click()
+  await until(root, '[data-testid="hint-candidates"]')
+  await wait(200)
 })

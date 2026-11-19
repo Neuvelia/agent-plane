@@ -49,6 +49,10 @@ export type Op =
   | { op: 'add_edge' | 'remove_edge' | 'can_connect'; from: string; to: string }
   // F2.3 graph data operations: graph input bindings and the connection query (from: an output or inputs.NAME, or to: an input)
   | { op: 'add_graph_input_binding' | 'remove_graph_input_binding'; from: string; to: string }
+  | { op: 'add_graph_input'; id: string; type: string; required: boolean }
+  | { op: 'update_graph_input'; id: string; new_id?: string; type?: string; required?: boolean }
+  | { op: 'remove_graph_input' | 'remove_graph_output'; id: string }
+  | { op: 'set_graph_output'; id: string; from: string }
   | { op: 'list_connections'; from: string }
   | { op: 'list_connections'; to: string }
   // F2.2 inspector operations
