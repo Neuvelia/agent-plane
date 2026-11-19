@@ -1,0 +1,81 @@
+# Template: update dependencies with a coding agent, limited to manifest files.
+# A person approves before any agent call; "update" runs Codex in a bounded loop
+# whose reported_file_scope gate rejects changes outside allowed_paths; a person
+# approves the result, because changed dependencies are hard to review at a glance.
+# Fill the workspace before running. Agent nodes run through
+#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex --input scope=...
+# Codex authentication needs a named environment reference (for example
+# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.
+# The shell node only prints text. Nothing is staged, committed, pushed or sent.
+schema_version: 0
+id: dependency-update
+name: Dependency update
+inputs:
+  scope: {type: string, required: true}
+nodes:
+  confirm_start:
+    type: human
+    config:
+      prompt: Start the coding agent on this dependency update? This may use a paid model.
+      context_inputs: [scope]
+    inputs:
+      scope: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  update:
+    type: agent
+    inputs:
+      task: {type: string, required: true}
+      start: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: "" # FILL: absolute path of the Git repository the agent may edit
+      allowed_paths: ["package.json", "package-lock.json"] # REVIEW: the manifest and lock files of your project
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: manifest-scope
+          kind: reported_file_scope
+          input: candidate
+          allowed_paths: ["package.json", "package-lock.json"] # REVIEW: keep equal to config.allowed_paths
+      bindings:
+        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}
+  approve_update:
+    type: human
+    config:
+      prompt: Review the summary and changed manifest files. Accept the update? Install and test it yourself before merging.
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  record:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["update accepted\n"]
+    inputs:
+      decision: {type: string, required: true}
+graph_input_bindings:
+  - {from: inputs.scope, to: confirm_start.inputs.scope}
+  - {from: inputs.scope, to: update.inputs.task}
+edges:
+  - {from: confirm_start.outputs.decision, to: update.inputs.start}
+  - {from: update.outputs.summary, to: approve_update.inputs.summary}
+  - {from: update.outputs.changed_files, to: approve_update.inputs.changed_files}
+  - {from: approve_update.outputs.decision, to: record.inputs.decision}
+outputs: {}
+metadata:
+  layout:
+    nodes:
+      confirm_start: {x: 0, y: 0}
+      update: {x: 320, y: 0}
+      approve_update: {x: 640, y: 0}
+      record: {x: 960, y: 0}

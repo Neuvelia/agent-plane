@@ -155,7 +155,7 @@ state and conflict handling live in `src/editor/doc.ts` and
 renderer holds no graph rules. Saving sends the hash of the text it opened
 (`base_hash`); a file changed on disk is reported as a conflict and is never
 overwritten silently. A new graph is create-only. "New graph" first opens a
-picker (F2.12, `src/editor/TemplatePicker.tsx`): Blank graph or one of the four
+picker (F2.12, `src/editor/TemplatePicker.tsx`): Blank graph or one of the eight
 templates of `.agents/templates/`, which the renderer bundles as text at build
 time (`src/templates.ts`). A template's draft is its text with only the
 `id: <template id>` line replaced by the id derived from the chosen file name;
