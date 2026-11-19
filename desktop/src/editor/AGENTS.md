@@ -46,10 +46,12 @@ before changing a document, operation or save flow.
   leaving with unsaved text.
 - Canvas controls send versioned operations to the Go API. `can_connect`
   answers whether a target is valid; the UI may display its reason but must
-  not duplicate port compatibility, cycle or binding rules. `connect.ts`
-  asks it for every candidate input in batches of at most `MAX_OPS_PER_BATCH`
-  (the engine's `MaxOps`, kept equal by a test); a refused batch is shown as a
-  notice, never as an empty target list. `layout.ts`
+  not duplicate port compatibility, cycle or binding rules. `connections.ts`
+  asks the one `list_connections` query; a refused query is shown as a
+  notice, never as an empty target list. Selection (node, edge, graph input
+  binding) has one owner, `selection.ts`, held by the open editor and shared by
+  the canvas, node list and `BindingsPanel.tsx` (F2.3 E5a.2); replace is one
+  atomic batch built by `bindings.ts`. `layout.ts`
   computes drawing positions and tolerates malformed metadata; moving or
   arranging updates draft `metadata.layout` through `set_layout`, and Save
   persists it without changing the graph's semantic version. When the engine
@@ -86,7 +88,7 @@ The contracts are `docs/features/F2.1-graph-canvas.md`,
 `docs/adr/0021-local-graph-document-api-and-write-trust.md`,
 `docs/adr/0022-graph-layout-metadata.md`, and `docs/graph-spec.md`. F2.1
 slices E1 and E2.1-E2.3 are present; F2.2 (`docs/features/F2.2-node-inspector.md`)
-and the F2.4 Issues panel are present; F2.3 remains a separate scope.
+and the F2.4 Issues panel are present; F2.3 E5a.2 (Bindings panel) is present; the rest of F2.3 remains a separate scope.
 
 ## Choose regression tests
 

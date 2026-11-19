@@ -37,6 +37,21 @@ describe('no graph rules in the renderer', () => {
     expect(hits).toEqual([])
   })
 
+  // F2.3: the bindings files read the engine's answers (list_connections, diagnostics, the batch itself).
+  // They may map references to operations, but never compare port types, name a validator code or search for a cycle.
+  const bindingFiles = sources.filter((s) => /[\\/]editor[\\/](bindings|connections|selection)\.ts$|[\\/]editor[\\/](BindingsPanel|AddBindingForm|TargetOptions)\.tsx$/.test(s.p))
+  it('scans the bindings panel files', () => {
+    expect(bindingFiles.map((s) => s.p.split(/[\\/]/).pop()).sort()).toEqual(['AddBindingForm.tsx', 'BindingsPanel.tsx', 'TargetOptions.tsx', 'bindings.ts', 'connections.ts', 'selection.ts'])
+  })
+  const code = (text: string) => {
+    const bare = text.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*\*[\s\S]*?\*\//g, '')
+    return /\.type\s*[!=]==?|\btype\s*[!=]==?\s*\w+\.type|[EW]_[A-Z]{3,}|\.code\s*[!=]==?/.test(bare) || /cycle/i.test(bare)
+  }
+  it('the bindings files never compare types, name a code or look for cycles', () => {
+    const hits = bindingFiles.filter((s) => code(s.text)).map((s) => s.p)
+    expect(hits).toEqual([])
+  })
+
   // F2.2: the inspector renders the sidecar's descriptors. It must not branch on
   // a node type or name a config key to decide what is valid.
   const inspector = sources.filter((s) => s.p.includes(join('editor', 'inspector')))

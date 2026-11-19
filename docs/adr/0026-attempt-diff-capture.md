@@ -1,7 +1,8 @@
 # ADR-0026 - Attempt diff capture for Attempt Compare
 
-**Status:** proposed for F2.8b (owner decisions recorded 2026-11-15; see "Owner decisions"); the Option C
-part (F2.8a) is implemented
+**Status:** accepted 2026-11-19 for the F2.8b engine capture (implemented behind `--record-diffs`; owner decisions
+recorded 2026-11-15 and 2026-11-18, see "Owner decisions"); the Option C part (F2.8a) is implemented. The desktop
+diff panel and setting, and a real-Codex validation run (`docs/validation/F2.8b-codex-diff-demo.md`), are follow-ups
 **Date:** 2026-11-15
 
 ## Context
@@ -41,10 +42,10 @@ changed file; redact, bound and emit it as events.
 Snapshot mechanism (recommended within A): reuse the existing `gitstate` pass, which already reads every
 non-ignored working file to hash it. For before-content, a tracked file whose working bytes hash (as a Git
 blob, computed in Go during the same read) to its index blob id is recoverable from the repository object
-database (read with `git cat-file --batch`, which applies no filters). Any other file, including tracked
+database (read with `git cat-file blob <id>`, one process per changed file; it applies no filters). Any other file, including tracked
 files that differ only through eol conversion or clean/smudge filters, counts as dirty: a dirty or
 untracked non-ignored text file up to 1 MiB is copied into a private
-per-run directory under the store (0700), keyed by its SHA-256, and deleted when the run ends. Nothing is
+private per-run scratch directory (0700, files 0600) created with `os.MkdirTemp` under the OS temp directory, keyed by its SHA-256, capped at 64 MiB and deleted when the run ends. Nothing is
 written into the user's `.git`. Ignored files are listed by path, never read. Patches are rendered in Go
 (Myers line diff, small and dependency-free) so no Git diff machinery, textconv or external driver can run.
 
@@ -66,7 +67,7 @@ object directory is configured.
   discovery (D5). Line endings: patches compare bytes as stored on disk; `\r\n` changes appear as changes.
 - **Cost:** one extra read of dirty/untracked files at each snapshot (already read for hashing), small
   copies, Go diff over changed files only. Clean tracked files cost one `cat-file` read when they change.
-- **Event schema:** one new event type `attempt_diff`, additive schema 12 (pending owner confirmation).
+- **Event schema:** one new event type `attempt_diff`, additive schema 12 (confirmed 2026-11-18).
 - **What the UI can show:** per-attempt per-file patches, line counts, hashes, change kinds, omissions.
   For consecutive attempts the later patch is the change from the earlier result; for non-consecutive
   attempts the UI lists intermediate patches rather than composing them.
@@ -128,12 +129,11 @@ observed paths (Agent producers) and `changed_files_scope` evidence.
    verdict, retry and acceptance unchanged. This differs from deny-mode `changed_files_scope`, where
    inspection failure is an operational error, because capture is evidence for people, not a check.
 7. **Git safety:** reuse `gitstate`'s controlled environment; never run hooks, clean/smudge filters,
-   textconv, external diff drivers or fsmonitor; read objects with `cat-file --batch` only.
+   textconv, external diff drivers or fsmonitor; read objects with `cat-file blob <id>` only (no `--batch`: the shared runner has no stdin).
 
 ## Owner decisions
 
-Decided by the owner on 2026-11-15. They match the recommendation above. This ADR stays **proposed** for the
-F2.8b part until that part is implemented and validated.
+Decided by the owner on 2026-11-15. They match the recommendation above. The F2.8b engine part is implemented; the real-Codex run is a recorded follow-up.
 
 - **D1 - Phasing:** ship Option C as F2.8a first (desktop only). Implemented on
   `claude/f2-8a-attempt-compare`.
@@ -145,7 +145,17 @@ F2.8b part until that part is implemented and validated.
 - **D5 - Native Windows:** accept "not available"; Git discovery for `gitstate` is tracked separately.
 - **D6 - Shell producers:** Agent producers only.
 - **Budgets:** 16 KiB per event, 256 KiB per attempt, 4 MiB per run, 1 MiB per file, accepted.
-- **Schema number:** ADR-0023's `value_recorded` is schema 10 and F3.1 workspace isolation took schema 11, so `attempt_diff` is schema 12 (proposed 2026-11-17, pending owner confirmation; an earlier decision said 11).
+- **Implementation decisions (owner, 2026-11-18, "all recommendations accepted"):**
+  - Q1 schema 12 confirmed; Q2 ADR-0026 keeps its number.
+  - Q3 at most 256 files are listed per attempt (first 256 sorted paths); the rest are counted in the summary's `omitted_files`.
+  - Q4 secrets are redacted in the file content of both sides (and the path) before diffing, not in the rendered patch. A secret-to-secret edit shows as `modified` with no visible line change; hashes still differ.
+  - Q5 ignored files are listed without `--directory`, compared by `Lstat` signature only (never opened), capped at 20,000 entries; over the cap the summary carries `E_DIFF_IGNORED_LIMIT` and ignored detection is skipped. An edit that keeps size, mtime and mode is not detected.
+  - Q6 scratch copies live in `os.MkdirTemp` under the OS temp directory (0700, files 0600, keyed by SHA-256), are removed when the run ends and total at most 64 MiB (beyond it a file is listed with hashes and `omitted_reason: budget`). A crash can leave a directory behind; no cleanup tool exists until F3.2/F3.11.
+  - Q7 capture runs only when the producer returned without error.
+  - Q8 `git cat-file blob <id>` per changed clean tracked file; `--batch` only if profiling asks.
+  - Q9 the summary is emitted last with `files`, `omitted_files`, `added_lines`, `deleted_lines`, `patch_bytes` and, when capture was incomplete, `diagnostic_code` from the closed set `E_DIFF_GIT_UNAVAILABLE`, `E_DIFF_GIT_FAILED`, `E_DIFF_TIMEOUT`, `E_DIFF_SCRATCH`, `E_DIFF_IGNORED_LIMIT`, `E_DIFF_UNSUPPORTED_ENTRY` plus `omitted_reason: unreadable`.
+  - Q10 the Compare diff panel (FR17) and the desktop setting are a follow-up issue.
+- **Schema number:** ADR-0023's `value_recorded` is schema 10 and F3.1 workspace isolation took schema 11, so `attempt_diff` is schema 12 (confirmed by the owner 2026-11-18; an earlier decision said 11).
 
 ## Consequences
 
@@ -172,7 +182,7 @@ F2.8b part until that part is implemented and validated.
 ## Compatibility and migration
 
 - Option C: no change to events, store, API, graph schema or CLI envelope.
-- Option A: one additive event type and event schema 12 (schema 10 is ADR-0023's `value_recorded`, schema 11 is F3.1; number pending owner confirmation).
+- Option A: one additive event type and event schema 12 (schema 10 is ADR-0023's `value_recorded`, schema 11 is F3.1; number confirmed 2026-11-18).
   Readers of schema 1-11 streams are unchanged; older readers reject the new
   schema as they do for any new contract. Default CLI and serve streams are unchanged without
   `--record-diffs`. Stored runs are never rewritten. A later SQLite or F3.2 store ingests the events as-is.

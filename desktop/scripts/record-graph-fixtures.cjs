@@ -89,6 +89,36 @@ edges:
   - {from: a.outputs.out, to: b.inputs.n}
 outputs: {}
 `,
+  // F2.3 E5a.2: an edge, a graph input binding, and candidates that are refused for different reasons
+  bindings: `schema_version: 0
+id: bindings
+inputs:
+  topic: {type: string, required: true}
+nodes:
+  a:
+    type: shell
+    config: {command: /usr/bin/true}
+    outputs:
+      stdout: {type: string, required: true}
+  c:
+    type: shell
+    config: {command: /usr/bin/true}
+    inputs:
+      seed: {type: string, required: true}
+    outputs:
+      stdout: {type: string, required: true}
+  b:
+    type: shell
+    config: {command: /usr/bin/true}
+    inputs:
+      text: {type: string, required: true}
+      count: {type: number}
+graph_input_bindings:
+  - {from: inputs.topic, to: c.inputs.seed}
+edges:
+  - {from: a.outputs.stdout, to: b.inputs.text}
+outputs: {}
+`,
   // what a new graph starts as
   empty: 'schema_version: 0\nid: new-graph\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n',
   // YAML the engine cannot read
@@ -154,9 +184,10 @@ outputs: {}
     await edit('connect', pair, [{ op: 'add_edge', from: 'a.outputs.stdout', to: 'b.inputs.text' }])
     await edit('refused', pair, [{ op: 'add_edge', from: 'a.outputs.stdout', to: 'nope.inputs.x' }])
     await edit('move', pair, [{ op: 'set_layout', nodes: { a: { x: 40, y: 40 } } }])
-    const opened = JSON.parse(fs.readFileSync(path.join(out, 'graph-open-demo.json'), 'utf8'))
-    const targets = Object.entries(opened.definition.nodes).flatMap(([id, n]) => Object.keys(n.inputs || {}).map((p) => `${id}.inputs.${p}`))
-    await edit('can-connect-demo', demoText, targets.map((to) => ({ op: 'can_connect', from: 'fast.outputs.stdout', to })))
+    // F2.3: list_connections replaces N can_connect operations (one query per source port).
+    await edit('list-connections-demo', demoText, [{ op: 'list_connections', from: 'fast.outputs.stdout' }])
+    await edit('list-connections-bindings', GRAPHS.bindings, [{ op: 'list_connections', from: 'c.outputs.stdout' }])
+    await edit('replace-bindings', GRAPHS.bindings, [{ op: 'remove_edge', from: 'a.outputs.stdout', to: 'b.inputs.text' }, { op: 'add_edge', from: 'c.outputs.stdout', to: 'b.inputs.text' }])
     await edit('rename-demo', demoText, [{ op: 'rename_node', id: 'fast', new_id: 'quick' }])
     await edit('delete-demo', demoText, [{ op: 'remove_node', id: 'flaky' }])
   } finally {
