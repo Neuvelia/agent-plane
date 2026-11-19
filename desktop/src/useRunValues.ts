@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { listRuns, lookupRun } from './api'
 import { usePoll, type PollStatus } from './hooks'
 import { classifyEnd } from './reducer'
@@ -14,6 +14,8 @@ export interface RunValuesStream {
   values?: RunValues
   /** The stream ended other than normally: what was received may be incomplete. */
   lost: boolean
+  /** Subscribes again; values already received stay and replayed events are ignored. */
+  reconnect: () => void
 }
 
 interface Held {
@@ -28,13 +30,16 @@ interface Held {
 // run changes and when the component unmounts; it is never written anywhere.
 export function useRunValues(runId: string | undefined): RunValuesStream {
   const [held, setHeld] = useState<Held>({ runId: undefined, load: 'idle', lost: false })
+  const [attempt, setAttempt] = useState(0)
+  const reconnect = useCallback(() => setAttempt((n) => n + 1), [])
   useEffect(() => {
     if (runId === undefined) {
       setHeld({ runId: undefined, load: 'idle', lost: false })
       return undefined
     }
     let alive = true
-    setHeld({ runId, load: 'loading', values: initialValues(runId), lost: false })
+    // A reconnect keeps what was received; the replay it triggers is idempotent (reduceValues).
+    setHeld((h) => (h.runId === runId && h.values ? { ...h, lost: false } : { runId, load: 'loading', values: initialValues(runId), lost: false }))
     // A run the engine cannot read says so up front; its (absent) events would otherwise look like "no values".
     void lookupRun(runId).then((found) => {
       if (alive && found.kind !== 'found') setHeld((h) => (h.runId === runId ? { ...h, load: 'unavailable', values: undefined } : h))
@@ -66,9 +71,9 @@ export function useRunValues(runId: string | undefined): RunValuesStream {
       stop()
       if (timer) clearTimeout(timer)
     }
-  }, [runId])
+  }, [runId, attempt])
   // A state from a previous run must never be shown for the current one.
-  return held.runId === runId ? { load: held.load, values: held.values, lost: held.lost } : { load: runId === undefined ? 'idle' : 'loading', lost: false }
+  return held.runId === runId ? { load: held.load, values: held.values, lost: held.lost, reconnect } : { load: runId === undefined ? 'idle' : 'loading', lost: false, reconnect }
 }
 
 export interface ValuesPicker {

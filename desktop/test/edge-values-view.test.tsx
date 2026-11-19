@@ -37,7 +37,7 @@ describe('privacy', () => {
     expect(fast?.kind === 'value' && fast.value.value).toBe('fast branch done')
     renderToStaticMarkup(
       <I18nProvider locale="en">
-        <ValuePicker picker={picker({ stream: { load: 'ready', values: v, lost: false } })} />
+        <ValuePicker picker={picker({ stream: { load: 'ready', values: v, lost: false, reconnect: () => undefined } })} />
       </I18nProvider>,
     )
     expect(writes).toEqual([])
@@ -86,11 +86,11 @@ describe('ValuePicker view', () => {
 
   it('reports an unreadable run, a lost connection and loading in both languages', () => {
     const list = pickerRuns(runs, 'demo', 'v2')
-    expect(html(picker({ runs: list, stream: { load: 'unavailable', lost: false } }))).toContain('This run could not be read.')
-    expect(html(picker({ runs: list, stream: { load: 'unavailable', lost: false } }), 'pl')).toContain('Nie udało się odczytać tego uruchomienia.')
-    expect(html(picker({ runs: list, stream: { load: 'ready', values: reduceAllValues(RUN, stream), lost: true } }))).toContain('data-testid="value-picker-lost"')
-    expect(html(picker({ runs: list, stream: { load: 'loading', lost: false } }))).toContain('Loading values')
-    expect(html(picker({ runs: list, stream: { load: 'ready', values: reduceAllValues(RUN, stream), lost: false } }))).toContain('3 values recorded')
+    expect(html(picker({ runs: list, stream: { load: 'unavailable', lost: false, reconnect: () => undefined } }))).toContain('This run could not be read.')
+    expect(html(picker({ runs: list, stream: { load: 'unavailable', lost: false, reconnect: () => undefined } }), 'pl')).toContain('Nie udało się odczytać tego uruchomienia.')
+    expect(html(picker({ runs: list, stream: { load: 'ready', values: reduceAllValues(RUN, stream), lost: true, reconnect: () => undefined } }))).toContain('data-testid="value-picker-lost"')
+    expect(html(picker({ runs: list, stream: { load: 'loading', lost: false, reconnect: () => undefined } }))).toContain('Loading values')
+    expect(html(picker({ runs: list, stream: { load: 'ready', values: reduceAllValues(RUN, stream), lost: false, reconnect: () => undefined } }))).toContain('3 values recorded')
   })
 
   it('no run of this version: says so and offers the others', () => {
@@ -103,5 +103,5 @@ describe('ValuePicker view', () => {
 function picker(over: Partial<ValuesPicker> & { choice?: ValuesPicker['choice'] }): ValuesPicker {
   const list = over.runs ?? pickerRuns(runs, 'demo', 'v2')
   const choice = over.choice ?? noChoice
-  return { runs: list, runsStatus: 'ready', choice, resolved: resolveRun(list, choice), stream: { load: 'idle', lost: false }, choose: () => undefined, confirm: () => undefined, ...over }
+  return { runs: list, runsStatus: 'ready', choice, resolved: resolveRun(list, choice), stream: { load: 'idle', lost: false, reconnect: () => undefined }, choose: () => undefined, confirm: () => undefined, ...over }
 }

@@ -26,7 +26,9 @@ import { badgesOf, type Badge, type Badges, type FocusReq } from './issues'
 import type { Selection, SelectionOwner } from './selection'
 import type { Definition, EdgeDef, Op, QueryResult } from './types'
 import type { GraphDocument } from './useGraphDocument'
+import { EdgeInspector } from './EdgeInspector'
 import { Inspector } from './inspector/Inspector'
+import type { ValuesPicker } from '../useRunValues'
 
 // The canvas draws the definition the engine returned and turns gestures into
 // ADR-0020 operations. Whether a connection is allowed is the engine's answer
@@ -152,7 +154,7 @@ type Mode = null | { kind: 'rename' } | { kind: 'delete' } | { kind: 'connect'; 
 
 export type CanvasBlock = 'parse' | 'anchors' | null
 
-export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner }) {
+export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner; picker: ValuesPicker }) {
   return (
     <ReactFlowProvider>
       <Inner {...props} />
@@ -160,7 +162,7 @@ export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: 
   )
 }
 
-function Inner({ g, doc, focusReq, selection }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner }) {
+function Inner({ g, doc, focusReq, selection, picker }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner; picker: ValuesPicker }) {
   const { t } = useI18n()
   const def = doc.analysis.definition
   // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
@@ -524,7 +526,12 @@ function Inner({ g, doc, focusReq, selection }: { g: GraphDocument; doc: DocStat
 
       {def && <BindingsPanel g={g} def={def} diagnostics={doc.analysis.diagnostics} selection={selection} readOnly={readOnly} />}
 
-      <Inspector g={g} doc={doc} nodeId={outlined} readOnly={readOnly} onRenamed={(id) => setSel({ kind: 'node', id })} />
+      {/* An edge or a graph input binding is inspected as an edge (F2.3 E5b.2); a node as a node (F2.2). */}
+      {def && sel && sel.kind !== 'node' ? (
+        <EdgeInspector def={def} edge={sel} picker={picker} />
+      ) : (
+        <Inspector g={g} doc={doc} nodeId={sel?.kind === 'node' ? sel.id : null} readOnly={readOnly} onRenamed={(id) => setSel({ kind: 'node', id })} />
+      )}
     </div>
   )
 }
