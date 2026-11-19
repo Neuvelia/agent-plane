@@ -92,8 +92,12 @@ set of commands that the runner validates exactly as it validates local ones.
   checks the Host header, sends no CORS headers and has no remote-bind option. Routes today:
   `GET /runs`, `POST /runs`, `GET /runs/{id}`, `GET /runs/{id}/events` (SSE replay then follow),
   `POST /runs/{id}/decisions/{nodeRun}` (idempotent, scoped to the run), `GET /approvals`,
-  graph validate/grant/open/edit/save, and capabilities. There is **no cancel route** yet; it is a
-  F3.4 deliverable (ADR-0028 proposed).
+  `POST /graphs/validate`, `POST /graphs/grants`, `DELETE /graphs/grants/{id}`,
+  `POST /graphs/open`, `POST /graphs/stat`, `POST /graphs/edit`, `PUT /graphs/save`,
+  `GET /capabilities` and `POST /capabilities/check`. None of the graph or capability routes
+  may be reachable by a phone. There is **no HTTP cancel route** yet; it is a F3.4
+  deliverable (ADR-0028 proposed). The cancel *events* (`cancel_requested`,
+  `process_terminated`) already exist at schema 13.
 - Human gates are events, not scheduler states: `approval_requested` without `approval_decided`
   means waiting. A decision carries no approver identity (ADR-0017 states this explicitly).
 - `POST /runs` accepts a `graph_grant` (a saved graph, by id) from the desktop renderer and, for
@@ -203,7 +207,14 @@ non-exportable. Keys are per device, not per account.
 
 1. Desktop (Settings > Mobile) generates a pairing offer: runner public key, a 128-bit one-time
    pairing secret, expiry (2 minutes), relay address (empty for LAN prototype), runner label.
-   Shown as QR; the secret is never logged or stored beyond the offer.
+   Shown as QR; the secret is never logged or stored beyond the offer. The offer also carries
+   the runner's **fingerprint** (hash of its public key) and label; the phone displays both
+   and the desktop shows the same fingerprint, so the user compares them. The relay address in
+   a QR is a hint only: the phone accepts a relay address solely from the signed runner
+   record obtained through the handshake (or the app's built-in default), and never connects
+   to or sends credentials to an address that appears only in a scanned code. A malicious QR
+   (attacker's runner key and relay) is caught by the fingerprint/label check and by the
+   rule that pairing is a handshake with the runner, not a URL to follow.
 2. Phone scans, generates/loads its device key, opens an authenticated key exchange to the
    runner that mixes in the pairing secret (a PSK-style handshake, so a bystander who saw only
    the runner's public key cannot pair).
@@ -216,7 +227,17 @@ non-exportable. Keys are per device, not per account.
 
 **Session auth.** After pairing, each connection is a fresh mutually authenticated key exchange
 using the stored static keys (forward secrecy by ephemeral keys); then an AEAD channel. Only
-then are any projection frames or commands exchanged. The recommended primitive is a standard
+then are any projection frames or commands exchanged. **Transport layering (M2 and M3):** the
+Noise-style handshake is the only authentication and confidentiality layer; it authenticates
+both device and runner by static key and binds the session. In the LAN prototype the TCP/TLS
+layer is transport only: TLS uses a self-signed certificate whose key is the runner key from the
+QR, pinned by the phone, so it adds no trust of its own and a failure of either layer closes the
+connection; the Noise channel runs inside it. Over a relay there is no TLS-level
+authentication of the runner (the relay's TLS only protects the hop). **Version negotiation is
+authenticated:** the highest protocol version each side supports is sent as handshake prologue
+data, so it is part of the transcript hash; both sides abort if the negotiated version is not
+the highest common one (downgrade attempts by the relay or a LAN attacker fail), and there is no
+unauthenticated fallback or "legacy" mode. The recommended primitive is a standard
 framework handshake (Noise IK/XX with PSK for pairing) rather than a bespoke scheme; the
 choice and the dependency question (Go standard library has X25519/Ed25519/AES-GCM but the
 project is on Go 1.23 and ChaCha20-Poly1305/HKDF live in `golang.org/x/crypto`) belong to
@@ -230,15 +251,32 @@ dependency and must be argued in that ADR, not assumed.
   a command with counter <= last accepted is rejected), a `sent_at` within +/- 30 s of runner
   time (skew reported to the phone), and an `idempotency_key`.
 - State-changing commands are **bound to the object they act on**: a decision carries
-  `run_id`, `node_run_id`, `approval_requested` event sequence, the graph hash, and a digest of
-  the prompt/context the phone displayed. The runner recomputes the digest from its own event
-  and rejects a mismatch (what you see is what you approve). Cancel carries run id and
+  `run_id`, `node_run_id`, `approval_requested` event sequence, the graph hash, and an
+  **approval digest**. The runner recomputes the digest from its own event and rejects a
+  mismatch (what you see is what you approve). The digest is defined over a **canonical,
+  versioned byte form**, never over what a screen rendered:
+  `digest = SHA-256("tarmind.approval.v1\0" || canonical)` where `canonical` is, in this
+  order, length-prefixed (uint32 big-endian) UTF-8 NFC strings or fixed-width integers:
+  `run_id`, `node_run_id`, `approval_requested.sequence` (uint64), `graph_hash`, `prompt`,
+  `context`, `consequence_class` (if the gate declares one, else empty), then the
+  `decision_kind` the signature is for (`approve` or `reject`). `prompt` and `context` are
+  the exact bounded strings stored in the runner's `approval_requested` event after
+  redaction and the runner's own truncation, **before** any localization, markdown or display
+  truncation on the phone. The phone may render a localized or shortened view, but it hashes
+  and signs the canonical form it received in the frame; if the received frame's own digest
+  field does not equal its recomputation the app refuses to enable the buttons. A new canonical
+  version gets a new prefix and the runner accepts only versions it can still recompute.
+  Test vectors (fixed inputs -> fixed digest, including NFC/NFD, a multi-byte string, empty
+  context and a maximum-length field) live in `docs/validation/` and are checked by both the
+  Go tests and the mobile tests. Cancel carries run id and
   `last_seen_sequence`; start carries the grant id and a hash of the declared input values.
 - Repeats are idempotent exactly as ADR-0019 decisions are today (first decision wins; the
   repeat returns the original and is not a second fact).
 
 **Authorization scopes per device.** `observe` (read projection), `decide` (approve/reject),
-`cancel`, `start`. Default for a new device: `observe` + `decide(reject)`; the desktop owner
+`cancel`, `start`. Default for a new device: `observe` + `decide(reject)`; **every `decide`, reject included, requires device user presence**
+(biometric or passcode, bound to the key use) so a phone stolen unlocked cannot decide
+anything; the desktop owner
 grants `approve`, `cancel`, `start` explicitly at pairing or later, per device. Scope is checked
 by the runner, never by the relay or phone.
 
@@ -251,8 +289,23 @@ by the runner, never by the relay or phone.
   tells the relay to refuse the device and tells the runner on next contact.
 - Lost phone: revoke from the desktop or account; compromise window = time until the runner
   next sees the revocation (for LAN: immediate; for relay: the next connection, seconds).
-- Optional per-device re-authentication: approving requires device biometric/passcode user
-  presence (key usage bound to it), so a stolen unlocked-once phone cannot approve silently.
+- User presence is mandatory, not optional, for every decision (approve and reject) and for
+  `cancel` and `start`; a device that cannot provide it cannot be granted those scopes.
+- **Desktop lost or reinstalled.** The runner key and device list lived on that machine. A new
+  install is a new runner identity: phones show "runner key changed" and refuse to talk to it
+  until re-paired by QR (never silently trust a new key under the old name). The old runner's
+  records are revoked in the account (F4.1) so the relay stops routing to them. With no
+  account (LAN or self-hosted), a lost desktop needs nothing: the phone just forgets the
+  runner ("unpair"). A phone can always unpair locally.
+- **Account compromise vs runner-authoritative revocation.** The account can only tell the
+  relay to *refuse* or *add routing for* devices; it cannot authorise a device. A device
+  becomes valid only by a runner-confirmed pairing, so an attacker with the account can
+  deny service and read relay metadata but cannot add a device that the runner accepts or
+  issue commands. Conversely an account-side "revoke" is advisory to the runner and applied
+  on next contact; the runner's own list always wins. Enrolling an additional runner or phone
+  from the account is possible but pairing still needs the on-desktop confirmation. Account
+  recovery (lost password or second factor) must not reset device keys: it re-establishes
+  login only.
 - Key rotation: runner key rotation re-pairs all devices (explicit); device keys can be
   rotated without re-pairing by a runner-confirmed rekey message.
 
@@ -261,8 +314,8 @@ by the runner, never by the relay or phone.
 | Limit | Default |
 | --- | --- |
 | Handshakes per device | 5/min, then backoff; unknown device 10/min per source |
-| Commands per device | 30/min; `start`: 5/min, `cancel`: 10/min |
-| Concurrent remote-started runs | 2 (config, below any local cap) |
+| Commands per device | 30/min total; `cancel`: 10/min; `start`: 5/min (error `rate_limited`, HTTP-equivalent 429) |
+| Concurrent remote-started runs | 2 (config, below any local cap); a start over the cap is `concurrency_limit` (HTTP-equivalent 409), not 429 |
 | Frame size | 64 KiB; projection batches <= 200 events; excerpt fields bounded |
 | Subscriptions per device | 20 runs; one live per run |
 | Open sessions per runner | 5 devices |
@@ -291,6 +344,16 @@ Rules:
 - Names are sensitive. Node ids and graph names may reveal project internals; with (b) they are
   inside the E2E channel, so the relay never sees them. Only the **relay-visible envelope**
   exists in clear: opaque route ids, device ids, frame size bucket and timing.
+- **Metadata leakage is real even when content is encrypted.** The relay and the network see
+  when a runner is active, frame sizes and timing (a gate firing, a run finishing), which
+  device talks to which runner, connection IPs, and push timing/volume to the provider.
+  Mitigations: frames padded to size buckets (e.g. 1, 4, 16, 64 KiB), a low-rate constant
+  heartbeat while a session is open so idle and busy look alike, events batched into at most
+  one frame per 500 ms, pushes coalesced and rate-limited (no per-event push, at most one
+  per approval id plus a digest push per run end), randomized small delay on non-urgent
+  pushes. This reduces but does not remove inference (an observer can still learn that a
+  user is active); the privacy statement and ADR-D must say so and must not promise
+  traffic-analysis resistance.
 - Least data per surface: lists carry summaries only; full excerpts are fetched on open.
 - Never forwarded: environment values, secret references' resolved values, absolute local paths,
   process argv/env, raw agent reasoning (AGENTS.md: do not expose private model reasoning).
@@ -411,10 +474,12 @@ nothing from `internal/remote`; the connector is wired only by the composition r
 
 | ADR | Decides | Why it is an ADR (AGENTS.md criteria) |
 | --- | --- | --- |
-| **ADR-A Remote protocol** | Frame format, version negotiation, messages in section 3.8, projection allowlist per event type, cursor semantics, size/rate limits, error codes, new additive events/fields (`remote_command_*`, approver device id on `approval_decided`, `source` on `cancel_requested`), event schema bump (next free number at merge; 14 is proposed for F3.9). | Changes event semantics and a public/durable contract. |
+| **ADR-A Remote protocol** | Frame format, authenticated version negotiation (no downgrade), the canonical approval digest, messages in section 3.8, projection allowlist per event type, cursor semantics, size/rate limits, error codes, new additive events/fields (`remote_command_*`, approver device id on `approval_decided`, `source` on `cancel_requested`), event schema bump (next free number at merge; 14 is proposed for F3.9). | Changes event semantics and a public/durable contract. |
 | **ADR-B Device identity and crypto** | Key types and storage, pairing handshake and PSK, confirmation code, session handshake, forward secrecy, replay counters, revocation model, scopes, the crypto dependency (`x/crypto` or a Noise implementation) and what stays in the standard library. | New dependency, new durable identity contract, security-critical. |
 | **ADR-C Approval and command semantics over the network** | Binding of decisions to the exact request (digest), idempotency, consequence-class gating of approve (L3 stays desktop-only by default), freshness TTL, no offline queue, approver identity in the trace, remote start rules (grant opt-in, declared inputs only), remote cancel authority, interaction with F2.10/ADR-0017's "no approver identity" and "no timeout". | Changes approval semantics and the human-gate contract. |
-| **ADR-D Cloud trust boundary** | What the relay/control plane may store (opaque routing, push tokens, account/device registry; no content), content-blind guarantee and how it is tested, relationship to F4.7 (server-readable metadata for web history) vs the E2E live channel, managed runners as a different trust class, data residency, self-host option, relay as availability-only. | Affects local-vs-cloud trust boundary; expensive to reverse. |
+| **ADR-D Cloud trust boundary** | What the relay/control plane may store (opaque routing, push tokens, account/device registry; no content), content-blind guarantee and how it is tested, relationship to F4.7 (server-readable metadata for web history) vs the E2E live channel, managed runners as a different trust class, data residency, self-host option, relay as availability-only, residual metadata leakage (frame
+timing and size buckets, push timing) and its mitigations, account compromise/recovery versus
+runner-authoritative revocation. | Affects local-vs-cloud trust boundary; expensive to reverse. |
 
 ADR-D must resolve the tension with the roadmap: F4.7 (cloud run metadata sync) and F4.8 (web
 approval) imply a server-readable store for history and the web UI, while this plan wants the
@@ -442,8 +507,9 @@ spec and ADR first.
   - [ ] the four ADRs exist, each with a Decision, Alternatives, Consequences and Validation
         section, and each lists the tests that will prove it;
   - [ ] `docs/security-model.md` names the relay-hostile, lost-phone, LAN-attacker,
-        QR-photograph and stale-approval attackers, each with a mitigation and the test id that
-        will cover it;
+        QR-photograph, malicious-QR, protocol-downgrade, account-compromise and
+        account-recovery, desktop-loss, metadata-observer and stale-approval attackers, each
+        with a mitigation and the test id that will cover it;
   - [ ] no code in the diff (`git diff --stat` shows only `docs/`).
 - **Proof:** review of the diff; docs link check if the repository has one.
 
@@ -462,6 +528,12 @@ spec and ADR first.
   - [ ] with a canary secret planted in every free-text field of every fixture event (and F3.8
         resolved values), the byte stream of all projected frames contains the canary 0 times,
         including Base64/hex forms (fuzz target, 60 s in CI);
+  - [ ] the approval digest matches the published test vectors (NFC/NFD, multi-byte,
+        empty context, maximum-length fields, approve vs reject kind) byte for byte, the
+        digest ignores any localized or truncated display rendering, and a runner running
+        digest `v1` rejects an unknown version prefix;
+  - [ ] a `decide` or `cancel` or `start` command without a valid user-presence assertion
+        is rejected with a typed error, reject included;
   - [ ] a decision whose digest differs from the runner's own `approval_requested` is rejected
         with the stale code and records nothing; the same decision with the right digest is
         recorded once, a repeat returns the original, a different run's node run id is "not
@@ -493,6 +565,10 @@ spec and ADR first.
         connections are closed before any frame is processed;
   - [ ] a pairing offer is single-use and expires in 2 minutes: the second use and a use at
         121 s (fake clock) fail; pairing fails without the desktop confirmation within 60 s;
+  - [ ] a handshake whose advertised version list was tampered with (downgrade) fails on
+        both sides; a QR whose relay address or runner key differs from the signed runner
+        record is refused, and the phone shows the runner fingerprint compared with the
+        desktop's;
   - [ ] a recorded handshake transcript replayed against the runner fails; a replayed command
         frame in a new session fails the counter check;
   - [ ] revoking a device closes its live session within 2 s and a new handshake fails (e2e
@@ -512,7 +588,9 @@ spec and ADR first.
   VoiceOver and TalkBack recorded as evidence.
 - **Spike (inside M2, decides native vs RN):** one day-bounded spike recorded under
   `docs/validation/`: hardware-backed key, AEAD module, QR scan, push extension feasibility in
-  an Expo dev build.
+  an Expo dev build, and confirmation that the files to be shared or vendored
+  (`desktop/src/reducer.ts`, `types.ts` and what they import) have no DOM, Electron or
+  `window` imports, so they run under React Native's JS engine.
 
 ### M3 - Relay and outbound connection (Phase 4 core)
 
@@ -574,7 +652,9 @@ spec and ADR first.
         before any run directory is created;
   - [ ] the started run records the originating device id; a run started remotely under
         `enforce` policy cannot weaken the runner's configured policy mode;
-  - [ ] the third remote start inside the rate window is refused with the 429 code;
+  - [ ] one rule, two codes: the sixth `start` from one device inside one minute is refused
+        `rate_limited` (429); with 2 remote-started runs active a start (even the first in the
+        window) is refused `concurrency_limit` (409); neither creates a run directory;
   - [ ] a graph edited after the grant (hash differs) is refused until re-granted on desktop.
 - **Tests:** API/integration tests with the built binary, rate-limit test with fake clock,
   graph-hash drift test, policy interaction test.
@@ -592,8 +672,9 @@ spec and ADR first.
         revoked device, relay compromise, QR photograph, lost phone;
   - [ ] store privacy disclosures match the data classes of section 3.7 (checked by a doc
         review table: every transmitted field mapped to a disclosure);
-  - [ ] crash-free sessions >= 99.5 percent over a 2-week beta of at least 20 sessions, or
-        the gap is explained;
+  - [ ] crash budget: at least 500 beta sessions over at least 10 devices across both OSes
+        and 0 crashes or ANRs that lose a pending approval; crash-free sessions >= 99.5
+        percent over that sample, or each crash has a filed issue and a test;
   - [ ] cold start to run list under 2 s on a mid-range reference device (documented
         method).
 
