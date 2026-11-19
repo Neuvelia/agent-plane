@@ -1,0 +1,80 @@
+# Template: fix an issue with a coding agent. A person approves before any agent
+# call; "fix" runs Codex in a bounded loop whose reported_file_scope gate rejects
+# changes outside allowed_paths; a person approves the result before it is recorded.
+# Fill the workspace before running. Agent nodes run through
+#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex --input issue=...
+# Codex authentication needs a named environment reference (for example
+# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.
+# The shell node only prints text. Nothing is staged, committed, pushed or sent.
+schema_version: 0
+id: fix-issue
+name: Fix an issue
+inputs:
+  issue: {type: string, required: true}
+nodes:
+  confirm_start:
+    type: human
+    config:
+      prompt: Start the coding agent on this issue? This may use a paid model.
+      context_inputs: [issue]
+    inputs:
+      issue: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  fix:
+    type: agent
+    inputs:
+      task: {type: string, required: true}
+      start: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: "" # FILL: absolute path of the Git repository the agent may edit
+      allowed_paths: ["src/", "tests/"] # REVIEW: the paths the fix is meant to change
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: reported-scope
+          kind: reported_file_scope
+          input: candidate
+          allowed_paths: ["src/", "tests/"] # REVIEW: keep equal to config.allowed_paths
+      bindings:
+        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}
+  approve_fix:
+    type: human
+    config:
+      prompt: Review the summary and changed files. Accept the fix? Run your own tests before merging.
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  record:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["fix accepted\n"]
+    inputs:
+      decision: {type: string, required: true}
+graph_input_bindings:
+  - {from: inputs.issue, to: confirm_start.inputs.issue}
+  - {from: inputs.issue, to: fix.inputs.task}
+edges:
+  - {from: confirm_start.outputs.decision, to: fix.inputs.start}
+  - {from: fix.outputs.summary, to: approve_fix.inputs.summary}
+  - {from: fix.outputs.changed_files, to: approve_fix.inputs.changed_files}
+  - {from: approve_fix.outputs.decision, to: record.inputs.decision}
+outputs: {}
+metadata:
+  layout:
+    nodes:
+      confirm_start: {x: 0, y: 0}
+      fix: {x: 320, y: 0}
+      approve_fix: {x: 640, y: 0}
+      record: {x: 960, y: 0}
