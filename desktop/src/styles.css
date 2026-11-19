@@ -284,6 +284,10 @@ main:focus{outline:none}
 .ed-target{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .ed-add{border:0;margin:0;min-width:0;display:grid;gap:var(--space-8);padding:var(--space-8);border-radius:var(--radius-12);background:var(--fill-4)}
 .ed-confirm{gap:8px}
+.ed-hints{display:grid;gap:6px}
+.ed-hint-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.ed-hint-list>li{display:grid;gap:4px;padding:8px;border-radius:var(--radius-10);background:var(--fill-4)}
+.ed-hint-list p{margin:0}
 .ed-graph-head{padding:var(--space-8) var(--space-12) 0}
 .ed-graph-head:focus-visible,.ed-selected-head:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .ed-port-badge{font-size:11px;font-weight:600}

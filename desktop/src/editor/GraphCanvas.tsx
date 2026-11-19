@@ -18,6 +18,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { useI18n } from '../i18n/context'
 import { Button, Card, Pill, Tag } from '../ui/primitives'
 import { BindingsPanel } from './BindingsPanel'
+import { GraphInputsCard } from './GraphInputsCard'
+import { GraphOutputsCard } from './GraphOutputsCard'
 import { removeOp, sourceType, type Binding } from './bindings'
 import { listConnections, verdictsOf } from './connections'
 import type { DocState } from './doc'
@@ -523,6 +525,8 @@ function Inner({ g, doc, focusReq, selection }: { g: GraphDocument; doc: DocStat
       </Card>
 
       {def && <BindingsPanel g={g} def={def} diagnostics={doc.analysis.diagnostics} selection={selection} readOnly={readOnly} />}
+      {def && <GraphInputsCard g={g} def={def} readOnly={readOnly} />}
+      {def && <GraphOutputsCard g={g} def={def} readOnly={readOnly} />}
 
       <Inspector g={g} doc={doc} nodeId={outlined} readOnly={readOnly} onRenamed={(id) => setSel({ kind: 'node', id })} />
     </div>

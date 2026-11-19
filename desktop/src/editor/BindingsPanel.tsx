@@ -4,6 +4,8 @@ import type { Diagnostic } from '../types'
 import { Button, Card, Pill, StateMessage } from '../ui/primitives'
 import { AddBindingForm, type Changed } from './AddBindingForm'
 import { bindingRows, removeOp, type BindingRow } from './bindings'
+import { hintsOf } from './hints'
+import { NeedsConnection } from './NeedsConnection'
 import type { SelectionOwner } from './selection'
 import type { Definition } from './types'
 import type { GraphDocument } from './useGraphDocument'
@@ -30,6 +32,7 @@ interface Props {
 export function BindingsPanel({ g, def, diagnostics, selection, readOnly }: Props) {
   const { t } = useI18n()
   const rows = bindingRows(def, diagnostics)
+  const hints = hintsOf(diagnostics, def)
   const [adding, setAdding] = useState(false)
   const [announce, setAnnounce] = useState('')
   const [failure, setFailure] = useState<string | null>(null)
@@ -94,6 +97,7 @@ export function BindingsPanel({ g, def, diagnostics, selection, readOnly }: Prop
             {t('editor.bindings.readonly')}
           </p>
         )}
+        <NeedsConnection g={g} def={def} hints={hints} readOnly={readOnly} announce={setAnnounce} />
         {adding && !readOnly && <AddBindingForm g={g} def={def} onChanged={changed} onCancel={() => { setAdding(false); setFocusAfter('add') }} />}
         {failure && (
           <p className="ed-refusal" role="alert" data-testid="bindings-failure">
