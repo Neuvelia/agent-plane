@@ -345,3 +345,5 @@ main:focus{outline:none}
 .picker-meta{display:flex;gap:var(--space-4);flex-wrap:wrap;margin-top:2px}
 .picker-notice{color:var(--warn)}
 .picker-actions{justify-content:flex-end}
+.val-picker{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8)}
+.val-picker select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);max-width:100%}
