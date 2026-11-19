@@ -1,7 +1,8 @@
 # ADR-0026 - Attempt diff capture for Attempt Compare
 
-**Status:** proposed for F2.8b (owner decisions recorded 2026-11-15; see "Owner decisions"); the Option C
-part (F2.8a) is implemented
+**Status:** accepted 2026-11-19 for the F2.8b engine capture (implemented behind `--record-diffs`; owner decisions
+recorded 2026-11-15 and 2026-11-18, see "Owner decisions"); the Option C part (F2.8a) is implemented. The desktop
+diff panel and setting, and a real-Codex validation run (`docs/validation/F2.8b-codex-diff-demo.md`), are follow-ups
 **Date:** 2026-11-15
 
 ## Context
@@ -132,8 +133,7 @@ observed paths (Agent producers) and `changed_files_scope` evidence.
 
 ## Owner decisions
 
-Decided by the owner on 2026-11-15. They match the recommendation above. This ADR stays **proposed** for the
-F2.8b part until that part is implemented and validated.
+Decided by the owner on 2026-11-15. They match the recommendation above. The F2.8b engine part is implemented; the real-Codex run is a recorded follow-up.
 
 - **D1 - Phasing:** ship Option C as F2.8a first (desktop only). Implemented on
   `claude/f2-8a-attempt-compare`.
