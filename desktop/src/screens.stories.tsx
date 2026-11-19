@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
-import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { agentProgressGraph, agentProgressRun, agentProgressYaml, demoApproveValues, agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
 import { Dashboard } from './dashboardView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
@@ -81,6 +81,33 @@ export const InspectorFilterSlow: S = { ...inspector(demoApprove, 'succeeded', '
 export const InspectorFilterFailed: S = { ...inspector(demoReject, 'failed', 'end'), play: clickTestId('nodes-failed') }
 // Too few finished nodes: Slow is disabled and says why.
 export const InspectorSlowUnavailable: S = inspector(runningParallel, 'running', 'open')
+// F2.7: node detail from recorded streams.
+const openNode = (node: string, tab?: string): S['play'] => async (ctx) => {
+  await new Promise((r) => setTimeout(r, 300))
+  ctx.canvasElement.querySelector<HTMLButtonElement>(`[data-testid="node-${node}"]`)?.click()
+  await new Promise((r) => setTimeout(r, 100))
+  if (tab) await clickTestId(tab)!(ctx)
+}
+export const InspectorDataWithValues: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(demoApproveValues, 'succeeded'), graph: demoGraph, yaml: demoYaml, events: demoApproveValues, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(demoApproveValues)} onBack={noop} />,
+  play: openNode('approve', 'tab-data'),
+}
+// A schema 9 recording cannot carry values: every value reads "older run".
+export const InspectorDataOlderRun: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: openNode('approve', 'tab-data') }
+export const InspectorActivityProgress: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(agentProgressRun, 'succeeded'), graph: agentProgressGraph, yaml: agentProgressYaml, events: agentProgressRun, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(agentProgressRun)} onBack={noop} />,
+  play: openNode('scout', 'tab-activity'),
+}
+export const InspectorNodeChangedFiles: S = {
+  parameters: { bridge: { runs: [{ summary: summaryOf(agentProgressRun, 'succeeded'), graph: agentProgressGraph, yaml: agentProgressYaml, events: agentProgressRun, ending: 'end' }] } satisfies BridgeData },
+  render: () => <RunInspector runId={rid(agentProgressRun)} onBack={noop} />,
+  play: openNode('scout'),
+}
+export const InspectorAttemptChangedFiles: S = { ...inspector(agentScopeRetry, 'succeeded', 'end'), parameters: { bridge: { runs: [{ summary: summaryOf(agentScopeRetry, 'succeeded'), graph: agentScopeGraph, yaml: agentScopeYaml, events: agentScopeRetry, ending: 'end' }] } satisfies BridgeData }, play: openNode('work') }
+// A Shell node has no changed-file evidence: "not observed", never "0 files".
+export const InspectorNodeNoEvidence: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: openNode('fast') }
 export const InspectorRunNotFound: S = {
   parameters: { bridge: { runs: [] } satisfies BridgeData },
   render: () => <RunInspector runId="missing" onBack={noop} />,

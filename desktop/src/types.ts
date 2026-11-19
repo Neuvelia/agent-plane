@@ -18,9 +18,27 @@ export interface ApEvent {
   payload: Record<string, unknown>
 }
 
+/** A declared node port: names and types only (ADR-0019 amendment, F2.7). */
+export interface GraphPortInfo {
+  name: string
+  type: string
+  required: boolean
+}
+
+/** Where a bound value comes from: a node output, or a graph input by name. */
+export type BindingSource = { node: string; port: string } | { input: string }
+
+export interface GraphBindingInfo {
+  source: BindingSource
+  target: { node: string; input: string }
+}
+
+// `inputs`, `outputs` and `bindings` are additive: an engine older than the ADR-0019
+// amendment omits them, and the renderer then reports bindings as unavailable.
 export interface GraphSummary {
-  nodes: { id: string; type: string; max_attempts?: number }[]
+  nodes: { id: string; type: string; max_attempts?: number; inputs?: GraphPortInfo[]; outputs?: GraphPortInfo[] }[]
   edges: { from: string; to: string }[]
+  bindings?: GraphBindingInfo[]
 }
 
 export interface RunSummary {

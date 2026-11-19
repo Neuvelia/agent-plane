@@ -1,0 +1,18 @@
+# Fixture graph for Storybook/tests (F2.7 node detail): one Agent node with no loop
+# that reports normalized progress and Git-observed changed files. agent-progress.json
+# was recorded from the engine's runtime.Run with a fake executor standing in for an
+# Agent adapter (a real Codex run is not reproducible in tests); the events are the
+# engine's own output. This YAML documents the graph shape and is not runnable with
+# the real CLI. The recorder is internal/runtime/desktop_progress_fixture_test.go;
+# `go test ./...` fails when this recording no longer matches the engine. Regenerate:
+#   AGENTPLANE_UPDATE_FIXTURES=1 go test ./internal/runtime -run TestDesktopAgentProgressFixture
+# The bounded progress_omitted marker needs megabytes of text and is not in this recording.
+schema_version: 0
+id: agent-progress
+inputs: {}
+nodes:
+  scout:
+    type: agent
+    config: {adapter: fake, task: look, workspace: .}
+edges: []
+outputs: {}

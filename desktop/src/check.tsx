@@ -1,3 +1,4 @@
+import { CheckScopeInfo } from './nodeDetail'
 import type { CheckView } from './reducer'
 import { VerdictPill } from './status'
 import { Tag } from './ui/primitives'
@@ -15,6 +16,7 @@ export function CheckResultView({ check }: { check: CheckView }) {
       <div className="reason" data-testid="check-reason">
         {check.reason}
       </div>
+      <CheckScopeInfo check={check} />
       <EvidenceList check={check} />
     </div>
   )

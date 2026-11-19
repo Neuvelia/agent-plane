@@ -245,11 +245,15 @@ func (s *Server) getRun(w http.ResponseWriter, r *http.Request) {
 type GraphSummary struct {
 	Nodes []GraphNode `json:"nodes"`
 	Edges []GraphEdge `json:"edges"`
+	// Bindings are the port-level data dependencies (ADR-0019 amendment, F2.7).
+	Bindings []GraphBinding `json:"bindings"`
 }
 type GraphNode struct {
-	ID          string `json:"id"`
-	Type        string `json:"type"`
-	MaxAttempts int    `json:"max_attempts,omitempty"`
+	ID          string      `json:"id"`
+	Type        string      `json:"type"`
+	MaxAttempts int         `json:"max_attempts,omitempty"`
+	Inputs      []GraphPort `json:"inputs"`
+	Outputs     []GraphPort `json:"outputs"`
 }
 type GraphEdge struct {
 	From string `json:"from"`
@@ -257,7 +261,7 @@ type GraphEdge struct {
 }
 
 func summarizeGraph(source []byte) GraphSummary {
-	summary := GraphSummary{Nodes: []GraphNode{}, Edges: []GraphEdge{}}
+	summary := GraphSummary{Nodes: []GraphNode{}, Edges: []GraphEdge{}, Bindings: []GraphBinding{}}
 	def, err := yamlgraph.Parse(source)
 	if err != nil {
 		return summary
@@ -269,7 +273,7 @@ func summarizeGraph(source []byte) GraphSummary {
 	sort.Strings(ids)
 	for _, id := range ids {
 		n := def.Nodes[id]
-		node := GraphNode{ID: id, Type: n.Type}
+		node := GraphNode{ID: id, Type: n.Type, Inputs: declaredPorts(n.Inputs), Outputs: declaredPorts(n.Outputs)}
 		if n.Loop != nil {
 			node.MaxAttempts = n.Loop.Attempts()
 		}
@@ -285,6 +289,7 @@ func summarizeGraph(source []byte) GraphSummary {
 			summary.Edges = append(summary.Edges, edge)
 		}
 	}
+	summary.Bindings = summarizeBindings(def)
 	sort.Slice(summary.Edges, func(i, j int) bool {
 		if summary.Edges[i].From != summary.Edges[j].From {
 			return summary.Edges[i].From < summary.Edges[j].From
