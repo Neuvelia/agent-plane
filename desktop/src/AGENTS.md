@@ -82,6 +82,7 @@ as implemented merely because the full spec describes it.
   schema-10 `value_recorded` streams leave run views unchanged:
   `desktop/test/schema10.test.ts`.
 - Settings recording switch: `desktop/test/recording.test.tsx`.
+- Run overview selectors and views (F2.6: waits, critical path, outcome, node filters, timeline segments): `desktop/test/overview.test.ts`, `desktop/test/overview.test.tsx`.
 - Recorded values (F2.3 E5b.1: `values.ts` reducer, `valuePicker.ts` picker rules, `useRunValues.ts`, `ValuePicker.tsx`; values stay out of `reducer.ts` and never touch storage or console): `desktop/test/edge-values.test.ts`, `desktop/test/edge-values-view.test.tsx`.
 - Welcome screen, capability text and first-run flag: `desktop/test/capabilities.test.tsx`.
 - Template picker, draft (only the `id` line changes), notices and EN/PL keys: `desktop/test/templates.test.tsx`; no YAML parsing or graph rule in the picker: `desktop/test/no-graph-rules.test.ts`.
