@@ -18,8 +18,17 @@ const entry = (id: string) => TEMPLATES.find((t) => t.id === id)!
 const onDisk = (id: string) => readFileSync(join(repo, '.agents', 'templates', `${id}.yaml`), 'utf8')
 
 describe('bundled templates', () => {
-  it('are the four index entries in the picker order, parallel-shell suggested first', () => {
-    expect(TEMPLATES.map((t) => t.id)).toEqual(['parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'])
+  it('are the eight index entries in the picker order, parallel-shell suggested first', () => {
+    expect(TEMPLATES.map((t) => t.id)).toEqual([
+      'parallel-shell',
+      'shell-check-loop',
+      'human-approval',
+      'agent-scoped-approval',
+      'fix-issue',
+      'code-review',
+      'dependency-update',
+      'repo-audit',
+    ])
     expect([...TEMPLATE_ORDER]).toEqual(TEMPLATES.map((t) => t.id))
     expect(SUGGESTED).toBe('parallel-shell')
   })
@@ -123,11 +132,11 @@ describe('picker markup', () => {
     )
   const entries = (html: string) => [...html.matchAll(/data-testid="picker-entry-([a-z-]+)"/g)].map((m) => m[1])
 
-  it('lists Blank graph and the four templates in order as one radio group with the first checked', () => {
+  it('lists Blank graph and the eight templates in order as one radio group with the first checked', () => {
     const html = render('en', linux)
-    expect(entries(html)).toEqual(['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'])
-    expect(html.match(/type="radio"/g)).toHaveLength(5)
-    expect(html.match(/name="start"/g)).toHaveLength(5)
+    expect(entries(html)).toEqual(['blank', ...TEMPLATE_ORDER])
+    expect(html.match(/type="radio"/g)).toHaveLength(9)
+    expect(html.match(/name="start"/g)).toHaveLength(9)
     expect(html.match(/checked=""/g)).toHaveLength(1)
     expect(html).toMatch(/Suggested first graph/)
   })
@@ -149,7 +158,7 @@ describe('picker markup', () => {
 
   it('states which templates have values to fill', () => {
     const html = render('en', linux)
-    expect(html).toMatch(/1 value to fill before it can run/)
+    expect(html.match(/1 value to fill before it can run/g)).toHaveLength(5)
     expect(html.match(/runs as is/g)).toHaveLength(3)
   })
 })
