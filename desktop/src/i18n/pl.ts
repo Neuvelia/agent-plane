@@ -622,4 +622,12 @@ export const pl: Record<MessageKey, string> = {
   'editor.edgeValue.value_not_carried.text': 'Silnik zachował rozmiar i skrót tej wartości, ale nie jej tekst: osiągnięto limit wartości uruchomienia, tekst nie jest UTF-8 albo zawierał sekret.',
   'editor.edgeValue.value.title': 'Wartość',
   'editor.edgeValue.value.text': 'Wartość zapisana przez to uruchomienie na tej krawędzi.',
+  'templates.fix-issue.title': 'Naprawa zgłoszenia',
+  'templates.fix-issue.description': 'Osoba zatwierdza start, agent Codex naprawia zgłoszenie w dozwolonych ścieżkach pod kontrolą bramki zakresu plików, a osoba zatwierdza wynik.',
+  'templates.code-review.title': 'Przegląd kodu tylko do odczytu',
+  'templates.code-review.description': 'Osoba zatwierdza start, agent Codex robi przegląd bez zmiany plików (bramka zakresu odrzuca każdą zmianę), a osoba czyta uwagi.',
+  'templates.dependency-update.title': 'Aktualizacja zależności',
+  'templates.dependency-update.description': 'Osoba zatwierdza start, agent Codex może zmienić tylko pliki manifestu i blokady pod kontrolą bramki zakresu plików, a osoba zatwierdza wynik.',
+  'templates.repo-audit.title': 'Audyt repozytorium tylko do odczytu',
+  'templates.repo-audit.description': 'Osoba zatwierdza start, agent Codex audytuje repozytorium bez zmiany plików, a osoba czyta raport.',
 }

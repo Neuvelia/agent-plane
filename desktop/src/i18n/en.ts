@@ -623,6 +623,14 @@ export const en = {
   'editor.edgeValue.value_not_carried.text': 'The engine kept this value’s size and hash but not its text: the run’s value budget was reached, the text is not UTF-8, or it spelled a secret.',
   'editor.edgeValue.value.title': 'Value',
   'editor.edgeValue.value.text': 'The value this run recorded on this edge.',
+  'templates.fix-issue.title': 'Fix an issue',
+  'templates.fix-issue.description': 'A person approves the start, a Codex agent fixes the issue within allowed paths under a file-scope gate, and a person approves the result.',
+  'templates.code-review.title': 'Read-only code review',
+  'templates.code-review.description': 'A person approves the start, a Codex agent reviews without changing files (a scope gate rejects any change), and a person reads the findings.',
+  'templates.dependency-update.title': 'Dependency update',
+  'templates.dependency-update.description': 'A person approves the start, a Codex agent may change only manifest and lock files under a file-scope gate, and a person approves the result.',
+  'templates.repo-audit.title': 'Read-only repository audit',
+  'templates.repo-audit.description': 'A person approves the start, a Codex agent audits the repository without changing files, and a person reads the report.',
 } as const
 
 export type MessageKey = keyof typeof en

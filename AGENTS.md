@@ -49,6 +49,8 @@ state exactly its JSONL event log: persist-before-deliver, durable creation, a r
 lock that separates `running` from `interrupted` (derived, no new event), a
 rebuildable `summary.json`, `store.json` and explicit `runs prune` retention.
 Implemented on Linux; the Windows tests have not been run.
+F2.8b adds opt-in `--record-diffs` capture of bounded, redacted per-attempt file diffs for loop Agent
+nodes as `attempt_diff` events (event schema 12, ADR-0026); the desktop diff panel is not implemented.
 A Phase 2 vertical slice is also active (event schema 11): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and

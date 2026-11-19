@@ -27,6 +27,7 @@ durable contract.
 | `internal/proctree` | Neutral process-tree ownership: start a child in its own Unix process group, terminate by request, grace, force, verify (ADR-0028; Windows is an interim direct-process stub until F3.4a) | `proctree.go`, `proctree_unix.go`, `policy.go` |
 | `internal/gitstate` | Hardened Git runner, Git-observed workspace baselines and changes | `run.go`, `snapshot.go` |
 | `internal/capability` | F2.11 read-only capability report: Git, agent adapters and agent CLIs, with bounded probes (ADR-0025) | `capability.go` |
+| `internal/adapter/attemptdiff` | F2.8b content-aware workspace snapshots and snapshot comparison into bounded, redacted `attempt_diff` payloads (behind `runtime.AttemptDiffer`, composed by the CLI) | `snapshot.go`, `compare.go`, `scratch.go` |
 | `internal/worktree` | F3.1 linked worktrees: preflight, create, snapshot, `merge-tree` integration, removal (behind `runtime.WorkspaceManager`, composed by the CLI) | `preflight.go`, `worktree.go`, `integrate.go` |
 | `internal/store` | Local append-only JSONL run history, run lock, summary snapshot, retention and prune (uses `golang.org/x/sys` for file locks) | `store.go`, `read.go`, `list.go`, `snapshot.go`, `prune.go`, `lock*.go`, `format.go` |
 | `internal/api` | Authenticated loopback API: runs, approvals, the graph editor routes (`/graphs/validate`, `/graphs/grants`, `/graphs/open`, `/graphs/stat`, `/graphs/edit`, `/graphs/save`) and the capability report | `server.go`, `docs.go`, `capabilities.go`, `hub.go` |
@@ -49,6 +50,7 @@ packages only):
 | `adapter/system`, `app/trace`, `store` | `domain/events` |
 | `gitstate` | `gitlocate` |
 | `worktree` | `gitstate` |
+| `adapter/attemptdiff` | `domain/diff`, `domain/events`, `gitstate` |
 | `capability` | `agent`, `gitlocate` |
 | `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `gitlocate`, `gitstate` |
 | `agent` | `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime` |

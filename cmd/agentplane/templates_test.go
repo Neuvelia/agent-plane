@@ -58,8 +58,8 @@ func loadTemplateIndex(t *testing.T) templateIndex {
 	if err := d.Decode(&idx); err != nil {
 		t.Fatalf("index.json: %v", err)
 	}
-	if idx.Version != 1 || len(idx.Templates) != 4 {
-		t.Fatalf("index version %d with %d templates, want version 1 with 4", idx.Version, len(idx.Templates))
+	if idx.Version != 1 || len(idx.Templates) != 8 {
+		t.Fatalf("index version %d with %d templates, want version 1 with 8", idx.Version, len(idx.Templates))
 	}
 	return idx
 }
@@ -269,6 +269,54 @@ func TestAgentTemplateScopeIsConsistentAndGuardedByApproval(t *testing.T) {
 				t.Errorf("%s: agent %s does not wait for a human approval", tpl.entry.ID, nodeID)
 			}
 		}
+	}
+}
+
+// The domain templates (fix issue, code review, dependency update, repo audit)
+// share one shape: a deterministic scope gate inside a bounded loop, and a
+// person who sees the agent's output before anything is recorded.
+func TestDomainTemplatesAreBoundedGatedAndReviewedByAPerson(t *testing.T) {
+	readOnly := map[string]bool{"code-review": true, "repo-audit": true}
+	domain := map[string]bool{"fix-issue": true, "code-review": true, "dependency-update": true, "repo-audit": true}
+	seen := 0
+	for _, tpl := range loadTemplates(t) {
+		id := tpl.entry.ID
+		if !domain[id] {
+			continue
+		}
+		seen++
+		var agentID string
+		for nodeID, n := range tpl.def.Nodes {
+			if n.Type != "agent" {
+				continue
+			}
+			agentID = nodeID
+			if n.Loop == nil || n.Loop.MaxAttempts != 3 || n.Loop.Gate.Config["kind"] != "reported_file_scope" {
+				t.Errorf("%s: agent %s needs a bounded loop (3) with a reported_file_scope gate", id, nodeID)
+				continue
+			}
+			paths, _ := n.Config["allowed_paths"].([]any)
+			if readOnly[id] && len(paths) != 0 {
+				t.Errorf("%s: a read-only template must have empty allowed_paths, has %v", id, paths)
+			}
+			if !readOnly[id] && len(paths) == 0 {
+				t.Errorf("%s: a changing template must name allowed_paths", id)
+			}
+		}
+		reviewed := false
+		for _, e := range tpl.def.Edges {
+			src := strings.SplitN(string(e.From), ".", 2)[0]
+			dst := strings.SplitN(string(e.To), ".", 2)[0]
+			if src == agentID && tpl.def.Nodes[dst].Type == "human" {
+				reviewed = true
+			}
+		}
+		if agentID == "" || !reviewed {
+			t.Errorf("%s: the agent output must reach a human node (agent %q)", id, agentID)
+		}
+	}
+	if seen != len(domain) {
+		t.Fatalf("found %d of %d domain templates", seen, len(domain))
 	}
 }
 
