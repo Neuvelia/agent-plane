@@ -100,3 +100,26 @@ The contracts are `docs/features/F2.1-graph-canvas.md`,
 `docs/adr/0022-graph-layout-metadata.md`, and `docs/graph-spec.md`. F2.1
 slices E1 and E2.1-E2.3 are present; F2.2 (`docs/features/F2.2-node-inspector.md`)
 and the F2.4 Issues panel are present; F2.3 E5a.2-E5a.3 (Bindings panel, graph input and output cards, hints) and E5b.2 (edge inspector) are present.
+
+## Choose regression tests
+
+- Edge inspector states, text safety, JSON formatting and Copy: `desktop/test/edge-inspector.test.tsx`; stories `edgeValue.stories.tsx`.
+- Draft/history, stale validation and run gating: `desktop/test/editor-doc.test.ts`.
+- Template picker and draft text: `desktop/test/templates.test.tsx`, stories in `picker.stories.tsx`.
+- Layout, ID suggestion and deletion counts: `desktop/test/editor-layout.test.ts`.
+- Guard against renderer graph rules: `desktop/test/no-graph-rules.test.ts`.
+- Inspector model, help catalogue and stories: `desktop/test/inspector-model.test.ts`,
+  `desktop/test/inspector-text.test.ts`, `inspector/inspector.stories.tsx`.
+- Story states and recorded responses: `editor.stories.tsx`,
+  `desktop/test/stories.test.ts`.
+- Real grant, edit, keyboard, conflict and Save and run path:
+  `desktop/e2e/demo.cjs`.
+- Go edit semantics, layout-version stability and write conflicts:
+  `internal/graph/edit/edit_test.go`, `internal/api/docs_test.go`.
+
+Run focused Vitest files first, then `npm run check` in `desktop/` and
+repository `make check`. For behavior changes to the editor or bridge, run
+the relevant real Electron/story checks from `desktop/README.md`. Add a
+focused behavior test for a rejected canvas target when changing that path;
+the static no-graph-rules test does not prove the refusal UI. Update this
+guide when a named owner or contract changes.
