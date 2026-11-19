@@ -52,7 +52,7 @@ feature contract.
 | `F2.3-edge-data-mapping-editor.md` | Accepted for implementation; E6, E5a.1 (engine operations), E5a.2 (Bindings panel) and E5b.1 (values reducer, run picker model and component, not yet mounted in the editor) implemented; E5a.3 and E5b.2 specified, not started; ADR-0020, ADR-0023 (accepted) |
 | `F2.3-E6-recorded-run-values.md` | Implemented (engine slice E6 and desktop switch, opt-in); ADR-0023 (accepted) |
 | `F2.4-graph-validation-ui.md` | Implemented (E3.1, E3.2); ADR-0021 (accepted) |
-| `F2.6-run-inspector-overview.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (overview largely delivered by F2.5/F2.5a/F2.9); no ADR |
+| `F2.6-run-inspector-overview.md` | Implemented in the renderer (decisions 2026-11-17); gap spec only (overview largely delivered by F2.5/F2.5a/F2.9); no ADR |
 | `F2.7-run-inspector-node-detail.md` | Accepted for implementation (decisions 2026-11-17); gap spec only (partly delivered by F2.5/F2.8a); additive `graph_summary` fields recorded as a proposed ADR-0019 amendment |
 | `F2.8-attempt-compare.md` | F2.8a implemented (desktop only, no ADR); F2.8b engine capture implemented (`--record-diffs`, ADR-0026 accepted); desktop diff panel and setting pending |
 | `F2.11-onboarding-capability-detection.md` | Implemented (Go and desktop); ADR-0025 (accepted); Linux native check recorded, macOS verification pending (#24) |
