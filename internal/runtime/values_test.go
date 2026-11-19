@@ -355,3 +355,24 @@ func TestValueRecordingRejectsNonUTF8RedactionsBeforeStart(t *testing.T) {
 		t.Fatalf("recording off must keep the existing byte-log behavior: %v", err)
 	}
 }
+
+// F2.3 E5b.1: the renderer keys a recorded value by (node, port) and treats two
+// node runs for one key as a contradiction, so the engine must never emit two
+// value events for one key in a run.
+func TestValueRecordingEmitsAtMostOneEventPerKey(t *testing.T) {
+	result, err := Run(context.Background(), valueGraph(), map[string]graph.Value{"job": graph.NewStringValue("do it")}, valueExecutor("hi"), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, RecordValues: true})
+	if err != nil || result.State != run.RunSucceeded {
+		t.Fatalf("run = %#v, %v", result, err)
+	}
+	seen := map[string]uint64{}
+	for _, e := range recordedValues(result.Events) {
+		key := string(e.NodeID) + "\x00" + valuePayload(t, e).Port
+		if first, dup := seen[key]; dup {
+			t.Fatalf("key %q recorded at sequences %d and %d", key, first, e.Sequence)
+		}
+		seen[key] = e.Sequence
+	}
+	if len(seen) != 5 {
+		t.Fatalf("recorded %d keys, want the graph input job and the 4 accepted outputs of a and b", len(seen))
+	}
+}
