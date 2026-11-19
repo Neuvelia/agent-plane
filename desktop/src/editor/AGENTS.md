@@ -18,6 +18,7 @@ before changing a document, operation or save flow.
 | CodeMirror text editing and key bindings | `YamlEditor.tsx` |
 | Node inspector (F2.2): descriptor-driven fields, ports, loop, Advanced | `inspector/Inspector.tsx`, `inspector/model.ts`, `inspector/useEdits.ts` |
 | Field labels and help keyed by descriptor id (PL/EN) | `inspector/fieldText.ts` |
+| Edge inspector (F2.3 E5b.2): state per requirement 17, value region, Copy | `edgeValue.ts`, `EdgeInspector.tsx`, `EdgeValueBox.tsx`, `valueText.ts` |
 | File grants and write safety | `desktop/electron/AGENTS.md`, `internal/api/AGENTS.md` |
 | Graph operation semantics and YAML fidelity | `internal/graph/edit/AGENTS.md` |
 
@@ -83,16 +84,26 @@ before changing a document, operation or save flow.
   previewed `set_loop_bindings` batches. Inspector
   fixtures are recorded and pinned by `cmd/agentplane/inspector_fixtures_test.go`;
   `test/fixtures/node-types.json` by `cmd/agentplane/catalogue_test.go`.
+- The inspector slot shows the edge inspector (F2.3 E5b.2) when the shared selection is an edge or a graph input
+  binding, and the node inspector for a node. The picker hook (`useValuesPicker`) lives in `Open` and is keyed by the
+  document's grant, so the run choice lasts until the document closes; `GraphCanvas` only receives it. The state of an
+  edge is `edgeValue.ts`, a pure function of the run list, the choice and the values reducer; its order of checks is
+  the precedence of requirement 17, so change it only with the spec. A recorded value is user data: it is only ever a
+  text node (never markup, a link or an open action; an `artifact_ref` is a plain string), hidden and bidirectional
+  characters are shown as `\uXXXX` marks, the formatted JSON view copies literals from the text and is offered only
+  when the text parses completely, and the clipboard is written only inside the Copy click, with exactly the
+  displayed text. Values are never stored, logged or sent (`edge-inspector.test.tsx` greps the sources for it).
 
 The contracts are `docs/features/F2.1-graph-canvas.md`,
 `docs/adr/0020-graph-edit-operations.md`,
 `docs/adr/0021-local-graph-document-api-and-write-trust.md`,
 `docs/adr/0022-graph-layout-metadata.md`, and `docs/graph-spec.md`. F2.1
 slices E1 and E2.1-E2.3 are present; F2.2 (`docs/features/F2.2-node-inspector.md`)
-and the F2.4 Issues panel are present; F2.3 E5a.2-E5a.3 (Bindings panel, graph input and output cards, hints) are present; the rest of F2.3 remains a separate scope.
+and the F2.4 Issues panel are present; F2.3 E5a.2-E5a.3 (Bindings panel, graph input and output cards, hints) and E5b.2 (edge inspector) are present.
 
 ## Choose regression tests
 
+- Edge inspector states, text safety, JSON formatting and Copy: `desktop/test/edge-inspector.test.tsx`; stories `edgeValue.stories.tsx`.
 - Draft/history, stale validation and run gating: `desktop/test/editor-doc.test.ts`.
 - Template picker and draft text: `desktop/test/templates.test.tsx`, stories in `picker.stories.tsx`.
 - Layout, ID suggestion and deletion counts: `desktop/test/editor-layout.test.ts`.

@@ -62,8 +62,11 @@ export function ValuePicker({ picker }: { picker: ValuesPicker }) {
         {status}
       </span>
       {stream.lost && (
-        <span className="mu" role="alert" data-testid="value-picker-lost">
-          {t('values.picker.lost')}
+        <span className="row" role="alert" data-testid="value-picker-lost">
+          <span className="mu">{t('values.picker.lost')}</span>
+          <Button size="sm" onClick={stream.reconnect} data-testid="value-picker-reconnect">
+            {t('run.reconnect')}
+          </Button>
         </span>
       )}
     </div>

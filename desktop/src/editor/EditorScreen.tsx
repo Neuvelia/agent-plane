@@ -8,6 +8,7 @@ import { isDirty, runBlock, type DocState } from './doc'
 import { selectionFor, useSelection } from './selection'
 import type { GraphDocument } from './useGraphDocument'
 import { LoadingState } from '../states'
+import { useValuesPicker } from '../useRunValues'
 import { TemplatePicker } from './TemplatePicker'
 
 // CodeMirror is loaded when the editor is first shown, not at application start.
@@ -67,7 +68,7 @@ export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDo
           </span>
         </div>
       )}
-      {doc ? <Open g={g} doc={doc} onRun={onRun} onNew={newGraph} /> : <Empty g={g} onNew={newGraph} />}
+      {doc ? <Open key={doc.grant} g={g} doc={doc} onRun={onRun} onNew={newGraph} /> : <Empty g={g} onNew={newGraph} />}
       {picker && (
         <TemplatePicker
           onCancel={() => {
@@ -124,6 +125,8 @@ function Open({ g, doc, onRun, onNew }: { g: GraphDocument; doc: DocState; onRun
   const [focusReq, setFocusReq] = useState<FocusReq | null>(null)
   // One selection for the canvas, the node list, the Bindings panel and the inspectors.
   const selection = useSelection(doc.analysis.definition, doc.grant)
+  // "Show values from run" and the chosen run's values live as long as this document is open (F2.3 requirement 16).
+  const valuePicker = useValuesPicker(doc.analysis.definition?.id, doc.analysis.version)
   const issues = issuesOf(doc.analysis)
   const errorCount = issueCounts(issues).error
   // Choosing an issue (or "show first error") takes the person to the element, and to its line when the YAML is on screen.
@@ -211,7 +214,7 @@ function Open({ g, doc, onRun, onNew }: { g: GraphDocument; doc: DocState; onRun
       </div>
 
       <div className={`ed-views ${view}`}>
-        {view !== 'yaml' && <GraphCanvas g={g} doc={doc} focusReq={focusReq} selection={selection} />}
+        {view !== 'yaml' && <GraphCanvas g={g} doc={doc} focusReq={focusReq} selection={selection} picker={valuePicker} />}
         {view !== 'visual' && (
           <Card title={t('editor.yaml')} action={<HelpTip>{t('editor.yamlHelp')}</HelpTip>} testId="yaml-card">
             <div className="yaml-host">

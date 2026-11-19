@@ -358,3 +358,14 @@ main:focus{outline:none}
 .ov-id{user-select:all}
 .outcome-entry{display:flex;flex-direction:column;gap:2px;align-items:flex-start;text-align:left;width:100%;font:inherit;color:inherit;background:transparent;border:0;border-radius:var(--radius-10);padding:var(--space-8) var(--space-10);cursor:pointer}
 .outcome-entry:hover{background:var(--fill-4)}
+/* Edge inspector (F2.3 E5b.2): a recorded value is text in a bounded, focusable, scrollable region. */
+.ev{display:flex;flex-direction:column;gap:var(--space-8);padding:var(--space-12)}
+.ev p{margin:0}
+.ev-state-head{margin:0;font-size:14px;display:flex;gap:var(--space-8);align-items:center;flex-wrap:wrap}
+.ev-value{display:flex;flex-direction:column;gap:var(--space-8)}
+.ev-facts,.ev-actions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8)}
+.ev-hash{overflow-wrap:anywhere}
+.ev-region{max-height:16rem;overflow:auto;background:var(--raised);border-radius:var(--radius-10);padding:var(--space-8)}
+.ev-region:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.ev-text{margin:0;font-family:var(--font-mono);font-size:var(--type-mono-size);white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:isolate}
+.ev-mark{color:var(--warn);border:1px solid currentColor;border-radius:4px;padding:0 2px;font-weight:600}

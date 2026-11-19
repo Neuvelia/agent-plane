@@ -13,6 +13,8 @@ export interface BridgeRun {
   events: ApEvent[]
   /** open: stream stays live; end: server's normal end; lost: connection drops. */
   ending: StreamEnding
+  /** The run is listed but cannot be read (GET /runs/{id} answers 404), as for a run the store lost. */
+  unreadable?: boolean
 }
 
 /** What the graph document API answers in a story (ADR-0021). Responses are recorded from the real API. */
@@ -100,7 +102,7 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
       if (method === 'GET' && path === '/runs') return respond(200, { runs: data.runs.map((r) => r.summary) }) as ApiResponse<T>
       if (method === 'GET' && run) {
         const r = data.runs.find((x) => x.summary.run_id === decodeURIComponent(run[1]!))
-        return (r ? respond(200, { run: r.summary, graph: r.yaml, graph_summary: r.graph }) : respond(404, null)) as ApiResponse<T>
+        return (r && !r.unreadable ? respond(200, { run: r.summary, graph: r.yaml, graph_summary: r.graph }) : respond(404, null)) as ApiResponse<T>
       }
       if (method === 'GET' && path === '/approvals') return respond(200, { approvals: data.approvals ?? [] }) as ApiResponse<T>
       if (method === 'POST' && path === '/graphs/validate') return respond(200, data.validate ?? { status: 'valid', diagnostics: [] }) as ApiResponse<T>
