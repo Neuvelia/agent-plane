@@ -188,6 +188,10 @@ outputs: {}
     await edit('list-connections-demo', demoText, [{ op: 'list_connections', from: 'fast.outputs.stdout' }])
     await edit('list-connections-bindings', GRAPHS.bindings, [{ op: 'list_connections', from: 'c.outputs.stdout' }])
     await edit('replace-bindings', GRAPHS.bindings, [{ op: 'remove_edge', from: 'a.outputs.stdout', to: 'b.inputs.text' }, { op: 'add_edge', from: 'c.outputs.stdout', to: 'b.inputs.text' }])
+    // F2.3 E5a.3: hints list candidates for an unused output and for an unbound required input; removing a bound graph input.
+    await edit('list-connections-pair-from', GRAPHS.pair, [{ op: 'list_connections', from: 'a.outputs.stdout' }])
+    await edit('list-connections-mixed-to', GRAPHS.mixed, [{ op: 'list_connections', to: 'b.inputs.free' }])
+    await edit('remove-graph-input-with-inputs', GRAPHS['with-inputs'], [{ op: 'remove_graph_input', id: 'topic' }])
     await edit('rename-demo', demoText, [{ op: 'rename_node', id: 'fast', new_id: 'quick' }])
     await edit('delete-demo', demoText, [{ op: 'remove_node', id: 'flaky' }])
   } finally {

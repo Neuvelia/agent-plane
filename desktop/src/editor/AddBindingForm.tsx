@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button } from '../ui/primitives'
 import { addOp, providersOf, replaceOps, sourceChoices, type Binding } from './bindings'
@@ -29,11 +29,13 @@ interface Props {
   def: Definition
   onChanged: (c: Changed) => void
   onCancel: () => void
+  /** Start from this source (a graph input's own Bind…); the source choice is then not shown. */
+  fixedSource?: string
 }
 
-export function AddBindingForm({ g, def, onChanged, onCancel }: Props) {
+export function AddBindingForm({ g, def, onChanged, onCancel, fixedSource }: Props) {
   const { t } = useI18n()
-  const [source, setSource] = useState('')
+  const [source, setSource] = useState(fixedSource ?? '')
   const [answer, setAnswer] = useState<ConnectionAnswer | 'checking' | null>(null)
   const [refusal, setRefusal] = useState<string | null>(null)
   const [replacing, setReplacing] = useState<Replacing | null>(null)
@@ -75,6 +77,9 @@ export function AddBindingForm({ g, def, onChanged, onCancel }: Props) {
     } else setReplacing({ ...replacing, refusal: r.message })
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => void (fixedSource && choose(fixedSource)), [])
+
   const replaceControl = (o: ConnectionOption) => {
     const removing = providersOf(def, o.ref)
     // Nothing to replace on a free input, and replacing a provider with itself changes nothing.
@@ -99,20 +104,28 @@ export function AddBindingForm({ g, def, onChanged, onCancel }: Props) {
     >
       <legend className="sr-only">{t('editor.bindings.addTitle')}</legend>
       <div className="row">
-        <label htmlFor="binding-source">{t('editor.bindings.source')}</label>
-        <select id="binding-source" className="input mono" value={source} onChange={(e) => void choose(e.target.value)} autoFocus data-testid="binding-source">
-          <option value="">{t('editor.bindings.sourcePlaceholder')}</option>
-          {choices.map((c) => (
-            <option key={c.ref} value={c.ref}>
-              {c.ref} ({c.type})
-            </option>
-          ))}
-        </select>
+        {fixedSource ? (
+          <span>
+            {t('editor.bindings.source')}: <span className="mono">{fixedSource}</span>
+          </span>
+        ) : (
+          <>
+            <label htmlFor="binding-source">{t('editor.bindings.source')}</label>
+            <select id="binding-source" className="input mono" value={source} onChange={(e) => void choose(e.target.value)} autoFocus data-testid="binding-source">
+              <option value="">{t('editor.bindings.sourcePlaceholder')}</option>
+              {choices.map((c) => (
+                <option key={c.ref} value={c.ref}>
+                  {c.ref} ({c.type})
+                </option>
+              ))}
+            </select>
+          </>
+        )}
         <Button size="sm" onClick={onCancel} data-testid="add-binding-cancel">
           {t('editor.cancel')}
         </Button>
       </div>
-      {choices.length === 0 && <p className="mu">{t('editor.bindings.noSources')}</p>}
+      {!fixedSource && choices.length === 0 && <p className="mu">{t('editor.bindings.noSources')}</p>}
       {answer === 'checking' && <p className="mu" role="status">{t('editor.connect.checking')}</p>}
       {answer && answer !== 'checking' && !answer.ok && (
         <p className="ed-refusal" role="alert">
