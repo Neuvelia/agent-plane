@@ -32,6 +32,38 @@
       "platforms": ["linux", "darwin"],
       "placeholders": [{"path": "nodes.implement.config.workspace", "marker": "FILL"}],
       "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.implement.config"}]
+    },
+    {
+      "id": "fix-issue",
+      "file": "fix-issue.yaml",
+      "requires": ["git", "codex"],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [{"path": "nodes.fix.config.workspace", "marker": "FILL"}],
+      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.fix.config"}]
+    },
+    {
+      "id": "code-review",
+      "file": "code-review.yaml",
+      "requires": ["git", "codex"],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [{"path": "nodes.review.config.workspace", "marker": "FILL"}],
+      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.review.config"}]
+    },
+    {
+      "id": "dependency-update",
+      "file": "dependency-update.yaml",
+      "requires": ["git", "codex"],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [{"path": "nodes.update.config.workspace", "marker": "FILL"}],
+      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.update.config"}]
+    },
+    {
+      "id": "repo-audit",
+      "file": "repo-audit.yaml",
+      "requires": ["git", "codex"],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [{"path": "nodes.audit.config.workspace", "marker": "FILL"}],
+      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.audit.config"}]
     }
   ]
 }

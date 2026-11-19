@@ -119,3 +119,12 @@ Run `go test ./cmd/agentplane/...` before `make check`. For process lifecycle,
 streaming or cancellation changes, also run the relevant built-binary and
 cross-package tests and a race check. Update this guide when a named owner
 or contract changes.
+
+## Attempt diff capture (`--record-diffs`, F2.8b, ADR-0026)
+
+`run` and `serve` accept `--record-diffs` (default off). `attemptdiff.go` is the
+only place that composes `internal/adapter/attemptdiff` behind
+`runtime.AttemptDiffer`, and only for graphs with a loop Agent node, so other
+graphs open no session and no scratch directory. The flag prints a one-line
+notice on stderr; redaction of file content and paths comes from `--redact-env`.
+In `serve` the flag is fixed at startup and every run opens its own session.

@@ -18,6 +18,7 @@ type runPreparation struct {
 	scopes            map[string][]string
 	scopeRedacted     map[string]bool
 	isolation         isolationPlan
+	diffs             *diffRecorder
 	limit             int
 }
 
@@ -86,7 +87,12 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 	if err := preflightHuman(definition, options.Decisions); err != nil {
 		return runPreparation{}, err
 	}
+	diffs, err := openAttemptDiffs(ctx, definition, options, redactions, redactionTemplate)
+	if err != nil {
+		return runPreparation{}, err
+	}
 	return runPreparation{
+		diffs:             diffs,
 		plan:              plan,
 		graphInputs:       graphInputs,
 		redactionTemplate: redactionTemplate,
@@ -108,6 +114,7 @@ func initializeRun(ctx context.Context, definition *graph.Definition, options Op
 	machine.decisions = options.Decisions
 	// Graph inputs are recorded directly after run_started, before any other fact.
 	machine.values = newValueRecorder(options.RecordValues, prepared.redactionTemplate)
+	machine.diffs = prepared.diffs
 	machine.recordGraphInputs(prepared.graphInputs)
 	for _, id := range definition.Units {
 		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, prepared.scopes[id], prepared.scopeRedacted[id]); err != nil {
