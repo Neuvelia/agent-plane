@@ -48,40 +48,13 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		limit = 1
 	}
 	redactions := append([]string(nil), options.LogRedactions...)
-	redactionTemplate, err := newRedactionSet(redactions, nil)
+	redactionTemplate, err := preflightRedactions(executor, options, redactions)
 	if err != nil {
-		return runPreparation{}, redactionPreparationError(err)
-	}
-
-	// Byte logs serialize as base64, but normalized/evidence string observation
-	// must not let JSON manufacture replacement runes after secret redaction.
-	if _, observed := executor.(ObservedExecutor); observed {
-		for _, value := range redactions {
-			if !utf8.ValidString(value) {
-				return runPreparation{}, errors.New("invalid observed redactions: values must be valid UTF-8")
-			}
-		}
-		if !utf8.Valid(redactionTemplate.marker) {
-			return runPreparation{}, errors.New("invalid observed redactions: no UTF-8-safe secret-absent marker is available")
-		}
-	}
-
-	if err := preflightValueRecording(options.RecordValues, redactions, redactionTemplate); err != nil {
 		return runPreparation{}, err
 	}
-
-	plan, validation := graph.CompileBindings(definition)
-	if !validation.Valid() {
-		return runPreparation{}, &run.PreflightError{Diagnostics: validation}
-	}
-	inputValidation := plan.ValidateGraphInputs(inputs)
-	if !inputValidation.Valid() {
-		return runPreparation{}, &run.PreflightError{Diagnostics: inputValidation}
-	}
-	// Run inputs are a stable snapshot even if the caller reuses its map.
-	graphInputs := make(map[string]graph.Value, len(inputs))
-	for name, value := range inputs {
-		graphInputs[name] = value
+	plan, graphInputs, err := compileRunBindings(definition, inputs)
+	if err != nil {
+		return runPreparation{}, err
 	}
 
 	scopes, scopeRedacted, err := unitScopes(definition, redactionTemplate)
@@ -112,6 +85,52 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		isolation:         isolation,
 		limit:             limit,
 	}, nil
+}
+
+// preflightRedactions builds the --redact-env redaction template and applies
+// the UTF-8 rules of the features that rewrite redacted text.
+func preflightRedactions(executor Executor, options Options, redactions []string) (*logRedactor, error) {
+	redactionTemplate, err := newRedactionSet(redactions, nil)
+	if err != nil {
+		return nil, redactionPreparationError(err)
+	}
+
+	// Byte logs serialize as base64, but normalized/evidence string observation
+	// must not let JSON manufacture replacement runes after secret redaction.
+	if _, observed := executor.(ObservedExecutor); observed {
+		for _, value := range redactions {
+			if !utf8.ValidString(value) {
+				return nil, errors.New("invalid observed redactions: values must be valid UTF-8")
+			}
+		}
+		if !utf8.Valid(redactionTemplate.marker) {
+			return nil, errors.New("invalid observed redactions: no UTF-8-safe secret-absent marker is available")
+		}
+	}
+
+	if err := preflightValueRecording(options.RecordValues, redactions, redactionTemplate); err != nil {
+		return nil, err
+	}
+	return redactionTemplate, nil
+}
+
+// compileRunBindings validates the graph bindings and the supplied inputs and
+// returns the binding plan with a stable snapshot of the inputs.
+func compileRunBindings(definition *graph.Definition, inputs map[string]graph.Value) (*graph.BindingPlan, map[string]graph.Value, error) {
+	plan, validation := graph.CompileBindings(definition)
+	if !validation.Valid() {
+		return nil, nil, &run.PreflightError{Diagnostics: validation}
+	}
+	inputValidation := plan.ValidateGraphInputs(inputs)
+	if !inputValidation.Valid() {
+		return nil, nil, &run.PreflightError{Diagnostics: inputValidation}
+	}
+	// Run inputs are a stable snapshot even if the caller reuses its map.
+	graphInputs := make(map[string]graph.Value, len(inputs))
+	for name, value := range inputs {
+		graphInputs[name] = value
+	}
+	return plan, graphInputs, nil
 }
 
 // initializeRun starts the event stream after preflight has accepted all
