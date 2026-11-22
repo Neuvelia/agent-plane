@@ -54,10 +54,13 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if len(args) >= 2 && args[0] == "runs" && (args[1] == "list" || args[1] == "show") {
 		return runsCommand(args[1], args[2:], stdout, stderr)
 	}
+	if len(args) >= 2 && args[0] == "runs" && args[1] == "prune" {
+		return runsPruneCommand(ctx, args[2:], stdout, stderr)
+	}
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane runs prune [--store-dir DIR] [--dry-run] [--json] | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -136,6 +139,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	var approveNodes, rejectNodes inputFlags
 	storeDir := fs.String("store-dir", "", "persist the run under this directory (events.jsonl + graph.yaml)")
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
+	recordDiffs := fs.Bool("record-diffs", false, "record bounded, redacted per-attempt file diffs of Agent loop nodes as events")
 	var isolation isolationFlags
 	isolation.register(fs)
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
@@ -199,6 +203,8 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err := isolation.configure(def, &opts); err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
+	configureAttemptDiffs(*recordDiffs, def, &opts)
+	announceRecordDiffs(*recordDiffs, stderr)
 	var writer persister
 	if *storeDir != "" {
 		runStore := store.Store{Dir: *storeDir}

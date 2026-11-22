@@ -55,6 +55,7 @@ var corpus = map[string]string{
 	"E_HUMAN_INVALID":          corpusHead + "inputs: {}\nnodes:\n  h:\n    type: human\nedges: []\noutputs: {}\n",
 	"E_LOOP_INVALID":           corpusHead + "inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    loop:\n      max_attempts: 2\n      gate:\n        config: {check_id: c, kind: json_predicate}\n      bindings: []\nedges: []\noutputs: {}\n",
 	"E_NODE_CONFIG_INVALID":    corpusHead + "inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: \"\"}\nedges: []\noutputs: {}\n",
+	"E_TIMEOUT_INVALID":        corpusHead + "inputs: {}\nlimits: {run_timeout_seconds: 0}\nnodes:\n" + nodeShell("a", "") + "edges: []\noutputs: {}\n",
 
 	"E_SECRET_NAME_INVALID":          secretsCorpus("  Bad-Name: {secret_ref: env/X}\n", nodeShell("a", "")),
 	"E_SECRET_ENTRY_INVALID":         secretsCorpus("  tok: {secret_ref: env/X, value: nope}\n", nodeShell("a", "")),

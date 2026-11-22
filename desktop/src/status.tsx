@@ -15,13 +15,16 @@ const NODE: Record<NodeStatus, [MessageKey, Tone]> = {
   failed: ['status.node.failed', 'x'],
   skipped: ['status.node.skipped', 'n'],
   cancelled: ['status.node.cancelled', 'n'],
+  interrupted: ['status.node.interrupted', 'n'],
 }
-const RUN: Record<RunStatus, [MessageKey, Tone]> = {
+// The store also reports runs this build cannot read: "unsupported" (a newer event schema).
+const RUN: Record<RunStatus | 'unsupported', [MessageKey, Tone]> = {
   running: ['status.run.running', 'b'],
   succeeded: ['status.run.succeeded', 'p'],
   failed: ['status.run.failed', 'x'],
   cancelled: ['status.run.cancelled', 'n'],
   interrupted: ['status.run.interrupted', 'n'],
+  unsupported: ['status.run.unsupported', 'x'],
 }
 const GATE: Record<string, [MessageKey, Tone]> = {
   green: ['status.gate.green', 'p'],
@@ -40,7 +43,7 @@ export function NodePill({ status, label }: { status: NodeStatus; label?: string
 
 export function RunPill({ status }: { status: string }) {
   const { t } = useI18n()
-  const known = RUN[status as RunStatus]
+  const known = RUN[status as RunStatus | 'unsupported']
   return (
     <Pill tone={known ? known[1] : 'n'} testId="run-status">
       {known ? t(known[0]) : status}

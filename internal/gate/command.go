@@ -13,8 +13,13 @@ import (
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/proctree"
 	rt "agentplane/internal/runtime"
 )
+
+// commandEvidenceBound limits the whole diff evidence step when
+// Executor.EvidenceBound is zero.
+const commandEvidenceBound = 30 * time.Second
 
 // openCompared rejects symlinks in every component before opening read-only.
 // This is path preflight, not protection from hostile concurrent path mutation.
@@ -58,46 +63,39 @@ func openCompared(cwd, relative string) (*os.File, error) {
 	}
 	return f, nil
 }
-func command(ctx context.Context, c config, in map[string]graph.Value, o rt.ExecutionObservation) (events.GateCheckPayload, error) {
+func (e Executor) command(ctx context.Context, c config, in map[string]graph.Value, o rt.ExecutionObservation) (events.GateCheckPayload, error) {
 	var p events.GateCheckPayload
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		return p, errors.New("read-only diff unsupported on this platform")
 	}
-	l, ok := in[c.Left].AsString()
-	if !ok {
-		return p, fmt.Errorf("input %q must resolve to a string path", c.Left)
-	}
-	r, ok := in[c.Right].AsString()
-	if !ok {
-		return p, fmt.Errorf("input %q must resolve to a string path", c.Right)
-	}
-	left, err := openCompared(c.Cwd, l)
+	left, right, err := openOperands(c, in)
 	if err != nil {
 		return p, err
 	}
 	defer left.Close()
-	right, err := openCompared(c.Cwd, r)
-	if err != nil {
-		return p, err
-	}
 	defer right.Close()
 	capture := o.NewCheckCapture
 	if capture == nil {
 		capture = rt.NewCheckCapture
 	}
 	stdout, stderr := capture(), capture()
-	// Only these fixed operands and descriptors reach the trusted OS operation.
-	cmd := exec.CommandContext(ctx, "/usr/bin/diff", "/dev/fd/3", "/dev/fd/4")
-	cmd.Dir = c.Cwd
-	cmd.Env = []string{"LC_ALL=C"}
-	cmd.ExtraFiles = []*os.File{left, right}
+	bound := e.EvidenceBound
+	if bound <= 0 {
+		bound = commandEvidenceBound
+	}
+	bounded, cancel := context.WithTimeout(ctx, bound)
+	defer cancel()
+	cmd := e.diffCommand(c.Cwd, left, right)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
-	cmd.WaitDelay = time.Second
-	exit, err := runDiff(ctx, cmd)
+	exit, err := runDiffTree(bounded, cmd, e.Termination)
 	out, no := stdout.Finish()
 	errs, ne := stderr.Finish()
 	if err != nil {
+		if ctx.Err() == nil && errors.Is(bounded.Err(), context.DeadlineExceeded) {
+			// A timeout is not evidence about the candidate; never a verdict.
+			return p, fmt.Errorf("diff evidence exceeded %s: %w", bound, errors.Join(context.DeadlineExceeded, err))
+		}
 		return p, err
 	}
 	p = events.GateCheckPayload{CheckID: c.CheckID, Kind: events.CheckKind(c.Kind), Verdict: "green", Reason: "files match", Evidence: []events.GateEvidence{{Source: "command", ExitCode: &exit, Stdout: out, Stderr: errs, StdoutOmitted: no, StderrOmitted: ne}}}
@@ -108,36 +106,63 @@ func command(ctx context.Context, c config, in map[string]graph.Value, o rt.Exec
 	return p, nil
 }
 
-// runDiff separates lifecycle failures from the two valid comparison exits.
+func openOperands(c config, in map[string]graph.Value) (left, right *os.File, err error) {
+	l, ok := in[c.Left].AsString()
+	if !ok {
+		return nil, nil, fmt.Errorf("input %q must resolve to a string path", c.Left)
+	}
+	r, ok := in[c.Right].AsString()
+	if !ok {
+		return nil, nil, fmt.Errorf("input %q must resolve to a string path", c.Right)
+	}
+	left, err = openCompared(c.Cwd, l)
+	if err != nil {
+		return nil, nil, err
+	}
+	right, err = openCompared(c.Cwd, r)
+	if err != nil {
+		closeAll([]*os.File{left})
+		return nil, nil, err
+	}
+	return left, right, nil
+}
+
+// diffCommand builds the only process this Gate starts: fixed operands and
+// preopened descriptors, a controlled environment, and no context, because
+// proctree owns termination of the whole tree.
+func (e Executor) diffCommand(cwd string, left, right *os.File) *exec.Cmd {
+	binary := "/usr/bin/diff"
+	if e.diffPath != "" {
+		binary = e.diffPath
+	}
+	cmd := exec.Command(binary, "/dev/fd/3", "/dev/fd/4")
+	cmd.Dir = cwd
+	cmd.Env = []string{"LC_ALL=C"}
+	cmd.ExtraFiles = []*os.File{left, right}
+	cmd.WaitDelay = time.Second
+	return cmd
+}
+
 func runDiff(ctx context.Context, cmd *exec.Cmd) (int, error) {
+	return runDiffTree(ctx, cmd, proctree.Policy{})
+}
+
+// runDiffTree separates lifecycle failures from the two valid comparison exits.
+// The process tree it starts never outlives the call: cancellation terminates
+// it, and a leader that exits on its own has its group swept.
+func runDiffTree(ctx context.Context, cmd *exec.Cmd, policy proctree.Policy) (int, error) {
 	// Own the pipes: exec.Cmd.Wait can otherwise hide copy errors behind exit 1.
 	targets := []io.Writer{cmd.Stdout, cmd.Stderr}
-	readers := make([]*os.File, 0, 2)
-	writers := make([]*os.File, 0, 2)
-	for range 2 {
-		r, w, e := os.Pipe()
-		if e != nil {
-			for _, f := range append(readers, writers...) {
-				f.Close()
-			}
-			return 0, fmt.Errorf("create diff evidence pipe: %w", e)
-		}
-		readers = append(readers, r)
-		writers = append(writers, w)
-	}
-	defer func() {
-		for _, f := range readers {
-			f.Close()
-		}
-	}()
-	cmd.Stdout = writers[0]
-	cmd.Stderr = writers[1]
-	err := cmd.Start()
-	for _, f := range writers {
-		f.Close()
-	}
+	readers, writers, err := evidencePipes()
 	if err != nil {
-		return 0, fmt.Errorf("start diff: %w", err)
+		return 0, err
+	}
+	defer closeAll(readers)
+	cmd.Stdout, cmd.Stderr = writers[0], writers[1]
+	tree, err := startOwned(ctx, cmd)
+	closeAll(writers)
+	if err != nil {
+		return 0, err
 	}
 	drained := make(chan error, 2)
 	for i, r := range readers {
@@ -147,7 +172,67 @@ func runDiff(ctx context.Context, cmd *exec.Cmd) (int, error) {
 		}
 		go func(r *os.File, w io.Writer) { defer r.Close(); _, e := io.Copy(w, r); drained <- e }(r, target)
 	}
-	err = cmd.Wait()
+	waitErr, termErr := waitOwned(ctx, tree, policy)
+	drainErr := awaitDrain(readers, drained)
+	if termErr != nil {
+		return 0, fmt.Errorf("terminate diff process tree: %w", errors.Join(ctx.Err(), termErr))
+	}
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
+	}
+	if drainErr != nil {
+		return 0, fmt.Errorf("drain diff evidence: %w", drainErr)
+	}
+	return diffExit(waitErr)
+}
+
+func evidencePipes() (readers, writers []*os.File, err error) {
+	for range 2 {
+		r, w, e := os.Pipe()
+		if e != nil {
+			closeAll(readers)
+			closeAll(writers)
+			return nil, nil, fmt.Errorf("create diff evidence pipe: %w", e)
+		}
+		readers = append(readers, r)
+		writers = append(writers, w)
+	}
+	return readers, writers, nil
+}
+
+// closeAll closes pipe ends that are done with; a failed close has no recovery.
+func closeAll(files []*os.File) {
+	for _, f := range files {
+		_ = f.Close()
+	}
+}
+
+func startOwned(ctx context.Context, cmd *exec.Cmd) (*proctree.Tree, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	tree, err := proctree.Start(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("start diff: %w", err)
+	}
+	return tree, nil
+}
+
+// waitOwned waits for the leader, terminating the tree if ctx ends first. A
+// leader that exited on its own has descendants it left in the group swept.
+func waitOwned(ctx context.Context, tree *proctree.Tree, policy proctree.Policy) (waitErr, termErr error) {
+	exited := make(chan struct{})
+	stopped := watchCancellation(ctx, tree, policy, exited)
+	waitErr = tree.Wait()
+	close(exited)
+	c := <-stopped
+	if !c.requested {
+		_, c.err = tree.Terminate(context.Background(), policy)
+	}
+	return waitErr, c.err
+}
+
+func awaitDrain(readers []*os.File, drained <-chan error) error {
 	timer := time.NewTimer(time.Second)
 	defer timer.Stop()
 	var drainErr error
@@ -158,29 +243,47 @@ func runDiff(ctx context.Context, cmd *exec.Cmd) (int, error) {
 				drainErr = e
 			}
 		case <-timer.C:
-			for _, r := range readers {
-				r.Close()
-			}
+			closeAll(readers)
 			for ; remaining > 0; remaining-- {
 				<-drained
 			}
 			drainErr = errors.New("diff evidence drain exceeded one second")
 		}
 	}
-	if ctx.Err() != nil {
-		return 0, ctx.Err()
-	}
-	if drainErr != nil {
-		return 0, fmt.Errorf("drain diff evidence: %w", drainErr)
-	}
-	if err == nil {
+	return drainErr
+}
+
+func diffExit(waitErr error) (int, error) {
+	if waitErr == nil {
 		return 0, nil
 	}
 	var e *exec.ExitError
-	if errors.As(err, &e) && e.ExitCode() == 1 {
+	if errors.As(waitErr, &e) && e.ExitCode() == 1 {
 		return 1, nil
 	}
-	return 0, fmt.Errorf("diff execution failed: %w", err)
+	return 0, fmt.Errorf("diff execution failed: %w", waitErr)
+}
+
+type cancellation struct {
+	requested bool
+	err       error
+}
+
+// watchCancellation terminates the tree when ctx is done before exited closes.
+// The result channel delivers once, so the caller reads it without a race.
+func watchCancellation(ctx context.Context, tree *proctree.Tree, policy proctree.Policy, exited <-chan struct{}) <-chan cancellation {
+	result := make(chan cancellation, 1)
+	go func() {
+		var c cancellation
+		select {
+		case <-ctx.Done():
+			c.requested = true
+			_, c.err = tree.Terminate(context.Background(), policy)
+		case <-exited:
+		}
+		result <- c
+	}()
+	return result
 }
 
 func pathCause(err error) error {

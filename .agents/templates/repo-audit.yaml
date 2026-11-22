@@ -1,0 +1,75 @@
+# Template: a read-only repository audit by a coding agent. The task text is fixed
+# in the graph, so no input is needed. The agent may not change any file:
+# allowed_paths is empty, so the reported_file_scope gate rejects every reported
+# change and the loop retries at most 3 times. A person approves before the agent
+# call and reads the report afterwards.
+# Fill the workspace before running. Agent nodes run through
+#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex
+# Codex authentication needs a named environment reference (for example
+# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.
+# The shell node only prints text. Nothing is staged, committed, pushed or sent.
+schema_version: 0
+id: repo-audit
+name: Read-only repository audit
+inputs: {}
+nodes:
+  confirm_start:
+    type: human
+    config:
+      prompt: Start the audit agent on this repository? This may use a paid model.
+    outputs:
+      decision: {type: string, required: true}
+  audit:
+    type: agent
+    inputs:
+      start: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: "" # FILL: absolute path of the Git repository to audit
+      allowed_paths: [] # REVIEW: empty means the auditor must not change any file
+      task: Audit this repository without changing any file. Report structure, risky areas, missing tests and unclear documentation as a prioritized list. # REVIEW: the audit instructions
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: no-changes
+          kind: reported_file_scope
+          input: candidate
+          allowed_paths: [] # REVIEW: keep equal to config.allowed_paths
+      bindings:
+        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}
+  read_report:
+    type: human
+    config:
+      prompt: Read the audit report. Acknowledge it? A model audit is advice, not proof.
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  record:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["audit acknowledged\n"]
+    inputs:
+      decision: {type: string, required: true}
+edges:
+  - {from: confirm_start.outputs.decision, to: audit.inputs.start}
+  - {from: audit.outputs.summary, to: read_report.inputs.summary}
+  - {from: audit.outputs.changed_files, to: read_report.inputs.changed_files}
+  - {from: read_report.outputs.decision, to: record.inputs.decision}
+outputs: {}
+metadata:
+  layout:
+    nodes:
+      confirm_start: {x: 0, y: 0}
+      audit: {x: 320, y: 0}
+      read_report: {x: 640, y: 0}
+      record: {x: 960, y: 0}

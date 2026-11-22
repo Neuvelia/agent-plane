@@ -1,19 +1,23 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { listApprovals, listRuns, startRun, validateGraph, type ApiFailure } from './api'
 import { useConnectionReport } from './connection'
 import { EngineErrorState, LoadingState } from './states'
 import { GraphMap } from './GraphMap'
 import { useRunStream, usePoll } from './hooks'
-import { formatDateTime, type Locale } from './i18n'
+import { formatDateTime } from './i18n'
 import { useI18n } from './i18n/context'
 import { ApprovalBox, NodePanel } from './NodePanel'
 import { nodeView, displayStatus, type RunView } from './reducer'
-import { filterEvents, formatDuration, runKpis, timeline, type EventFilter } from './insight'
+import { criticalPath } from './criticalPath'
+import { filterEvents, timeline, type EventFilter } from './insight'
+import { matchingNodes, type NodeFilter } from './nodeFilter'
+import { clockTime, NodeFilterBar, OutcomeCard, RunIdentity, RunSummaryCard } from './overview'
+import { NodeTimeline } from './timelineView'
 import { RunPill } from './status'
-import type { ChosenGraph, Diagnostic } from './types'
-import { CodeView, DotTimeline, EventLog, type EventRow } from './ui/data'
+import type { ChosenGraph, Diagnostic, GraphSummary } from './types'
+import { CodeView, EventLog, type EventRow } from './ui/data'
 import { canStart, preflightState } from './preflight'
-import { Button, Card, Field, HelpTip, KPI, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
+import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
 
 // R1: Run Inspector, Approvals and New run on the design system. Behaviour and
 // data are unchanged from F2.5; the Dashboard is redesigned in R2.
@@ -70,40 +74,15 @@ export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
 
 export type GraphView = 'map' | 'yaml' | 'split'
 
-const time = (locale: Locale, iso: string) => new Intl.DateTimeFormat(locale, { timeStyle: 'medium' }).format(new Date(iso))
-
-function RunSummaryCard({ run }: { run: RunView }) {
-  const { t, locale } = useI18n()
-  const k = runKpis(run)
-  const dur = (v: number | undefined) => (v === undefined ? undefined : formatDuration(v, locale))
-  const unknown = t('kpi.unknown')
-  return (
-    <Card title={t('run.summary')} action={<HelpTip>{t('run.summaryHelp')}</HelpTip>} testId="run-summary">
-      <div className="kpis">
-        <KPI label={t('kpi.wall')} value={dur(k.wallClockMs)} unknownLabel={unknown} />
-        <KPI label={t('kpi.node')} value={dur(k.nodeTimeMs)} unknownLabel={unknown} />
-        <span className="kpi-with-tip">
-          <KPI label={t('kpi.saved')} value={dur(k.savedMs)} unknownLabel={unknown} />
-          <HelpTip>{t('kpi.savedHelp')}</HelpTip>
-        </span>
-        <KPI label={t('kpi.retries')} value={k.retries} unknownLabel={unknown} />
-        <span className="kpi-with-tip">
-          <KPI label={t('kpi.tokens')} unknownLabel={unknown} />
-          <HelpTip>{t('kpi.tokensHelp')}</HelpTip>
-        </span>
-      </div>
-      {run.status === 'running' && run.lastEventAt && <div className="mu small-print">{t('kpi.asOf', { time: time(locale, run.lastEventAt) })}</div>}
-    </Card>
-  )
-}
-
-function TimelineCard({ run }: { run: RunView }) {
+function TimelineCard({ run, graph, filter, onFilter, hidden, selected, critical, onSelect }: { run: RunView; graph: GraphSummary | null; filter: NodeFilter; onFilter: (f: NodeFilter) => void; hidden: ReadonlySet<string>; selected: string | null; critical: ReadonlySet<string>; onSelect: (id: string) => void }) {
   const { t } = useI18n()
   const tl = timeline(run)
+  const caption = tl && tl.bucketSeconds > 1 ? t('run.timelineBucket', { seconds: tl.bucketSeconds }) : undefined
   return (
-    <Card title={t('run.timeline')} subtitle={tl && tl.bucketSeconds > 1 ? t('run.timelineBucket', { seconds: tl.bucketSeconds }) : undefined} action={<HelpTip>{t('run.timelineHelp')}</HelpTip>} testId="run-timeline">
+    <Card title={t('run.timeline')} subtitle={caption} action={<HelpTip>{t('run.timelineHelp')}</HelpTip>} testId="run-timeline">
+      <NodeFilterBar run={run} graph={graph} filter={filter} onChange={onFilter} />
       {tl && tl.rows.length > 0 ? (
-        <DotTimeline rows={tl.rows} label={t('run.timeline')} caption={tl.bucketSeconds > 1 ? t('run.timelineBucket', { seconds: tl.bucketSeconds }) : undefined} />
+        <NodeTimeline timeline={tl} selected={selected} critical={critical} hidden={hidden} onSelect={onSelect} />
       ) : (
         <div className="mu empty-line">{t('run.timelineEmpty')}</div>
       )}
@@ -117,7 +96,7 @@ function EventsCard({ run }: { run: RunView }) {
   const shown = filterEvents(run.tail, filter)
   const rows: EventRow[] = shown.map((e) => ({
     sequence: e.sequence,
-    time: time(locale, e.timestamp),
+    time: clockTime(locale, e.timestamp),
     type: e.type,
     node: e.node,
     detail: e.detail,
@@ -143,21 +122,34 @@ function EventsCard({ run }: { run: RunView }) {
 
 export function RunInspector({ runId, onBack }: { runId: string; onBack: () => void }) {
   const { t } = useI18n()
-  const { run, graph, yaml, following, notFound, lost, reconnect } = useRunStream(runId)
+  const { run, graph, yaml, following, notFound, unsupported, lost, reconnect } = useRunStream(runId)
   const [selected, setSelected] = useState<string | null>(null)
   const [view, setView] = useState<GraphView>('map')
+  const [nodeFilter, setNodeFilter] = useState<NodeFilter>('all')
+  const path = useMemo(() => (graph ? criticalPath(run, graph) : undefined), [run, graph])
+  const critical = useMemo<ReadonlySet<string>>(() => new Set(path?.nodes ?? []), [path])
+  // Nodes the filter leaves out: dimmed on the map and hidden from the timeline. View state only.
+  const dimmed = useMemo<ReadonlySet<string>>(() => {
+    if (nodeFilter === 'all') return new Set<string>()
+    const keep = new Set(matchingNodes(run, graph, nodeFilter))
+    return new Set((graph ? graph.nodes.map((n) => n.id) : run.order).filter((id) => !keep.has(id)))
+  }, [run, graph, nodeFilter])
   const isLost = lost !== null
   useConnectionReport('run', isLost)
-  if (notFound)
+  if (notFound || unsupported)
     return (
       <section>
         <Button onClick={onBack}>{t('run.back')}</Button>
-        <div className="empty-state">{t('run.notFound')}</div>
+        <div className="empty-state" data-testid={unsupported ? 'run-unsupported' : 'run-not-found'}>
+          {t(unsupported ? 'run.unsupported' : 'run.notFound')}
+        </div>
       </section>
     )
   const waiting = run.order.filter((id) => displayStatus(nodeView(run, id)) === 'waiting_human')
   const focus = selected ?? waiting[0] ?? run.order.find((id) => nodeView(run, id).status === 'failed') ?? null
-  const map = graph ? <GraphMap graph={graph} run={run} selected={focus} onSelect={setSelected} /> : <div className="empty-state">{t('run.loadingGraph')}</div>
+  // The node that is open is never dimmed, whatever the filter says.
+  const mapDimmed = focus && dimmed.has(focus) ? new Set([...dimmed].filter((id) => id !== focus)) : dimmed
+  const map = graph ? <GraphMap graph={graph} run={run} selected={focus} onSelect={setSelected} critical={critical} dimmed={mapDimmed} /> : <div className="empty-state">{t('run.loadingGraph')}</div>
   return (
     <section className="inspector">
       <div className="row between">
@@ -176,7 +168,9 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
           <Button onClick={reconnect}>{t('run.reconnect')}</Button>
         </div>
       )}
-      <RunSummaryCard run={run} />
+      <RunIdentity run={run} />
+      <RunSummaryCard run={run} graph={graph} path={path} lost={lost !== null} />
+      <OutcomeCard run={run} onOpen={setSelected} />
       <div className="split">
         <div className="stack">
         <Card
@@ -203,7 +197,7 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
             {view !== 'map' && <CodeView text={yaml} testId="graph-yaml" label={t('run.view.yaml')} />}
           </div>
         </Card>
-        <TimelineCard run={run} />
+        <TimelineCard run={run} graph={graph} filter={nodeFilter} onFilter={setNodeFilter} hidden={dimmed} selected={focus} critical={critical} onSelect={setSelected} />
         </div>
         <div className="stack">
           <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} />

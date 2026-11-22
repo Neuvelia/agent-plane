@@ -83,6 +83,10 @@ func validateAttempt(e Event) error {
 				return errors.New("checked outcome requires check ID")
 			}
 		case "execution_error", "cancelled":
+		case "timeout":
+			if err := requireCancelSchema(e, "timeout attempt outcome"); err != nil {
+				return err
+			}
 		default:
 			return errors.New("invalid attempt outcome")
 		}

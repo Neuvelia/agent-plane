@@ -19,6 +19,7 @@ graph semantics, scheduler transitions or event schemas.
 | `--worktree-root`/`--retain-worktrees` and the Git `WorkspaceManager` adapter (F3.1) | `workspaces.go` |
 | Local or interactive human decisions | `approvals.go` |
 | `runs list/show` and stored-run replay | `runs.go` |
+| `runs prune` and retention at `serve` start (F3.2) | `prune.go` |
 | Loopback server setup, persistence and start callback | `serve.go` |
 
 ## Preserve these contracts
@@ -102,6 +103,11 @@ needs a feature spec and, where required by root policy, an ADR.
 - Watch ordering, progress omission, broken pipes and cancellation:
   `output_test.go`, `progress_test.go`, `integration_test.go`.
 - Store opt-in, replay, secrets and failure precedence: `store_test.go`.
+- `kill -9` of a running CLI (durable prefix, live `running` then `interrupted`,
+  lock not inherited by node processes) and persist-before-deliver across
+  processes: `crash_test.go` (helper processes `TestCrashHelperProcess`,
+  `TestCrashEventsHelperProcess`).
+- `runs prune`, its exit codes and the serve-start retention: `prune_test.go`.
 - Worktree isolation flags, JSON/human result, exit codes and the
   no-isolation golden guard: `isolation_test.go`.
 - Server handshake, persistence, invalid graphs and shutdown:
@@ -113,3 +119,12 @@ Run `go test ./cmd/agentplane/...` before `make check`. For process lifecycle,
 streaming or cancellation changes, also run the relevant built-binary and
 cross-package tests and a race check. Update this guide when a named owner
 or contract changes.
+
+## Attempt diff capture (`--record-diffs`, F2.8b, ADR-0026)
+
+`run` and `serve` accept `--record-diffs` (default off). `attemptdiff.go` is the
+only place that composes `internal/adapter/attemptdiff` behind
+`runtime.AttemptDiffer`, and only for graphs with a loop Agent node, so other
+graphs open no session and no scratch directory. The flag prints a one-line
+notice on stderr; redaction of file content and paths comes from `--redact-env`.
+In `serve` the flag is fixed at startup and every run opens its own session.

@@ -47,3 +47,26 @@ func LoopGateKinds(nodeType string) []string {
 	}
 	return nil
 }
+
+// Timeout bounds in seconds (F3.4, ADR-0028).
+const (
+	timeoutMinSeconds = 1
+	timeoutMaxSeconds = 86400
+)
+
+// NodeTimeoutFields describes the node-level timeout_seconds key. A human node
+// cannot carry it; it has no default because absent means no limit.
+func NodeTimeoutFields() []fields.Field {
+	return []fields.Field{
+		{ID: "node.timeout_seconds", Key: "timeout_seconds", Kind: fields.Int,
+			Min: fields.IntPtr(timeoutMinSeconds), Max: fields.IntPtr(timeoutMaxSeconds)},
+	}
+}
+
+// RunLimitFields describes the graph-level limits block.
+func RunLimitFields() []fields.Field {
+	return []fields.Field{
+		{ID: "limits.run_timeout_seconds", Key: "run_timeout_seconds", Kind: fields.Int,
+			Min: fields.IntPtr(timeoutMinSeconds), Max: fields.IntPtr(timeoutMaxSeconds)},
+	}
+}

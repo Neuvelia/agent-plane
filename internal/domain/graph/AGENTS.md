@@ -11,6 +11,7 @@ operations in the child package.
 | One-document YAML parse and normalized marshal | `yaml.go` |
 | Semantic diagnostics, references, cycles | `validation.go`, `loop.go`, `human.go` |
 | Human-node and loop field descriptors (F2.2) | `fields.go` |
+| Timeout and run-limit validation (F3.4) | `timeout.go`, `fields.go` |
 | Secret declarations by reference, `secret_env` and ambient-bypass validation (F3.8); grammar lives in `internal/domain/secrets` | `secrets.go` |
 | Compiled data dependencies and value resolution | `bindings.go`, `value.go` |
 | Nodes with no data-dependency path to or from a node (inspector, F2.2) | `independence.go` |
@@ -38,7 +39,8 @@ operations in the child package.
   Do not add implicit ordering edges, coercion or shared context.
 - `SemanticVersion` excludes `Name` and `Metadata` and normalizes unordered
   units, edges and graph-input bindings. Presentation changes must not alter
-  the execution hash. Keep production `graph` independent of runtime, API,
+  the execution hash. Optional `timeout_seconds` and `limits` are semantic and
+  absent by default; a graph without them keeps its hash. Keep production `graph` independent of runtime, API,
   desktop and concrete executors.
 
 Before changing a durable contract, read `docs/graph-spec.md` and the active

@@ -49,6 +49,9 @@ func Parse(data []byte) (*graph.Definition, error) {
 	if err := checkSchemaVersion(data); err != nil {
 		return nil, err
 	}
+	if err := checkTimeouts(data); err != nil {
+		return nil, err
+	}
 	var dto definitionDTO
 	if err := decodeOneDocument(data, &dto, true); err != nil {
 		return nil, fmt.Errorf("parse graph definition: %w", renameDTOTypes(err))

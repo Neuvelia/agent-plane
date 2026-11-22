@@ -9,9 +9,6 @@ import (
 
 // Secret and execution-policy facts (F3.8/F3.9, ADR-0029). They exist from
 // SchemaPolicy; older schemas never carry them and stay readable unchanged.
-//
-// Renumber to 14 (after F2.8b=12, F3.4=13); whoever merges later bumps this
-// constant and greps for schema literals. Tests derive from the constant.
 const (
 	PolicyEvaluated Type = "policy_evaluated"
 	PolicyViolation Type = "policy_violation"
@@ -19,7 +16,7 @@ const (
 
 const (
 	// SchemaPolicy is the first event schema that carries these facts.
-	SchemaPolicy = 12
+	SchemaPolicy = 14
 )
 
 // Bounds per payload; secrets, values and evidence come from graphs and repositories.

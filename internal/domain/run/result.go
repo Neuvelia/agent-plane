@@ -19,6 +19,8 @@ const (
 	FailureOutputContract    FailureKind = "output_contract"
 	FailureGraphOutput       FailureKind = "graph_output"
 	FailureScheduler         FailureKind = "scheduler"
+	FailureTimeout           FailureKind = "timeout"
+	FailureShutdown          FailureKind = "shutdown"
 )
 
 // Failure preserves the error cause or structured diagnostics within the
@@ -46,6 +48,8 @@ type NodeResult struct {
 	Outputs           []PortValue
 	Failure           *Failure
 	SkipReason        string
+	// Reason is set on cancelled nodes and on node_timeout failures.
+	Reason CancelReason
 }
 
 // StateTransition records an observable in-memory state change. An empty
@@ -61,14 +65,16 @@ type StateTransition struct {
 // exactly one terminal State when Run returns.
 type Result struct {
 	// PersistError is the first Options.Persist failure, if any.
-	PersistError  error
-	GraphID       string
-	GraphVersion  string
-	RunID         events.RunID
-	State         State
-	Nodes         []NodeResult
-	Outputs       []PortValue
-	Failure       *Failure
+	PersistError error
+	GraphID      string
+	GraphVersion string
+	RunID        events.RunID
+	State        State
+	Nodes        []NodeResult
+	Outputs      []PortValue
+	Failure      *Failure
+	// Reason is set when the run ended cancelled.
+	Reason        CancelReason
 	Transitions   []StateTransition
 	Events        []events.Event
 	ProgressStats events.DeliveryStats

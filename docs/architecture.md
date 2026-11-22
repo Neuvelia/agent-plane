@@ -236,18 +236,30 @@ input contract and are copied without narrowing; total authored input memory and
 the full feedback object including authored scope have no new global size cap.
 The trace limits above apply only to its observable summary.
 
-## Persistence direction
+## Persistence
 
-Phase 0 is in-memory.
+A run's durable state is exactly its append-only event log
+(`<store>/<run_id>/events.jsonl`, ADR-0019, ADR-0027). No database is used.
 
-Later local persistence should use:
+- A non-progress event is fsynced before it is delivered to any subscriber, so
+  anything a client saw is on disk; live delivery stops at the first persist
+  error. Progress and `log_chunk` events are synced with the next lifecycle fact.
+- A run is created durably: `graph.yaml` is synced before the log exists, then the
+  run and store directories (POSIX).
+- A live writer holds an advisory lock on `<run>/run.lock` (`flock`, `LockFileEx`),
+  which the operating system drops when the process dies. A log with no terminal
+  event is `running` while the lock is held and `interrupted` otherwise; this is
+  derived, never recorded, and adds no event.
+- `store.json` carries the store format and optional retention. Logs of every
+  earlier schema stay readable; a newer schema is listed `unsupported` and never
+  modified.
+- `<run>/summary.json` is a rebuildable snapshot written at the terminal event so
+  `List` does not parse every log. The log always wins.
+- Retention is explicit: `agentplane runs prune`, and once at `serve` start when
+  configured. It never removes an unterminated run.
 
-- SQLite for metadata and event indexes;
-- filesystem for larger artifacts/logs;
-- YAML/JSON for graph definitions;
-- Git for graph/repository version context.
-
-A future durable event store should preserve append-only audit semantics even if snapshots are added for performance.
+Larger artifacts (F3.5), graph versioning (F3.6) and export (F3.7) remain later
+work. Git still supplies graph and repository version context.
 
 ## Workspace isolation direction
 
@@ -319,17 +331,30 @@ the existing CheckResult; the Return Envelope and correction loop use their
 established path. This is post-execution detection, not filesystem isolation.
 External writers can still alter the shared workspace. See ADR-0016.
 
+## Cancellation and timeout facts (F3.4)
+
+Event schema 13 (schema 12 is F2.8b's `attempt_diff`) adds two
+bounded facts and one optional field. `cancel_requested` carries `scope`
+(`run|node`), a closed `reason` (`interrupt|user_cancel|run_timeout|
+sibling_failed|node_timeout`) and `source` (`signal|api|deadline|failure`); it is
+node-correlated only for node scope. `process_terminated` is node-correlated and
+carries `method` (`graceful|forced|already_exited`), `grace_ms`, `elapsed_ms` and a
+`leaked` descendant count, never paths, environment or command lines. `reason` is
+an optional field of `node_finished`, `node_terminated` and `run_finished`, valid
+only on a `cancelled` status or a `timeout` failure. `attempt_finished.outcome`
+gains `timeout`. Readers of schemas 1-11 are unchanged. The reason is derived from
+a typed `run.CancelCause` read with `run.ReasonOf`, never from error text. This
+change defines the shapes only; the runtime emits them in a later F3.4 task.
+
 ## Secret and policy facts (F3.8/F3.9)
 
-Event schema 12 adds two typed, bounded facts, `policy_evaluated` (per node
+Event schema 14 adds two typed, bounded facts, `policy_evaluated` (per node
 run: mode, `applied`, scope root, the four permissions with their state, the
 assigned secrets by name, provider and variable name, and a redaction-value
 count) and `policy_violation` (permission, closed reason, `blocked` or
 `recorded` outcome, bounded sorted evidence), plus the Check Result kinds
 `execution_policy` and `secret_in_workspace`. No payload can hold a secret
-value. Renumber to 14 (after F2.8b=12, F3.4=13); whoever merges later bumps
-`events.SchemaPolicy` and greps for schema literals. Nothing emits these facts
-yet; the runtime pipeline lands in later F3.8 tasks (ADR-0029).
+value. Nothing emits these facts yet; the runtime pipeline lands in later F3.8 tasks (ADR-0029).
 
 ## Workspace isolation facts (F3.1)
 
@@ -351,6 +376,17 @@ least one isolated node exists, the runtime captures the source checkout with
 sorted, bounded paths; a failed or timed-out inspection (the capture hashes
 ignored files, see ADR-0016) is emitted with `indeterminate: true` and no paths,
 and an unchanged source emits nothing. The guard never changes run status.
+
+## Attempt diff facts (F2.8b)
+
+Event schema 12 adds the typed, bounded `attempt_diff` fact (ADR-0026). It is
+recorded only when diff recording is enabled: one event per changed file (path,
+change kind, hashes, sizes, line counts and a patch of at most 16 KiB, or an
+`omitted_reason`) and one summary event per attempt with an empty path. The
+payload shape and its validation live in `internal/domain/events/diff.go`; the
+patch text comes from the pure `internal/domain/diff` package. Capture,
+redaction and budgets are later F2.8b tasks. Readers of schemas 1-11 decode
+unchanged, and a schema 11 stream containing `attempt_diff` is invalid.
 
 Known limits of F3.1: downstream isolated nodes do not see upstream file changes
 (every unit starts from the run's base commit and data flows through ports), Shell,
