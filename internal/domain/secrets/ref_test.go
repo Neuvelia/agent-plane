@@ -76,3 +76,14 @@ func TestValidEnvName(t *testing.T) {
 		}
 	}
 }
+
+func TestValidEnvIdentifierGrammar(t *testing.T) {
+	for s, want := range map[string]bool{
+		"GH_TOKEN": true, "_x1": true, "a": true, "": false, "1A": false,
+		"ghp_Pasted-Token.9": false, "A=B": false, strings.Repeat("A", 128): true, strings.Repeat("A", 129): false,
+	} {
+		if got := ValidEnvIdentifier(s); got != want {
+			t.Errorf("ValidEnvIdentifier(%q) = %v, want %v", s, got, want)
+		}
+	}
+}

@@ -24,6 +24,7 @@ var ErrInvalidRef = errors.New("secret_ref must be <provider>/<name>: a lowercas
 var (
 	providerPattern = regexp.MustCompile(`^[a-z][a-z0-9-]{0,31}$`)
 	namePattern     = regexp.MustCompile(`^[a-z][a-z0-9_]{0,63}$`)
+	envIdentifier   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
 )
 
 // Ref is a parsed secret reference.
@@ -85,3 +86,9 @@ func ValidName(s string) bool { return namePattern.MatchString(s) }
 func ValidEnvName(s string) bool {
 	return s != "" && !strings.ContainsAny(s, "=\x00") && !strings.EqualFold(s, ReservedEnvName)
 }
+
+// ValidEnvIdentifier reports whether s is a portable environment variable
+// identifier (the grammar events.PolicyEvaluated records). Diagnostics quote an
+// author-typed variable name only when it matches, because text outside the
+// grammar might be a pasted secret.
+func ValidEnvIdentifier(s string) bool { return envIdentifier.MatchString(s) }
