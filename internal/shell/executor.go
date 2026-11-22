@@ -87,6 +87,7 @@ type config struct {
 	envAllowlist []string
 	env          map[string]string
 	inputEnv     map[string]string
+	secretEnv    map[string]string
 	stdoutJSON   bool
 }
 
@@ -104,6 +105,9 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	}
 	cfg, err := parseConfig(node)
 	if err != nil {
+		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
+	}
+	if err := requireSecretDelivery(cfg); err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
 	if err := ctx.Err(); err != nil {
@@ -398,6 +402,11 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 				}
 			}
 			used[variable] = inputID
+		}
+	}
+	if value, present := node.Config["secret_env"]; present {
+		if cfg.secretEnv, err = parseSecretEnv(value, cfg); err != nil {
+			return cfg, err
 		}
 	}
 	if value, present := node.Config["stdout_json"]; present {
