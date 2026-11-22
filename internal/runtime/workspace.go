@@ -2,15 +2,12 @@ package runtime
 
 import (
 	"context"
-	"errors"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
-	"agentplane/internal/gitlocate"
 	"agentplane/internal/gitstate"
 )
 
@@ -21,15 +18,9 @@ type workspaceIdentity struct {
 	known    bool
 	isolated bool
 }
-type identityOutput struct{ data []byte }
 
-func (b *identityOutput) Write(p []byte) (int, error) {
-	if len(b.data)+len(p) > 16384 {
-		return 0, errors.New("workspace identity exceeds inspection bound")
-	}
-	b.data = append(b.data, p...)
-	return len(p), nil
-}
+// identityOutputLimit bounds the two path lines `git rev-parse` may print.
+const identityOutputLimit = 16384
 
 // Inspection is bounded, read-only, and does not inherit the caller's Git
 // environment. Unknown identity always serializes, including non-Git roots.
@@ -43,22 +34,13 @@ func inspectWorkspace(ctx context.Context, workspace string) workspaceIdentity {
 	}
 	root = filepath.Clean(root)
 	result := workspaceIdentity{root: root}
-	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	gitPath, err := gitlocate.ResolveGit()
+	// gitstate.Run owns the Git process tree, so a cancelled run leaves no
+	// Git child behind.
+	res, err := gitstate.Run(ctx, root, gitstate.RunOptions{Timeout: 2 * time.Second, StdoutLimit: identityOutputLimit}, "rev-parse", "--show-toplevel", "--absolute-git-dir")
 	if err != nil {
 		return result
 	}
-	cmd := exec.CommandContext(bounded, gitPath, "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "rev-parse", "--show-toplevel", "--absolute-git-dir")
-	cmd.Dir = root
-	cmd.Env = append(gitstate.Environment(gitPath), "GIT_TERMINAL_PROMPT=0")
-	cmd.WaitDelay = time.Second
-	output := &identityOutput{}
-	cmd.Stdout = output
-	if cmd.Run() != nil {
-		return result
-	}
-	lines := strings.Split(strings.TrimSuffix(string(output.data), "\n"), "\n")
+	lines := strings.Split(strings.TrimSuffix(string(res.Stdout), "\n"), "\n")
 	if len(lines) != 2 {
 		return result
 	}

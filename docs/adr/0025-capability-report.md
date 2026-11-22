@@ -1,6 +1,6 @@
 # ADR-0025 - Read-only capability report on the loopback API
 
-**Status:** proposed
+**Status:** accepted (macOS native verification pending, #24)
 **Date:** 2026-11-16
 
 ## Context

@@ -67,6 +67,7 @@ type NodeFinishedPayload struct {
 	FailureKind     string   `json:"failure_kind,omitempty"`
 	DiagnosticCodes []string `json:"diagnostic_codes,omitempty"`
 	DurationMS      *int64   `json:"duration_ms,omitempty"`
+	Reason          string   `json:"reason,omitempty"`
 }
 
 // NodeTerminated records a terminal transition that never entered running.
@@ -74,6 +75,7 @@ type NodeTerminatedPayload struct {
 	Status          string   `json:"status"`
 	FailureKind     string   `json:"failure_kind,omitempty"`
 	DiagnosticCodes []string `json:"diagnostic_codes,omitempty"`
+	Reason          string   `json:"reason,omitempty"`
 }
 type NodeCounts struct {
 	Succeeded int `json:"succeeded"`
@@ -86,6 +88,7 @@ type RunFinishedPayload struct {
 	DurationMS  int64      `json:"duration_ms"`
 	NodeCounts  NodeCounts `json:"node_counts"`
 	FailureKind string     `json:"failure_kind,omitempty"`
+	Reason      string     `json:"reason,omitempty"`
 }
 
 func (RunStartedPayload) eventPayload()     {}
@@ -227,6 +230,24 @@ func (e Event) Validate() error {
 		if err := p.Validate(); err != nil {
 			return err
 		}
+	case CancelRequestedPayload:
+		payloadType = CancelRequested
+		if err := validateCancelRequested(e, p); err != nil {
+			return err
+		}
+	case ProcessTerminatedPayload:
+		payloadType = ProcessTerminated
+		if err := validateProcessTerminated(e, p); err != nil {
+			return err
+		}
+	case AttemptDiffPayload:
+		payloadType = AttemptDiff
+		if err := validateAttemptDiffEnvelope(e); err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
 	case AttemptStartedPayload:
 		payloadType = AttemptStarted
 		if err := validateAttempt(e); err != nil {
@@ -292,10 +313,19 @@ func (e Event) Validate() error {
 		payloadType = LogChunk
 	case NodeFinishedPayload:
 		payloadType = NodeFinished
+		if err := validateTerminalReason(e, p.Status, p.FailureKind, p.Reason); err != nil {
+			return err
+		}
 	case NodeTerminatedPayload:
 		payloadType = NodeTerminated
+		if err := validateTerminalReason(e, p.Status, p.FailureKind, p.Reason); err != nil {
+			return err
+		}
 	case RunFinishedPayload:
 		payloadType = RunFinished
+		if err := validateTerminalReason(e, p.Status, p.FailureKind, p.Reason); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("event %q has no supported payload", e.Type)
 	}
@@ -374,6 +404,12 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = PolicyEvaluatedPayload{}
 	case PolicyViolation:
 		payload = PolicyViolationPayload{}
+	case CancelRequested:
+		payload = CancelRequestedPayload{}
+	case ProcessTerminated:
+		payload = ProcessTerminatedPayload{}
+	case AttemptDiff:
+		payload = AttemptDiffPayload{}
 	case AttemptStarted:
 		payload = AttemptStartedPayload{}
 	case AttemptInput:
@@ -473,7 +509,22 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 			return err
 		}
 		payload = p
+	case CancelRequestedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
 	case PolicyViolationPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ProcessTerminatedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case AttemptDiffPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}

@@ -28,6 +28,11 @@ state; it does not run a graph, decide a Gate verdict or isolate a workspace.
   16 MiB stdout bound (callers such as `internal/worktree` pass larger
   timeouts through `RunOptions`); `Run` exposes only `Write` to the process so
   `io.Copy` cannot bypass the stdout limit through `bytes.Buffer.ReadFrom`.
+  Git runs as a process tree owned through `internal/proctree`: when the
+  bound or the caller's context ends first the whole tree is terminated, and
+  descendants a finished Git left in its group are swept, so no Git helper
+  outlives `Run`. The `RunError` classes are unchanged; a tree that cannot be
+  emptied is joined into the cause. An unexported `resolveGit` is a test seam.
   Errors are `*RunError` with a class and exit code, never Git's stderr. File hashing reads workspace contents separately; these Git
   subprocess limits are not a global bound on files, memory or inspection
   time. Do not emit subprocess stderr as an event; callers own redaction and
@@ -75,6 +80,7 @@ requires one.
 
 - Workspace/HEAD failures, tracked/staged/untracked/ignored/deleted changes,
   dirty baselines, rename ordering and unsafe paths: `snapshot_test.go`.
+- Whole-tree termination on timeout and cancellation: `run_tree_test.go`.
 - Adapter nonignored baseline, ignored transitions and observed provenance:
   `internal/agent/codex/adapter_test.go`.
 - Scope Gate rules, Git failure and warn/deny outcomes:

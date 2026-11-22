@@ -367,6 +367,105 @@ async function startDemo(app, page) {
     await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-dashboard"]')
 
+    // F2.3 E5a.2: the Bindings panel. Add, replace and remove with the keyboard only; a refused target shows the engine's reason.
+    const bound = path.join(graphDir, 'bindings.yaml')
+    fs.writeFileSync(bound, 'schema_version: 0\nid: bindings\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  c:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  b:\n    type: shell\n    config: {command: "true"}\n    inputs:\n      text: {type: string}\n      count: {type: number}\nedges: []\noutputs: {}\n')
+    await stubOpen(bound)
+    await page.click('[data-testid="nav-editor"]')
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="bindings-empty"]')
+    const rowCount = () => page.locator('[data-testid="binding-row"]').count()
+    await key('add-binding-open')
+    await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'binding-source')
+    await page.selectOption('[data-testid="binding-source"]', 'a.outputs.stdout')
+    await page.waitForSelector('[data-testid="connect-option-b.inputs.text"]:not([aria-disabled])')
+    // A refused target stays in the list with the engine's own reason, and Enter on it sends nothing.
+    const reason = await page.locator('[data-testid="target-option"][data-ref="b.inputs.count"] [data-testid="target-reason"]').textContent()
+    assert.match(reason, /string.*number/, 'the refusal is the engine message')
+    assert.equal(await page.getAttribute('[data-testid="connect-option-b.inputs.count"]', 'aria-disabled'), 'true')
+    await key('connect-option-b.inputs.count')
+    assert.equal(await rowCount(), 0, 'a refused target is never sent')
+    await key('connect-option-b.inputs.text')
+    await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"][data-to="b.inputs.text"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'binding-select', 'focus lands on the new row')
+    assert.ok((await page.locator('[data-testid="yaml-content"]').textContent()).includes('a.outputs.stdout'), 'the YAML shows the new edge')
+    // Escape cancels the form.
+    await key('add-binding-open')
+    await page.keyboard.press('Escape')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="add-binding"]'))
+    // Replace the provider in one undoable step: the old edge goes, the new one comes.
+    await key('add-binding-open')
+    await page.selectOption('[data-testid="binding-source"]', 'c.outputs.stdout')
+    await page.waitForSelector('[data-testid="replace-b.inputs.text"]')
+    await key('replace-b.inputs.text')
+    await page.waitForSelector('[data-testid="replace-apply"]')
+    assert.match(await page.textContent('[data-testid="replace-confirm"]'), /removes a\.outputs\.stdout → b\.inputs\.text and adds c\.outputs\.stdout → b\.inputs\.text/)
+    await key('replace-apply')
+    await page.waitForSelector('[data-testid="binding-row"][data-from="c.outputs.stdout"][data-to="b.inputs.text"]')
+    assert.equal(await rowCount(), 1, 'the old provider is gone')
+    await page.click('[data-testid="editor-undo"]')
+    await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"]')
+    assert.equal(await rowCount(), 1, 'one undo restores the old provider')
+    // Selecting a row selects the edge on the canvas, and the reverse.
+    await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1)
+    await page.click('[data-testid="binding-select"]')
+    await page.waitForSelector('.react-flow__edge.ed-edge-sel')
+    // F2.3 E5b.2: a selected binding opens the edge inspector. This graph never ran, and this session does not record values.
+    await page.waitForSelector('[data-testid="edge-value-state"][data-state="no_run"]')
+    assert.equal(await page.textContent('[data-testid="edge-source"]'), 'a.outputs.stdout')
+    assert.equal(await page.textContent('[data-testid="edge-target"]'), 'b.inputs.text')
+    assert.match(await page.textContent('[data-testid="edge-recording-hint"]'), /does not record run values/)
+    assert.match(await page.textContent('.react-flow__edge-text'), /string/, 'a selected edge is labelled with its type')
+    await page.click('.react-flow__pane')
+    await page.waitForFunction(() => !document.querySelector('.react-flow__edge.ed-edge-sel'))
+    assert.equal(await page.getAttribute('[data-testid="binding-select"]', 'aria-pressed'), 'false')
+    await page.locator('.react-flow__edge').first().dispatchEvent('click')
+    await page.waitForFunction(() => document.querySelector('[data-testid="binding-select"]')?.getAttribute('aria-pressed') === 'true')
+    // Remove from the keyboard: focus moves to the panel heading when no row is left.
+    await key('remove-binding')
+    await page.waitForSelector('[data-testid="bindings-empty"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'bindings-heading')
+    await page.click('[data-testid="editor-close"]') // the edit was undone by the removal: nothing unsaved
+    await page.click('[data-testid="nav-dashboard"]')
+
+    // F2.3 E5a.3: hints. An unused output binds to a compatible unbound required input in two actions.
+    const hinted = path.join(graphDir, 'hints.yaml')
+    const hintText = (extra) => 'schema_version: 0\nid: hints\ninputs: {}\nnodes:\n' + extra + '  b:\n    type: shell\n    config: {command: "true"}\n    inputs:\n      text: {type: string, required: true}\nedges: []\noutputs: {}\n'
+    const hintProducer = '  a:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n'
+    fs.writeFileSync(hinted, hintText(hintProducer))
+    await stubOpen(hinted)
+    await page.click('[data-testid="nav-editor"]')
+    await key('editor-open')
+    await page.waitForSelector('[data-testid="hint"][data-kind="unused-output"][data-ref="a.outputs.stdout"]')
+    await page.click('[data-testid="hint"][data-ref="a.outputs.stdout"] [data-testid="hint-options"]')
+    await page.click('[data-testid="hint-option-b.inputs.text"]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="hint"]'))
+    await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"][data-to="b.inputs.text"]')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
+    // Adding a required graph input from an unbound-input hint: one click, one batch, the warning goes.
+    fs.writeFileSync(hinted, hintText(''))
+    await stubOpen(hinted)
+    await page.click('[data-testid="editor-open"]')
+    await page.waitForSelector('[data-testid="hint"][data-kind="unbound-input"]')
+    await page.click('[data-testid="hint-add-input"]')
+    await page.waitForFunction(() => !document.querySelector('[data-testid="hint"]'))
+    await page.waitForSelector('[data-testid="graph-input"][data-name="text"]')
+    const withInput = await page.locator('[data-testid="yaml-content"]').textContent()
+    assert.ok(/inputs:\s*\n?\s*text:.*required: true/s.test(withInput) || withInput.includes('text: {type: string, required: true}'), 'the YAML shows the new input')
+    assert.ok(withInput.includes('inputs.text') && withInput.includes('b.inputs.text'), 'the YAML shows the binding')
+    // The graph inputs card edits and removes it; removal previews the binding that goes.
+    await page.click('[data-testid="remove-graph-input-text"]')
+    await page.waitForSelector('[data-testid="graph-input-preview"]')
+    assert.match(await page.textContent('[data-testid="graph-input-preview"]'), /inputs\.text → b\.inputs\.text/)
+    await page.click('[data-testid="graph-input-preview-apply"]')
+    await page.waitForSelector('[data-testid="graph-inputs-empty"]')
+    await page.waitForSelector('[data-testid="hint"][data-kind="unbound-input"]')
+    await page.click('[data-testid="editor-undo"]')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="leave-discard"]')
+    await page.click('[data-testid="nav-dashboard"]')
+
     // E2.3: window focus finds outside changes; Save and run runs the SAVED file.
     const focusIt = () => page.evaluate(() => window.dispatchEvent(new Event('focus')))
     const watched = path.join(graphDir, 'watched.yaml')
@@ -432,7 +531,7 @@ async function startDemo(app, page) {
     assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
     assert.deepEqual(
       await page.$$eval('[data-testid^="picker-entry-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('picker-entry-', ''))),
-      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'],
+      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval', 'fix-issue', 'code-review', 'dependency-update', 'repo-audit'],
     )
     // Without Codex configured the agent entry says so; the report is the engine's, so this is Linux only.
     assert.match(await page.textContent('[data-testid="picker-entry-agent-scoped-approval"]'), /Needs Codex: Not configured\./)
@@ -796,6 +895,17 @@ async function startDemo(app, page) {
     await page.click('[data-testid="node-fast"]')
     assert.match(await page.textContent('[data-testid="node-panel"]'), /no correction loop/)
     await page.click('[data-testid="node-flaky"]')
+    // F2.6: the overview. A succeeded run has no outcome card; a timeline row selects its node; the Retried filter leaves flaky.
+    assert.equal(await page.locator('[data-testid="run-outcome"]').count(), 0)
+    assert.match(await page.textContent('[data-testid="critical-path-nodes"]'), /approve/)
+    await page.click('[data-testid="timeline-row-fast"]')
+    assert.equal(await page.locator('[data-testid="node-fast"].sel').count(), 1)
+    await page.click('[data-testid="nodes-retried"]')
+    assert.equal(await page.locator('[data-testid="node-apply"][data-dimmed="true"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="timeline-row-flaky"]').count(), 1)
+    assert.equal(await page.locator('[data-testid="timeline-row-apply"]').count(), 0)
+    await page.click('[data-testid="nodes-all"]')
+    await page.click('[data-testid="node-flaky"]')
     await shot(page, '2-attempts-reason-evidence')
 
     // R2: run summary, timeline and event log come from the event stream.
@@ -832,6 +942,8 @@ async function startDemo(app, page) {
     await shot(page, '4-succeeded')
     const finishedEvents = await page.textContent('[data-testid="event-count"]')
     await app.close()
+    // F2.3 E6: the switch is a main-process file read at start. The runs above were not recorded; the ones below are.
+    fs.writeFileSync(path.join(work, 'user', 'recording.json'), JSON.stringify({ version: 1, enabled: true, redactEnv: [] }))
 
     // 4. History survives an application restart and the map is rebuilt from events.
     ;({ app, page } = await launch())
@@ -870,6 +982,94 @@ async function startDemo(app, page) {
     assert.equal(await status(page, 'approve'), 'failed')
     assert.equal(await status(page, 'apply'), 'skipped')
     await shot(page, '6-rejected')
+    await shot(page, '6-rejected')
+
+    // F2.3 E5b.2: the edge inspector shows what the engine recorded on an edge, from the store, in the editor.
+    const valuesGraph = path.join(graphDir, 'values.yaml')
+    fs.writeFileSync(valuesGraph, original)
+    const stateOf = (s) => page.waitForSelector(`[data-testid="edge-value-state"][data-state="${s}"]`)
+    const textNow = () => page.textContent('[data-testid="edge-value-text"]')
+    const edgeKey = async (from) => {
+      await page.focus(`[data-testid="binding-select"][data-from="${from}"]`)
+      await page.keyboard.press('Enter')
+    }
+    const openForValues = async (file) => {
+      await stubOpenDialog(app, file)
+      await page.click('[data-testid="nav-editor"]')
+      await page.click('[data-testid="editor-open"]')
+      await page.waitForSelector('[data-testid="binding-row"]')
+    }
+    await openForValues(valuesGraph)
+    await edgeKey('fast.outputs.stdout')
+    await stateOf('value')
+    assert.equal(await textNow(), 'fast branch done')
+    assert.match(await page.textContent('[data-testid="edge-recording-hint"]'), /This session records run values/)
+    await edgeKey('flaky.outputs.json')
+    await page.waitForFunction(() => /"ready": true/.test(document.querySelector('[data-testid="edge-value-text"]')?.textContent ?? ''))
+    assert.equal(await page.getAttribute('[data-testid="edge-value-formatted"]', 'aria-pressed'), 'true', 'JSON opens formatted')
+    const formatted = await textNow()
+    await page.click('[data-testid="edge-value-raw"]')
+    assert.equal(await textNow(), '{"ready":true}\n', 'the raw view is the recorded text')
+    // Copy is an explicit click, writes exactly the displayed text and is announced.
+    await page.click('[data-testid="edge-value-copy"]')
+    await page.waitForFunction(() => /Copied/.test(document.querySelector('[data-testid="edge-value-copy-status"]')?.textContent ?? ''))
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), '{"ready":true}\n')
+    await page.click('[data-testid="edge-value-formatted"]')
+    await page.click('[data-testid="edge-value-copy"]')
+    await page.waitForFunction(() => /Copied/.test(document.querySelector('[data-testid="edge-value-copy-status"]')?.textContent ?? ''))
+    assert.equal(await app.evaluate(({ clipboard }) => clipboard.readText()), formatted)
+    await shot(page, '11-edge-values')
+    // The canvas path: clicking an edge selects it and opens the same inspector.
+    await page.locator('.react-flow__edge').first().dispatchEvent('click')
+    await page.waitForSelector('[data-testid="edge-inspector"]')
+    // A run recorded with the switch off says "not recorded" for both edges, never an empty value.
+    const runChoices = await page.$$eval('[data-testid="value-picker-select"] option', (os) => os.map((o) => ({ value: o.value, text: o.textContent })))
+    const unrecorded = runChoices.filter((o) => !/different version/.test(o.text))[1]
+    assert.ok(unrecorded, 'an older run of the same version exists')
+    await page.selectOption('[data-testid="value-picker-select"]', unrecorded.value)
+    await stateOf('not_recorded')
+    await edgeKey('fast.outputs.stdout')
+    await stateOf('not_recorded')
+    assert.equal(await page.locator('[data-testid="edge-value-text"]').count(), 0)
+    // A run of another graph version shows no value until it is confirmed, and then says whose it is.
+    const changed = path.join(graphDir, 'values-changed.yaml')
+    fs.writeFileSync(changed, original.replace('fast branch done', 'fast branch done again'))
+    await page.click('[data-testid="editor-close"]')
+    await openForValues(changed)
+    await edgeKey('fast.outputs.stdout')
+    await stateOf('different_version')
+    await page.selectOption('[data-testid="value-picker-select"]', runChoices[0].value)
+    await page.waitForSelector('[data-testid="value-picker-confirm-button"]')
+    assert.equal(await page.locator('[data-testid="edge-value-text"]').count(), 0, 'nothing is shown before the confirmation')
+    await page.click('[data-testid="value-picker-confirm-button"]')
+    await stateOf('value')
+    assert.equal(await textNow(), 'fast branch done')
+    assert.match(await page.textContent('[data-testid="edge-value-heading"]'), /different version/)
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="nav-dashboard"]')
+    // Restart: the same values come back from the run store.
+    await app.close()
+    ;({ app, page } = await launch())
+    await page.waitForSelector('[data-testid="dashboard"]')
+    await openForValues(valuesGraph)
+    await edgeKey('fast.outputs.stdout')
+    await stateOf('value')
+    assert.equal(await textNow(), 'fast branch done', 'replay equals live')
+    // Keyboard only: from an edge row, Tab reaches the value region, which is a labelled, bounded, scrollable stop.
+    await page.focus('[data-testid="binding-select"][data-from="fast.outputs.stdout"]')
+    let reached = false
+    for (let i = 0; i < 40 && !reached; i++) {
+      await page.keyboard.press('Tab')
+      reached = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'edge-value-region')
+    }
+    assert.ok(reached, 'the value region is reachable with Tab')
+    assert.deepEqual(
+      await page.evaluate(() => { const r = document.activeElement; const c = getComputedStyle(r); return [r.getAttribute('role'), r.tabIndex, c.overflowY, c.maxHeight !== 'none', !!r.getAttribute('aria-label')] }),
+      ['region', 0, 'auto', true, true],
+    )
+    await page.keyboard.press('PageDown')
+    await page.click('[data-testid="editor-close"]')
+    await page.click('[data-testid="nav-dashboard"]')
 
     // #56: New run chooses the graph in the native dialog and holds only a grant. It starts the run
     // from the file as saved when the run starts, and the renderer cannot send a path at all.

@@ -14,7 +14,15 @@ const H = 76
 // selection reach the node component through this context instead of node.data:
 // replacing node objects on every event batch makes React Flow drop its handle
 // measurements, and then it silently draws no edges.
-const StateCtx = createContext<{ run: RunView; selected: string | null }>({ run: { status: 'running', nodeCount: 0, nodes: {}, order: [], lastSequence: 0, eventCount: 0, tail: [] }, selected: null })
+// `critical` and `dimmed` (F2.6) are node IDs: on the critical path, and hidden by the node filter.
+interface MapState {
+  run: RunView
+  selected: string | null
+  critical: ReadonlySet<string>
+  dimmed: ReadonlySet<string>
+}
+const NONE: ReadonlySet<string> = new Set()
+const StateCtx = createContext<MapState>({ run: { status: 'running', nodeCount: 0, nodes: {}, order: [], lastSequence: 0, eventCount: 0, tail: [] }, selected: null, critical: NONE, dimmed: NONE })
 
 interface ApNodeData extends Record<string, unknown> {
   id: string
@@ -23,17 +31,19 @@ interface ApNodeData extends Record<string, unknown> {
 
 function ApNode({ data }: NodeProps<Node<ApNodeData>>) {
   const { t } = useI18n()
-  const { run, selected } = useContext(StateCtx)
+  const { run, selected, critical, dimmed } = useContext(StateCtx)
   const n = nodeView(run, data.id)
   const status = displayStatus(n)
   const last = n.attempts[n.attempts.length - 1]
   const label = status === 'retrying' && last ? t('status.node.retryingOf', { n: last.number, max: last.max }) : undefined
   return (
-    <div className={`ap-node s-${status}${selected === data.id ? ' sel' : ''}`} data-testid={`node-${data.id}`} data-status={status}>
+    <div className={`ap-node s-${status}${selected === data.id ? ' sel' : ''}${dimmed.has(data.id) ? ' dim' : ''}`} data-testid={`node-${data.id}`} data-status={status} data-dimmed={dimmed.has(data.id) || undefined} data-critical={critical.has(data.id) || undefined}>
       <Handle type="target" position={Position.Left} isConnectable={false} />
       <div className="ap-node-top">
         <b>{data.id}</b>
         <span className="tag">{data.kind}</span>
+        {critical.has(data.id) && <span className="tag" data-testid={`critical-${data.id}`}>{t('overview.criticalBadge')}</span>}
+        {dimmed.has(data.id) && <span className="tag">{t('nodes.dimmed')}</span>}
       </div>
       <div className="ap-node-bottom">
         <NodePill status={status} label={label} />
@@ -70,7 +80,7 @@ function FitOnResize() {
 
 // Layout comes from the graph definition only (dagre); node status comes from
 // the event reduction only. Neither is stored in this component.
-export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSummary; run: RunView; selected: string | null; onSelect: (id: string) => void }) {
+export function GraphMap({ graph, run, selected, onSelect, critical = NONE, dimmed = NONE }: { graph: GraphSummary; run: RunView; selected: string | null; onSelect: (id: string) => void; critical?: ReadonlySet<string>; dimmed?: ReadonlySet<string> }) {
   const positions = useMemo(() => {
     const g = new dagre.graphlib.Graph()
     g.setGraph({ rankdir: 'LR', ranksep: 70, nodesep: 28 })
@@ -110,7 +120,7 @@ export function GraphMap({ graph, run, selected, onSelect }: { graph: GraphSumma
 
   return (
     <div className="map" data-testid="graph-map">
-      <StateCtx.Provider value={{ run, selected }}>
+      <StateCtx.Provider value={{ run, selected, critical, dimmed }}>
       <ReactFlow
         nodes={nodes}
         edges={edges}

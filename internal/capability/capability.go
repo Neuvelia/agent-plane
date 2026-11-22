@@ -19,6 +19,7 @@ import (
 
 	"agentplane/internal/agent"
 	"agentplane/internal/gitlocate"
+	"agentplane/internal/proctree"
 )
 
 // ReportVersion is the version of the Report JSON contract.
@@ -276,14 +277,14 @@ func (d Detector) git(ctx context.Context, goos string) Tool {
 func probe(ctx context.Context, timeout time.Duration, path string, args ...string) (string, string) {
 	pctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd := exec.CommandContext(pctx, path, args...)
+	cmd := exec.Command(path, args...)
 	cmd.Env = []string{"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "LC_ALL=C"}
 	cmd.Dir = os.TempDir()
 	cmd.Stdin = nil
 	out := &capped{limit: maxProbeOutput}
 	cmd.Stdout = out
 	cmd.WaitDelay = time.Second
-	err := cmd.Run()
+	err := runOwned(pctx, cmd)
 	switch {
 	case ctx.Err() != nil:
 		// The caller (the server) stopped the probe; it did not time out.
@@ -296,6 +297,39 @@ func probe(ctx context.Context, timeout time.Duration, path string, args ...stri
 		return "", ReasonProbeFailed
 	}
 	return out.String(), ReasonNone
+}
+
+// runOwned runs cmd as a process tree this call owns: a context that ends first
+// terminates the whole tree, and a leader that exits on its own has descendants
+// it left in the group swept. A tree that cannot be emptied is an error.
+func runOwned(ctx context.Context, cmd *exec.Cmd) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	tree, err := proctree.Start(cmd)
+	if err != nil {
+		return err
+	}
+	exited := make(chan struct{})
+	stopped := make(chan error, 1)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_, err := tree.Terminate(context.Background(), proctree.Policy{})
+			stopped <- err
+		case <-exited:
+			stopped <- nil
+		}
+	}()
+	waitErr := tree.Wait()
+	close(exited)
+	if err := <-stopped; err != nil {
+		return err
+	}
+	if _, err := tree.Terminate(context.Background(), proctree.Policy{}); err != nil {
+		return err
+	}
+	return waitErr
 }
 
 type capped struct {

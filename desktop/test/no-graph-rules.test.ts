@@ -17,8 +17,15 @@ describe('no graph rules in the renderer', () => {
   const sources = files(join(__dirname, '..', 'src')).map((p) => ({ p, text: readFileSync(p, 'utf8') }))
 
   it('never names a validator diagnostic code', () => {
-    const hits = sources.filter((s) => /['"`][EW]_[A-Z][A-Z_]{4,}['"`]/.test(s.text)).map((s) => s.p)
+    const hits = sources.filter((s) => !s.p.endsWith('hints.ts') && /['"`][EW]_[A-Z][A-Z_]{4,}['"`]/.test(s.text)).map((s) => s.p)
     expect(hits).toEqual([])
+  })
+  // F2.3 requirement 7: the hint list derives from exactly two diagnostic codes, named in one file and nowhere else.
+  it('names only the two hint codes, and only in hints.ts', () => {
+    const named = sources.filter((s) => /['"`][EW]_[A-Z][A-Z_]{4,}['"`]/.test(s.text.replace(/^\s*\/\/.*$/gm, ''))).map((s) => s.p.split(/[\\/]/).pop())
+    expect(named).toEqual(['hints.ts'])
+    const hints = sources.find((s) => s.p.endsWith('hints.ts'))!
+    expect([...hints.text.matchAll(/'([EW]_[A-Z_]+)'/g)].map((m) => m[1]).sort()).toEqual(['E_REQUIRED_INPUT_UNBOUND', 'W_DECLARED_OUTPUT_UNUSED'])
   })
 
   it('never compares port types or decides connectability', () => {
@@ -34,6 +41,21 @@ describe('no graph rules in the renderer', () => {
   })
   it('the template picker never parses YAML or branches on a node type or config key', () => {
     const hits = picker.filter((s) => /from ['"](yaml|js-yaml|@codemirror\/lang-yaml)['"]|YAML\.parse|JSON\.parse|\.type\s*[!=]==?\s*['"`]|config\??\.\w+|workspace|allowed_paths/.test(s.text)).map((s) => s.p)
+    expect(hits).toEqual([])
+  })
+
+  // F2.3: the bindings files read the engine's answers (list_connections, diagnostics, the batch itself).
+  // They may map references to operations, but never compare port types, name a validator code or search for a cycle.
+  const bindingFiles = sources.filter((s) => /[\\/]editor[\\/](bindings|connections|selection|graphData|hints)\.ts$|[\\/]editor[\\/](BindingsPanel|AddBindingForm|TargetOptions|NeedsConnection|GraphInputsCard|GraphOutputsCard)\.tsx$/.test(s.p))
+  it('scans the bindings panel files', () => {
+    expect(bindingFiles.map((s) => s.p.split(/[\\/]/).pop()).sort()).toEqual(['AddBindingForm.tsx', 'BindingsPanel.tsx', 'GraphInputsCard.tsx', 'GraphOutputsCard.tsx', 'NeedsConnection.tsx', 'TargetOptions.tsx', 'bindings.ts', 'connections.ts', 'graphData.ts', 'hints.ts', 'selection.ts'])
+  })
+  const code = (text: string) => {
+    const bare = text.replace(/^\s*\/\/.*$/gm, '').replace(/\/\*\*[\s\S]*?\*\//g, '')
+    return /\.type\s*[!=]==?|\btype\s*[!=]==?\s*\w+\.type|[EW]_[A-Z]{3,}|\.code\s*[!=]==?/.test(bare) || /cycle/i.test(bare)
+  }
+  it('the bindings files never compare types, name a code or look for cycles', () => {
+    const hits = bindingFiles.filter((s) => !s.p.endsWith('hints.ts')).filter((s) => code(s.text)).map((s) => s.p)
     expect(hits).toEqual([])
   })
 

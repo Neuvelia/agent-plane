@@ -29,7 +29,13 @@ export interface RunSummary {
   started_at: string
   status: string
   event_count: number
+  /** Semantic version of the executed graph; equals the document API's `version` for the same bytes. Absent in older stores. */
+  graph_version?: string
   truncated?: boolean
+  /** Last durable sequence of a run that has no terminal event and no live writer. */
+  interrupted_at_sequence?: number
+  /** Reason a run is listed as corrupt or unsupported. */
+  error?: string
 }
 
 export interface PendingApproval {

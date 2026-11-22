@@ -118,6 +118,9 @@
 ## E_SECRET_REF_REQUIRED exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_REF_REQUIRED","message":"secret \"tok\" has no secret_ref","graph_id":"g","location":{"path":"secrets.tok.secret_ref"},"suggestion":"add secret_ref: env/\u003cVARIABLE_NAME\u003e to name where the runner finds the value"}],"failure":null,"error":null}
 
+## E_TIMEOUT_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_TIMEOUT_INVALID","message":"limits.run_timeout_seconds is 0; it must be an integer from 1 to 86400","graph_id":"g","location":{"path":"limits.run_timeout_seconds"},"suggestion":"use whole seconds from 1 to 86400, or omit the field for no limit"}],"failure":null,"error":null}
+
 ## E_UNIT_INVALID exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_UNIT_INVALID","message":"unit \"a\" must uniquely reference an existing loop Agent node","graph_id":"g","location":{"node_id":"a","path":"units[0]"},"suggestion":"use each loop Agent node ID at most once"}],"failure":null,"error":null}
 

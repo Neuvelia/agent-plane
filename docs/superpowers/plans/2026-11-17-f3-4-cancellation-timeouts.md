@@ -279,9 +279,12 @@ processes are gone; pid liveness is checked with `kill(pid, 0)` on Unix),
 `TestTerminateBeforeWaitAndAfterWaitIsIdempotent`,
 `TestTerminateNeverStartedTreeIsSuccess` (nil receiver and failed `Start`),
 `TestEscalateSkipsRemainingGrace` (grace 30 s, `Escalate` closed, finishes under
-the verify bound), `TestLeakedDescendantYieldsLeakError` (helper `setsid-child`
-escapes the group, so the tree cannot be emptied; `errors.As(*LeakError)`,
-`Leaked >= 1`; the escaped process is killed by the test cleanup),
+the verify bound), `TestLeakedDescendantYieldsLeakError` (the injected `kill` drops
+SIGTERM and SIGKILL, since a member SIGKILL cannot remove is not constructible;
+`errors.As(*LeakError)`, `Leaked >= 1`), `TestEscapedSessionIsOutOfScopeAndNotSignalled`
+(helper `setsid-child` leaves the group; `Terminate` succeeds and the escapee
+survives, killed by test cleanup), `TestReapedLeaderWithEmptyGroupSendsNoSignal`
+and `TestReapedLeaderWhosePidWasReusedSendsNoSignal` (injected `kill`),
 `TestSignalsOnlyTheOwnedGroup` (a sibling process in a different group survives
 every termination), `TestStartKeepsCallerSysProcAttr` (a field the caller set, for example `Setsid` on Linux, survives the merge with `Setpgid`; guarded by build tag), `TestWaitDrainIsBoundedByWaitDelay` (a descendant holding the
 stdout pipe; `Wait` returns within `WaitDelay`), `TestLinuxCountsGroupMembers`.
@@ -309,7 +312,7 @@ classify cancel. Replace this:
   its outcome is read without a race.
 - Classification uses the record: `FailureCanceled` iff termination was requested
   by a done context and `Terminate` succeeded (any exit status, any OS exit code);
-  `FailureTimeout` iff `run.ReasonOf(context.Cause(ctx))` is `node_timeout`;
+  (`FailureTimeout` iff `run.ReasonOf(context.Cause(ctx))` is `node_timeout` moves to Task 7: the cause types arrive with Task 5, so B2 does not add it;)
   `FailureShutdown` iff `*proctree.LeakError`; otherwise existing kinds. The Unix
   `Signaled()` heuristic and the Windows special case are deleted.
 - `ExecutionError` gains `Termination *proctree.Outcome` and the method
@@ -324,16 +327,18 @@ classify cancel. Replace this:
 - [ ] Delete the Windows branch and the `runtime` import.
 
 **Tests:** `TestExecuteCancellationKillsGrandchild` (red today; helper `spawn`),
-`TestExecuteNodeDeadlineKillsTreeAndReportsTimeout` (a derived context with a
-typed `node_timeout` cause; `FailureTimeout`, no descendant),
 `TestExecuteCancelAfterExitIsNotAnExitFailure` (helper exits as cancel fires;
 `FailureCanceled` or success, never `FailureExit`; this is W3 on Windows),
 `TestExecuteForcedKillRecordsMethod` (helper `ignore-term` with a 200 ms policy
 grace; `Termination.Method == forced`), `TestExecuteLeakIsShutdownWithCount`,
 `TestExecuteExitCodeZeroAfterKillStillCanceled` (helper that traps TERM and exits
 0; classification from the record, not the code), existing
-`TestExecuteCancellationTerminatesChild` and
-`TestExecuteCancellationReturnsWithInheritedOutputPipes` unchanged.
+`TestExecuteCancellationTerminatesChild` unchanged. Deviation:
+`TestExecuteCancellationReturnsWithInheritedOutputPipes` only drops its wait for the
+holder (cancellation now kills it); `TestExecuteCancellationBoundsDrainForEscapedPipeHolder`
+(a `setsid` descendant outside the group) keeps the `WaitDelay` bound covered.
+`TestExecuteNodeDeadlineKillsTreeAndReportsTimeout` (typed `node_timeout` cause,
+`FailureTimeout`, no descendant) moves to Task 7 with `FailureTimeout`.
 
 ---
 
@@ -355,24 +360,27 @@ leader success with an inherited pipe returns nil within `WaitDelay`, typed
 `shutdown`/`cancelled`. New: the default grace is the shared 5 s instead of the
 fixed 500 ms (`Adapter.Termination.Grace` can pin it for tests), `Outcome` and
 `LeakError` flow into the typed `agent.ExecutionError` so the runtime can emit
-`process_terminated`, and `Execute` maps `run.ReasonOf(context.Cause(ctx)) ==
-node_timeout` to `codex_timeout` (new code in the `fail` allow-list at
-`adapter.go:39`, new `agent.ErrorTimeout`) before the generic `cancelled`
-mapping at `adapter.go:210`.
+`process_terminated`. (Mapping `run.ReasonOf(context.Cause(ctx)) == node_timeout`
+to `codex_timeout` and the new `agent.ErrorTimeout` move to Task 7: the cause
+types arrive with Task 5, so B3 does not add them.)
 
-- [ ] Red: `TestExecuteNodeDeadlineIsCodexTimeout` and the grace test, plus the
-  runtime-visible `ProcessTermination()` on a cancelled execution.
-- [ ] Refactor `runProcess` onto `proctree`; run the unmodified existing tests
+- [x] Red: `TestCancelledExecutionCarriesGracefulTermination` (runtime-visible
+  `ProcessTermination()` on a cancelled execution) and the forced-kill grace test.
+  `TestExecuteNodeDeadlineIsCodexTimeout` moves to Task 7.
+- [x] Refactor `runProcess` onto `proctree`; run the existing tests (the cancel
+  case of `TestOwnedChildCancellationAndOrdinaryExit` pins `Termination.Grace`
+  to 200 ms because its descendant ignores TERM and the 5 s default exceeds its
+  3 s bound)
   (`TestOwnedChildCancellationAndOrdinaryExit`,
   `TestOwnedChildReapedBetweenTerminationObservations`,
   `TestInitiallyIgnoredSpecialEntryIsNotRead`,
   `TestOwnedChildTerminationObservationFailsClosedForLiveProcess`).
 
 **Tests:** the four existing process tests unchanged;
-`TestCancelledExecutionCarriesGracefulTermination`,
-`TestDeadlineCauseMapsToCodexTimeoutNotCancelled`,
+`TestCancelledExecutionCarriesGracefulTermination` (also asserts the shared
+5 s default grace on the record),
 `TestCodexForcedKillAfterGraceWithDescendant` (fake CLI with a TERM-ignoring
-descendant), `TestSharedGraceDefaultIsFiveSeconds` (policy value only, no wait).
+descendant). `TestDeadlineCauseMapsToCodexTimeoutNotCancelled` moves to Task 7.
 
 ---
 
@@ -395,26 +403,37 @@ tests next to each.
   AGENTS.md rule 5). `runDiff` keeps its separation of lifecycle failures from the
   two valid comparison exits. The bound is independent of the node limit and is
   injectable in tests (`gate.Executor.EvidenceBound`, zero means 30 s).
+  B4 implements the bound as an operational error wrapping
+  `context.DeadlineExceeded`; the typed failure kind `timeout` moves to Task 7
+  with the cause types. `/usr/bin/diff` and `/dev/fd/3` stay until Task 11.
 - Git helpers: `gitstate.Run`, the `git rev-parse` in `runtime/workspace.go`, and
   the capability probe start through `proctree.Start` and terminate by the
   contract, so a Git child that spawns a helper cannot outlive its time bound.
-  `gitstate.Run`'s `RunError` classes are unchanged. `internal/runtime/workspace.go`
-  keeps its existing baseline line (still imports `os/exec`); no new violation.
+  `gitstate.Run`'s `RunError` classes are unchanged. Deviation: `workspace.go`
+  now calls `gitstate.Run` (same hardened argv, 2 s bound, 16 KiB stdout limit)
+  instead of its own `exec`, so it no longer imports `os/exec` and the
+  `internal/runtime -> os/exec` line is removed from the architecture baseline.
+  `internal/worktree` already runs every Git call through `gitstate.Run`.
 
-- [ ] Red: `TestCommandGateTimeoutIsNotARedVerdict` against a fake diff that blocks
-  (the fake is injected through an unexported command path variable used only by
+- [x] Red: `TestCommandGateTimeoutIsNotARedVerdict` against a fake diff that blocks
+  (the fake is injected through an unexported `Executor.diffPath` used only by
   tests, never from graph config; production keeps the fixed
   `/usr/bin/diff`).
-- [ ] Red: `TestGitRunTimeoutKillsGrandchild` using a fake `git` that spawns a
-  child (a test `PATH` is not used: `gitstate.Run` is hardened and absolute; add
-  an unexported `gitBinary` seam for tests).
-- [ ] Port the three callers.
+- [x] Red: `TestGitRunTimeoutKillsGrandchild` using a fake `git` that spawns a
+  child (a test `PATH` is not used: `gitstate.Run` is hardened and absolute; an
+  unexported `resolveGit` seam serves tests).
+- [x] Port the three callers.
 
 **Tests:** `TestCommandGateTimeoutIsNotARedVerdict`,
 `TestCommandGateKillsDiffTreeOnCancel`,
 `TestCommandGateGreenRedUnchanged` (existing tests untouched),
-`TestGitRunTimeoutKillsGrandchild`, `TestGitRunCancelClassesUnchanged`,
-`TestCapabilityProbeBoundedTree`.
+`TestGitRunTimeoutKillsGrandchild`, `TestGitRunCancelKillsGrandchildAndKeepsClass`
+(replaces `TestGitRunCancelClassesUnchanged`), `TestCapabilityProbeBoundedTree`.
+The assertion that a gate evidence timeout carries failure kind `timeout` moves
+to Task 7.
+
+**Follow-up (own small PR, after Task 4):** extract the duplicated watch-and-terminate
+loop (shell, codex, gate, gitstate, capability) into one `proctree` helper.
 
 **Phase A exit:** on Linux and macOS a cancelled or timed-out Shell, Codex, Gate
 or Git child leaves no descendant; Windows still builds on the interim file.
@@ -443,10 +462,11 @@ is `node`; `process_terminated` requires node correlation and bounded integers
 timeout-failed terminal; new types and fields rejected below the new schema;
 payloads detached on clone.
 
-- [ ] **Schema number.** 13 (proposed; next free number confirmed at merge).
-  Check `origin/main` for the highest `SchemaVersion` (expected 12 from F2.8b);
-  amend the ADR and spec text in the same PR if it differs.
-- [ ] Failing tests first, then the types.
+- [x] **Schema number.** B5 uses schema 13 and adds `internal/store/testdata/schemas/v13.jsonl`.
+  Schema 12 is F2.8b's `attempt_diff` (#130, fixture `v12.jsonl`); the first draft of B5 took
+  12 and was renumbered to 13 on 2026-11-18 (`schemaCancelTimeout`, `SchemaVersion`, the
+  fixture name, the golden CLI documents and the desktop fixture). The spec and ADR-0028 already say 13.
+- [x] Failing tests first, then the types.
 - [ ] Verify `desktop/src/reducer.ts` ignores unknown types and tolerates the new
   optional fields; add a reducer test with `cancel_requested` and
   `process_terminated`.
@@ -521,6 +541,7 @@ as noted, create `internal/runtime/cancel.go` (cause helpers, `Timers`,
   `finish`, so nothing appends after `run_finished`. This guarantees
   `cancel_requested` precedes any `process_terminated`, which is only emitted by
   the coordinator when it consumes a worker result.
+- From Task 4: a Gate evidence timeout (`gate.commandEvidenceBound`) is classified as failure kind `timeout` here, once the cause types exist.
 - Reason of an external parent cancel: `run.ReasonOf(context.Cause(parent))`;
   an untyped `context.Canceled` means `interrupt` (the CLI default). `serve.go`
   supplies typed causes (T8). The `source` is derived from the reason, not

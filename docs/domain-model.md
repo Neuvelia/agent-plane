@@ -20,7 +20,8 @@ Owns:
 An immutable semantic snapshot of a GraphDefinition used for a run.
 
 F0.6 identifies the schema-v0 semantic definition with a `sha256-v0:`
-fingerprint that excludes name and metadata. Repository context is later work.
+fingerprint that excludes name and metadata. Optional run limits (F3.4) are
+semantic and included when authored. Repository context is later work.
 
 ### NodeDefinition
 
@@ -34,7 +35,8 @@ A node has:
 - declared outputs;
 - type-specific configuration;
 - optional node-local correction loop (F1.6);
-- later: timeout, permission and policy configuration.
+- optional `timeout_seconds` bounding one attempt (F3.4);
+- later: permission and policy configuration.
 
 ### EdgeDefinition
 
@@ -67,6 +69,15 @@ An append-oriented fact describing an observable execution transition.
 
 Events are ordered within a run by sequence number, starting at 1. The
 combination of run ID and sequence identifies an event.
+
+### Cancel cause
+
+A stop has a typed reason from a closed set: `interrupt`, `user_cancel`,
+`run_timeout`, `sibling_failed`, `node_timeout` (`run.CancelReason`). It is passed
+as `run.CancelCause` through `context.WithCancelCause` and read with
+`run.ReasonOf`; error text, exit codes and bare `context.Canceled` never yield
+one. `Result.Reason` and `NodeResult.Reason` carry it, and terminal events carry
+an optional `reason` (ADR-0028).
 
 ### CheckResult
 
@@ -134,7 +145,7 @@ Attempt         1 --- N CheckResult
 7. Visual canvas metadata must not change graph execution semantics.
 8. A correction attempt never overwrites the trace of a previous attempt.
 9. Unknown usage/cost is represented as unknown, never as zero.
-10. Runtime state must be reconstructable from durable events once persistence is introduced.
+10. Runtime state must be reconstructable from durable events. `interrupted` is not a scheduler state: it is derived at read time for a log with no terminal event and no live writer (F3.2), and no event records it.
 
 ### F1.6 attempts and accepted candidates
 
