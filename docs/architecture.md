@@ -353,7 +353,9 @@ run: mode, `applied`, scope root, the four permissions with their state, the
 assigned secrets by name, provider and variable name, and a redaction-value
 count) and `policy_violation` (permission, closed reason, `blocked` or
 `recorded` outcome, bounded sorted evidence), plus the Check Result kinds
-`execution_policy` and `secret_in_workspace`. No payload can hold a secret
+`execution_policy` and `secret_in_workspace`. Evidence of a `secret_in_workspace`
+result may carry an optional `secret_name` (the secret's name, never its value;
+rejected on every other kind). No payload can hold a secret
 value. Nothing emits these facts yet; the runtime pipeline lands in later F3.8 tasks (ADR-0029).
 
 ## Workspace isolation facts (F3.1)
