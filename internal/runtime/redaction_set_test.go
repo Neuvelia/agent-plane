@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"agentplane/internal/domain/events"
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/domain/run"
 	"agentplane/internal/domain/secrets"
 )
@@ -195,5 +197,34 @@ func BenchmarkRedactorWithForms(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r.Write(events.Stdout, chunk)
 		r.Flush(events.Stdout)
+	}
+}
+
+func TestPreflightRedactionErrorWording(t *testing.T) {
+	allBytes := make([]byte, 256)
+	for i := range allBytes {
+		allBytes[i] = byte(i)
+	}
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		return nil, nil
+	})
+	_, err := preflightRun(context.Background(), definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}}), nil, exec, Options{LogRedactions: []string{string(allBytes)}})
+	if err == nil {
+		t.Fatal("redactions without a safe marker were accepted")
+	}
+	if !strings.Contains(err.Error(), "invalid redactions") || strings.Contains(err.Error(), "invalid log redactions") {
+		t.Fatalf("error wording = %q", err)
+	}
+}
+
+func TestRedactionPreflightErrorKeepsStructuredDiagnostic(t *testing.T) {
+	structured := redactionBoundError("secrets.token", "too large", "use a smaller secret")
+	err := redactionPreparationError(structured)
+	var pre *run.PreflightError
+	if !errors.As(err, &pre) || err != structured {
+		t.Fatalf("structured diagnostic was wrapped: %#v", err)
+	}
+	if strings.Contains(err.Error(), "invalid") {
+		t.Fatalf("structured error gained a prefix: %q", err)
 	}
 }
