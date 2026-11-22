@@ -144,7 +144,7 @@ func TestRedactorBoundsRejectOversizedSet(t *testing.T) {
 	}
 }
 
-func TestPreflightRedactionBoundFailsLoudly(t *testing.T) {
+func TestRedactionSetBoundDiagnosticNamesSecretAndBound(t *testing.T) {
 	huge := strings.Repeat("Z", secrets.MaxSecretBytes+1)
 	many := make([]resolvedSecret, secrets.MaxSecrets+1)
 	for i := range many {

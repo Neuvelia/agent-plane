@@ -97,6 +97,11 @@ type Options struct {
 	// CleanupTimeout bounds each worktree removal so a hung Git cannot block
 	// run_finished. Zero means 30 seconds.
 	CleanupTimeout time.Duration
+	// SecretResolver resolves the secrets that nodes are assigned through
+	// secret_env (F3.8, ADR-0029). Nil means a runner without providers: a graph
+	// that assigns a secret then fails preflight with secret_provider_unavailable.
+	// Resolved values never enter Options, Result or events.
+	SecretResolver SecretResolver
 	// GraphVersion is the canonical encoding hashed into the run's graph
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.

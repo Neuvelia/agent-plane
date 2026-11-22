@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"agentplane/internal/domain/run"
+	"agentplane/internal/domain/secrets"
 	"context"
 	"errors"
 	"fmt"
@@ -15,11 +16,14 @@ type runPreparation struct {
 	plan              *graph.BindingPlan
 	graphInputs       map[string]graph.Value
 	redactionTemplate *logRedactor
-	scopes            map[string][]string
-	scopeRedacted     map[string]bool
-	isolation         isolationPlan
-	diffs             *diffRecorder
-	limit             int
+	// grants holds the resolved secret environment of each assigned node. The
+	// values stay in memory and are read only where a node process is started.
+	grants        map[string]secrets.Env
+	scopes        map[string][]string
+	scopeRedacted map[string]bool
+	isolation     isolationPlan
+	diffs         *diffRecorder
+	limit         int
 }
 
 // redactionPreparationError passes a structured preflight diagnostic through
@@ -57,6 +61,14 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		return runPreparation{}, err
 	}
 
+	resolution, err := preflightSecrets(ctx, definition, executor, options, redactions)
+	if err != nil {
+		return runPreparation{}, err
+	}
+	if resolution.template != nil {
+		redactionTemplate = resolution.template
+	}
+
 	scopes, scopeRedacted, err := unitScopes(definition, redactionTemplate)
 	if err != nil {
 		return runPreparation{}, err
@@ -80,6 +92,7 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 		plan:              plan,
 		graphInputs:       graphInputs,
 		redactionTemplate: redactionTemplate,
+		grants:            resolution.grants,
 		scopes:            scopes,
 		scopeRedacted:     scopeRedacted,
 		isolation:         isolation,
