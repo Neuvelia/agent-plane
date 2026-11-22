@@ -1,0 +1,81 @@
+# Template: a read-only code review by a coding agent. The agent may not change
+# any file: allowed_paths is empty, so the reported_file_scope gate rejects every
+# reported change and the loop retries at most 3 times. A person approves before
+# the agent call and reads the findings afterwards.
+# Fill the workspace before running. Agent nodes run through
+#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex --input target=...
+# Codex authentication needs a named environment reference (for example
+# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.
+# The shell node only prints text. Nothing is staged, committed, pushed or sent.
+schema_version: 0
+id: code-review
+name: Read-only code review
+inputs:
+  target: {type: string, required: true}
+nodes:
+  confirm_start:
+    type: human
+    config:
+      prompt: Start the review agent on this target? This may use a paid model.
+      context_inputs: [target]
+    inputs:
+      target: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  review:
+    type: agent
+    inputs:
+      task: {type: string, required: true}
+      start: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: "" # FILL: absolute path of the Git repository to review
+      allowed_paths: [] # REVIEW: empty means the reviewer must not change any file
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: no-changes
+          kind: reported_file_scope
+          input: candidate
+          allowed_paths: [] # REVIEW: keep equal to config.allowed_paths
+      bindings:
+        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}
+  read_findings:
+    type: human
+    config:
+      prompt: Read the review findings. Acknowledge them? A model review is advice, not proof.
+      context_inputs: [summary]
+    inputs:
+      summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
+    outputs:
+      decision: {type: string, required: true}
+  record:
+    type: shell
+    config:
+      command: /usr/bin/printf
+      args: ["review acknowledged\n"]
+    inputs:
+      decision: {type: string, required: true}
+graph_input_bindings:
+  - {from: inputs.target, to: confirm_start.inputs.target}
+  - {from: inputs.target, to: review.inputs.task}
+edges:
+  - {from: confirm_start.outputs.decision, to: review.inputs.start}
+  - {from: review.outputs.summary, to: read_findings.inputs.summary}
+  - {from: review.outputs.changed_files, to: read_findings.inputs.changed_files}
+  - {from: read_findings.outputs.decision, to: record.inputs.decision}
+outputs: {}
+metadata:
+  layout:
+    nodes:
+      confirm_start: {x: 0, y: 0}
+      review: {x: 320, y: 0}
+      read_findings: {x: 640, y: 0}
+      record: {x: 960, y: 0}

@@ -39,6 +39,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	dir := fs.String("store-dir", defaultStoreDir, "run store directory")
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes per run")
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
+	recordDiffs := fs.Bool("record-diffs", false, "record bounded, redacted per-attempt file diffs of Agent loop nodes as events")
 	var redactEnv inputFlags
 	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
 	var isolation isolationFlags
@@ -62,6 +63,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if err != nil {
 		return usageError("serve", err, false, stdout, stderr)
 	}
+	announceRecordDiffs(*recordDiffs, stderr)
 	runStore := store.Store{Dir: *dir}
 	if err := runStore.Check(); err != nil {
 		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
@@ -87,7 +89,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		Validate:           validateForAPI,
 		ValidateDefinition: diagnosticsFor,
 		NodeTypes:          nodeCatalogue(),
-		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues, isolation: isolation}),
+		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues, recordDiffs: *recordDiffs, isolation: isolation}),
 		Capabilities:       &capability.Service{Detect: capabilityDetector(*codexBin).Detect},
 	}
 	if onServe != nil {
@@ -104,8 +106,24 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if _, err := fmt.Fprintf(stdout, "%s\n", line); err != nil {
 		return presentationError(err, stderr)
 	}
-	if err := server.Serve(serveCtx, listener); err != nil {
-		return commandError("serve", "error", "internal", err, nil, false, stdout, stderr, exitInternal)
+	// Retention runs after the announcement the desktop waits for, so a large
+	// store never delays startup. The goroutine ends with serveCtx and is awaited.
+	pruned := make(chan error, 1)
+	go func() {
+		err := pruneOnServeStart(serveCtx, runStore, stderr)
+		if onRetentionApplied != nil {
+			onRetentionApplied()
+		}
+		pruned <- err
+	}()
+	serveErr := server.Serve(serveCtx, listener)
+	cancel()
+	pruneErr := <-pruned
+	if serveErr != nil {
+		return commandError("serve", "error", "internal", serveErr, nil, false, stdout, stderr, exitInternal)
+	}
+	if pruneErr != nil {
+		return presentationError(pruneErr, stderr)
 	}
 	return exitOK
 }
@@ -131,6 +149,7 @@ type serveRunOptions struct {
 	concurrency  int
 	redactions   []string
 	recordValues bool
+	recordDiffs  bool
 	isolation    isolationFlags
 }
 
@@ -180,6 +199,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 		if err := config.isolation.configure(def, &opts); err != nil {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 		}
+		configureAttemptDiffs(config.recordDiffs, def, &opts)
 		result, err := runtime.Run(runCtx, def, values, serveExecutor(def), opts)
 		if closeErr := writer.Close(); closeErr != nil && result.PersistError == nil {
 			result.PersistError = closeErr
@@ -213,6 +233,10 @@ func capabilityDetector(codexBin string) capability.Detector {
 // onServe lets tests reach the running server (for example its Hub) without
 // polling HTTP; it is nil in production.
 var onServe func(*api.Server)
+
+// onRetentionApplied lets tests wait for the start-up retention pass, which runs
+// in the background and is cancelled by a shutdown, without sleeping.
+var onRetentionApplied func()
 
 // serveExecutor mirrors `run` without an agent adapter: shell, gate and human
 // graphs are served; an agent node fails with the adapter's own error.

@@ -50,6 +50,7 @@ var legacyLayers = map[string]layer{
 	"internal/gitlocate":         layerNeutral, // resolves the git executable; shared by adapters and runtime
 	"internal/fields":            layerNeutral, // config field descriptors shared by domain, adapters and delivery
 	"internal/fields/fieldstest": layerNeutral,
+	"internal/proctree":          layerNeutral, // owns child process trees; stdlib only, shared by every process-running adapter
 	"internal/testenv":           layerNeutral, // test-only helpers
 	"internal/capability":        layerAdapter, // probes Git and agent adapters (F2.11)
 	"internal/worktree":          layerAdapter, // Git worktree isolation (ADR-0024, F3.1)

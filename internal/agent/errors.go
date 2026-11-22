@@ -3,6 +3,8 @@ package agent
 import (
 	"errors"
 	"fmt"
+
+	"agentplane/internal/proctree"
 )
 
 type ErrorKind string
@@ -23,6 +25,21 @@ type ExecutionError struct {
 	AdapterID AdapterID
 	Kind      ErrorKind
 	Cause     error
+	// Termination records how an adapter-owned process tree was stopped.
+	Termination *proctree.Outcome
+}
+
+// ProcessTermination returns the tree termination record, looking through a
+// wrapping ExecutionError, or nil.
+func (e *ExecutionError) ProcessTermination() *proctree.Outcome {
+	if e.Termination != nil {
+		return e.Termination
+	}
+	var inner interface{ ProcessTermination() *proctree.Outcome }
+	if errors.As(e.Cause, &inner) {
+		return inner.ProcessTermination()
+	}
+	return nil
 }
 
 func (e *ExecutionError) Error() string {

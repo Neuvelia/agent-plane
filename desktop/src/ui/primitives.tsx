@@ -43,6 +43,8 @@ export interface Segment<T extends string> {
   value: T
   label: ReactNode
   testId?: string
+  /** A disabled segment cannot be picked; the caller shows why in text next to the control. */
+  disabled?: boolean
 }
 
 /** A pill-shaped single-choice control. Native buttons: Tab moves between segments, Enter/Space picks one. */
@@ -50,7 +52,7 @@ export function SegmentedControl<T extends string>({ value, onChange, segments, 
   return (
     <div className="seg" role="group" aria-label={label}>
       {segments.map((s) => (
-        <button key={s.value} type="button" aria-pressed={s.value === value} onClick={() => onChange(s.value)} data-testid={s.testId}>
+        <button key={s.value} type="button" aria-pressed={s.value === value} onClick={() => onChange(s.value)} disabled={s.disabled} data-testid={s.testId}>
           {s.label}
         </button>
       ))}

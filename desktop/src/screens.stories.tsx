@@ -74,6 +74,13 @@ export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end'
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
 export const InspectorConnectionLost: S = inspector(waitingForHuman, 'running', 'lost')
 export const InspectorFailedEvents: S = { ...inspector(demoReject, 'failed', 'end'), play: clickTestId('events-failed') }
+// F2.6: node filters, critical path, waits and "what failed", from recorded streams.
+export const InspectorFilterRetried: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: clickTestId('nodes-retried') }
+export const InspectorFilterHuman: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: clickTestId('nodes-human') }
+export const InspectorFilterSlow: S = { ...inspector(demoApprove, 'succeeded', 'end'), play: clickTestId('nodes-slow') }
+export const InspectorFilterFailed: S = { ...inspector(demoReject, 'failed', 'end'), play: clickTestId('nodes-failed') }
+// Too few finished nodes: Slow is disabled and says why.
+export const InspectorSlowUnavailable: S = inspector(runningParallel, 'running', 'open')
 export const InspectorRunNotFound: S = {
   parameters: { bridge: { runs: [] } satisfies BridgeData },
   render: () => <RunInspector runId="missing" onBack={noop} />,

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"agentplane/internal/gitlocate"
+	"agentplane/internal/proctree"
 )
 
 // RunClass classifies why a controlled Git invocation failed. It never carries
@@ -25,6 +26,10 @@ const (
 	RunOutputLimit RunClass = "output_limit" // stdout exceeded RunOptions.StdoutLimit
 	RunStart       RunClass = "start"        // Git could not be started
 )
+
+// resolveGit is a seam so tests can substitute a fake git; production keeps
+// gitlocate.ResolveGit.
+var resolveGit = gitlocate.ResolveGit
 
 type writeOnly struct{ w io.Writer }
 
@@ -80,11 +85,11 @@ func Run(ctx context.Context, dir string, opts RunOptions, args ...string) (RunR
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	argv := append([]string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null"}, args...)
-	gitPath, err := gitlocate.ResolveGit()
+	gitPath, err := resolveGit()
 	if err != nil {
 		return RunResult{ExitCode: -1}, &RunError{Class: RunStart, ExitCode: -1, cause: err}
 	}
-	cmd := exec.CommandContext(ctx, gitPath, argv...)
+	cmd := exec.Command(gitPath, argv...)
 	cmd.Dir = dir
 	cmd.Env = Environment(gitPath)
 	var out limitedBuffer
@@ -93,7 +98,8 @@ func Run(ctx context.Context, dir string, opts RunOptions, args ...string) (RunR
 	// io.Copy bypass the limit; expose only Write to the process.
 	cmd.Stdout = writeOnly{&out}
 	cmd.Stderr = io.Discard
-	err = cmd.Run()
+	cmd.WaitDelay = time.Second
+	err, termErr := runOwned(ctx, cmd)
 	result := RunResult{Stdout: out.Bytes(), ExitCode: -1}
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
@@ -106,13 +112,51 @@ func Run(ctx context.Context, dir string, opts RunOptions, args ...string) (RunR
 	}
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return result, &RunError{Class: RunTimeout, ExitCode: -1, cause: errors.Join(err, ctx.Err())}
+		return result, &RunError{Class: RunTimeout, ExitCode: -1, cause: errors.Join(err, ctx.Err(), termErr)}
 	case ctx.Err() != nil:
-		return result, &RunError{Class: RunCancelled, ExitCode: -1, cause: errors.Join(err, ctx.Err())}
+		return result, &RunError{Class: RunCancelled, ExitCode: -1, cause: errors.Join(err, ctx.Err(), termErr)}
 	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		return result, &RunError{Class: RunExit, ExitCode: exit.ExitCode(), cause: err}
 	}
 	return result, &RunError{Class: RunStart, ExitCode: -1, cause: err}
+}
+
+type termination struct {
+	requested bool
+	err       error
+}
+
+// runOwned runs cmd as a process tree this call owns. When ctx ends first the
+// whole tree is terminated; a leader that exits on its own has descendants it
+// left in the group swept, so no Git helper outlives Run. termErr reports a
+// tree that could not be emptied.
+func runOwned(ctx context.Context, cmd *exec.Cmd) (err, termErr error) {
+	if err := ctx.Err(); err != nil {
+		return err, nil
+	}
+	tree, err := proctree.Start(cmd)
+	if err != nil {
+		return err, nil
+	}
+	exited := make(chan struct{})
+	stopped := make(chan termination, 1)
+	go func() {
+		var c termination
+		select {
+		case <-ctx.Done():
+			c.requested = true
+			_, c.err = tree.Terminate(context.Background(), proctree.Policy{})
+		case <-exited:
+		}
+		stopped <- c
+	}()
+	err = tree.Wait()
+	close(exited)
+	c := <-stopped
+	if !c.requested {
+		_, c.err = tree.Terminate(context.Background(), proctree.Policy{})
+	}
+	return err, c.err
 }

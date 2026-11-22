@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
+	"agentplane/internal/proctree"
 )
 
 func TestOwnedChildCancellationAndOrdinaryExit(t *testing.T) {
@@ -36,7 +37,7 @@ func TestOwnedChildCancellationAndOrdinaryExit(t *testing.T) {
 			} else {
 				body += `printf '{"summary":"ok","artifacts":[]}' >"$result"`
 			}
-			a := Adapter{Binary: fake(t, body)}
+			a := Adapter{Binary: fake(t, body), Termination: proctree.Policy{Grace: 200 * time.Millisecond}}
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 			defer cancel()
 			ready := make(chan error, 1)

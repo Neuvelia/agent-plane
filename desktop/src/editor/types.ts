@@ -47,6 +47,14 @@ export type Op =
   | { op: 'rename_node'; id: string; new_id: string }
   | { op: 'set_layout'; nodes: Record<string, { x: number; y: number }> }
   | { op: 'add_edge' | 'remove_edge' | 'can_connect'; from: string; to: string }
+  // F2.3 graph data operations: graph input bindings and the connection query (from: an output or inputs.NAME, or to: an input)
+  | { op: 'add_graph_input_binding' | 'remove_graph_input_binding'; from: string; to: string }
+  | { op: 'add_graph_input'; id: string; type: string; required: boolean }
+  | { op: 'update_graph_input'; id: string; new_id?: string; type?: string; required?: boolean }
+  | { op: 'remove_graph_input' | 'remove_graph_output'; id: string }
+  | { op: 'set_graph_output'; id: string; from: string }
+  | { op: 'list_connections'; from: string }
+  | { op: 'list_connections'; to: string }
   // F2.2 inspector operations
   | { op: 'set_config'; node: string; path: string[]; value: JsonValue }
   | { op: 'unset_config'; node: string; path: string[] }
@@ -124,10 +132,22 @@ export interface NodeInfo {
   independent_of: string[]
 }
 
+/** One counterpart port of a list_connections answer: the engine's verdict for that pair. */
+export interface ConnectionOption {
+  ref: string
+  type: string
+  required: boolean
+  ok: boolean
+  code?: string
+  message?: string
+}
+
 export interface QueryResult {
   ok: boolean
   code?: string
   message?: string
+  /** Only list_connections answers carry it; the engine omits an empty list. */
+  options?: ConnectionOption[]
 }
 
 export interface OpResult {

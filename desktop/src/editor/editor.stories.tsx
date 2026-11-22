@@ -11,7 +11,14 @@ import parseColumnValidate from '../../test/fixtures/graph-validate-parse-column
 import emptyValidate from '../../test/fixtures/graph-validate-empty.json'
 import pairValidate from '../../test/fixtures/graph-validate-pair.json'
 import editAddNode from '../../test/fixtures/graph-edit-add-node.json'
-import editCanConnect from '../../test/fixtures/graph-edit-can-connect-demo.json'
+import editListConnections from '../../test/fixtures/graph-edit-list-connections-demo.json'
+import editListBindings from '../../test/fixtures/graph-edit-list-connections-bindings.json'
+import editReplace from '../../test/fixtures/graph-edit-replace-bindings.json'
+import listPairFrom from '../../test/fixtures/graph-edit-list-connections-pair-from.json'
+import listMixedTo from '../../test/fixtures/graph-edit-list-connections-mixed-to.json'
+import removeInput from '../../test/fixtures/graph-edit-remove-graph-input-with-inputs.json'
+import bindingsOpen from '../../test/fixtures/graph-open-bindings.json'
+import bindingsValidate from '../../test/fixtures/graph-validate-bindings.json'
 import editDelete from '../../test/fixtures/graph-edit-delete-demo.json'
 import editMove from '../../test/fixtures/graph-edit-move.json'
 import editRefused from '../../test/fixtures/graph-edit-refused.json'
@@ -119,7 +126,7 @@ const demo: GraphStory = {
   opened: demoOpen as unknown as OpenResponse,
   edit: (ops) => {
     const first = ops[0]?.op
-    const answers: Record<string, { status: number; body: unknown }> = { can_connect: editCanConnect, rename_node: editRename, remove_node: editDelete, add_node: editAddNode, set_layout: editMove }
+    const answers: Record<string, { status: number; body: unknown }> = { list_connections: editListConnections, rename_node: editRename, remove_node: editDelete, add_node: editAddNode, set_layout: editMove }
     return first ? answers[first] : undefined
   },
 }
@@ -273,4 +280,90 @@ export const IssuesEngineUnreachable: S = story({ ...mixed, validateFails: true 
   await open(root)
   await typeIn(root, '# note\n')
   await until(root, '[data-testid="issues-unreachable"]')
+})
+
+// ---- the Bindings panel (F2.3 E5a.2): recorded answers of the real engine -------------
+const withBindings: GraphStory = {
+  ...base,
+  opened: bindingsOpen as unknown as OpenResponse,
+  validate: () => bindingsValidate as unknown as ValidateResponse,
+  edit: (ops) => (ops[0]?.op === 'list_connections' ? editListBindings : ops[0]?.op === 'remove_edge' ? editReplace : undefined),
+}
+const panel = async (root: Element) => {
+  await open(root)
+  await until(root, '[data-testid="binding-row"]')
+}
+/** Picks a value in a controlled native select the way a person would: set it, then fire change. */
+async function choose(root: Element, testId: string, value: string) {
+  const select = (await until(root, `[data-testid="${testId}"]`)) as HTMLSelectElement
+  Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')!.set!.call(select, value)
+  select.dispatchEvent(new Event('change', { bubbles: true }))
+}
+
+export const BindingsRows: S = story(withBindings, async (root) => {
+  await panel(root)
+  await click(root, 'binding-select')
+})
+export const BindingsWithIssues: S = story(mixed, panel)
+export const BindingsEmpty: S = story(base, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="bindings-empty"]')
+})
+export const BindingsAddForm: S = story(withBindings, async (root) => {
+  await panel(root)
+  await click(root, 'add-binding-open')
+  await choose(root, 'binding-source', 'c.outputs.stdout')
+  await until(root, '[data-testid="target-reason"]')
+})
+export const BindingsReplaceConfirm: S = story(withBindings, async (root) => {
+  await panel(root)
+  await click(root, 'add-binding-open')
+  await choose(root, 'binding-source', 'c.outputs.stdout')
+  await click(root, 'replace-b.inputs.text')
+  await until(root, '[data-testid="replace-confirm"] [data-testid="replace-apply"]')
+})
+export const BindingsReadOnly: S = story({ ...base, opened: anchorsOpen as unknown as OpenResponse }, async (root) => {
+  await open(root)
+  await until(root, '[data-testid="bindings-readonly"]')
+})
+export const BindingsConflict: S = story({ ...withBindings, save: 'conflict' }, async (root) => {
+  await panel(root)
+  await typeIn(root, '# mine\n')
+  await wait(500)
+  await click(root, 'editor-save')
+  await until(root, '[data-testid="conflict-banner"]')
+})
+
+// ---- graph inputs, graph outputs and hints (F2.3 E5a.3) --------------------------------
+const hinted = (opened: unknown): GraphStory => ({
+  ...base,
+  opened: opened as OpenResponse,
+  edit: (ops) => (ops[0]?.op === 'list_connections' ? ('from' in ops[0] ? listPairFrom : listMixedTo) : ops[0]?.op === 'remove_graph_input' ? removeInput : undefined),
+})
+
+export const GraphInputsCard: S = story(hinted(inputsOpen), async (root) => {
+  await open(root)
+  await until(root, '[data-testid="graph-input"]')
+})
+export const GraphInputRemovalPreview: S = story(hinted(inputsOpen), async (root) => {
+  await open(root)
+  await click(root, 'remove-graph-input-topic')
+  await until(root, '[data-testid="graph-input-preview-apply"]')
+})
+export const GraphOutputsCard: S = story(hinted(configErrorOpen), async (root) => {
+  await open(root)
+  await until(root, '[data-testid="graph-output"]')
+})
+export const HintUnusedOutputOptions: S = story(hinted(pairOpen), async (root) => {
+  await open(root)
+  const hint = (await until(root, '[data-testid="hint"][data-kind="unused-output"] [data-testid="hint-options"]')) as HTMLElement
+  hint.click()
+  await until(root, '[data-testid^="hint-option-"]')
+})
+export const HintUnboundInputOptions: S = story(hinted(mixedOpen), async (root) => {
+  await open(root)
+  const hint = (await until(root, '[data-testid="hint"][data-ref="b.inputs.free"] [data-testid="hint-options"]')) as HTMLElement
+  hint.click()
+  await until(root, '[data-testid="hint-candidates"]')
+  await wait(200)
 })

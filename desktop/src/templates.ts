@@ -1,7 +1,11 @@
 import agentScopedApproval from '../../.agents/templates/agent-scoped-approval.yaml?raw'
+import codeReview from '../../.agents/templates/code-review.yaml?raw'
+import dependencyUpdate from '../../.agents/templates/dependency-update.yaml?raw'
+import fixIssue from '../../.agents/templates/fix-issue.yaml?raw'
 import humanApproval from '../../.agents/templates/human-approval.yaml?raw'
 import index from '../../.agents/templates/index.json'
 import parallelShell from '../../.agents/templates/parallel-shell.yaml?raw'
+import repoAudit from '../../.agents/templates/repo-audit.yaml?raw'
 import shellCheckLoop from '../../.agents/templates/shell-check-loop.yaml?raw'
 import { statusOf, type CapabilityReport, type CapabilityTool } from './capabilities'
 import { graphIdFromLabel } from './editor/doc'
@@ -27,16 +31,24 @@ const TEXT: Record<string, string> = {
   'shell-check-loop': shellCheckLoop,
   'human-approval': humanApproval,
   'agent-scoped-approval': agentScopedApproval,
+  'fix-issue': fixIssue,
+  'code-review': codeReview,
+  'dependency-update': dependencyUpdate,
+  'repo-audit': repoAudit,
 }
 const NODE_TYPES: Record<string, string[]> = {
   'parallel-shell': ['shell'],
   'shell-check-loop': ['shell'],
   'human-approval': ['shell', 'human'],
   'agent-scoped-approval': ['human', 'agent', 'shell'],
+  'fix-issue': ['human', 'agent', 'shell'],
+  'code-review': ['human', 'agent', 'shell'],
+  'dependency-update': ['human', 'agent', 'shell'],
+  'repo-audit': ['human', 'agent', 'shell'],
 }
 
 /** Picker order (F2.12 requirement 7); `parallel-shell` is the suggested first graph. */
-export const TEMPLATE_ORDER = ['parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval'] as const
+export const TEMPLATE_ORDER = ['parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval', 'fix-issue', 'code-review', 'dependency-update', 'repo-audit'] as const
 export type TemplateId = (typeof TEMPLATE_ORDER)[number]
 export const SUGGESTED: TemplateId = 'parallel-shell'
 

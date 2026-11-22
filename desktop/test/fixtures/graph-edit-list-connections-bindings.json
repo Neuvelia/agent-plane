@@ -1,0 +1,426 @@
+{
+ "status": 200,
+ "body": {
+  "text": "schema_version: 0\nid: bindings\ninputs:\n  topic: {type: string, required: true}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    outputs:\n      stdout: {type: string, required: true}\n  c:\n    type: shell\n    config: {command: /usr/bin/true}\n    inputs:\n      seed: {type: string, required: true}\n    outputs:\n      stdout: {type: string, required: true}\n  b:\n    type: shell\n    config: {command: /usr/bin/true}\n    inputs:\n      text: {type: string, required: true}\n      count: {type: number}\ngraph_input_bindings:\n  - {from: inputs.topic, to: c.inputs.seed}\nedges:\n  - {from: a.outputs.stdout, to: b.inputs.text}\noutputs: {}\n",
+  "hash": "71ef4f2bece2c9c678dff9f33ed47017554b68d843da2219d8426763dc3398fe",
+  "version": "sha256-v0:7b93852760e644f78aabd9bdfea2c861fd8bc7801d5de488d88b82fc2110a1aa",
+  "definition": {
+   "schema_version": 0,
+   "id": "bindings",
+   "inputs": {
+    "topic": {
+     "type": "string",
+     "required": true
+    }
+   },
+   "nodes": {
+    "a": {
+     "type": "shell",
+     "config": {
+      "command": "/usr/bin/true"
+     },
+     "outputs": {
+      "stdout": {
+       "type": "string",
+       "required": true
+      }
+     }
+    },
+    "b": {
+     "type": "shell",
+     "inputs": {
+      "count": {
+       "type": "number"
+      },
+      "text": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "config": {
+      "command": "/usr/bin/true"
+     }
+    },
+    "c": {
+     "type": "shell",
+     "inputs": {
+      "seed": {
+       "type": "string",
+       "required": true
+      }
+     },
+     "config": {
+      "command": "/usr/bin/true"
+     },
+     "outputs": {
+      "stdout": {
+       "type": "string",
+       "required": true
+      }
+     }
+    }
+   },
+   "edges": [
+    {
+     "from": "a.outputs.stdout",
+     "to": "b.inputs.text"
+    }
+   ],
+   "graph_input_bindings": [
+    {
+     "from": "inputs.topic",
+     "to": "c.inputs.seed"
+    }
+   ],
+   "outputs": {}
+  },
+  "diagnostics": [
+   {
+    "severity": "warning",
+    "code": "W_DECLARED_OUTPUT_UNUSED",
+    "message": "output \"stdout\" on node \"c\" is not consumed",
+    "graph_id": "bindings",
+    "location": {
+     "node_id": "c",
+     "path": "nodes.c.outputs.stdout"
+    },
+    "suggestion": "remove the output or bind it to an edge or graph output",
+    "line": 17
+   }
+  ],
+  "readonly_canvas": false,
+  "line_ending": "lf",
+  "label": "edit.yaml",
+  "results": [
+   {
+    "index": 0,
+    "op": "list_connections",
+    "query": {
+     "ok": true,
+     "options": [
+      {
+       "ref": "b.inputs.count",
+       "type": "number",
+       "required": false,
+       "ok": false,
+       "code": "E_BINDING_TYPE_MISMATCH",
+       "message": "edge binds \"c.outputs.stdout\" (string) to \"b.inputs.count\" (number)"
+      },
+      {
+       "ref": "b.inputs.text",
+       "type": "string",
+       "required": true,
+       "ok": false,
+       "code": "E_INPUT_MULTIPLE_PROVIDERS",
+       "message": "input \"text\" on node \"b\" has multiple providers"
+      },
+      {
+       "ref": "c.inputs.seed",
+       "type": "string",
+       "required": true,
+       "ok": false,
+       "code": "E_GRAPH_CYCLE",
+       "message": "graph contains cycle: c -> c"
+      }
+     ]
+    }
+   }
+  ],
+  "node_types": {
+   "shell": {
+    "config": [
+     {
+      "id": "shell.config.command",
+      "key": "command",
+      "kind": "string",
+      "required": true,
+      "format": "nonempty"
+     },
+     {
+      "id": "shell.config.args",
+      "key": "args",
+      "kind": "list",
+      "item": {
+       "id": "shell.config.args.item",
+       "kind": "string"
+      }
+     },
+     {
+      "id": "shell.config.cwd",
+      "key": "cwd",
+      "kind": "string"
+     },
+     {
+      "id": "shell.config.env_allowlist",
+      "key": "env_allowlist",
+      "kind": "list",
+      "item": {
+       "id": "shell.config.env_name",
+       "kind": "string",
+       "format": "env_name"
+      }
+     },
+     {
+      "id": "shell.config.env",
+      "key": "env",
+      "kind": "map"
+     },
+     {
+      "id": "shell.config.input_env",
+      "key": "input_env",
+      "kind": "map",
+      "item": {
+       "id": "shell.config.env_name",
+       "kind": "string",
+       "format": "env_name"
+      },
+      "input_types": [
+       "string"
+      ]
+     },
+     {
+      "id": "shell.config.stdout_json",
+      "key": "stdout_json",
+      "kind": "bool",
+      "default": false
+     }
+    ],
+    "outputs": [
+     {
+      "name": "stdout",
+      "type": "string"
+     },
+     {
+      "name": "stderr",
+      "type": "string"
+     },
+     {
+      "name": "exit_code",
+      "type": "number"
+     },
+     {
+      "name": "json",
+      "type": "json",
+      "requires": [
+       {
+        "key": "stdout_json",
+        "equals": "true"
+       }
+      ]
+     }
+    ],
+    "outputs_locked": false,
+    "loop": {
+     "fields": [
+      {
+       "id": "loop.max_attempts",
+       "key": "max_attempts",
+       "kind": "int",
+       "default": 3,
+       "min": 1,
+       "max": 10
+      }
+     ],
+     "gate": [
+      {
+       "id": "gate.config.check_id",
+       "key": "check_id",
+       "kind": "string",
+       "required": true,
+       "max_bytes": 256,
+       "format": "not_blank"
+      },
+      {
+       "id": "gate.config.kind",
+       "key": "kind",
+       "kind": "enum",
+       "required": true,
+       "enum": [
+        "command",
+        "json_predicate",
+        "reported_file_scope"
+       ]
+      },
+      {
+       "id": "gate.config.command",
+       "kind": "group",
+       "fields": [
+        {
+         "id": "gate.config.command.command",
+         "key": "command",
+         "kind": "string",
+         "required": true,
+         "locked": {
+          "value": "/usr/bin/diff",
+          "reason": "a command Gate compares two inputs with /usr/bin/diff only"
+         }
+        },
+        {
+         "id": "gate.config.command.cwd",
+         "key": "cwd",
+         "kind": "string",
+         "required": true,
+         "format": "clean_absolute_path"
+        },
+        {
+         "id": "gate.config.command.left_input",
+         "key": "left_input",
+         "kind": "input_name",
+         "required": true,
+         "input_types": [
+          "string"
+         ],
+         "input_required": true
+        },
+        {
+         "id": "gate.config.command.right_input",
+         "key": "right_input",
+         "kind": "input_name",
+         "required": true,
+         "input_types": [
+          "string"
+         ],
+         "input_required": true
+        }
+       ],
+       "requires": [
+        {
+         "key": "kind",
+         "equals": "command"
+        }
+       ]
+      },
+      {
+       "id": "gate.config.json_predicate",
+       "kind": "group",
+       "fields": [
+        {
+         "id": "gate.config.json_predicate.input",
+         "key": "input",
+         "kind": "input_name",
+         "required": true,
+         "input_types": [
+          "json"
+         ],
+         "input_required": true
+        },
+        {
+         "id": "gate.config.json_predicate.field",
+         "key": "field",
+         "kind": "list",
+         "required": true,
+         "item": {
+          "id": "gate.config.json_predicate.field.item",
+          "kind": "string",
+          "format": "nonempty"
+         }
+        },
+        {
+         "id": "gate.config.json_predicate.operator",
+         "key": "operator",
+         "kind": "enum",
+         "required": true,
+         "enum": [
+          "eq",
+          "ne"
+         ]
+        },
+        {
+         "id": "gate.config.json_predicate.expected",
+         "key": "expected",
+         "kind": "scalar",
+         "required": true,
+         "excludes": [
+          {
+           "key": "expected_json"
+          }
+         ]
+        },
+        {
+         "id": "gate.config.json_predicate.expected_json",
+         "key": "expected_json",
+         "kind": "string",
+         "required": true,
+         "format": "json_scalar",
+         "excludes": [
+          {
+           "key": "expected"
+          }
+         ]
+        }
+       ],
+       "requires": [
+        {
+         "key": "kind",
+         "equals": "json_predicate"
+        }
+       ]
+      },
+      {
+       "id": "gate.config.reported_file_scope",
+       "kind": "group",
+       "fields": [
+        {
+         "id": "gate.config.reported_file_scope.input",
+         "key": "input",
+         "kind": "input_name",
+         "required": true,
+         "input_types": [
+          "json"
+         ],
+         "input_required": true
+        },
+        {
+         "id": "gate.config.reported_file_scope.allowed_paths",
+         "key": "allowed_paths",
+         "kind": "path_list",
+         "required": true,
+         "item": {
+          "id": "gate.config.reported_file_scope.allowed_paths.item",
+          "kind": "string",
+          "format": "relative_path"
+         }
+        }
+       ],
+       "requires": [
+        {
+         "key": "kind",
+         "equals": "reported_file_scope"
+        }
+       ]
+      }
+     ],
+     "gate_kinds": [
+      "command",
+      "json_predicate",
+      "reported_file_scope"
+     ]
+    }
+   }
+  },
+  "node_info": {
+   "a": {
+    "known_type": true,
+    "advanced": [],
+    "independent_of": [
+     "c"
+    ]
+   },
+   "b": {
+    "known_type": true,
+    "advanced": [],
+    "independent_of": [
+     "c"
+    ]
+   },
+   "c": {
+    "known_type": true,
+    "advanced": [],
+    "independent_of": [
+     "a",
+     "b"
+    ]
+   }
+  }
+ }
+}

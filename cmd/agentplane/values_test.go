@@ -299,3 +299,72 @@ func TestServeRecordsRedactedValuesAndReplaysThemAfterRestart(t *testing.T) {
 		t.Fatalf("replay differs from live:\n%s\n---\n%s", got, joined)
 	}
 }
+
+// F2.3 E5b.1 (requirement 16): the editor offers a run as "same version" by
+// comparing the run summary's graph_version with the document API's version, so
+// for the same bytes they must be the same string, and the stored run holds at
+// most one value event per (node, port).
+func TestServeRunSummaryVersionEqualsTheDocumentVersionForTheSameBytes(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/printf")
+	s := startServe(t, "--record-values")
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "versioned.yaml")
+	if err := os.WriteFile(path, []byte("schema_version: 0\nid: versioned\ninputs: {}\nnodes:\n  say:\n    type: shell\n    config: {command: /usr/bin/printf, args: [hello]}\n    outputs:\n      stdout: {type: string, required: true}\nedges: []\noutputs: {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var grant struct {
+		Grant string `json:"grant"`
+	}
+	code, body := s.call(t, "POST", "/graphs/grants", `{"path":`+quote(path)+`,"mode":"open"}`)
+	if code != http.StatusCreated || json.Unmarshal([]byte(body), &grant) != nil {
+		t.Fatalf("grant: %d %s", code, body)
+	}
+	var doc struct {
+		Version string `json:"version"`
+	}
+	code, body = s.call(t, "POST", "/graphs/open", `{"grant":`+quote(grant.Grant)+`}`)
+	if code != http.StatusOK || json.Unmarshal([]byte(body), &doc) != nil || !strings.HasPrefix(doc.Version, "sha256-v0:") {
+		t.Fatalf("open: %d %s", code, body)
+	}
+	var started struct {
+		RunID string `json:"run_id"`
+	}
+	code, body = s.call(t, "POST", "/runs", `{"graph_grant":`+quote(grant.Grant)+`}`)
+	if code != http.StatusAccepted || json.Unmarshal([]byte(body), &started) != nil {
+		t.Fatalf("run: %d %s", code, body)
+	}
+	_, stream := s.call(t, "GET", "/runs/"+started.RunID+"/events", "")
+	keys := map[string]bool{}
+	for _, line := range sseEvents(t, stream) {
+		var e events.Event
+		if err := json.Unmarshal([]byte(line[len("data: "):]), &e); err != nil {
+			t.Fatal(err)
+		}
+		if p, ok := e.Payload.(events.ValueRecordedPayload); ok {
+			key := string(e.NodeID) + "\x00" + p.Port
+			if keys[key] {
+				t.Fatalf("two value events for %q", key)
+			}
+			keys[key] = true
+		}
+	}
+	if len(keys) != 1 {
+		t.Fatalf("value keys = %v, want the one output of say", keys)
+	}
+	var list struct {
+		Runs []struct {
+			RunID        string `json:"run_id"`
+			GraphVersion string `json:"graph_version"`
+		} `json:"runs"`
+	}
+	_, body = s.call(t, "GET", "/runs", "")
+	if err := json.Unmarshal([]byte(body), &list); err != nil || len(list.Runs) != 1 || list.Runs[0].RunID != started.RunID {
+		t.Fatalf("runs: %s (%v)", body, err)
+	}
+	if list.Runs[0].GraphVersion != doc.Version {
+		t.Fatalf("run graph_version %q != document version %q for the same bytes", list.Runs[0].GraphVersion, doc.Version)
+	}
+}

@@ -26,6 +26,11 @@ type definitionDTO struct {
 	Edges              []edgeDTO              `yaml:"edges"`
 	GraphInputBindings []graphInputBindingDTO `yaml:"graph_input_bindings,omitempty"`
 	Outputs            map[string]outputDTO   `yaml:"outputs"`
+	Limits             *limitsDTO             `yaml:"limits,omitempty"`
+}
+
+type limitsDTO struct {
+	RunTimeoutSeconds *int `yaml:"run_timeout_seconds,omitempty"`
 }
 
 type inputDTO struct {
@@ -39,6 +44,8 @@ type nodeDTO struct {
 	Inputs  map[string]portDTO `yaml:"inputs,omitempty"`
 	Config  graph.NodeConfig   `yaml:"config,omitempty"`
 	Outputs map[string]portDTO `yaml:"outputs,omitempty"`
+
+	TimeoutSeconds *int `yaml:"timeout_seconds,omitempty"`
 }
 
 type portDTO struct {
@@ -103,7 +110,7 @@ func mapSlice[A, B any](in []A, convert func(A) B) []B {
 }
 
 func (d definitionDTO) toDomain() *graph.Definition {
-	return &graph.Definition{
+	def := &graph.Definition{
 		Units:         d.Units,
 		SchemaVersion: d.SchemaVersion,
 		ID:            d.ID,
@@ -117,6 +124,10 @@ func (d definitionDTO) toDomain() *graph.Definition {
 		}),
 		Outputs: mapValues(d.Outputs, func(v outputDTO) graph.OutputDefinition { return graph.OutputDefinition(v) }),
 	}
+	if d.Limits != nil {
+		def.Limits = &graph.LimitsDefinition{RunTimeoutSeconds: d.Limits.RunTimeoutSeconds}
+	}
+	return def
 }
 
 func (d nodeDTO) toDomain() graph.NodeDefinition {
@@ -125,6 +136,8 @@ func (d nodeDTO) toDomain() graph.NodeDefinition {
 		Inputs:  mapValues(d.Inputs, portToDomain),
 		Config:  d.Config,
 		Outputs: mapValues(d.Outputs, portToDomain),
+
+		TimeoutSeconds: d.TimeoutSeconds,
 	}
 	if d.Loop != nil {
 		node.Loop = &graph.LoopDefinition{
@@ -139,7 +152,7 @@ func (d nodeDTO) toDomain() graph.NodeDefinition {
 func portToDomain(p portDTO) graph.PortDefinition { return graph.PortDefinition(p) }
 
 func definitionToDTO(d *graph.Definition) definitionDTO {
-	return definitionDTO{
+	dto := definitionDTO{
 		Units:         d.Units,
 		SchemaVersion: d.SchemaVersion,
 		ID:            d.ID,
@@ -153,6 +166,11 @@ func definitionToDTO(d *graph.Definition) definitionDTO {
 		}),
 		Outputs: mapValues(d.Outputs, func(v graph.OutputDefinition) outputDTO { return outputDTO(v) }),
 	}
+	// An empty limits block is the same graph as none, so it is not written.
+	if d.Limits != nil && d.Limits.RunTimeoutSeconds != nil {
+		dto.Limits = &limitsDTO{RunTimeoutSeconds: d.Limits.RunTimeoutSeconds}
+	}
+	return dto
 }
 
 func nodeToDTO(n graph.NodeDefinition) nodeDTO {
@@ -161,6 +179,8 @@ func nodeToDTO(n graph.NodeDefinition) nodeDTO {
 		Inputs:  mapValues(n.Inputs, portToDTO),
 		Config:  n.Config,
 		Outputs: mapValues(n.Outputs, portToDTO),
+
+		TimeoutSeconds: n.TimeoutSeconds,
 	}
 	if n.Loop != nil {
 		node.Loop = &loopDTO{
@@ -185,6 +205,7 @@ var domainTypeNames = strings.NewReplacer(
 	"yamlgraph.edgeDTO", "graph.EdgeDefinition",
 	"yamlgraph.graphInputBindingDTO", "graph.GraphInputBindingDefinition",
 	"yamlgraph.outputDTO", "graph.OutputDefinition",
+	"yamlgraph.limitsDTO", "graph.LimitsDefinition",
 	"yamlgraph.loopDTO", "graph.LoopDefinition",
 	"yamlgraph.loopGateDTO", "graph.LoopGateDefinition",
 	"yamlgraph.loopBindingDTO", "graph.LoopBinding",
