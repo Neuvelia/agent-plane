@@ -33,6 +33,13 @@ runtime owns scheduling, accepted node values, loops and event emission.
   undeclared/non-string ports, invalid or duplicate target names and collisions
   with `env`/`env_allowlist` without regard to case. Do not embed secrets in
   graph config or assume an input mapping marks a value for redaction.
+- `secret_env` maps a child variable to the NAME of a declared secret (F3.8);
+  only names are parsed, never values, and errors never quote a secret name.
+  Invalid names, duplicates and collisions with `env`/`env_allowlist`/
+  `input_env` are rejected without regard to case, mirroring the graph
+  validator. Until values are delivered (T4b), `execute` fails closed with
+  `FailureConfig` before starting the process; keep that guard until grants
+  replace it.
 - `exec.Command` with explicit argv, cwd and environment starts the child through
   `internal/proctree`, which owns its process tree. When the context is done,
   a goroutine joined before `execute` returns calls `Terminate` (request, grace,
