@@ -77,18 +77,8 @@ func TestEventRejectsMismatchedPayload(t *testing.T) {
 	}
 }
 
-// allEventTypes lists every event type the decoder must dispatch.
-var allEventTypes = []Type{
-	NodeEvidence, RunStarted, NodeReady, NodeStarted, LogChunk, NodeFinished, NodeTerminated, RunFinished,
-	ApprovalRequested, ApprovalDecided, AttemptStarted, AttemptInput, AttemptFinished,
-	CancelRequested, ProcessTerminated, AttemptDiff, GateCheck, PolicyEvaluated, PolicyViolation,
-	TextDelta, ToolCallStarted, ToolCallFinished, CommandStarted, CommandFinished, FileChanged, Status, ProgressOmitted,
-	ReturnEnvelope, DeclaredScopeConflicts, ValueRecorded,
-	WorkspacePrepared, WorkspaceIntegrated, WorkspaceConflict, WorkspaceReleased, SourceWorkspaceChanged,
-}
-
 func TestEventJSONRoundTripCoversEveryType(t *testing.T) {
-	for _, kind := range allEventTypes {
+	for kind := range expectedPayloads {
 		t.Run(string(kind)+"/dispatches to a typed payload", func(t *testing.T) {
 			line := fmt.Sprintf(`{"event_schema_version":%d,"type":%q,"payload":{"no_such_field":1}}`, SchemaVersion, kind)
 			var decoded Event

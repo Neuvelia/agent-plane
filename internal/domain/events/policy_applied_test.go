@@ -26,14 +26,15 @@ func TestPolicyAppliedPermissionRequiresAppliedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("consistent applied flags rejected: %v", err)
 	}
-	bad := []byte(`{"event_schema_version":14,"type":"policy_evaluated","payload":` +
-		string(mustPayloadJSON(t, appliedPermissionUnderUnappliedPolicy())) + `}`)
 	var decoded Event
-	if err := json.Unmarshal(bad, &decoded); err == nil {
-		t.Fatal("log line with an applied permission and applied=false was decoded")
-	}
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("consistent log line rejected on read: %v", err)
+	}
+	bad := []byte(`{"event_schema_version":14,"type":"policy_evaluated","payload":` +
+		string(mustPayloadJSON(t, appliedPermissionUnderUnappliedPolicy())) + `}`)
+	var rejected Event
+	if err := json.Unmarshal(bad, &rejected); err == nil {
+		t.Fatal("log line with an applied permission and applied=false was decoded")
 	}
 }
 
