@@ -105,3 +105,24 @@ func TestParityCorpusSecretCodesAddNoNodeConfigDiagnostic(t *testing.T) {
 		}
 	}
 }
+
+// A pasted "NAME=value" as a secret_env variable name must not be echoed by
+// any diagnostic, including the Shell executor's E_NODE_CONFIG_INVALID.
+func TestGraphValidateDoesNotEchoInvalidSecretEnvName(t *testing.T) {
+	text := corpusHead + "secrets:\n  tok: {secret_ref: env/AGENTPLANE_C43_SECRET}\ninputs: {}\nnodes:\n" +
+		"  a:\n    type: shell\n    config: {command: /usr/bin/true, secret_env: {\"GH_TOKEN=ghp_xxx\": tok}}\n" +
+		"edges: []\noutputs: {}\n"
+	path := filepath.Join(t.TempDir(), "graph.yaml")
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	exit, out, errout := cli(t, "graph", "validate", path, "--json")
+	if exit == 0 || !strings.Contains(out, "E_NODE_CONFIG_INVALID") {
+		t.Fatalf("exit=%d stdout=%s", exit, out)
+	}
+	for _, text := range []string{out, errout} {
+		if strings.Contains(text, "ghp_xxx") {
+			t.Fatalf("output echoes the pasted name: %s", text)
+		}
+	}
+}

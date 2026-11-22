@@ -61,6 +61,34 @@ func TestShellConfigRejectsInvalidSecretEnv(t *testing.T) {
 	}
 }
 
+func TestShellConfigDoesNotQuoteInvalidSecretEnvNames(t *testing.T) {
+	tests := []struct{ name, variable, leaked string }{
+		{"pasted assignment", "GH_TOKEN=ghp_xxx", "ghp_xxx"},
+		{"empty name", "", `""`},
+		{"NUL in name", "a\x00b", "a\x00b"},
+		{"NUL escaped", "a\x00b", `\x00`},
+		{"reserved name", "agentplane_attempt", "agentplane_attempt"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := Executor{}.ValidateNodeConfig("n", secretEnvNode(map[string]any{test.variable: "tok"}, nil))
+			if err == nil {
+				t.Fatal("ValidateNodeConfig() = nil, want an error")
+			}
+			if !strings.Contains(err.Error(), "secret_env entry 0 has an invalid environment name") || strings.Contains(err.Error(), test.leaked) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestShellConfigKeepsQuotingValidSecretEnvNames(t *testing.T) {
+	err := Executor{}.ValidateNodeConfig("n", secretEnvNode(map[string]any{"GH_TOKEN": 1}, nil))
+	if err == nil || !strings.Contains(err.Error(), `secret_env["GH_TOKEN"] must be a string`) {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestExecuteRefusesSecretEnvWithoutDeliveryAndNeverStartsTheProcess(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "ran")
 	node := helperNode("touch", marker)
