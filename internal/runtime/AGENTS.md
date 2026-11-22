@@ -15,6 +15,7 @@ The root `AGENTS.md` still applies. This file adds rules for
 | Workspace identity and changed-file baselines | `workspace.go`, `loop.go` |
 | Bounded progress, logs and redaction | `progress.go`, `log_redactor.go` |
 | Redaction set for resolved secrets: raw, hex, percent and Base64 (three alignments) forms from `internal/domain/secrets.Forms`, bounded to 64 secrets x 16 KiB x 16 forms with the structured `secret_redaction_bound_exceeded` preflight error; `--redact-env` values stay raw-only (F3.8) | `redaction_set.go` |
+| `SecretResolver` port (one method) for resolving a `secrets.Ref` to a `secrets.Value`; not yet consumed by the scheduler (preflight is C4.2, F3.8) | `secret_resolver.go` |
 | Opt-in recorded run values (ADR-0023) | `values.go`, called from `preflight.go` and `accept.go` |
 | Opt-in attempt diff capture port, budget and emission (ADR-0026) | `attemptdiff.go`, called from `preflight.go`, `loop.go` and `accept.go` |
 | Opt-in worktree isolation (ADR-0024): port, preflight, lifecycle, integration, release | `isolation.go`, called from `preflight.go`, `batch.go`, `accept.go`, `scheduler.go` (`finish`) |

@@ -58,6 +58,15 @@ var legacyLayers = map[string]layer{
 	"internal/agent/adaptertest": layerAdapter,
 }
 
+// rootOnlyRule names the R7 violation for secret providers (ADR-0029). It is a
+// separate rule from the layer rules because delivery -> adapter imports are
+// baselined; this one must never be (TestRootOnlyRuleIsNotBaselined).
+const rootOnlyRule = "R7 secret providers are imported only by the composition root"
+
+// rootOnlyPackages are providers of secret values; only cmd/agentplane may
+// import them, so no other layer can reach a plaintext source.
+var rootOnlyPackages = map[string]bool{"internal/adapter/envsecrets": true}
+
 // forbiddenStdlib are standard-library packages that domain and application
 // code must reach only through ports (R4).
 var forbiddenStdlib = map[string]bool{
@@ -139,6 +148,9 @@ func check(importer string, from layer, imported string) []violation {
 func checkLayers(importer string, from layer, imported, pkg string, to layer) []violation {
 	var out []violation
 	add := func(rule string) { out = append(out, violation{importer, imported, rule}) }
+	if rootOnlyPackages[pkg] && from != layerRoot && family(importer) != family(pkg) {
+		add(rootOnlyRule)
+	}
 	if to == layerNeutral || family(importer) == family(pkg) || from == layerRoot {
 		return nil
 	}
@@ -277,11 +289,45 @@ func TestRulesDetectViolations(t *testing.T) {
 		{"adapter imports app port", layerAdapter, "internal/adapter/shell", modulePath + "/internal/app/engine", false},
 		{"delivery imports adapter", layerDelivery, "internal/delivery/httpapi", modulePath + "/internal/adapter/runstore", true},
 		{"root imports anything", layerRoot, "cmd/agentplane", modulePath + "/internal/adapter/shell", false},
+		{"secret provider imported by delivery", layerDelivery, "internal/api", modulePath + "/internal/adapter/envsecrets", true},
+		{"secret provider imported by app", layerApp, "internal/runtime", modulePath + "/internal/adapter/envsecrets", true},
+		{"secret provider imported by adapter", layerAdapter, "internal/shell", modulePath + "/internal/adapter/envsecrets", true},
+		{"secret provider imported by root", layerRoot, "cmd/agentplane", modulePath + "/internal/adapter/envsecrets", false},
 		{"anyone imports version", layerDomain, "internal/domain/graph", modulePath + "/internal/version", false},
 	}
 	for _, tc := range cases {
 		if got := len(check(tc.importer, tc.from, tc.imported)) > 0; got != tc.want {
 			t.Errorf("%s: violation=%v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestRootOnlyRuleIsNotBaselined(t *testing.T) {
+	for line := range readBaseline(t) {
+		if strings.Contains(line, rootOnlyRule) {
+			t.Errorf("the composition-root rule cannot be baselined; fix the import:\n  %s", line)
+		}
+	}
+}
+
+// TestRootOnlyPackagesExistAndAreUsedByRoot keeps the rule from rotting: a renamed
+// provider package would silently stop being guarded. Importers other than the
+// composition root are already rejected by TestDependencyRules; root wiring of
+// envsecrets lands with F3.8 C4.2/C4.4, so use by root is asserted only for
+// importers that do exist.
+func TestRootOnlyPackagesExistAndAreUsedByRoot(t *testing.T) {
+	root := repoRoot(t)
+	imports := productionImports(t, root)
+	for pkg := range rootOnlyPackages {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(pkg))); err != nil {
+			t.Errorf("root-only package %s does not exist: %v", pkg, err)
+		}
+		for importer, list := range imports {
+			for _, imported := range list {
+				if imported == modulePath+"/"+pkg && importer != "cmd/agentplane" && family(importer) != family(pkg) {
+					t.Errorf("%s imports root-only package %s", importer, pkg)
+				}
+			}
 		}
 	}
 }
