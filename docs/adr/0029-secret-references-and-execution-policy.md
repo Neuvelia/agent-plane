@@ -22,7 +22,7 @@ kernel and the OS.
    are reachable only from this pipeline; an architecture test enforces that only the composition root imports
    providers and platform enforcement.
 2. **Graph holds references only.** Additive optional top-level `secrets` (`name -> {secret_ref}`) and
-   `config.secret_env` (env name -> secret name) on Shell and Agent nodes; additive top-level `policy` and
+   `config.secret_env` (env name -> secret name) on Shell and Agent nodes (Agent deferred: C4.0 review #138 F-2; validation returns `E_SECRET_ENV_AGENT_UNSUPPORTED` until the Codex spike, F3.8 Open question 6); additive top-level `policy` and
    `config.policy`. No graph `schema_version` bump (as `units`). Graph defaults restrict but never grant secrets;
    a node value may only narrow a default.
 3. **Secret delivery is environment-only, per node run, resolved once in process memory.** Never argv, file,
