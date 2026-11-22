@@ -45,6 +45,11 @@ document or event contract.
   are fixed per server by `serve --record-values` and `--redact-env`; the
   `serve` starter refuses a graph that holds a configured secret before a run
   exists. Run summaries carry `graph_version` from the store.
+- `POST /graphs/edit` refuses operations that change secret bindings with
+  `secrets_read_only` (HTTP 422, text unchanged; the rule lives in
+  `internal/adapter/yamlgraph/edit/secrets.go`). `PUT /graphs/save` still writes
+  any text (ADR-0021), so declarations stay editable as text; do not add a
+  route that creates or edits secrets or returns their values.
 - Human decisions are scoped to both run ID and node-run ID. The first
   accepted decision wins; a repeat for that run returns 409 with the original
   decision, while a different run gets 404. Cancellation must not discard a

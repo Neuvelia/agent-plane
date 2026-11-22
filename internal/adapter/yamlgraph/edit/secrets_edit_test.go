@@ -46,14 +46,55 @@ func TestSecretsRoundTripKeepsFieldOrderAndComments(t *testing.T) {
 	}
 }
 
-func TestSecretEnvIsEditableThroughConfigPaths(t *testing.T) {
-	out := mustApply(t, secretsDocument, Op{Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}, Value: raw("api_key")})
-	definition, err := yamlgraph.Parse([]byte(out))
-	if err != nil {
-		t.Fatal(err)
+// F3.8 / ADR-0029: the editor is read-only for secret declarations and
+// bindings. Before this decision (owner decision 9A) set_config could rewrite
+// secret_env through a config path (#138); every operation that would write or
+// drop a binding is now refused with CodeSecretsReadOnly and leaves the text
+// unchanged. Other config fields stay editable.
+func TestEditRefusesSecretBindings(t *testing.T) {
+	cases := map[string]Op{
+		"set a binding":       {Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}, Value: raw("api_key")},
+		"add a binding":       {Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "OTHER"}, Value: raw("api_key")},
+		"replace the map":     {Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env"}, Value: raw(map[string]any{"X": "api_key"})},
+		"unset a binding":     {Op: OpUnsetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}},
+		"unset the map":       {Op: OpUnsetConfig, Node: "deploy", Path: []string{"secret_env"}},
+		"remove bound node":   {Op: OpRemoveNode, ID: "deploy"},
+		"set loop secret_env": {Op: OpSetLoopConfig, Node: "deploy", Path: []string{"secret_env", "X"}, Value: raw("api_key")},
+		"unset loop binding":  {Op: OpUnsetLoopConfig, Node: "deploy", Path: []string{"secret_env"}},
+		"set_loop gate":       {Op: OpSetLoop, Node: "deploy", Gate: &LoopGate{Config: raw(map[string]any{"check_id": "c", "kind": "exit_code", "secret_env": map[string]any{"X": "api_key"}})}},
 	}
-	assigned, _ := definition.Nodes["deploy"].Config["secret_env"].(graph.NodeConfig)
-	if assigned["GH_TOKEN"] != "api_key" || !strings.Contains(out, "# granted to this node only") {
-		t.Fatalf("secret_env edit lost or dropped its comment:\n%s", out)
+	for name, op := range cases {
+		t.Run(name, func(t *testing.T) {
+			e := applyErr(t, secretsDocument, op)
+			if e.Code != CodeSecretsReadOnly || e.OpIndex != 0 {
+				t.Fatalf("want %s at operation 0, got %+v", CodeSecretsReadOnly, e)
+			}
+		})
+	}
+}
+
+func TestEditRefusalKeepsTheWholeBatchAtomic(t *testing.T) {
+	_, err := Apply([]byte(secretsDocument), []Op{
+		{Op: OpSetConfig, Node: "deploy", Path: []string{"command"}, Value: raw("/bin/echo")},
+		{Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}, Value: raw("api_key")},
+	})
+	e, ok := err.(*Error)
+	if !ok || e.Code != CodeSecretsReadOnly || e.OpIndex != 1 {
+		t.Fatalf("want secrets_read_only at operation 1, got %v", err)
+	}
+}
+
+func TestEditStillChangesOtherConfigAndUnboundNodes(t *testing.T) {
+	out := mustApply(t, secretsDocument,
+		Op{Op: OpAddNode, ID: "plain", Type: "shell"},
+		Op{Op: OpSetConfig, Node: "plain", Path: []string{"command"}, Value: raw("/bin/true")},
+		Op{Op: OpSetConfig, Node: "deploy", Path: []string{"env", "A"}, Value: raw("b")},
+		Op{Op: OpRenameNode, ID: "deploy", NewID: "ship"},
+		Op{Op: OpRemoveNode, ID: "plain"},
+	)
+	for _, want := range []string{"secret_ref: env/GITHUB_TOKEN", "GH_TOKEN: gh_token", "# granted to this node only", "ship:"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("edited text lost %q:\n%s", want, out)
+		}
 	}
 }

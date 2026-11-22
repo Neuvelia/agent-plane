@@ -527,6 +527,9 @@ secrets:
   case-insensitively), `E_SECRET_ENV_NODE_TYPE` (Gate, Human or a loop's embedded
   Gate) and `E_SECRET_ENV_AGENT_UNSUPPORTED` (Agent nodes cannot take
   `secret_env` until the Codex spike reports).
+- The editor does not change secrets: edit operations that would write or drop a
+  `secret_env` binding are refused with `secrets_read_only` (ADR-0021 annotation).
+  Declarations and bindings are edited as YAML text.
 - `E_SECRET_AMBIENT_BYPASS` fails in every mode: a node that is not assigned an
   `env`-provider secret must not name its backing variable in `env_allowlist`,
   `environment_refs`, an `env` key or an `input_env` target.
