@@ -310,24 +310,16 @@ func TestRootOnlyRuleIsNotBaselined(t *testing.T) {
 	}
 }
 
-// TestRootOnlyPackagesExistAndAreUsedByRoot keeps the rule from rotting: a renamed
-// provider package would silently stop being guarded. Importers other than the
-// composition root are already rejected by TestDependencyRules; root wiring of
-// envsecrets lands with F3.8 C4.2/C4.4, so use by root is asserted only for
-// importers that do exist.
-func TestRootOnlyPackagesExistAndAreUsedByRoot(t *testing.T) {
+// TestRootOnlyPackagesExist keeps the rule from rotting: a renamed provider
+// package would silently stop being guarded. Importers other than the
+// composition root are already rejected by TestDependencyRules. The assertion
+// that the root imports the provider arrives with F3.8 C4.2/C4.4, when the
+// wiring exists.
+func TestRootOnlyPackagesExist(t *testing.T) {
 	root := repoRoot(t)
-	imports := productionImports(t, root)
 	for pkg := range rootOnlyPackages {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(pkg))); err != nil {
 			t.Errorf("root-only package %s does not exist: %v", pkg, err)
-		}
-		for importer, list := range imports {
-			for _, imported := range list {
-				if imported == modulePath+"/"+pkg && importer != "cmd/agentplane" && family(importer) != family(pkg) {
-					t.Errorf("%s imports root-only package %s", importer, pkg)
-				}
-			}
 		}
 	}
 }
