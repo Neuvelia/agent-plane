@@ -250,7 +250,10 @@ func CloneGate(p GateCheckPayload) GateCheckPayload {
 // validEvidenceSecretName allows the name only on secret_in_workspace evidence.
 // The kind already requires SchemaPolicy, so the field needs no schema check of
 // its own and older logs never carry it. The grammar repeats policySecretName
-// because this package may not import domain/secrets.
+// because this package may not import domain/secrets. The grammar does not
+// protect against a secret value (a short lowercase secret passes it). The
+// protection is that the emitter takes the name from the declared grant, never
+// from file content.
 func validEvidenceSecretName(kind CheckKind, name string) error {
 	if name == "" {
 		return nil
