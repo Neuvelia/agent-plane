@@ -3,6 +3,7 @@ package events
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +74,47 @@ func TestEventRejectsMismatchedPayload(t *testing.T) {
 	var decoded Event
 	if err := json.Unmarshal([]byte(`{"event_schema_version":1,"type":"log_chunk","payload":{"status":"failed"}}`), &decoded); err == nil {
 		t.Fatal("mismatched payload JSON decoded")
+	}
+}
+
+// allEventTypes lists every event type the decoder must dispatch.
+var allEventTypes = []Type{
+	NodeEvidence, RunStarted, NodeReady, NodeStarted, LogChunk, NodeFinished, NodeTerminated, RunFinished,
+	ApprovalRequested, ApprovalDecided, AttemptStarted, AttemptInput, AttemptFinished,
+	CancelRequested, ProcessTerminated, AttemptDiff, GateCheck, PolicyEvaluated, PolicyViolation,
+	TextDelta, ToolCallStarted, ToolCallFinished, CommandStarted, CommandFinished, FileChanged, Status, ProgressOmitted,
+	ReturnEnvelope, DeclaredScopeConflicts, ValueRecorded,
+	WorkspacePrepared, WorkspaceIntegrated, WorkspaceConflict, WorkspaceReleased, SourceWorkspaceChanged,
+}
+
+func TestEventJSONRoundTripCoversEveryType(t *testing.T) {
+	for _, kind := range allEventTypes {
+		t.Run(string(kind)+"/dispatches to a typed payload", func(t *testing.T) {
+			line := fmt.Sprintf(`{"event_schema_version":%d,"type":%q,"payload":{"no_such_field":1}}`, SchemaVersion, kind)
+			var decoded Event
+			err := json.Unmarshal([]byte(line), &decoded)
+			if err == nil || !strings.Contains(err.Error(), "no_such_field") {
+				t.Fatalf("type %s was not dispatched to a strict typed payload: %v", kind, err)
+			}
+		})
+	}
+	valid := append(policyFacts(),
+		Event{SchemaVersion: SchemaVersion, Type: RunFinished, Payload: RunFinishedPayload{Status: "failed", NodeCounts: NodeCounts{Failed: 1, Skipped: 1}}},
+		Event{SchemaVersion: SchemaVersion, Type: TextDelta, Payload: TextDeltaPayload{Text: "hi"}},
+	)
+	for _, original := range valid {
+		t.Run(string(original.Type)+"/round trips", func(t *testing.T) {
+			data, err := json.Marshal(original)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var decoded Event
+			if err := json.Unmarshal(data, &decoded); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(decoded, original) {
+				t.Fatalf("round trip = %#v, want %#v", decoded, original)
+			}
+		})
 	}
 }
