@@ -221,7 +221,7 @@ func TestRedactionPreflightErrorKeepsStructuredDiagnostic(t *testing.T) {
 	structured := redactionBoundError("secrets.token", "too large", "use a smaller secret")
 	err := redactionPreparationError(structured)
 	var pre *run.PreflightError
-	if !errors.As(err, &pre) || err != structured {
+	if !errors.As(err, &pre) || !errors.Is(err, structured) {
 		t.Fatalf("structured diagnostic was wrapped: %#v", err)
 	}
 	if strings.Contains(err.Error(), "invalid") {
