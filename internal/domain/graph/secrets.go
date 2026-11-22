@@ -35,10 +35,19 @@ func (v *definitionValidator) validateSecrets() {
 	}
 	for _, b := range secrets.AmbientBypasses(refs, channels) {
 		v.error("E_SECRET_AMBIENT_BYPASS",
-			fmt.Sprintf("node %q names %s, the variable behind secret %q, but is not assigned that secret", b.NodeID, b.Variable, b.Secret),
+			fmt.Sprintf("node %q names %s, the variable behind secret %q, but is not assigned that secret", b.NodeID, bypassVariable(b.Variable, "a variable"), b.Secret),
 			DiagnosticLocation{NodeID: b.NodeID, Path: mapPath("nodes", b.NodeID) + ".config"},
-			fmt.Sprintf("assign the secret with secret_env or stop naming %s in this node; this check applies in every mode", b.Variable))
+			fmt.Sprintf("assign the secret with secret_env or stop naming %s in this node; this check applies in every mode", bypassVariable(b.Variable, "that variable")))
 	}
+}
+
+// bypassVariable shows the variable only when it matches the identifier grammar:
+// the name comes from a secret_ref the author typed and might be a pasted token.
+func bypassVariable(variable, fallback string) string {
+	if secrets.ValidEnvIdentifier(variable) {
+		return variable
+	}
+	return fallback
 }
 
 // validateSecretDeclarations returns the references of the valid declarations.
@@ -54,7 +63,8 @@ func (v *definitionValidator) validateSecretDeclarations() map[string]secrets.Re
 
 // secretLabel names a secret in a message. Names are map keys the author typed,
 // so text that does not match the name grammar might be a pasted secret and is
-// replaced by its position; the same rule applies to the path.
+// replaced by its position among the names sorted alphabetically (not the file
+// order); the same rule applies to the path.
 func secretLabel(i int, name string) (label, path string) {
 	if secrets.ValidName(name) {
 		return fmt.Sprintf("secret %q", name), mapPath("secrets", name)

@@ -76,7 +76,8 @@ func (v *definitionValidator) validateSecretEnvEntry(scan *secretEnvScan, index 
 
 // envLabel names a secret_env entry in a message. The key is text the author
 // typed, so it is shown only when it matches the identifier grammar; anything
-// else might be a pasted secret and is replaced by its position.
+// else might be a pasted secret and is replaced by its position. The position is
+// the index among the entry keys sorted by name, not the order in the file.
 func envLabel(index int, variable string) string {
 	if secrets.ValidEnvIdentifier(variable) {
 		return variable
@@ -85,7 +86,7 @@ func envLabel(index int, variable string) string {
 }
 
 // quotedEnv quotes variable when it matches the identifier grammar and returns
-// fallback otherwise.
+// fallback otherwise. "Position" fallbacks index the keys sorted by name.
 func quotedEnv(variable, fallback string) string {
 	if secrets.ValidEnvIdentifier(variable) {
 		return fmt.Sprintf("%q", variable)

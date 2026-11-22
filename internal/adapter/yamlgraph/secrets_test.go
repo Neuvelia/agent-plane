@@ -315,3 +315,26 @@ func TestValidateSecretEnvReportsEveryEntryProblemOnce(t *testing.T) {
 		t.Fatalf("codes = %v, want %v", codes, want)
 	}
 }
+
+func TestAmbientBypassQuotesTheVariableOnlyWhenItMatchesTheGrammar(t *testing.T) {
+	const pasted = "ghp_Ab.Cd-Ef12"
+	backing := "secrets:\n  gh_token:\n    secret_ref: \"env/" + pasted + "\"\n"
+	nodes := shellNode("a", "      secret_env: {GH_TOKEN: gh_token}\n") +
+		shellNode("thief", "      env_allowlist: [\""+pasted+"\"]\n")
+	result := validateText(t, secretsGraph(backing, nodes))
+	d := diagnosticFor(t, result, "E_SECRET_AMBIENT_BYPASS")
+	if !strings.Contains(d.Message, `"thief"`) {
+		t.Errorf("message must still name the node: %+v", d)
+	}
+	assertNoLiteral(t, "ambient bypass", "ghp_Ab", result)
+	assertNoLiteral(t, "ambient bypass", "Cd-Ef12", result)
+}
+
+func TestAmbientBypassNamesAValidIdentifier(t *testing.T) {
+	nodes := shellNode("a", "      secret_env: {GH_TOKEN: gh_token}\n") +
+		shellNode("thief", "      env_allowlist: [GITHUB_TOKEN]\n")
+	d := diagnosticFor(t, validateText(t, secretsGraph(oneSecret, nodes)), "E_SECRET_AMBIENT_BYPASS")
+	if !strings.Contains(d.Message, "names GITHUB_TOKEN,") || !strings.Contains(d.Suggestion, "naming GITHUB_TOKEN in") {
+		t.Errorf("a valid identifier is still named: %+v", d)
+	}
+}
