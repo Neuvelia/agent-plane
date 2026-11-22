@@ -14,13 +14,24 @@ var errValueNotSerializable = errors.New("a secret value cannot be serialized")
 // refuses JSON and text marshaling, so a stray %+v, t.Logf or json.Marshal cannot
 // leak it. Reveal is the only way to read the plaintext; only the code that hands
 // the value to a child process or to a redaction set should call it.
-type Value struct{ text string }
+//
+// The text is held behind a *string on purpose. When a Value sits in an
+// unexported field of another struct, fmt walks it by reflection and never calls
+// Format or String; a plain string (or []byte) field would then print the
+// plaintext, whereas a pointer field prints only an address. The zero Value has
+// a nil pointer and reveals the empty string.
+type Value struct{ text *string }
 
 // NewValue wraps plaintext in a Value.
-func NewValue(text string) Value { return Value{text: text} }
+func NewValue(text string) Value { return Value{text: &text} }
 
 // Reveal returns the plaintext.
-func (v Value) Reveal() string { return v.text }
+func (v Value) Reveal() string {
+	if v.text == nil {
+		return ""
+	}
+	return *v.text
+}
 
 // String implements fmt.Stringer and never reveals the value.
 func (Value) String() string { return redactedText }

@@ -49,3 +49,38 @@ func TestValueRevealReturnsOriginal(t *testing.T) {
 		t.Errorf("zero Value Reveal = %q, want empty", got)
 	}
 }
+
+// Unexported fields are printed by fmt through reflection, which never calls
+// Format or String, so the storage inside Value must not expose the text.
+func TestValueInsideUnexportedFieldsNeverLeaks(t *testing.T) {
+	v := NewValue(canary)
+	type inner struct{ v Value }
+	type outer struct{ in inner }
+	type holder struct{ v Value }
+	subjects := map[string]any{
+		"struct":         holder{v: v},
+		"pointer":        &holder{v: v},
+		"slice":          []holder{{v: v}},
+		"map":            map[string]holder{"k": {v: v}},
+		"nested":         outer{in: inner{v: v}},
+		"nested pointer": &outer{in: inner{v: v}},
+		"slice of nest":  []outer{{in: inner{v: v}}},
+	}
+	hexForm := fmt.Sprintf("%x", canary)
+	decForm := strings.Trim(fmt.Sprint([]byte(canary)), "[]")
+	for name, subject := range subjects {
+		for _, verb := range []string{"%v", "%+v", "%#v", "%s", "%q", "%x", "%d"} {
+			got := fmt.Sprintf(verb, subject)
+			if strings.Contains(got, canary) || strings.Contains(got, hexForm) || strings.Contains(got, decForm) {
+				t.Errorf("%s with %s leaked the value: %q", name, verb, got)
+			}
+		}
+	}
+}
+
+func TestZeroValueFormatsWithoutPanicking(t *testing.T) {
+	var zero Value
+	if zero.Reveal() != "" || fmt.Sprintf("%+v", struct{ v Value }{}) == "" {
+		t.Error("zero Value must reveal empty text and format without panicking")
+	}
+}
