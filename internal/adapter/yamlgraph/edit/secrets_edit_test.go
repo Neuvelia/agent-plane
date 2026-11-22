@@ -1,6 +1,7 @@
 package edit
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -83,7 +84,8 @@ func TestEditRefusalKeepsTheWholeBatchAtomic(t *testing.T) {
 		{Op: OpSetConfig, Node: "deploy", Path: []string{"command"}, Value: raw("/bin/echo")},
 		{Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}, Value: raw("api_key")},
 	})
-	e, ok := err.(*Error)
+	var e *Error
+	ok := errors.As(err, &e)
 	if !ok || e.Code != CodeSecretsReadOnly || e.OpIndex != 1 {
 		t.Fatalf("want secrets_read_only at operation 1, got %v", err)
 	}
