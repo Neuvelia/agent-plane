@@ -52,22 +52,27 @@ func TestSecretsRoundTripKeepsFieldOrderAndComments(t *testing.T) {
 // drop a binding is now refused with CodeSecretsReadOnly and leaves the text
 // unchanged. Other config fields stay editable.
 func TestEditRefusesSecretBindings(t *testing.T) {
-	cases := map[string]Op{
-		"set a binding":       {Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}, Value: raw("api_key")},
-		"add a binding":       {Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "OTHER"}, Value: raw("api_key")},
-		"replace the map":     {Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env"}, Value: raw(map[string]any{"X": "api_key"})},
-		"unset a binding":     {Op: OpUnsetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}},
-		"unset the map":       {Op: OpUnsetConfig, Node: "deploy", Path: []string{"secret_env"}},
-		"remove bound node":   {Op: OpRemoveNode, ID: "deploy"},
-		"set loop secret_env": {Op: OpSetLoopConfig, Node: "deploy", Path: []string{"secret_env", "X"}, Value: raw("api_key")},
-		"unset loop binding":  {Op: OpUnsetLoopConfig, Node: "deploy", Path: []string{"secret_env"}},
-		"set_loop gate":       {Op: OpSetLoop, Node: "deploy", Gate: &LoopGate{Config: raw(map[string]any{"check_id": "c", "kind": "exit_code", "secret_env": map[string]any{"X": "api_key"}})}},
+	const config = "nodes.deploy.config."
+	const gateConfig = "nodes.deploy.loop.gate.config."
+	cases := map[string]struct {
+		op   Op
+		path string
+	}{
+		"set a binding":       {Op{Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}, Value: raw("api_key")}, config + "secret_env.GH_TOKEN"},
+		"add a binding":       {Op{Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env", "OTHER"}, Value: raw("api_key")}, config + "secret_env.OTHER"},
+		"replace the map":     {Op{Op: OpSetConfig, Node: "deploy", Path: []string{"secret_env"}, Value: raw(map[string]any{"X": "api_key"})}, config + "secret_env"},
+		"unset a binding":     {Op{Op: OpUnsetConfig, Node: "deploy", Path: []string{"secret_env", "GH_TOKEN"}}, config + "secret_env.GH_TOKEN"},
+		"unset the map":       {Op{Op: OpUnsetConfig, Node: "deploy", Path: []string{"secret_env"}}, config + "secret_env"},
+		"remove bound node":   {Op{Op: OpRemoveNode, ID: "deploy"}, config + "secret_env"},
+		"set loop secret_env": {Op{Op: OpSetLoopConfig, Node: "deploy", Path: []string{"secret_env", "X"}, Value: raw("api_key")}, gateConfig + "secret_env.X"},
+		"unset loop binding":  {Op{Op: OpUnsetLoopConfig, Node: "deploy", Path: []string{"secret_env"}}, gateConfig + "secret_env"},
+		"set_loop gate":       {Op{Op: OpSetLoop, Node: "deploy", Gate: &LoopGate{Config: raw(map[string]any{"check_id": "c", "kind": "exit_code", "secret_env": map[string]any{"X": "api_key"}})}}, gateConfig + "secret_env"},
 	}
-	for name, op := range cases {
+	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
-			e := applyErr(t, secretsDocument, op)
-			if e.Code != CodeSecretsReadOnly || e.OpIndex != 0 {
-				t.Fatalf("want %s at operation 0, got %+v", CodeSecretsReadOnly, e)
+			e := applyErr(t, secretsDocument, c.op)
+			if e.Code != CodeSecretsReadOnly || e.OpIndex != 0 || e.Node != "deploy" || e.Path != c.path {
+				t.Fatalf("want %s at operation 0 for node deploy path %q, got %+v", CodeSecretsReadOnly, c.path, e)
 			}
 		})
 	}
