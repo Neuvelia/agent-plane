@@ -134,12 +134,12 @@ func TestPreflightResolvesEachRefOnce(t *testing.T) {
 
 func TestPreflightReportsEveryFailingSecretInOrder(t *testing.T) {
 	def := secretDefinition(
-		map[string]string{"d_down": "env/D", "c_ok": "env/C", "b_empty": "env/B", "a_missing": "env/A"},
+		map[string]string{"d_down": "env/REF_D_DOWN_CANARY", "c_ok": "env/REF_C_OK_CANARY", "b_empty": "env/REF_B_EMPTY_CANARY", "a_missing": "env/REF_A_MISSING_CANARY"},
 		map[string]map[string]string{"n": {"A": "a_missing", "B": "b_empty", "C": "c_ok", "D": "d_down"}},
 	)
 	resolver := &fakeResolver{
-		values: map[string]string{"env/B": "", "env/C": "fine"},
-		errs:   map[string]error{"env/D": fmt.Errorf("fake: %w", secrets.ErrProviderUnavailable)},
+		values: map[string]string{"env/REF_B_EMPTY_CANARY": "", "env/REF_C_OK_CANARY": "fine"},
+		errs:   map[string]error{"env/REF_D_DOWN_CANARY": fmt.Errorf("fake: %w", secrets.ErrProviderUnavailable)},
 	}
 	diagnostics := requireSecretPreflightFailure(t, def, newReceiver(), resolver, "secret_unresolved", "secret_empty", "secret_provider_unavailable")
 	for i, name := range []string{"a_missing", "b_empty", "d_down"} {
@@ -180,5 +180,32 @@ func TestPreflightNoSecretsDoesNotTouchResolverOrTemplate(t *testing.T) {
 	want := mustLogRedactor(t, []string{"env-redacted"})
 	if got := redactAll(prepared.redactionTemplate, []byte("x env-redacted y"), 0); string(got) != string(redactAll(want, []byte("x env-redacted y"), 0)) {
 		t.Errorf("template changed for a graph without secrets: %q", got)
+	}
+}
+
+// idleDiffer is a hand-written AttemptDiffer whose sessions capture nothing; it
+// only switches attempt-diff capture on for preflight.
+type idleDiffer struct{}
+
+func (idleDiffer) Open(context.Context) (DiffSession, error) { return idleDiffSession{}, nil }
+
+type idleDiffSession struct{}
+
+func (idleDiffSession) Snapshot(context.Context, string) (DiffSnapshot, error) { return nil, nil }
+
+func (idleDiffSession) Diff(context.Context, DiffSnapshot, DiffSnapshot, DiffRedactor) (AttemptCapture, error) {
+	return AttemptCapture{}, nil
+}
+
+func (idleDiffSession) Close() error { return nil }
+
+func TestPreflightSecretNotUTF8WithAttemptDiffs(t *testing.T) {
+	resolver := &fakeResolver{values: map[string]string{"env/GITHUB_TOKEN": secretCanary + "\xff"}}
+	sink := &persisted{}
+	options := sink.options(resolver)
+	options.AttemptDiffs = idleDiffer{}
+	_, err := preflightRun(context.Background(), ghDefinition(), nil, newReceiver(), options)
+	if got := diagnosticCodes(preflightDiagnostics(t, err)); !reflect.DeepEqual(got, []string{"secret_invalid_value"}) {
+		t.Errorf("codes = %v, want secret_invalid_value while attempt diffs rewrite redacted text", got)
 	}
 }
