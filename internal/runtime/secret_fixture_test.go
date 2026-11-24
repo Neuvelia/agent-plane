@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -152,12 +153,36 @@ func requireSecretPreflightFailure(t *testing.T, def *graph.Definition, exec Exe
 		t.Errorf("%d nodes ran before preflight failed", counter.runCount())
 	}
 	encoded, _ := json.Marshal(diagnostics)
+	reported := string(encoded) + err.Error()
 	for _, form := range secrets.Forms(secretCanary) {
-		if strings.Contains(string(encoded)+err.Error(), string(form)) {
+		if strings.Contains(reported, string(form)) {
 			t.Errorf("diagnostics hold secret text %q", form)
 		}
 	}
+	for _, name := range refNamesThatMustNotAppear(def, wantCodes) {
+		if strings.Contains(reported, name) {
+			t.Errorf("diagnostics cite the reference name %q", name)
+		}
+	}
 	return diagnostics
+}
+
+// refNamesThatMustNotAppear lists what follows the provider in every declared
+// reference (the variable behind env/NAME). A reference names what was looked
+// up, so failure output carries the secret name instead and never this part.
+// The one exception is the static E_SECRET_AMBIENT_BYPASS diagnostic, which
+// quotes the variable a node itself names in its own configuration.
+func refNamesThatMustNotAppear(def *graph.Definition, wantCodes []string) []string {
+	if slices.Contains(wantCodes, "E_SECRET_AMBIENT_BYPASS") {
+		return nil
+	}
+	names := make([]string, 0, len(def.Secrets))
+	for _, secret := range def.Secrets {
+		if _, name, found := strings.Cut(secret.SecretRef, "/"); found {
+			names = append(names, name)
+		}
+	}
+	return names
 }
 
 func (e *receiverExecutor) runCount() int32 { return e.runs.Load() }
