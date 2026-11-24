@@ -25,18 +25,21 @@ const readChunk = 1 << 20
 // Each file is read whole into one buffer, so a value can never straddle a
 // window boundary. A canceled ctx aborts with ctx.Err() and no report. Deleted
 // paths are skipped without a gap: they have no content to leak.
-func (Scanner) ScanFiles(ctx context.Context, root string, paths []string, targets []secrets.ScanTarget, limits secrets.ScanLimits) (secrets.ScanReport, error) {
+func (sc Scanner) ScanFiles(ctx context.Context, root string, paths []string, targets []secrets.ScanTarget, limits secrets.ScanLimits) (secrets.ScanReport, error) {
 	if err := ctx.Err(); err != nil {
 		return secrets.ScanReport{}, err
 	}
 	if len(targets) == 0 {
 		return secrets.ScanReport{}, nil
 	}
+	if err := limits.Validate(); err != nil {
+		return secrets.ScanReport{}, err
+	}
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return secrets.ScanReport{}, fmt.Errorf("resolve scan root: %w", err)
 	}
-	run := &scanRun{root: realRoot, targets: targets, limits: limits, gaps: map[secrets.ScanGapReason]uint64{}}
+	run := &scanRun{afterLstat: sc.afterLstat, root: realRoot, targets: targets, limits: limits, gaps: map[secrets.ScanGapReason]uint64{}}
 	ordered := orderedPaths(paths)
 	if len(ordered) > limits.Files {
 		run.gaps[secrets.GapFileLimitReached] = uint64(len(ordered) - limits.Files)
@@ -58,14 +61,15 @@ func orderedPaths(paths []string) []string {
 
 // scanRun is the state of one ScanFiles call; it is never shared.
 type scanRun struct {
-	root     string
-	targets  []secrets.ScanTarget
-	limits   secrets.ScanLimits
-	used     int64
-	buf      []byte
-	findings []secrets.ScanFinding
-	gaps     map[secrets.ScanGapReason]uint64
-	examined uint64
+	afterLstat func(abs string)
+	root       string
+	targets    []secrets.ScanTarget
+	limits     secrets.ScanLimits
+	used       int64
+	buf        []byte
+	findings   []secrets.ScanFinding
+	gaps       map[secrets.ScanGapReason]uint64
+	examined   uint64
 }
 
 func (r *scanRun) scanPath(ctx context.Context, rel string) error {
@@ -119,6 +123,9 @@ func (r *scanRun) scanRegular(ctx context.Context, abs, rel string, lstat fs.Fil
 	if r.refuseBySize(lstat.Size()) {
 		return nil
 	}
+	if r.afterLstat != nil {
+		r.afterLstat(abs)
+	}
 	file, err := openNoFollow(abs)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -129,17 +136,23 @@ func (r *scanRun) scanRegular(ctx context.Context, abs, rel string, lstat fs.Fil
 	}
 	defer func() { _ = file.Close() }() // read-only: a close failure loses nothing
 	opened, err := file.Stat()
-	if err != nil || !opened.Mode().IsRegular() || !os.SameFile(lstat, opened) {
+	switch {
+	case err != nil || !os.SameFile(lstat, opened):
 		r.gaps[secrets.GapUnreadable]++
+		return nil
+	case !opened.Mode().IsRegular():
+		r.gaps[secrets.GapNotRegularFile]++
 		return nil
 	}
 	data, err := r.read(ctx, file)
 	if err != nil {
 		return r.readFailure(ctx)
 	}
-	if !r.refuseBySize(int64(len(data))) {
-		r.examine(rel, data)
+	if r.refuseBySize(int64(len(data))) {
+		r.used += int64(len(data)) // a file that grew was still read
+		return nil
 	}
+	r.examine(rel, data)
 	return nil
 }
 

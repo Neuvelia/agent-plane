@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"agentplane/internal/domain/secrets"
 )
@@ -266,5 +267,99 @@ func TestScanWithoutTargetsExaminesNothing(t *testing.T) {
 	report, err := Scanner{}.ScanFiles(context.Background(), root, []string{"a.txt"}, nil, secrets.DefaultScanLimits())
 	if err != nil || !reflect.DeepEqual(report, secrets.ScanReport{}) {
 		t.Errorf("got (%+v, %v), want an empty report", report, err)
+	}
+}
+
+func TestScanRejectsNegativeLimitsWithoutPanicking(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "a.txt", leak)
+	_, err := Scanner{}.ScanFiles(context.Background(), root, []string{"a.txt"}, []secrets.ScanTarget{target(t, "gh_token", leak)}, secrets.ScanLimits{Files: -1})
+	if !errors.Is(err, secrets.ErrInvalidScanLimits) {
+		t.Errorf("err = %v, want ErrInvalidScanLimits", err)
+	}
+}
+
+// scanAfterSwap scans path "f.txt" (initially clean) after swap has run in the
+// window between the scanner's Lstat and its open.
+func scanAfterSwap(t *testing.T, root string, limits secrets.ScanLimits, swap func(abs string)) secrets.ScanReport {
+	t.Helper()
+	scanner := Scanner{afterLstat: swap}
+	report, err := scanner.ScanFiles(context.Background(), root, []string{"f.txt"}, []secrets.ScanTarget{target(t, "gh_token", leak)}, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return report
+}
+
+func mustDo(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestScanRefusesSymlinkSwappedInAfterLstat(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "f.txt", "clean")
+	report := scanAfterSwap(t, root, secrets.DefaultScanLimits(), func(abs string) {
+		// The link points at a hard link of the very file Lstat saw, so only
+		// O_NOFOLLOW (not SameFile) can refuse it.
+		alias := abs + ".alias"
+		mustDo(t, os.Link(abs, alias))
+		mustDo(t, os.WriteFile(alias, []byte(leak), 0o644))
+		mustDo(t, os.Remove(abs))
+		mustDo(t, os.Symlink(alias, abs))
+	})
+	if len(report.Findings) != 0 || gapCount(report, secrets.GapUnreadable) != 1 {
+		t.Errorf("report = %+v, want the swapped symlink refused as unreadable", report)
+	}
+}
+
+func TestScanDoesNotBlockOnFifoSwappedInAfterLstat(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "f.txt", "clean")
+	done := make(chan secrets.ScanReport, 1)
+	go func() {
+		done <- scanAfterSwap(t, root, secrets.DefaultScanLimits(), func(abs string) {
+			mustDo(t, os.Remove(abs))
+			mustDo(t, syscall.Mkfifo(abs, 0o600))
+		})
+	}()
+	select {
+	case report := <-done:
+		if gapCount(report, secrets.GapNotRegularFile) != 1 {
+			t.Errorf("report = %+v, want one not_regular_file gap", report)
+		}
+	case <-time.After(5 * time.Second):
+		// Release a reader stuck in open so the goroutine does not leak.
+		if w, err := os.OpenFile(filepath.Join(root, "f.txt"), os.O_WRONLY|syscall.O_NONBLOCK, 0); err == nil {
+			_ = w.Close()
+		}
+		t.Fatal("ScanFiles blocked opening a FIFO swapped in after Lstat")
+	}
+}
+
+func TestScanRefusesDifferentFileSwappedInAfterLstat(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "f.txt", "clean")
+	report := scanAfterSwap(t, root, secrets.DefaultScanLimits(), func(abs string) {
+		replacement := abs + ".new"
+		mustDo(t, os.WriteFile(replacement, []byte(leak), 0o644))
+		mustDo(t, os.Rename(replacement, abs)) // both inodes existed together, so they differ
+	})
+	if len(report.Findings) != 0 || gapCount(report, secrets.GapUnreadable) != 1 {
+		t.Errorf("report = %+v, want the replaced file refused as unreadable", report)
+	}
+}
+
+func TestScanReportsFileThatGrewAfterLstatAsTooLarge(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "f.txt", "clean")
+	limits := secrets.ScanLimits{Files: 8, FileBytes: 64, TotalBytes: 1 << 20}
+	report := scanAfterSwap(t, root, limits, func(abs string) {
+		mustDo(t, os.WriteFile(abs, []byte(strings.Repeat("x", 64)+leak), 0o644))
+	})
+	if gapCount(report, secrets.GapFileTooLarge) != 1 || report.Examined != 0 {
+		t.Errorf("report = %+v, want one file_too_large gap (not silently truncated)", report)
 	}
 }
