@@ -94,3 +94,22 @@ func TestErrUnobservableIsASentinel(t *testing.T) {
 		t.Error("ErrUnobservable cannot be matched through wrapping")
 	}
 }
+
+func TestMatchIgnoresTheZeroScanTarget(t *testing.T) {
+	if got := Match([]byte("anything"), []ScanTarget{{}}); len(got) != 0 {
+		t.Errorf("zero ScanTarget matched: %v", got)
+	}
+}
+
+func TestScanLimitsValidateRejectsNegativeValues(t *testing.T) {
+	for name, limits := range map[string]ScanLimits{
+		"files": {Files: -1}, "file bytes": {FileBytes: -1}, "total bytes": {TotalBytes: -1},
+	} {
+		if err := limits.Validate(); !errors.Is(err, ErrInvalidScanLimits) {
+			t.Errorf("%s: err = %v, want ErrInvalidScanLimits", name, err)
+		}
+	}
+	if err := (ScanLimits{}).Validate(); err != nil {
+		t.Errorf("zero limits rejected: %v", err)
+	}
+}

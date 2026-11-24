@@ -37,6 +37,18 @@ type ScanLimits struct {
 	TotalBytes int64
 }
 
+// ErrInvalidScanLimits marks a negative limit. Zero is valid and makes every
+// path or byte a gap.
+var ErrInvalidScanLimits = errors.New("scan limits must not be negative")
+
+// Validate rejects negative limits, which a scanner could not honour safely.
+func (l ScanLimits) Validate() error {
+	if l.Files < 0 || l.FileBytes < 0 || l.TotalBytes < 0 {
+		return ErrInvalidScanLimits
+	}
+	return nil
+}
+
 // DefaultScanLimits returns the limits the specification names.
 func DefaultScanLimits() ScanLimits {
 	return ScanLimits{Files: MaxScanFiles, FileBytes: MaxScanFileBytes, TotalBytes: MaxScanTotalBytes}
@@ -86,6 +98,9 @@ func (ScanTarget) MarshalText() ([]byte, error) { return nil, errValueNotSeriali
 func Match(data []byte, targets []ScanTarget) []string {
 	var names []string
 	for _, target := range targets {
+		if target.value.Reveal() == "" {
+			continue // the zero ScanTarget would otherwise match everything
+		}
 		if bytes.Contains(data, []byte(target.value.Reveal())) {
 			names = append(names, target.name)
 		}
