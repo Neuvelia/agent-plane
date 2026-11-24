@@ -107,8 +107,21 @@ func TestResultRedactorWithholdsJSONOutputHoldingSecret(t *testing.T) {
 
 func TestResultRedactorWithholdsJSONSecretSpelledWithEscapes(t *testing.T) {
 	r := testResultRedactor(t, []string{resultSecret}, nil)
-	escaped := `{"k":"TOPSECRET-4821"}`
-	requireWithheld(t, redactedPort(r, mustJSONValue(t, escaped)), graph.ValueTypeJSON)
+	// A raw string keeps the backslash: the JSON text never contains the secret
+	// bytes, only a \u0054 escape that decodes to them.
+	cases := map[string]string{
+		"value":  `{"k":"\u0054OPSECRET-4821"}`,
+		"key":    `{"\u0054OPSECRET-4821":1}`,
+		"nested": `{"a":[{"b":["x","\u0054OPSECRET-4821"]}]}`,
+	}
+	for name, text := range cases {
+		t.Run(name, func(t *testing.T) {
+			if strings.Contains(text, resultSecret) {
+				t.Fatal("test literal must not contain the secret bytes")
+			}
+			requireWithheld(t, redactedPort(r, mustJSONValue(t, text)), graph.ValueTypeJSON)
+		})
+	}
 }
 
 func TestResultRedactorWithholdsNumberAndBooleanChangedByRedaction(t *testing.T) {
