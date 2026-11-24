@@ -182,3 +182,30 @@ func TestPreflightNoSecretsDoesNotTouchResolverOrTemplate(t *testing.T) {
 		t.Errorf("template changed for a graph without secrets: %q", got)
 	}
 }
+
+// idleDiffer is a hand-written AttemptDiffer whose sessions capture nothing; it
+// only switches attempt-diff capture on for preflight.
+type idleDiffer struct{}
+
+func (idleDiffer) Open(context.Context) (DiffSession, error) { return idleDiffSession{}, nil }
+
+type idleDiffSession struct{}
+
+func (idleDiffSession) Snapshot(context.Context, string) (DiffSnapshot, error) { return nil, nil }
+
+func (idleDiffSession) Diff(context.Context, DiffSnapshot, DiffSnapshot, DiffRedactor) (AttemptCapture, error) {
+	return AttemptCapture{}, nil
+}
+
+func (idleDiffSession) Close() error { return nil }
+
+func TestPreflightSecretNotUTF8WithAttemptDiffs(t *testing.T) {
+	resolver := &fakeResolver{values: map[string]string{"env/GITHUB_TOKEN": secretCanary + "\xff"}}
+	sink := &persisted{}
+	options := sink.options(resolver)
+	options.AttemptDiffs = idleDiffer{}
+	_, err := preflightRun(context.Background(), ghDefinition(), nil, newReceiver(), options)
+	if got := diagnosticCodes(preflightDiagnostics(t, err)); !reflect.DeepEqual(got, []string{"secret_invalid_value"}) {
+		t.Errorf("codes = %v, want secret_invalid_value while attempt diffs rewrite redacted text", got)
+	}
+}
