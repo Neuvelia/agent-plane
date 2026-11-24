@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"agentplane/internal/domain/graph"
 	"agentplane/internal/domain/secrets"
 )
 
@@ -91,5 +92,42 @@ func TestPreflightGrantsOnlyAssignedNodes(t *testing.T) {
 	}
 	if rendered := fmt.Sprintf("%+v %#v", prepared.grants, prepared.grants); strings.Contains(rendered, secretCanary) {
 		t.Errorf("formatting the grants leaked the value: %s", rendered)
+	}
+}
+
+// loopReceiver is an observed secret receiver that accepts any loop node
+// configuration, so a test can enroll a unit without a real Agent adapter.
+type loopReceiver struct{ observedReceiver }
+
+func (*loopReceiver) ValidateNodeConfig(string, graph.NodeDefinition) error { return nil }
+
+func (*loopReceiver) PreflightNode(context.Context, string, graph.NodeDefinition) error { return nil }
+
+// unitDefinitionWithScope adds an enrolled loop Agent unit whose intended scope
+// holds the given allowed_paths entry to the shell graph that receives a secret.
+func unitDefinitionWithScope(entry string) *graph.Definition {
+	def := ghDefinition()
+	def.Units = []string{"work"}
+	def.Nodes["work"] = graph.NodeDefinition{Type: "agent", Config: graph.NodeConfig{"adapter": "fake", "task": "edit", "allowed_paths": []string{entry}}, Outputs: map[string]graph.PortDefinition{"raw_metadata": {Type: graph.ValueTypeJSON, Required: true}}, Loop: &graph.LoopDefinition{MaxAttempts: 2, Gate: graph.LoopGateDefinition{Inputs: map[string]graph.PortDefinition{"candidate": {Type: graph.ValueTypeJSON, Required: true}}, Config: graph.NodeConfig{"check_id": "scope", "kind": "changed_files_scope", "input": "candidate", "mode": "report", "allowed_paths": []string{entry}}}, Bindings: []graph.LoopBinding{{From: "candidate.outputs.raw_metadata", To: "gate.inputs.candidate"}}}}
+	return def
+}
+
+// The unit scope is redacted with the final template, the one that already
+// holds the resolved secrets, not with the --redact-env-only template.
+func TestPreflightUnitScopeIsRedactedWithResolvedSecrets(t *testing.T) {
+	sink := &persisted{}
+	prepared, err := preflightRun(context.Background(), unitDefinitionWithScope("src/"+secretCanary+"/**"), nil, &loopReceiver{*newObservedReceiver()}, sink.options(ghResolver()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !prepared.scopeRedacted["work"] {
+		t.Error("a scope holding a secret must be marked redacted")
+	}
+	for _, entry := range prepared.scopes["work"] {
+		for _, form := range secrets.Forms(secretCanary) {
+			if strings.Contains(entry, string(form)) {
+				t.Errorf("unit scope entry %q holds secret form %q", entry, form)
+			}
+		}
 	}
 }
