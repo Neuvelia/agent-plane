@@ -109,16 +109,17 @@ func (r *resultRedactor) text(s string) string {
 	return string(append(masked, c.Flush(events.Stdout)...))
 }
 
-// failure returns a copy whose error text is redacted. Diagnostics describe
+// failure returns a copy whose error text is redacted, or in itself when it
+// has no error to present. Diagnostics describe
 // graph structure and carry no values, so they are shared unchanged.
 func (r *resultRedactor) failure(in *run.Failure) *run.Failure {
 	if r == nil || in == nil {
 		return in
 	}
-	out := *in
 	if in.Err == nil {
-		return &out
+		return in
 	}
+	out := *in
 	out.Err = r.presentedError(in.Err)
 	return &out
 }

@@ -107,7 +107,8 @@ The redaction set also covers the `run.Result` that `runtime.Run` returns, at on
 on copies only: accepted outputs and downstream inputs stay raw. Text-like outputs are masked, number, boolean
 and JSON outputs are withheld rather than rewritten, and `Failure.Err` keeps `errors.Is` through a
 wrapper without an `Unwrap` chain, and `errors.As` reaches only a masked copy of typed errors that implement
-`Redacted(mask)` (`shell.ExecutionError`, `agent.ExecutionError`), never the raw cause. `--redact-env` values are in the same set, so they now mask graph outputs
+`Redacted(mask)` (`shell.ExecutionError`, `agent.ExecutionError`), never the raw cause. Only the first such type in the chain is exposed: types it wraps (for example
+`shell.ExecutionError` under `agent.ExecutionError`) are not reachable through `errors.As`. `--redact-env` values are in the same set, so they now mask graph outputs
 too. The CLI field `redacted` is additive; `cli_schema_version` stays 1. No new decision about contracts
 beyond this addendum.
 

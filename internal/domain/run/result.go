@@ -25,6 +25,10 @@ const (
 
 // Failure preserves the error cause or structured diagnostics within the
 // local run result. Events expose only the kind and diagnostic codes.
+// When the run redacts secrets, Err is a presented error: errors.Is answers from
+// the original cause, and errors.As reaches only a masked copy of the first
+// error in the chain that has a Redacted method. Types wrapped by that error
+// (for example a shell error under an agent error) are not reachable (ADR-0029).
 type Failure struct {
 	NodeID      string
 	Kind        FailureKind

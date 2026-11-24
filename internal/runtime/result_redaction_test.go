@@ -220,6 +220,51 @@ func TestResultRedactorExposesOnlyMaskedCopyOfTypedEvidence(t *testing.T) {
 	}
 }
 
+// wrappingEvidenceError models an error with a Redacted copy that wraps another one.
+type wrappingEvidenceError struct{ cause error }
+
+func (e *wrappingEvidenceError) Error() string { return "wrapper: " + e.cause.Error() }
+
+func (e *wrappingEvidenceError) Redacted(mask func(string) string) error {
+	return &wrappingEvidenceError{cause: errors.New(mask(e.cause.Error()))}
+}
+
+func (e *wrappingEvidenceError) Unwrap() error { return e.cause }
+
+func TestResultRedactorExposesOnlyTheFirstRedactableTypeInTheChain(t *testing.T) {
+	r := testResultRedactor(t, []string{resultSecret}, nil)
+	inner := &evidenceError{Code: 3, Stdout: "out " + resultSecret}
+	got := r.failure(&run.Failure{Kind: run.FailureExecutor, Err: &wrappingEvidenceError{cause: inner}})
+	var outer *wrappingEvidenceError
+	if !errors.As(got.Err, &outer) {
+		t.Fatal("the outer redactable type must be reachable")
+	}
+	var wrapped *evidenceError
+	if errors.As(got.Err, &wrapped) {
+		t.Fatalf("a type wrapped by the first redactable error must not be reachable: %#v", wrapped)
+	}
+	if !errors.Is(got.Err, inner) {
+		t.Fatal("errors.Is must still match the wrapped cause")
+	}
+}
+
+func TestResultRedactorReturnsTheSameFailureWithoutAnError(t *testing.T) {
+	r := testResultRedactor(t, []string{resultSecret}, nil)
+	original := &run.Failure{Kind: run.FailureScheduler}
+	if r.failure(original) != original {
+		t.Fatal("a failure without Err must be returned unchanged")
+	}
+}
+
+func TestResultRedactorApplyRedactsTheResultFailure(t *testing.T) {
+	r := testResultRedactor(t, []string{resultSecret}, nil)
+	result := run.Result{Failure: &run.Failure{Kind: run.FailureExecutor, Err: errors.New("boom " + resultSecret)}}
+	r.apply(&result)
+	if strings.Contains(result.Failure.Err.Error(), resultSecret) {
+		t.Fatalf("Result.Failure not redacted: %q", result.Failure.Err)
+	}
+}
+
 func TestResultRedactorKeepsFailureWithoutSecretText(t *testing.T) {
 	r := testResultRedactor(t, []string{resultSecret}, nil)
 	original := &run.Failure{Kind: run.FailureScheduler, Err: errors.New("plain")}
