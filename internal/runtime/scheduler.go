@@ -174,6 +174,8 @@ type runMachine struct {
 	// scanner and scans serve the workspace scan of granted nodes (secret_scan.go).
 	scanner WorkspaceScanner
 	scans   scanBook
+	// resultRedactor masks the copies snapshot returns; nil without redactions.
+	resultRedactor *resultRedactor
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -529,6 +531,7 @@ func (m *runMachine) snapshot() run.Result {
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])
 	}
+	m.resultRedactor.apply(&result)
 	return result
 }
 

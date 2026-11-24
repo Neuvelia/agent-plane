@@ -24,10 +24,13 @@ type cliNode struct {
 	FailureKind       run.FailureKind  `json:"failure_kind,omitempty"`
 }
 
+// cliOutput is one graph output. Redacted is set when Value is a masked copy;
+// a withheld value is null and keeps its declared Type (F3.8).
 type cliOutput struct {
-	Name  string          `json:"name"`
-	Type  graph.ValueType `json:"type"`
-	Value any             `json:"value"`
+	Name     string          `json:"name"`
+	Type     graph.ValueType `json:"type"`
+	Value    any             `json:"value"`
+	Redacted bool            `json:"redacted,omitempty"`
 }
 
 type cliFailure struct {
@@ -108,8 +111,7 @@ func documentForRun(result run.Result, diagnostics []graph.Diagnostic) cliDocume
 		nodes = append(nodes, entry)
 	}
 	for _, output := range result.Outputs {
-		entry := cliOutput{Name: output.Name, Type: output.Value.Type(), Value: valueForJSON(output.Value)}
-		outputs = append(outputs, entry)
+		outputs = append(outputs, outputForJSON(output))
 	}
 	doc.Isolation = isolationForJSON(result.Isolation)
 	if result.Failure != nil {
@@ -120,6 +122,13 @@ func documentForRun(result run.Result, diagnostics []graph.Diagnostic) cliDocume
 		}
 	}
 	return doc
+}
+
+func outputForJSON(output run.PortValue) cliOutput {
+	if output.Withheld != "" {
+		return cliOutput{Name: output.Name, Type: output.Withheld, Redacted: true}
+	}
+	return cliOutput{Name: output.Name, Type: output.Value.Type(), Value: valueForJSON(output.Value), Redacted: output.Redacted}
 }
 
 func isolationForJSON(iso *run.IsolationResult) *cliIsolation {

@@ -144,7 +144,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
 	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
-	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs")
+	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs and run results")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
 		return usageError("run", err, wantsJSON(args), stdout, stderr)
 	}

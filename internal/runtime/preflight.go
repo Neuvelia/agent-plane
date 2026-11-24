@@ -157,6 +157,7 @@ func initializeRun(ctx context.Context, definition *graph.Definition, options Op
 	machine.decisions = options.Decisions
 	// Graph inputs are recorded directly after run_started, before any other fact.
 	machine.values = newValueRecorder(options.RecordValues, prepared.redactionTemplate)
+	machine.resultRedactor = newResultRedactor(prepared.redactionTemplate)
 	machine.diffs = prepared.diffs
 	machine.grants = prepared.grants
 	machine.scanner = options.WorkspaceScanner

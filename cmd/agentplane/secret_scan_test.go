@@ -62,13 +62,9 @@ func assertStoreHoldsRun(t *testing.T, store string) {
 // through which the value reaches run.Result.Outputs and the CLI document.
 const declaredOutputGraph = "  leaker:\n    type: shell\n    config: {command: /bin/sh, args: [-c, 'echo \"token=$GH_TOKEN\"'], secret_env: {GH_TOKEN: tok}}\n    outputs:\n      stdout: {type: string, required: true}\n"
 
-// Known gap, tracked as C4.5: the accepted outputs of a finished run
-// (Result.Outputs, Nodes[].Outputs) and the CLI document built from them are
-// not redacted yet. The event log and the store are covered above and clean.
-// The body below is the acceptance test C4.5 must turn green; it is skipped
-// here, with the reason, rather than weakened.
+// The accepted outputs of a finished run (Result.Outputs, Nodes[].Outputs) and
+// the CLI document built from them are redacted with the same set as events (C4.5).
 func TestRunSecretEchoedIntoGraphOutputIsRedactedInCLIDocument(t *testing.T) {
-	t.Skip("known gap: Result.Outputs and the --json document are redacted by C4.5, not by C4.4")
 	t.Setenv(deliveryEnvName, deliveryValue)
 	path := writeGraph(t, strings.Replace(secretGraphText(declaredOutputGraph), "outputs: {}\n", "outputs:\n  out: {from: leaker.outputs.stdout}\n", 1))
 	exit, out, errout := cli(t, "run", path, "--json")
