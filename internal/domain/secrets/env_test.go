@@ -56,7 +56,7 @@ func TestEnvNeverFormats(t *testing.T) {
 			t.Errorf("rendering leaked the value: %q", got)
 		}
 	}
-	if got := fmt.Sprintf("%v", env); got != "[secret env: 1 variables]" {
+	if got := fmt.Sprintf("%v", env); got != "[secret env: 1 variable]" {
 		t.Errorf("%%v = %q", got)
 	}
 }
@@ -103,5 +103,17 @@ func TestEnvTargetsNeverFormatTheValue(t *testing.T) {
 	env := NewEnv([]Binding{{Variable: "A_TOKEN", Secret: "alpha_token", Value: NewValue("alpha-value-canary")}})
 	if printed := fmt.Sprintf("%v %+v %#v %s", env.Targets(), env.Targets(), env.Targets(), env.Targets()); strings.Contains(printed, "alpha-value-canary") {
 		t.Fatalf("printing targets revealed the value: %s", printed)
+	}
+}
+
+func TestEnvFormatAgreesWithCount(t *testing.T) {
+	cases := map[string]Env{
+		"[secret env: 0 variables]": {},
+		"[secret env: 2 variables]": NewEnv(bindings("A", "one", "B", "two")),
+	}
+	for want, env := range cases {
+		if got := fmt.Sprintf("%v", env); got != want {
+			t.Errorf("%%v = %q, want %q", got, want)
+		}
 	}
 }
