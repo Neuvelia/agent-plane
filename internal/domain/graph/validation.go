@@ -73,6 +73,7 @@ func Validate(definition *Definition) ValidationResult {
 	validator.validateUnits()
 	validator.validateSecrets()
 	validator.validateEdges()
+	validator.validateSecretFlowToAgent()
 	validator.validateGraphInputBindings()
 	validator.validateGraphOutputs()
 	validator.validateRequiredInputs()

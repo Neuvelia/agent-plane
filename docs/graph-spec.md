@@ -530,6 +530,17 @@ secrets:
 - `E_SECRET_AMBIENT_BYPASS` fails in every mode: a node that is not assigned an
   `env`-provider secret must not name its backing variable in `env_allowlist`,
   `environment_refs`, an `env` key or an `input_env` target.
+- `E_SECRET_FLOWS_TO_AGENT` rejects a data edge whose source node has a
+  non-empty `secret_env` and whose target is an Agent node. Accepted output is
+  immutable and flows raw to dependents, so a granted child that echoes its
+  secret would place the value in an Agent prompt sent to a remote model. The
+  message names the source node, the target node and the edge (`edges[N]`), never
+  a variable name or value; an empty `secret_env: {}` does not trigger it. Only
+  direct edges are checked: a path through an intermediate node without a secret
+  is not detected (see the transitive gap in `docs/features/F3.8-secrets-references.md`).
+  Graph input bindings, graph outputs, Gate bindings and loop feedback do not
+  carry one node's output into another node's Agent input, so they are not covered
+  by this rule.
 - This iteration defines the graph surface and validation only. The Shell
   executor does not accept `secret_env` yet, so `agentplane run` and
   `graph validate` reject it as an unknown config field until the runtime

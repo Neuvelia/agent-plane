@@ -71,6 +71,10 @@ var corpus = map[string]string{
 	"E_SECRET_ENV_NODE_TYPE":         secretsCorpus("  tok: {secret_ref: env/X}\n", "  g:\n    type: gate\n    config: {secret_env: {T: tok}}\n"),
 	"E_SECRET_ENV_AGENT_UNSUPPORTED": secretsCorpus("  tok: {secret_ref: env/X}\n", "  g:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t, secret_env: {T: tok}}\n"),
 	"E_SECRET_AMBIENT_BYPASS":        secretsCorpus("  tok: {secret_ref: env/X}\n", nodeShell("a", "")+"  b:\n    type: shell\n    config: {command: /usr/bin/true, env_allowlist: [X]}\n"),
+	"E_SECRET_FLOWS_TO_AGENT": corpusHead + "secrets:\n  tok: {secret_ref: env/X}\ninputs: {}\nnodes:\n" +
+		"  a:\n    type: shell\n    config: {command: /usr/bin/true, secret_env: {T: tok}}\n    outputs:\n      o: {type: string}\n" +
+		"  b:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t}\n    inputs:\n      i: {type: string}\n" +
+		"edges:\n  - {from: a.outputs.o, to: b.inputs.i}\noutputs: {}\n",
 }
 
 func secretsCorpus(secrets, nodes string) string {

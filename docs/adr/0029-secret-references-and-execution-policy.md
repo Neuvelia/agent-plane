@@ -105,3 +105,13 @@ facts. Later versions may promote these fields to first-class schema fields with
 Acceptance criteria in both specs: byte scans of the store directory and API responses for secret values;
 filesystem-level assertions that enforced writes did not happen; unenforceable requests fail preflight in enforce
 mode; Windows launcher tests; architecture test for provider/platform imports; spike reports for Landlock and Codex.
+
+## Addendum: secrets must not flow into Agent inputs over a direct edge
+
+Decided by the product owner after the review of PR #167. A node's accepted output is immutable and flows raw to
+its dependents; the redaction of requirement C applies to recorded copies only. A granted child can echo its
+secret, so a node with a non-empty `secret_env` must not feed an Agent, whose inputs go into a prompt sent to a
+remote model. Graph validation rejects such a direct edge with `E_SECRET_FLOWS_TO_AGENT`. This is a validation
+rule only: no event, schema or runtime contract changes, and no new ADR. The check is deliberately direct-only; the
+transitive case (a secret-free node between the secret node and the Agent can pass the value on) is an open gap
+recorded in the F3.8 spec, with reachability over edges as the proposed option awaiting a decision.
