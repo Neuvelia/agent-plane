@@ -80,3 +80,20 @@ func TestServeUnresolvedSecretFailsPreflightWithoutStoringARun(t *testing.T) {
 		t.Fatalf("a failed preflight left store entries: %v", entries)
 	}
 }
+
+func TestServeWithUnavailableSecretProviderStartsNothing(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/env")
+	dump := filepath.Join(t.TempDir(), "dump")
+	path := writeGraph(t, localProviderGraph(dump))
+	s := startServe(t)
+	code, body := s.call(t, "POST", "/runs", `{"graph_path":`+quote(path)+`}`)
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "E_SECRET_PROVIDER_UNAVAILABLE") {
+		t.Fatalf("%d %s", code, body)
+	}
+	if _, err := os.Stat(dump); err == nil {
+		t.Error("the node ran although its secret provider is unavailable")
+	}
+	if entries, _ := os.ReadDir(s.dir); len(entries) != 0 {
+		t.Errorf("a rejected graph left store entries: %v", entries)
+	}
+}

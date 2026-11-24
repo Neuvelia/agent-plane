@@ -34,9 +34,14 @@ type recordingExecutor struct {
 	deliveries []delivery
 	attempts   int
 	greenAfter int
+	// receivesGate makes the executor claim it can receive secrets for the
+	// embedded Gate's node type, to prove the cut-off does not depend on it.
+	receivesGate bool
 }
 
-func (*recordingExecutor) ReceivesSecrets(nodeType string) bool { return nodeType == "shell" }
+func (r *recordingExecutor) ReceivesSecrets(nodeType string) bool {
+	return nodeType == "shell" || (r.receivesGate && nodeType == "gate")
+}
 
 func (*recordingExecutor) ValidateNodeConfig(string, graph.NodeDefinition) error { return nil }
 
@@ -213,6 +218,24 @@ func TestSecretValueAbsentFromResultEventsAndPrintedObservation(t *testing.T) {
 			if strings.Contains(string(data), string(form)) {
 				t.Errorf("%s hold a secret form %q", name, form)
 			}
+		}
+	}
+}
+
+func TestEmbeddedGateGetsNoSecretsEvenWhenExecutorReceivesGateType(t *testing.T) {
+	exec := &recordingExecutor{greenAfter: 2, receivesGate: true}
+	def := secretGraph(map[string]graph.NodeDefinition{"work": loopingShellNode(2)})
+	var sink []events.Event
+	if _, err := runtime.Run(context.Background(), def, nil, exec, deliveryOptions(tokenResolver{}, &sink)); err != nil {
+		t.Fatal(err)
+	}
+	gates := exec.callsFor("work", "gate")
+	if len(gates) != 2 {
+		t.Fatalf("gate ran %d times, want 2", len(gates))
+	}
+	for i, call := range gates {
+		if len(call.names) != 0 {
+			t.Errorf("embedded Gate %d received secrets %v", i+1, call.names)
 		}
 	}
 }

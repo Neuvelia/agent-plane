@@ -117,3 +117,35 @@ func TestExecutorSelectionUsesNodeExecutorOnlyWhenNeeded(t *testing.T) {
 		t.Errorf("a shell graph with secret_env needs the node executor, got %T", selectExecutor(assigned))
 	}
 }
+
+func TestExecutorSelectionIgnoresEmptySecretEnv(t *testing.T) {
+	empty := parseGraphText(t, corpusHead+"inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true, secret_env: {}}\nedges: []\noutputs: {}\n")
+	if _, ok := selectExecutor(empty).(shell.Executor); !ok {
+		t.Errorf("an empty secret_env assigns nothing and must keep the bare shell executor, got %T", selectExecutor(empty))
+	}
+}
+
+// localProviderGraph references the reserved `local` provider, which no runner
+// implements; the failure is a diagnostic, never a started process.
+func localProviderGraph(dump string) string {
+	return corpusHead + "secrets:\n  tok: {secret_ref: local/token}\ninputs: {}\nnodes:\n" +
+		"  a:\n    type: shell\n    config: {command: /bin/sh, args: [-c, '/usr/bin/env > \"$0\"', " + dump + "], secret_env: {GH_TOKEN: tok}}\n" +
+		"edges: []\noutputs: {}\n"
+}
+
+func TestRunWithUnavailableSecretProviderStartsNothing(t *testing.T) {
+	testenv.RequireExecutable(t, "/bin/sh", "/usr/bin/env")
+	dump := filepath.Join(t.TempDir(), "dump")
+	path := writeGraph(t, localProviderGraph(dump))
+	store := t.TempDir()
+	exit, out, errout := cli(t, "run", path, "--store-dir", store, "--json")
+	if exit == 0 || !strings.Contains(out+errout, "E_SECRET_PROVIDER_UNAVAILABLE") {
+		t.Fatalf("exit=%d stdout=%s stderr=%s", exit, out, errout)
+	}
+	if _, err := os.Stat(dump); err == nil {
+		t.Error("the node ran although its secret provider is unavailable")
+	}
+	if entries, _ := os.ReadDir(store); len(entries) != 0 {
+		t.Errorf("a rejected graph left store entries: %v", entries)
+	}
+}
