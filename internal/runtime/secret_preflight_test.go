@@ -134,12 +134,12 @@ func TestPreflightResolvesEachRefOnce(t *testing.T) {
 
 func TestPreflightReportsEveryFailingSecretInOrder(t *testing.T) {
 	def := secretDefinition(
-		map[string]string{"d_down": "env/D", "c_ok": "env/C", "b_empty": "env/B", "a_missing": "env/A"},
+		map[string]string{"d_down": "env/REF_D_DOWN_CANARY", "c_ok": "env/REF_C_OK_CANARY", "b_empty": "env/REF_B_EMPTY_CANARY", "a_missing": "env/REF_A_MISSING_CANARY"},
 		map[string]map[string]string{"n": {"A": "a_missing", "B": "b_empty", "C": "c_ok", "D": "d_down"}},
 	)
 	resolver := &fakeResolver{
-		values: map[string]string{"env/B": "", "env/C": "fine"},
-		errs:   map[string]error{"env/D": fmt.Errorf("fake: %w", secrets.ErrProviderUnavailable)},
+		values: map[string]string{"env/REF_B_EMPTY_CANARY": "", "env/REF_C_OK_CANARY": "fine"},
+		errs:   map[string]error{"env/REF_D_DOWN_CANARY": fmt.Errorf("fake: %w", secrets.ErrProviderUnavailable)},
 	}
 	diagnostics := requireSecretPreflightFailure(t, def, newReceiver(), resolver, "secret_unresolved", "secret_empty", "secret_provider_unavailable")
 	for i, name := range []string{"a_missing", "b_empty", "d_down"} {

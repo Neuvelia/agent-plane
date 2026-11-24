@@ -16,7 +16,7 @@ func TestPreflightRedactionBoundFailsLoudly(t *testing.T) {
 		assigned := map[string]string{}
 		resolver := &fakeResolver{values: map[string]string{}}
 		for i := 0; i <= secrets.MaxSecrets; i++ {
-			name, variable := fmt.Sprintf("s%d", i), fmt.Sprintf("V%d", i)
+			name, variable := fmt.Sprintf("s%d", i), fmt.Sprintf("REF_VAR_%d_CANARY", i)
 			declared[name] = "env/" + variable
 			assigned[variable] = name
 			resolver.values["env/"+variable] = fmt.Sprintf("value-%d-%s", i, secretCanary)
