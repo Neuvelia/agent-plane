@@ -77,11 +77,13 @@ func TestPolicySecretNameGrammarMatchesDomainSecrets(t *testing.T) {
 	}
 }
 
-// An empty GateEvidence.SecretName means "absent" and is always legal, so the
-// comparison skips that one input; every other input must match ValidName.
+// An empty GateEvidence.SecretName means "absent". Whether an absent name is
+// acceptable depends on the verdict (a red secret_in_workspace result must name
+// its secret since the workspace scan wiring), so that one input is skipped and
+// every other input must match ValidName.
 func TestGateEvidenceSecretNameGrammarMatchesDomainSecrets(t *testing.T) {
-	if !gateEvidenceAcceptsName("a") || !gateEvidenceAcceptsName("") {
-		t.Fatal("fixture is invalid: a legal name and an absent name must be accepted")
+	if !gateEvidenceAcceptsName("a") {
+		t.Fatal("fixture is invalid: a legal name must be accepted")
 	}
 	for label, name := range parityInputs() {
 		if name == "" {
