@@ -1,6 +1,8 @@
 package main
 
 import (
+	"reflect"
+
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
@@ -32,7 +34,15 @@ func needsNodeExecutor(def *graph.Definition) bool {
 	return false
 }
 
+// assignsSecrets is true only for a non-empty secret_env: an empty mapping
+// assigns nothing and must not change the executor.
 func assignsSecrets(node graph.NodeDefinition) bool {
-	_, assigned := node.Config["secret_env"]
-	return assigned
+	value := node.Config["secret_env"]
+	if value == nil {
+		return false
+	}
+	if mapping := reflect.ValueOf(value); mapping.Kind() == reflect.Map {
+		return mapping.Len() > 0
+	}
+	return true // malformed: let validation report it, with the composed executor
 }

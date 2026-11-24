@@ -18,12 +18,13 @@ durable contract.
 | `internal/adapter/yamlgraph/edit` | The graph editor engine: in-memory, fidelity-preserving YAML operations (ADR-0020), served by the API | `apply.go`, `ops.go`, `doc.go` |
 | `internal/adapter/system` | Wall clock and random run identifiers behind engine ports | `system.go` |
 | `internal/app/trace` | Event collector that retains lifecycle, evidence and bounded logs | `collector.go` |
+| `internal/testenv` | Test-only platform guards and the independent secret byte-scan oracle (`AssertNoSecretBytes`) used by the F3.8 tests | `testenv.go`, `secretscan.go` |
 | `internal/archtest` | Test that enforces the layer dependency rules over production imports, plus the non-baselinable rule that only `cmd/agentplane` imports secret providers | `archtest_test.go`, `baseline.txt` |
 | `internal/fields` | Field descriptor types for node configuration; each validator owns and exports its descriptors (`ConfigFields`, `OutputPorts`) | `fields.go`, `fieldstest/` |
-| `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording | `scheduler.go`, `loop.go`, `unit.go`, `values.go` |
+| `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording; `secret_grants.go` hands granted secrets only to the assigned node, never to a loop's embedded Gate (F3.8) | `scheduler.go`, `loop.go`, `unit.go`, `values.go`, `secret_grants.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
 | `internal/agent/codex` | Installed Codex CLI process and result/progress translation | `adapter.go` |
-| `internal/shell` | Shell node process execution and configuration | `executor.go` |
+| `internal/shell` | Shell node process execution and configuration; `Request`/`Run` carry the granted `secret_env` values and require a grant for every configured variable (F3.8) | `executor.go`, `request.go`, `secret_env.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
 | `internal/gitlocate` | Resolution of the Git binary shared by the engine and the capability report | `gitlocate.go` |
 | `internal/proctree` | Neutral process-tree ownership: start a child in its own Unix process group, terminate by request, grace, force, verify (ADR-0028; Windows is an interim direct-process stub until F3.4a) | `proctree.go`, `proctree_unix.go`, `policy.go` |
@@ -35,6 +36,7 @@ durable contract.
 | `internal/api` | Authenticated loopback API: runs, approvals, the graph editor routes (`/graphs/validate`, `/graphs/grants`, `/graphs/open`, `/graphs/stat`, `/graphs/edit`, `/graphs/save`) and the capability report | `server.go`, `docs.go`, `capabilities.go`, `hub.go` |
 | `internal/version` | Build and runtime version metadata | `version.go` |
 | `cmd/agentplane` | CLI commands and composition of the engine, adapters, store and API | `main.go`, `cli.go`, `serve.go` |
+| `cmd/agentplane` composition | `secrets.go` builds the `env` secret provider for `run` and `serve`; `executors.go` chooses the bare Shell executor or the composed node executor (needed for loops, non-Shell nodes and `secret_env`) | `secrets.go`, `executors.go`, `adapters.go` |
 | `desktop/electron` | Sidecar lifecycle, local API token, IPC allowlist and narrow preload bridge | `main.cjs`, `preload.cjs` |
 | `desktop/src` | React presentation, typed bridge calls and event-derived run views; the welcome screen and capability panel (`welcome.tsx`, `capabilities.ts`) | `api.ts`, `reducer.ts`, `App.tsx` |
 | `desktop/src/editor` | Graph editor: canvas, YAML view, Issues panel, node inspector and template picker, over the graph document API | `EditorScreen.tsx`, `useGraphDocument.ts`, `api.ts` |
@@ -59,7 +61,7 @@ packages only):
 | `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `domain/secrets`, `gitlocate`, `gitstate` |
 | `agent` | `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime` |
 | `agent/codex` | `agent`, `domain/events`, `gitstate` |
-| `shell` | `domain/graph`, `fields` |
+| `shell` | `domain/graph`, `domain/secrets`, `fields` |
 | `gate` | `domain/events`, `domain/graph`, `fields`, `gitstate`, `runtime` |
 | `api` | `adapter/yamlgraph`, `adapter/yamlgraph/edit`, `capability`, `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime`, `store` |
 | `cmd/agentplane` | composition of the Go packages above |

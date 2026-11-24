@@ -78,16 +78,8 @@ func secretEnvironment(cfg config, granted secrets.Env) ([]string, error) {
 	if len(cfg.secretEnv) == 0 {
 		return nil, nil
 	}
-	names, entries := granted.Names(), granted.Environ()
-	selected := make([]string, 0, len(cfg.secretEnv))
-	covered := make(map[string]bool, len(cfg.secretEnv))
-	for i, name := range names {
-		if _, configured := cfg.secretEnv[name]; configured && !covered[name] {
-			covered[name] = true
-			selected = append(selected, entries[i])
-		}
-	}
-	if len(covered) != len(cfg.secretEnv) {
+	selected := granted.Pick(cfg.secretEnv)
+	if len(selected) != len(cfg.secretEnv) {
 		return nil, errSecretNotGranted
 	}
 	return selected, nil

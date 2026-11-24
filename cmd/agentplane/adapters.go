@@ -38,13 +38,13 @@ func (e nodeExecutor) ValidateNodeConfig(id string, n graph.NodeDefinition) erro
 	if n.Type == "gate" {
 		return (gate.Executor{}).ValidateNodeConfig(id, n)
 	}
-	if n.Type == "shell" {
+	if n.Type == shellNodeType {
 		return (shell.Executor{}).ValidateNodeConfig(id, n)
 	}
 	return e.agents.ValidateNodeConfig(id, n)
 }
 func (e nodeExecutor) PreflightNode(ctx context.Context, id string, n graph.NodeDefinition) error {
-	if n.Type == "shell" {
+	if n.Type == shellNodeType {
 		return nil // no provider capability to detect for a local process
 	}
 	return e.agents.PreflightNode(ctx, id, n)
