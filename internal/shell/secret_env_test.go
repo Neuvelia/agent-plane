@@ -89,7 +89,7 @@ func TestShellConfigKeepsQuotingValidSecretEnvNames(t *testing.T) {
 	}
 }
 
-func TestExecuteRefusesSecretEnvWithoutDeliveryAndNeverStartsTheProcess(t *testing.T) {
+func TestExecuteRefusesSecretEnvWithoutGrantAndNeverStartsTheProcess(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "ran")
 	node := helperNode("touch", marker)
 	node.Config["secret_env"] = map[string]any{"GH_TOKEN": "gh_token"}
@@ -104,7 +104,7 @@ func TestExecuteRefusesSecretEnvWithoutDeliveryAndNeverStartsTheProcess(t *testi
 		t.Run(name, func(t *testing.T) {
 			result, err := call()
 			var executionErr *ExecutionError
-			if !errors.As(err, &executionErr) || executionErr.Kind != FailureConfig || !errors.Is(err, errSecretDeliveryUnavailable) {
+			if !errors.As(err, &executionErr) || executionErr.Kind != FailureConfig || !errors.Is(err, errSecretNotGranted) {
 				t.Fatalf("error = %v", err)
 			}
 			if result.ExitCode != -1 {

@@ -57,6 +57,17 @@ func TestHelperProcess(t *testing.T) {
 		fmt.Print(cwd)
 	case "env":
 		fmt.Printf("%s|%s|%s", os.Getenv("SHELL_ALLOWED"), os.Getenv("SHELL_ADDED"), os.Getenv("SHELL_SECRET"))
+	case "env-len":
+		// Prints NAME=length for each requested variable, or NAME=- when unset.
+		// Never prints a value, so tests can prove delivery without echoing it.
+		for _, name := range args[1:] {
+			value, ok := os.LookupEnv(name)
+			if !ok {
+				fmt.Printf("%s=-;", name)
+				continue
+			}
+			fmt.Printf("%s=%d;", name, len(value))
+		}
 	case "mapped-env":
 		fmt.Printf("%s|%s", os.Getenv("LEFT_TEXT"), os.Getenv("RIGHT_TEXT"))
 	case "json":
@@ -769,7 +780,7 @@ func TestExecuteCancelAfterExitIsNotAnExitFailure(t *testing.T) {
 	defer cancel()
 	// The helper is alive while it writes its output and exits right after,
 	// so cancellation races with a normal exit.
-	_, err := execute(ctx, "worker", helperNode("echo", "x"), nil, func(string, []byte) { cancel() }, 0, Executor{})
+	_, err := Executor{}.execute(ctx, Request{NodeID: "worker", Node: helperNode("echo", "x"), Observe: func(string, []byte) { cancel() }})
 	var executionErr *ExecutionError
 	if err != nil && (!errors.As(err, &executionErr) || executionErr.Kind != FailureCanceled) {
 		t.Fatalf("cancel racing with exit = %v", err)
