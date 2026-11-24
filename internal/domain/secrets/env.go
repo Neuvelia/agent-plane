@@ -47,7 +47,11 @@ func (e Env) Environ() []string {
 
 // Format implements fmt.Formatter so that no verb prints a value.
 func (e Env) Format(f fmt.State, _ rune) {
-	_, _ = fmt.Fprintf(f, "[secret env: %d variables]", len(e.bindings))
+	noun := "variables"
+	if len(e.bindings) == 1 {
+		noun = "variable"
+	}
+	_, _ = fmt.Fprintf(f, "[secret env: %d %s]", len(e.bindings), noun)
 }
 
 // MarshalJSON always fails: a secret environment must never enter a payload.

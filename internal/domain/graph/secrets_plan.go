@@ -15,8 +15,7 @@ type SecretGrant struct {
 
 // SecretPlan is what the runner resolves and delivers (F3.8, ADR-0029). Build
 // it with PlanSecrets after Validate (or CompileBindings, which runs it)
-// reports no errors; it holds
-// references and names only, never a value.
+// reports no errors; it holds references and names only, never a value.
 type SecretPlan struct {
 	// Refs maps a declared secret name to its parsed reference.
 	Refs map[string]secrets.Ref

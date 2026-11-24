@@ -56,7 +56,7 @@ func TestEnvNeverFormats(t *testing.T) {
 			t.Errorf("rendering leaked the value: %q", got)
 		}
 	}
-	if got := fmt.Sprintf("%v", env); got != "[secret env: 1 variables]" {
+	if got := fmt.Sprintf("%v", env); got != "[secret env: 1 variable]" {
 		t.Errorf("%%v = %q", got)
 	}
 }
@@ -65,5 +65,17 @@ func TestEnvRefusesMarshaling(t *testing.T) {
 	env := NewEnv(bindings("TOKEN", canary))
 	if out, err := json.Marshal(env); err == nil || strings.Contains(string(out), canary) {
 		t.Errorf("json.Marshal = %q, %v; want an error", out, err)
+	}
+}
+
+func TestEnvFormatAgreesWithCount(t *testing.T) {
+	cases := map[string]Env{
+		"[secret env: 0 variables]": {},
+		"[secret env: 2 variables]": NewEnv(bindings("A", "one", "B", "two")),
+	}
+	for want, env := range cases {
+		if got := fmt.Sprintf("%v", env); got != want {
+			t.Errorf("%%v = %q, want %q", got, want)
+		}
 	}
 }
