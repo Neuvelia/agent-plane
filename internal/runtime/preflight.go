@@ -159,6 +159,7 @@ func initializeRun(ctx context.Context, definition *graph.Definition, options Op
 	machine.values = newValueRecorder(options.RecordValues, prepared.redactionTemplate)
 	machine.diffs = prepared.diffs
 	machine.grants = prepared.grants
+	machine.scanner = options.WorkspaceScanner
 	machine.recordGraphInputs(prepared.graphInputs)
 	for _, id := range definition.Units {
 		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, prepared.scopes[id], prepared.scopeRedacted[id]); err != nil {

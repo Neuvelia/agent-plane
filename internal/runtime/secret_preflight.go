@@ -250,7 +250,7 @@ func buildGrants(plan graph.SecretPlan, values map[string]secrets.Value) map[str
 	for id, assigned := range plan.Grants {
 		bindings := make([]secrets.Binding, len(assigned))
 		for i, grant := range assigned {
-			bindings[i] = secrets.Binding{Variable: grant.Variable, Value: values[grant.Secret]}
+			bindings[i] = secrets.Binding{Variable: grant.Variable, Secret: grant.Secret, Value: values[grant.Secret]}
 		}
 		grants[id] = secrets.NewEnv(bindings)
 	}

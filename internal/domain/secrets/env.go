@@ -7,8 +7,10 @@ import (
 )
 
 // Binding names one child environment variable and the secret it carries.
+// Secret is the declared secret name; it lets a scan name what it found.
 type Binding struct {
 	Variable string
+	Secret   string
 	Value    Value
 }
 
@@ -43,6 +45,24 @@ func (e Env) Environ() []string {
 		entries[i] = b.Variable + "=" + b.Value.Reveal()
 	}
 	return entries
+}
+
+// Targets returns one scan target per distinct granted secret, sorted by name.
+// A binding without a valid name or with an empty value is skipped. The targets
+// hold the plaintext only inside Value and never print it (F3.8 requirement 13).
+func (e Env) Targets() []ScanTarget {
+	byName := make(map[string]ScanTarget, len(e.bindings))
+	for _, b := range e.bindings {
+		if target, err := NewScanTarget(b.Secret, b.Value); err == nil {
+			byName[b.Secret] = target
+		}
+	}
+	targets := make([]ScanTarget, 0, len(byName))
+	for _, target := range byName {
+		targets = append(targets, target)
+	}
+	sort.Slice(targets, func(i, j int) bool { return targets[i].name < targets[j].name })
+	return targets
 }
 
 // Pick returns NAME=value entries only for the requested variables, each at

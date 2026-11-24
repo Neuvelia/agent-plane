@@ -82,3 +82,26 @@ func TestEnvPickReturnsOnlyRequestedVariablesOnce(t *testing.T) {
 		t.Error("an empty Env produced entries")
 	}
 }
+
+func TestEnvTargetsNameEachGrantedSecretOnceSorted(t *testing.T) {
+	env := NewEnv([]Binding{
+		{Variable: "B_TOKEN", Secret: "zeta_token", Value: NewValue("zeta-value")},
+		{Variable: "A_TOKEN", Secret: "alpha_token", Value: NewValue("alpha-value")},
+		{Variable: "C_TOKEN", Secret: "alpha_token", Value: NewValue("alpha-value")},
+		{Variable: "EMPTY", Secret: "empty_token", Value: NewValue("")},
+	})
+	var names []string
+	for _, target := range env.Targets() {
+		names = append(names, target.Name())
+	}
+	if got := strings.Join(names, ","); got != "alpha_token,zeta_token" {
+		t.Fatalf("target names = %q, want alpha_token,zeta_token", got)
+	}
+}
+
+func TestEnvTargetsNeverFormatTheValue(t *testing.T) {
+	env := NewEnv([]Binding{{Variable: "A_TOKEN", Secret: "alpha_token", Value: NewValue("alpha-value-canary")}})
+	if printed := fmt.Sprintf("%v %+v %#v %s", env.Targets(), env.Targets(), env.Targets(), env.Targets()); strings.Contains(printed, "alpha-value-canary") {
+		t.Fatalf("printing targets revealed the value: %s", printed)
+	}
+}
