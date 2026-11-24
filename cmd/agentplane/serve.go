@@ -40,7 +40,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
 	recordDiffs := fs.Bool("record-diffs", false, "record bounded, redacted per-attempt file diffs of Agent loop nodes as events")
 	var redactEnv inputFlags
-	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
+	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events and run results; repeatable")
 	var isolation isolationFlags
 	isolation.register(fs)
 	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path, used only for capability detection")

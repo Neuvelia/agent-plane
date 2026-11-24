@@ -164,6 +164,8 @@ type runMachine struct {
 	// grants is the in-memory secret environment per assigned node; read only by
 	// secretEnvFor.
 	grants map[string]secrets.Env
+	// resultRedactor masks the copies snapshot returns; nil without redactions.
+	resultRedactor *resultRedactor
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -519,6 +521,7 @@ func (m *runMachine) snapshot() run.Result {
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])
 	}
+	m.resultRedactor.apply(&result)
 	return result
 }
 

@@ -122,8 +122,11 @@ numbers. A preflight failure has no run ID or events. A started run includes
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
 current value of each named environment variable from event logs, normalized
 progress string fields, evidence and their human display, without putting the value in CLI arguments. The variable
-must be set. Redaction does not alter graph output values explicitly exposed
-by the graph.
+must be set. The same set also masks the printed run result: string and artifact reference
+outputs and failure messages carry the marker, and number, boolean or JSON outputs
+that redaction would change are withheld (`value: null`, declared `type` kept).
+Both carry `redacted: true`, which is absent when nothing was redacted. Values
+passed to downstream nodes are not altered.
 
 `--record-values` (off by default, on `run` and `serve`) adds one
 `value_recorded` event per supplied graph input and per accepted output port

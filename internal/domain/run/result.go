@@ -33,10 +33,19 @@ type Failure struct {
 }
 
 // PortValue keeps externally presented values in a stable name order.
+//
+// A run with an active redaction set (--redact-env or resolved secrets)
+// presents copies in Result: accepted values used by dataflow stay raw (F3.8).
 type PortValue struct {
 	Provenance *AcceptedProvenance
 	Name       string
 	Value      graph.Value
+	// Redacted reports that Value is a masked copy, or was withheld.
+	Redacted bool
+	// Withheld is the original type of a value that cannot be rewritten
+	// safely (number, boolean, JSON, or a mask that is not valid UTF-8). Value
+	// is then the zero Value. It is empty for every other port.
+	Withheld graph.ValueType
 }
 
 // NodeResult describes the terminal outcome of one node.
