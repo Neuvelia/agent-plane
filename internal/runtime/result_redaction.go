@@ -119,23 +119,48 @@ func (r *resultRedactor) failure(in *run.Failure) *run.Failure {
 	if in.Err == nil {
 		return &out
 	}
-	message := in.Err.Error()
-	if masked := r.text(message); masked != message {
-		out.Err = &redactedError{message: masked, cause: in.Err}
-	}
+	out.Err = r.presentedError(in.Err)
 	return &out
 }
 
-// redactedError carries masked text while keeping errors.Is and errors.As
-// working against the original cause. It has no Unwrap, so walking the chain
-// cannot reach the raw message.
+// redactableError is implemented by typed errors that carry raw process or
+// provider text. Redacted returns a copy whose text fields went through mask.
+type redactableError interface {
+	Redacted(mask func(string) string) error
+}
+
+// presentedError returns cause itself when it holds no secret. A typed error
+// that carries raw text is always replaced: its fields, not only Error(), may
+// spell a secret.
+func (r *resultRedactor) presentedError(cause error) error {
+	message := cause.Error()
+	masked := r.text(message)
+	var typed redactableError
+	hasTyped := errors.As(cause, &typed)
+	if masked == message && !hasTyped {
+		return cause
+	}
+	presented := &redactedError{message: masked, cause: cause}
+	if hasTyped {
+		presented.typed = typed.Redacted(r.text)
+	}
+	return presented
+}
+
+// redactedError carries masked text. errors.Is answers from the original
+// cause, which is a boolean and exposes nothing. errors.As reaches only the
+// masked copy of the typed error (never the raw cause), and there is no
+// Unwrap, so the raw chain cannot be walked (ADR-0029).
 type redactedError struct {
 	message string
 	cause   error
+	typed   error
 }
 
 func (e *redactedError) Error() string { return e.message }
 
 func (e *redactedError) Is(target error) bool { return errors.Is(e.cause, target) }
 
-func (e *redactedError) As(target any) bool { return errors.As(e.cause, target) }
+func (e *redactedError) As(target any) bool {
+	return e.typed != nil && errors.As(e.typed, target)
+}

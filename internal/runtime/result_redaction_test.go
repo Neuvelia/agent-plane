@@ -157,7 +157,21 @@ func (e *causeError) Error() string { return fmt.Sprintf("cause %d leaked %s", e
 
 var errSentinel = errors.New("sentinel " + resultSecret)
 
-func TestResultRedactorMasksFailureErrorTextAndKeepsErrorsIsAndAs(t *testing.T) {
+// evidenceError models a typed error carrying raw process text in a field.
+type evidenceError struct {
+	Code   int
+	Stdout string
+}
+
+func (*evidenceError) Error() string { return "evidence failed" }
+
+func (e *evidenceError) Redacted(mask func(string) string) error {
+	copied := *e
+	copied.Stdout = mask(e.Stdout)
+	return &copied
+}
+
+func TestResultRedactorMasksFailureErrorTextAndKeepsErrorsIs(t *testing.T) {
 	r := testResultRedactor(t, []string{resultSecret}, nil)
 	cause := &causeError{code: 7}
 	original := &run.Failure{NodeID: "n", Kind: run.FailureExecutor, Err: fmt.Errorf("wrapped: %w", errors.Join(cause, errSentinel))}
@@ -165,15 +179,31 @@ func TestResultRedactorMasksFailureErrorTextAndKeepsErrorsIsAndAs(t *testing.T) 
 	if strings.Contains(got.Err.Error(), resultSecret) || !strings.Contains(got.Err.Error(), "***") {
 		t.Fatalf("message = %q", got.Err)
 	}
-	var target *causeError
-	if !errors.As(got.Err, &target) || target.code != 7 || !errors.Is(got.Err, errSentinel) {
-		t.Fatalf("errors.As/Is lost the cause chain: %v", got.Err)
+	if !errors.Is(got.Err, errSentinel) || !errors.Is(got.Err, cause) {
+		t.Fatalf("errors.Is lost the cause chain: %v", got.Err)
 	}
-	if errors.Unwrap(got.Err) != nil {
-		t.Fatal("redacted error must not expose an Unwrap chain")
+	var target *causeError
+	if errors.As(got.Err, &target) || errors.Unwrap(got.Err) != nil {
+		t.Fatal("a type without a Redacted copy must not be reachable through errors.As or Unwrap")
 	}
 	if !strings.Contains(original.Err.Error(), resultSecret) {
 		t.Fatal("the original failure was mutated")
+	}
+}
+
+func TestResultRedactorExposesOnlyMaskedCopyOfTypedEvidence(t *testing.T) {
+	r := testResultRedactor(t, []string{resultSecret}, nil)
+	original := &evidenceError{Code: 3, Stdout: "out " + resultSecret}
+	got := r.failure(&run.Failure{Kind: run.FailureExecutor, Err: fmt.Errorf("wrapped: %w", original)})
+	var target *evidenceError
+	if !errors.As(got.Err, &target) || target.Code != 3 || strings.Contains(target.Stdout, resultSecret) || target.Stdout != "out ***" {
+		t.Fatalf("typed copy = %#v", target)
+	}
+	if target == original || original.Stdout != "out "+resultSecret {
+		t.Fatal("the raw typed error was exposed or mutated")
+	}
+	if !errors.Is(got.Err, original) {
+		t.Fatal("errors.Is must still match the original cause")
 	}
 }
 
