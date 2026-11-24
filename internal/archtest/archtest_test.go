@@ -17,6 +17,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -311,15 +312,18 @@ func TestRootOnlyRuleIsNotBaselined(t *testing.T) {
 }
 
 // TestRootOnlyPackagesExist keeps the rule from rotting: a renamed provider
-// package would silently stop being guarded. Importers other than the
-// composition root are already rejected by TestDependencyRules. The assertion
-// that the root imports the provider arrives with F3.8 C4.2/C4.4, when the
-// wiring exists.
+// package would silently stop being guarded, and one the composition root no
+// longer imports would leave runs unable to resolve secrets. Importers other
+// than the root are already rejected by TestDependencyRules.
 func TestRootOnlyPackagesExist(t *testing.T) {
 	root := repoRoot(t)
+	rootImports := productionImports(t, root)["cmd/agentplane"]
 	for pkg := range rootOnlyPackages {
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(pkg))); err != nil {
 			t.Errorf("root-only package %s does not exist: %v", pkg, err)
+		}
+		if !slices.Contains(rootImports, modulePath+"/"+pkg) {
+			t.Errorf("cmd/agentplane does not import root-only package %s; runs could not resolve secrets", pkg)
 		}
 	}
 }

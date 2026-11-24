@@ -36,11 +36,11 @@ type recordingExecutor struct {
 	greenAfter int
 }
 
-func (r *recordingExecutor) ReceivesSecrets(nodeType string) bool { return nodeType == "shell" }
+func (*recordingExecutor) ReceivesSecrets(nodeType string) bool { return nodeType == "shell" }
 
-func (r *recordingExecutor) ValidateNodeConfig(string, graph.NodeDefinition) error { return nil }
+func (*recordingExecutor) ValidateNodeConfig(string, graph.NodeDefinition) error { return nil }
 
-func (r *recordingExecutor) PreflightNode(context.Context, string, graph.NodeDefinition) error {
+func (*recordingExecutor) PreflightNode(context.Context, string, graph.NodeDefinition) error {
 	return nil
 }
 

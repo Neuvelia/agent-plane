@@ -119,13 +119,7 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
 
-	cmd := exec.Command(cfg.command, cfg.args...)
-	cmd.Dir = cfg.cwd
-	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
-	cmd.Env = append(cmd.Env, grantedEnvironment...)
-	if request.Attempt > 0 {
-		cmd.Env = append(cmd.Env, AttemptEnv+"="+strconv.Itoa(request.Attempt))
-	}
+	cmd := newCommand(cfg, request.Attempt, inputEnvironment, grantedEnvironment)
 	// A descendant may inherit stdout or stderr after the direct child exits.
 	// Bound the pipe drain so Wait can finish even if a descendant escapes.
 	cmd.WaitDelay = time.Second
@@ -154,6 +148,19 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 	}
 	failure.NodeID, failure.Result, failure.Termination = nodeID, result, cancellation.record()
 	return result, failure
+}
+
+// newCommand builds the child with an explicit environment: configured values,
+// mapped inputs, the granted secrets, then the loop attempt number.
+func newCommand(cfg config, attempt int, inputEnvironment, grantedEnvironment []string) *exec.Cmd {
+	cmd := exec.Command(cfg.command, cfg.args...)
+	cmd.Dir = cfg.cwd
+	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
+	cmd.Env = append(cmd.Env, grantedEnvironment...)
+	if attempt > 0 {
+		cmd.Env = append(cmd.Env, AttemptEnv+"="+strconv.Itoa(attempt))
+	}
+	return cmd
 }
 
 type cancellation struct {

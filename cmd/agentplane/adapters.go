@@ -25,9 +25,14 @@ func (e nodeExecutor) ExecuteNodeObserved(ctx context.Context, id string, n grap
 	if n.Type == "agent" {
 		return e.agents.ExecuteNodeObserved(ctx, id, n, in, o)
 	}
-	values, err := (shell.Executor{}).ExecuteNodeAttempt(ctx, id, n, in, o.Log, o.AttemptNumber)
+	values, err := (shell.Executor{}).Run(ctx, shell.Request{NodeID: id, Node: n, Inputs: in, Observe: o.Log, Attempt: o.AttemptNumber, Secrets: o.SecretEnv})
 	return values, nil, err
 }
+
+// ReceivesSecrets declares that Shell nodes read ExecutionObservation.SecretEnv.
+// Agent nodes do not: until an adapter delivers secrets, a graph that assigns
+// one to an Agent node fails preflight (F3.8, ADR-0029).
+func (nodeExecutor) ReceivesSecrets(nodeType string) bool { return nodeType == shellNodeType }
 
 func (e nodeExecutor) ValidateNodeConfig(id string, n graph.NodeDefinition) error {
 	if n.Type == "gate" {
