@@ -38,6 +38,9 @@ const (
 	FormatEnvName      Format = "env_name"
 	FormatRelativePath Format = "relative_path" // a portable path inside the workspace
 	FormatJSONScalar   Format = "json_scalar"   // the text of one JSON string, number, boolean or null
+	// FormatSecretName is the name of a secret declared in the graph's secrets
+	// section: [a-z][a-z0-9_]{0,63}. The owner of the field enforces the grammar.
+	FormatSecretName Format = "secret_name"
 )
 
 // Rule is a condition on the node being edited.

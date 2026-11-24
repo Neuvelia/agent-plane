@@ -87,6 +87,7 @@ type config struct {
 	envAllowlist []string
 	env          map[string]string
 	inputEnv     map[string]string
+	secretEnv    map[string]string
 	stdoutJSON   bool
 }
 
@@ -104,6 +105,9 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	}
 	cfg, err := parseConfig(node)
 	if err != nil {
+		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
+	}
+	if err := requireSecretDelivery(cfg); err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
 	if err := ctx.Err(); err != nil {
@@ -400,6 +404,11 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 			used[variable] = inputID
 		}
 	}
+	if value, present := node.Config["secret_env"]; present {
+		if cfg.secretEnv, err = parseSecretEnv(value, cfg); err != nil {
+			return cfg, err
+		}
+	}
 	if value, present := node.Config["stdout_json"]; present {
 		cfg.stdoutJSON, ok = value.(bool)
 		if !ok {
@@ -448,7 +457,30 @@ func stringList(value any, field string) ([]string, error) {
 }
 
 func stringMap(value any, field string) (map[string]string, error) {
+	raw, keys, err := sortedEntries(value, field)
+	if err != nil {
+		return nil, err
+	}
 	result := map[string]string{}
+	for _, key := range keys {
+		item, ok := raw[key].(string)
+		if !ok {
+			return nil, fmt.Errorf("%s[%q] must be a string", field, key)
+		}
+		if !validEnvName(key) {
+			return nil, fmt.Errorf("invalid %s name %q", field, key)
+		}
+		if strings.ContainsRune(item, 0) {
+			return nil, fmt.Errorf("%s[%q] contains a NUL byte", field, key)
+		}
+		result[key] = item
+	}
+	return result, nil
+}
+
+// sortedEntries normalizes the accepted mapping shapes and returns the keys in
+// sorted order.
+func sortedEntries(value any, field string) (map[string]any, []string, error) {
 	raw := map[string]any{}
 	switch entries := value.(type) {
 	case map[string]string:
@@ -464,27 +496,14 @@ func stringMap(value any, field string) (map[string]string, error) {
 			raw[key] = item
 		}
 	default:
-		return nil, fmt.Errorf("%s must be a mapping of string values", field)
+		return nil, nil, fmt.Errorf("%s must be a mapping of string values", field)
 	}
 	keys := make([]string, 0, len(raw))
 	for key := range raw {
 		keys = append(keys, key)
 	}
 	sort.Strings(keys)
-	for _, key := range keys {
-		item, ok := raw[key].(string)
-		if !ok {
-			return nil, fmt.Errorf("%s[%q] must be a string", field, key)
-		}
-		if !validEnvName(key) {
-			return nil, fmt.Errorf("invalid %s name %q", field, key)
-		}
-		if strings.ContainsRune(item, 0) {
-			return nil, fmt.Errorf("%s[%q] contains a NUL byte", field, key)
-		}
-		result[key] = item
-	}
-	return result, nil
+	return raw, keys, nil
 }
 
 func validEnvName(name string) bool { return name != "" && !strings.ContainsAny(name, "=\x00") }
