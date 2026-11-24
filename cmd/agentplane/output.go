@@ -182,6 +182,12 @@ func (r *eventRenderer) Event(event events.Event) error {
 			if _, err := fmt.Fprintf(r.stderr, "  source=%s path=%q exit=%s stdout=%q stderr=%q omitted=%d/%d/%d\n", e.Source, e.Path, exit, e.Stdout, e.Stderr, e.StdoutOmitted, e.StderrOmitted, e.Omitted); err != nil {
 				return err
 			}
+			if e.SecretName == "" {
+				continue
+			}
+			if _, err := fmt.Fprintf(r.stderr, "  secret=%s\n", e.SecretName); err != nil {
+				return err
+			}
 		}
 	case events.NodeEvidence:
 		p := event.Payload.(events.NodeEvidencePayload)

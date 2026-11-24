@@ -199,6 +199,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
 	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues, SecretResolver: secretResolver()}
+	configureSecretScan(&opts)
 	if err := isolation.configure(def, &opts); err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
