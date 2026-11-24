@@ -73,8 +73,9 @@ var corpus = map[string]string{
 	"E_SECRET_AMBIENT_BYPASS":        secretsCorpus("  tok: {secret_ref: env/X}\n", nodeShell("a", "")+"  b:\n    type: shell\n    config: {command: /usr/bin/true, env_allowlist: [X]}\n"),
 	"E_SECRET_FLOWS_TO_AGENT": corpusHead + "secrets:\n  tok: {secret_ref: env/X}\ninputs: {}\nnodes:\n" +
 		"  a:\n    type: shell\n    config: {command: /usr/bin/true, secret_env: {T: tok}}\n    outputs:\n      o: {type: string}\n" +
+		"  m:\n    type: shell\n    config: {command: /usr/bin/true}\n    inputs:\n      i: {type: string}\n    outputs:\n      o: {type: string}\n" +
 		"  b:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t}\n    inputs:\n      i: {type: string}\n" +
-		"edges:\n  - {from: a.outputs.o, to: b.inputs.i}\noutputs: {}\n",
+		"edges:\n  - {from: a.outputs.o, to: m.inputs.i}\n  - {from: m.outputs.o, to: b.inputs.i}\noutputs: {}\n",
 }
 
 func secretsCorpus(secrets, nodes string) string {

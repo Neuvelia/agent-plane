@@ -108,13 +108,113 @@ func TestEveryEdgeFromASecretNodeToAnAgentIsReported(t *testing.T) {
 	}
 }
 
-func TestSecretFlowRuleLeavesTheTransitivePathUnreported(t *testing.T) {
-	// Documented gap: only direct edges are rejected (F3.8 spec, transitive gap).
-	nodes := flowNode("a", "      secret_env: {GH_TOKEN: gh_token}\n", outPort) +
-		"  b:\n    type: shell\n    config: {command: /bin/true}\n" + inPort + outPort + agentNode("c")
-	edges := "  - {from: a.outputs.o, to: b.inputs.i}\n  - {from: b.outputs.o, to: c.inputs.i}\n"
-	if got := flowDiagnostics(t, validateText(t, flowGraph(nodes, edges))); len(got) != 0 {
-		t.Fatalf("transitive flow is a documented gap, not rejected: %+v", got)
+const secretShell = "      secret_env: {GH_TOKEN: gh_token}\n"
+
+// relayNode is a pass-through node of the given type: one string input i, one
+// string output o. Gate and human nodes use their own shapes.
+func relayNode(id, nodeType string) string {
+	switch nodeType {
+	case "gate":
+		return "  " + id + ":\n    type: gate\n    config: {check_id: c, kind: json_predicate}\n" + inPort + outPort
+	case "human":
+		return "  " + id + ":\n    type: human\n    inputs:\n      i: {type: string}\n    outputs:\n      decision: {type: string}\n"
+	}
+	return flowNode(id, "", inPort+outPort)
+}
+
+func flowEdge(from, to string) string {
+	port := "o"
+	if strings.HasPrefix(from, "h") {
+		port = "decision"
+	}
+	return "  - {from: " + from + ".outputs." + port + ", to: " + to + ".inputs.i}\n"
+}
+
+func flowMessages(t *testing.T, nodes, edges string) []string {
+	t.Helper()
+	var out []string
+	for _, d := range flowDiagnostics(t, validateText(t, flowGraph(nodes, edges))) {
+		out = append(out, d.Message)
+	}
+	return out
+}
+
+func TestSecretFlowIsReportedThroughAnIntermediateNode(t *testing.T) {
+	nodes := flowNode("a", secretShell, outPort) + relayNode("cat", "shell") + agentNode("z")
+	got := flowMessages(t, nodes, flowEdge("a", "cat")+flowEdge("cat", "z"))
+	if len(got) != 1 || !strings.Contains(got[0], "a -> cat -> z") || !strings.Contains(got[0], "a.outputs.o to cat.inputs.i") {
+		t.Fatalf("want one path diagnostic naming a -> cat -> z and the first edge, got %q", got)
+	}
+}
+
+func TestSecretFlowIsReportedOnALongPath(t *testing.T) {
+	nodes := flowNode("a", secretShell, outPort) + relayNode("b", "shell") + relayNode("c", "shell") + agentNode("z")
+	got := flowMessages(t, nodes, flowEdge("a", "b")+flowEdge("b", "c")+flowEdge("c", "z"))
+	if len(got) != 1 || !strings.Contains(got[0], "a -> b -> c -> z") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSecretFlowPropagatesThroughHumanAndGateNodes(t *testing.T) {
+	for _, relay := range []string{"human", "gate"} {
+		id := map[string]string{"human": "hum", "gate": "chk"}[relay]
+		nodes := flowNode("a", secretShell, outPort) + relayNode(id, relay) + agentNode("z")
+		got := flowMessages(t, nodes, flowEdge("a", id)+flowEdge(id, "z"))
+		if len(got) != 1 || !strings.Contains(got[0], "a -> "+id+" -> z") {
+			t.Errorf("%s must not stop propagation, got %q", relay, got)
+		}
+	}
+}
+
+func TestSecretFlowFromTwoSourcesToOneAgentReportsEachPair(t *testing.T) {
+	nodes := flowNode("a", secretShell, outPort) + flowNode("b", secretShell, outPort) +
+		"  z:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t}\n    inputs:\n      i: {type: string}\n      j: {type: string}\n"
+	edges := flowEdge("a", "z") + "  - {from: b.outputs.o, to: z.inputs.j}\n"
+	if got := flowMessages(t, nodes, edges); len(got) != 2 {
+		t.Fatalf("want one diagnostic per source, got %q", got)
+	}
+}
+
+func TestSecretFlowDiamondAndBranchingReportOncePerAgent(t *testing.T) {
+	nodes := flowNode("a", secretShell, outPort) + relayNode("l", "shell") + relayNode("r", "shell") +
+		"  z:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t}\n    inputs:\n      i: {type: string}\n      j: {type: string}\n" +
+		agentNode("y")
+	edges := flowEdge("a", "l") + flowEdge("a", "r") + flowEdge("l", "z") + "  - {from: r.outputs.o, to: z.inputs.j}\n" + flowEdge("r", "y")
+	got := flowMessages(t, nodes, edges)
+	if len(got) != 2 {
+		t.Fatalf("want one diagnostic for z (two paths) and one for y, got %q", got)
+	}
+	if !strings.Contains(got[0]+got[1], "a -> l -> z") || !strings.Contains(got[0]+got[1], "a -> r -> y") {
+		t.Errorf("shortest deterministic paths expected, got %q", got)
+	}
+}
+
+func TestAgentReachableOnlyFromANodeWithoutSecretsIsAccepted(t *testing.T) {
+	nodes := flowNode("a", "", outPort) + relayNode("b", "shell") + agentNode("z")
+	if got := flowMessages(t, nodes, flowEdge("a", "b")+flowEdge("b", "z")); len(got) != 0 {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestEmptySecretEnvDoesNotTriggerTheTransitiveRule(t *testing.T) {
+	nodes := flowNode("a", "      secret_env: {}\n", outPort) + relayNode("b", "shell") + agentNode("z")
+	if got := flowMessages(t, nodes, flowEdge("a", "b")+flowEdge("b", "z")); len(got) != 0 {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSecretFlowWalkTerminatesOnACycle(t *testing.T) {
+	nodes := flowNode("a", secretShell, inPort+outPort) + relayNode("b", "shell") + agentNode("z")
+	got := flowMessages(t, nodes, flowEdge("a", "b")+flowEdge("b", "a")+flowEdge("b", "z"))
+	if len(got) != 1 || !strings.Contains(got[0], "a -> b -> z") {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestSecretFlowToShellOnlyChainIsAccepted(t *testing.T) {
+	nodes := flowNode("a", secretShell, outPort) + relayNode("b", "shell") + relayNode("c", "shell")
+	if got := flowMessages(t, nodes, flowEdge("a", "b")+flowEdge("b", "c")); len(got) != 0 {
+		t.Fatalf("got %q", got)
 	}
 }
 
