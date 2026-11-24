@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -132,7 +133,10 @@ func (m *runMachine) beginScan(ctx context.Context, root string) scanSession {
 
 func (m *runMachine) finishScan(ctx context.Context, session scanSession, targets []secrets.ScanTarget, redactor *logRedactor) events.GateCheckPayload {
 	observation := scanObservation{err: session.err}
-	if session.err == nil {
+	if session.err == nil && session.window == nil {
+		observation.err = errors.New("no open scan window for this node run")
+	}
+	if observation.err == nil {
 		ctx, cancel := context.WithTimeout(ctx, scanTimeout)
 		defer cancel()
 		started := m.clock.Now()
@@ -160,6 +164,32 @@ func (m *runMachine) recordSecretScans(results []completedNode) {
 		if work.scan == nil {
 			continue
 		}
-		m.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: m.nodes[work.id].NodeRunID, Payload: events.CloneGate(*work.scan)})
+		m.emitSecretScan(work.id, *work.scan)
+	}
+}
+
+func (m *runMachine) emitSecretScan(id string, check events.GateCheckPayload) {
+	m.appendEvent(events.Event{Type: events.GateCheck, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: events.CloneGate(check)})
+}
+
+// closeUnscannedWindows is the safety net for the one rule the worker and the
+// coordinator both apply to decide "another attempt follows" (attemptWillRetry
+// mirrors accept.go). If they ever disagree, the worker leaves the window open
+// for a retry that never comes. Rather than trust that the two copies stay in
+// step, the coordinator, which makes the final decision, closes every window of
+// a node it is not retrying and records an unobserved scan (reason
+// scan_not_completed). A cancelled run records nothing, like the worker.
+func (m *runMachine) closeUnscannedWindows(ctx context.Context, results []completedNode, retry []string) {
+	for _, work := range results {
+		if slices.Contains(retry, work.id) {
+			continue
+		}
+		if _, open := m.scans.lookup(work.id); !open {
+			continue
+		}
+		m.scans.take(work.id)
+		if ctx.Err() == nil {
+			m.emitSecretScan(work.id, unobservedCheck(scanObservation{}, "scan_not_completed"))
+		}
 	}
 }

@@ -89,6 +89,19 @@ func (s scanRun) secretChecks() []events.GateCheckPayload {
 	return checks
 }
 
+// requireWorkerAndCoordinatorAgree fails when the coordinator's safety net had
+// to close a window: the worker's attemptWillRetry then disagreed with accept.go.
+func (s scanRun) requireWorkerAndCoordinatorAgree(t *testing.T) {
+	t.Helper()
+	for _, check := range s.secretChecks() {
+		for _, evidence := range check.Evidence {
+			if evidence.Reference != nil && evidence.Reference.Reason == "scan_not_completed" {
+				t.Fatalf("a scan window was closed unscanned by the coordinator: %+v", check)
+			}
+		}
+	}
+}
+
 func (s scanRun) indexOf(kind events.Type, predicate func(events.Event) bool) int {
 	return slices.IndexFunc(s.events, func(e events.Event) bool { return e.Type == kind && predicate(e) })
 }
@@ -276,6 +289,7 @@ func TestScanRunsOncePerNodeRunAfterFinalAttempt(t *testing.T) {
 	if len(got.secretChecks()) != 1 {
 		t.Fatalf("secret checks = %d, want 1", len(got.secretChecks()))
 	}
+	got.requireWorkerAndCoordinatorAgree(t)
 	finished := 0
 	for _, e := range got.events {
 		payload, ok := e.Payload.(events.AttemptFinishedPayload)
@@ -302,6 +316,7 @@ func TestScanRunsWhenLoopNeedsIntervention(t *testing.T) {
 	if got.result.State != run.RunFailed || len(got.secretChecks()) != 1 {
 		t.Fatalf("run = %s, secret checks = %d, want failed run with one check", got.result.State, len(got.secretChecks()))
 	}
+	got.requireWorkerAndCoordinatorAgree(t)
 }
 
 type failingExecutor struct{ recordingExecutor }

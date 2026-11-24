@@ -158,5 +158,6 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 		machine.recordAcceptedOutputs(work.id, acceptedAttempt)
 		machine.transitionNode(work.id, run.NodeSucceeded)
 	}
+	machine.closeUnscannedWindows(ctx, results, retry)
 	return retry
 }
