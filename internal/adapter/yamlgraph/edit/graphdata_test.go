@@ -688,23 +688,29 @@ func TestListConnectionsOnALargeGraphIsFast(t *testing.T) {
 	if edges := len(parse(t, src).Edges); edges < 390 {
 		t.Fatalf("generated only %d edges", edges)
 	}
+	// Over the limit is accepted when it is in proportion to the time to parse the
+	// same document: a loaded machine is slow for every operation (timing_test.go).
+	const samples = 5
+	parse := parseTime(t, []byte(src), samples)
 	for _, op := range []Op{{Op: OpListConnections, From: "n000.outputs.o"}, {Op: OpListConnections, To: "n100.inputs.i1"}, {Op: OpListConnections, From: "inputs.seed"}} {
-		best := time.Duration(1<<63 - 1)
-		for i := 0; i < 5; i++ {
-			start := time.Now()
+		var failure error
+		best := bestOf(samples, func() {
 			res, err := Apply([]byte(src), []Op{op})
 			if err != nil {
-				t.Fatal(err)
+				failure = err
+				return
 			}
 			if got := len(res.Results[0].Query.Options); got < n {
-				t.Fatalf("%+v: only %d options", op, got)
+				failure = fmt.Errorf("%+v: only %d options", op, got)
 			}
-			if d := time.Since(start); d < best {
-				best = d
-			}
+		})
+		if failure != nil {
+			t.Fatal(failure)
 		}
-		if best > 500*time.Millisecond {
-			t.Errorf("%+v took %v at best of 5 (limit 500ms)", op, best)
+		const limit = 500 * time.Millisecond
+		if !withinBudget(best, limit, parse, listConnectionsParseRatioBound) {
+			t.Errorf("list_connections (from %q, to %q) took %v at best of %d (limit %v) and %.1fx the %v it takes to parse the graph (bound %.0fx)",
+				op.From, op.To, best, samples, limit, float64(best)/float64(parse), parse, listConnectionsParseRatioBound)
 		}
 	}
 }
