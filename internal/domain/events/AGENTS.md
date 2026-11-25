@@ -43,6 +43,10 @@ the CLI, local run store, loopback API and desktop client.
   secret by name only and use closed vocabularies; a value, length, hash or
   prefix field needs a reviewed schema change. A permission with `applied: true`
   requires the event-level `applied: true`; the converse is legal.
+  `secret_in_workspace` Check Result evidence may carry `secret_name` (additive,
+  omitted when empty; only that kind, same grammar as a secret name, never a
+  value). `gate.go` repeats the grammar because this package must not import
+  `domain/secrets`.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes, approval,
   workspace isolation facts (schema 11, ADR-0024), attempt diffs (schema 12,
   ADR-0026) and cancel/timeout facts (schema 13, ADR-0028) survive progress retention limits. Logs and normalized progress share
