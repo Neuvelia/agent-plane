@@ -53,7 +53,7 @@ Jeśli `roadmap-check` failuje na main, opisz to na górze PR.
 
 - Jedna sesja tygodniowo. Pełny audyt kodu jest drogi, więc prompt ogranicza go do feature'ów zmienionych od ostatniego audytu i niedomkniętych.
 - Model może się mylić. Dlatego wynik zawsze przechodzi przez PR, a `roadmap-check` w CI odrzuci `done` bez dowodów.
-- Scheduled task nie zastępuje CI. **Obecnie joby CI nie startują** (audyt, ryzyko 1). Bez działającego CI deterministyczna bramka istnieje tylko lokalnie.
+- Scheduled task nie zastępuje CI. **Obecnie joby CI nie startują** (audyt, ryzyko 2). Bez działającego CI deterministyczna bramka istnieje tylko lokalnie.
 
 ## 3. Wizualizacja: opcje
 
