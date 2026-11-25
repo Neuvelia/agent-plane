@@ -67,7 +67,7 @@ func TestValueInsideUnexportedFieldsNeverLeaks(t *testing.T) {
 		"slice of nest":  []outer{{in: inner{v: v}}},
 	}
 	hexForm := fmt.Sprintf("%x", canary)
-	decForm := strings.Trim(fmt.Sprint([]byte(canary)), "[]")
+	decForm := strings.Trim(fmt.Sprintf("%v", []byte(canary)), "[]")
 	for name, subject := range subjects {
 		for _, verb := range []string{"%v", "%+v", "%#v", "%s", "%q", "%x", "%d"} {
 			got := fmt.Sprintf(verb, subject)

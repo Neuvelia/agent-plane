@@ -56,6 +56,12 @@ kernel and the OS.
    F3.4 = 13, Decided 2026-11-17 (lead, delegated by the product owner); the team may revisit).
 10. **Ports.** Consumer-owned `runtime.SecretResolver` and `runtime.PolicyEnforcer`, composed by the CLI like
     `WorkspaceManager`. Policy evaluation and the path matcher are domain code shared with the F1.8 scope Gate.
+11. **Delivery capability, fail closed.** An executor that can hand secrets to a node process declares the
+    optional `runtime.SecretReceiver` (`ReceivesSecrets(nodeType) bool`). Preflight rejects a graph that assigns
+    a secret to a node type the executor does not receive (`secret_delivery_unsupported`) instead of dropping
+    the value. Resolved values travel to the node as a `secrets.Env` held by the run machine, not through
+    `Options`, results, events or the store. Added during F3.8 implementation (C4.2); no new decision about
+    scope or trust.
 
 ## Alternatives considered
 

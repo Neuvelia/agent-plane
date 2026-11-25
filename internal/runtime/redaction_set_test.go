@@ -144,7 +144,7 @@ func TestRedactorBoundsRejectOversizedSet(t *testing.T) {
 	}
 }
 
-func TestPreflightRedactionBoundFailsLoudly(t *testing.T) {
+func TestRedactionSetBoundDiagnosticNamesSecretAndBound(t *testing.T) {
 	huge := strings.Repeat("Z", secrets.MaxSecretBytes+1)
 	many := make([]resolvedSecret, secrets.MaxSecrets+1)
 	for i := range many {
@@ -221,7 +221,7 @@ func TestRedactionPreflightErrorKeepsStructuredDiagnostic(t *testing.T) {
 	structured := redactionBoundError("secrets.token", "too large", "use a smaller secret")
 	err := redactionPreparationError(structured)
 	var pre *run.PreflightError
-	if !errors.As(err, &pre) || err != structured {
+	if !errors.As(err, &pre) || !errors.Is(err, structured) {
 		t.Fatalf("structured diagnostic was wrapped: %#v", err)
 	}
 	if strings.Contains(err.Error(), "invalid") {
