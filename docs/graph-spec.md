@@ -534,6 +534,20 @@ secrets:
 - `E_SECRET_AMBIENT_BYPASS` fails in every mode: a node that is not assigned an
   `env`-provider secret must not name its backing variable in `env_allowlist`,
   `environment_refs`, an `env` key or an `input_env` target.
+- `E_SECRET_FLOWS_TO_AGENT` rejects any Agent node reachable over data edges
+  from a node with a non-empty `secret_env`, directly or through other nodes of
+  any type (shell, gate, human and agent nodes do not stop the propagation).
+  Accepted output is immutable and flows raw to dependents, so a granted child
+  that echoes its secret could place the value in an Agent prompt sent to a
+  remote model. One error is reported per (source, Agent) pair on the shortest
+  path. A direct edge names the source, the target and the edge (`edges[N]`); a
+  longer path names the node ids along it (`a -> b -> agent`) and the first edge.
+  Variable names and values are never echoed; an empty `secret_env: {}` does not
+  trigger it. Not covered, because they are not edges: a shared workspace file
+  written by a Shell node and read by an Agent (detected after the fact by the
+  workspace scan) and the approval context of a human node. Graph input
+  bindings, graph outputs, Gate bindings and loop feedback do not carry one
+  node's output into another node's Agent input.
 - This iteration defines the graph surface and validation only. The Shell
   executor does not accept `secret_env` yet, so `agentplane run` and
   `graph validate` reject it as an unknown config field until the runtime

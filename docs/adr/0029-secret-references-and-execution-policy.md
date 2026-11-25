@@ -105,3 +105,14 @@ facts. Later versions may promote these fields to first-class schema fields with
 Acceptance criteria in both specs: byte scans of the store directory and API responses for secret values;
 filesystem-level assertions that enforced writes did not happen; unenforceable requests fail preflight in enforce
 mode; Windows launcher tests; architecture test for provider/platform imports; spike reports for Landlock and Codex.
+
+## Addendum: secrets must not reach an Agent over data edges
+
+Decided by the product owner after the reviews of PR #167 and PR #169. A node's accepted output is immutable and
+flows raw to its dependents; the redaction of requirement C applies to recorded copies only. A granted child can
+echo its secret, and any intermediate node can pass a value on, so no Agent node may be reachable over data edges
+from a node with a non-empty `secret_env`. Graph validation rejects it with `E_SECRET_FLOWS_TO_AGENT`, one error
+per (source, Agent) pair on the shortest path; shell, gate, human and agent nodes are not barriers. This is a
+validation rule only: no event, schema or runtime contract changes, and no new ADR. Remaining, non-edge channels
+are the shared workspace (a Shell node writes a file an Agent reads; detected after the fact by the workspace scan,
+not prevented) and the approval context of a human node (redacted, not rejected).
