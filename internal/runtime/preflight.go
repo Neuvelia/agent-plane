@@ -22,6 +22,17 @@ type runPreparation struct {
 	limit             int
 }
 
+// redactionPreparationError passes a structured preflight diagnostic through
+// untouched so callers keep errors.As and its exact text, and labels any other
+// failure as a redaction problem without implying it came only from --redact-env.
+func redactionPreparationError(err error) error {
+	var preflight *run.PreflightError
+	if errors.As(err, &preflight) {
+		return err
+	}
+	return fmt.Errorf("invalid redactions: %w", err)
+}
+
 func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[string]graph.Value, executor Executor, options Options) (runPreparation, error) {
 	if ctx == nil {
 		return runPreparation{}, errors.New("run context is nil")
@@ -39,7 +50,7 @@ func preflightRun(ctx context.Context, definition *graph.Definition, inputs map[
 	redactions := append([]string(nil), options.LogRedactions...)
 	redactionTemplate, err := newRedactionSet(redactions, nil)
 	if err != nil {
-		return runPreparation{}, fmt.Errorf("invalid log redactions: %w", err)
+		return runPreparation{}, redactionPreparationError(err)
 	}
 
 	// Byte logs serialize as base64, but normalized/evidence string observation
