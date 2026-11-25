@@ -284,6 +284,9 @@ func TestSchemasBelowPolicyStillDecode(t *testing.T) {
 func TestPolicyCheckKindsRoundTripAndGate(t *testing.T) {
 	for _, kind := range []CheckKind{CheckExecutionPolicy, CheckSecretInWorkspace} {
 		p := CheckResult{Version: 1, CheckID: string(kind), Kind: kind, Verdict: CheckRed, Reason: string(kind) + "_violation", Scope: CheckScope{CheckedInputs: []string{"candidate"}}, Evidence: []GateEvidence{{Kind: EvidenceKind(kind), Source: EvidenceSource(kind), Path: "dir/a.txt"}}}
+		if kind == CheckSecretInWorkspace {
+			p.Evidence[0].SecretName = "api_token" // a red secret result names its secret
+		}
 		e := policyEvent(SchemaVersion, GateCheck, p)
 		e.AttemptID = "att"
 		data, err := json.Marshal(e)

@@ -102,6 +102,10 @@ type Options struct {
 	// CleanupTimeout bounds each worktree removal so a hung Git cannot block
 	// run_finished. Zero means 30 seconds.
 	CleanupTimeout time.Duration
+	// WorkspaceScanner looks for granted secret values in the files a node
+	// changed (F3.8 requirement 13). Nil means such nodes record an unobserved
+	// scan; nodes without a grant never reach it.
+	WorkspaceScanner WorkspaceScanner
 	// SecretResolver resolves the secrets that nodes are assigned through
 	// secret_env (F3.8, ADR-0029). Nil means a runner without providers: a graph
 	// that assigns a secret then fails preflight with secret_provider_unavailable.
@@ -136,6 +140,9 @@ type completedNode struct {
 	diagnostics  []graph.Diagnostic
 	diff         *attemptDiffResult
 	err          error
+	// scan is the node run's secret_in_workspace Check Result, set by the worker
+	// after the final attempt and emitted by the coordinator.
+	scan *events.GateCheckPayload
 }
 
 const maxEventLogChunk = 16 * 1024
@@ -164,6 +171,9 @@ type runMachine struct {
 	// grants is the in-memory secret environment per assigned node; read only by
 	// secretEnvFor.
 	grants map[string]secrets.Env
+	// scanner and scans serve the workspace scan of granted nodes (secret_scan.go).
+	scanner WorkspaceScanner
+	scans   scanBook
 	// resultRedactor masks the copies snapshot returns; nil without redactions.
 	resultRedactor *resultRedactor
 }

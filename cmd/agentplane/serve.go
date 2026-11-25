@@ -195,6 +195,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			return persist(e)
 		}
 		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink, SecretResolver: secretResolver()}
+		configureSecretScan(&opts)
 		if err := config.isolation.configure(def, &opts); err != nil {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 		}

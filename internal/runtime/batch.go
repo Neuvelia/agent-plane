@@ -62,7 +62,10 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 		resolved := m.resolved[id]
 		aid, feedback, baseline, number, carried := state.attempts[id], state.feedbacks[id], state.baselines[id], state.numbers[id], state.diffs[id]
 		go func(id string) {
-			completed <- m.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, carried, redactor)
+			request := scanRequest{id: id, node: node, number: number, redactor: redactor}
+			completed <- m.scanned(ctx, request, func() completedNode {
+				return m.cycle(ctx, executor, id, node, resolved, aid, number, feedback, baseline, carried, redactor)
+			})
 		}(id)
 		started++
 	}

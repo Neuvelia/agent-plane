@@ -175,6 +175,9 @@ func (p GateCheckPayload) Validate() error {
 	if p.Evidence == nil || p.Verdict == CheckRed && len(p.Evidence) == 0 || len(p.Evidence) > 32 {
 		return errors.New("invalid gate evidence count")
 	}
+	if err := validSecretCheck(p); err != nil {
+		return err
+	}
 	if p.Kind == "command" && len(p.Evidence) != 1 {
 		return errors.New("command requires exactly one evidence item")
 	}

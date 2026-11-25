@@ -112,6 +112,15 @@ wrapper without an `Unwrap` chain, and `errors.As` reaches only a masked copy of
 too. The CLI field `redacted` is additive; `cli_schema_version` stays 1. No new decision about contracts
 beyond this addendum.
 
+## Addendum: workspace scan wiring (C4.7b)
+
+The runtime scans a granted node's changed files once, after its last attempt, and records a node-run scoped
+`secret_in_workspace` Check Result. Until F3.9 it is an audit fact and never changes a node or run outcome.
+Known gaps that F3.9 must close before enforcing: in a shared workspace the scan attributes neighbours' changes
+(two granted nodes in one repository may both get a red result), so enforce mode must settle attribution before
+blocking a node; and the red `reason` (`secret_found_in_workspace`) differs from the schema 14 fixture
+(`secret_in_workspace_violation`) and is to be unified with the F3.9 policy reasons.
+
 ## Compatibility and migration
 
 Graphs without `policy` or `secrets` behave and hash identically. Readers of older event schemas see no new
