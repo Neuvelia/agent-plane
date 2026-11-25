@@ -52,7 +52,7 @@ Validation diagnostics and executor configuration errors run before that guard, 
 fails the grammar it was typed for: a key, id, reference or type outside the graph identifier grammar, or an
 environment variable name outside the identifier grammar, is replaced by `<invalid identifier>`, a position or a
 field name, and the location points at the enclosing collection (`nodes`, `inputs`). Keys of undeclared run inputs
-and the text of `--input`/`--redact-env` flags are never echoed, even when they look like identifiers. Text that
+and `--input`/`--redact-env`/`--approve`/`--reject` text that is not a declared name are never echoed, even when it looks like an identifier. Text that
 matches the grammar is graph structure and is still quoted, so a secret that happens to be a valid identifier can
 appear in a diagnostic; `run` and `serve` then refuse the graph with `secret_value_in_graph`, `graph validate` does
 not resolve secrets and cannot. Not yet covered: YAML syntax errors from the parser library, Agent and Gate
