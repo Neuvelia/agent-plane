@@ -16,6 +16,7 @@ the CLI, local run store, loopback API and desktop client.
 | Return Envelopes, accepted-unit scope and declared conflicts | `unit.go` |
 | Human approval facts and bounded text | `approval.go` |
 | Opt-in recorded run values (schema 10) and their bounds | `value.go` |
+| Secret and execution-policy facts, closed vocabularies (schema 14) | `policy.go` |
 | Workspace isolation facts, closed reason vocabulary, path bounding | `workspace.go` |
 | Opt-in attempt diff facts (schema 12), bounds and closed vocabularies | `diff.go` |
 | Cancel/timeout facts, closed cause vocabulary, terminal `reason` (schema 13) | `cancel.go` |
@@ -28,7 +29,7 @@ the CLI, local run store, loopback API and desktop client.
   the distinction between `node_finished` after a start and
   `node_terminated` before one. The runtime owns state transitions and
   decides when to emit facts; this package owns their shape and collection.
-- New events use `SchemaVersion` 12. JSON readers accept schemas 1 through 12
+- New events use `SchemaVersion` 14 (`SchemaPolicy`). JSON readers accept schemas 1 through 14
   with their actual historical payload shapes; in-memory zero is a builder
   convention, not a serialized schema. Keep strict type/payload matching,
   unknown payload-field rejection and the schema-4 legacy Gate payload distinct
@@ -38,6 +39,14 @@ the CLI, local run store, loopback API and desktop client.
   text; `value` is omitted only with `truncated: true`, and an untruncated
   value must match its `size_bytes` and `sha256`. The runtime owns redaction,
   the per-run `MaxRunValueBytes` budget and whether recording is enabled.
+- `policy_evaluated` and `policy_violation` (schema 14, ADR-0029) describe a
+  secret by name only and use closed vocabularies; a value, length, hash or
+  prefix field needs a reviewed schema change. A permission with `applied: true`
+  requires the event-level `applied: true`; the converse is legal.
+  `secret_in_workspace` Check Result evidence may carry `secret_name` (additive,
+  omitted when empty; only that kind, same grammar as a secret name, never a
+  value). `gate.go` repeats the grammar because this package must not import
+  `domain/secrets`.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes, approval,
   workspace isolation facts (schema 11, ADR-0024), attempt diffs (schema 12,
   ADR-0026) and cancel/timeout facts (schema 13, ADR-0028) survive progress retention limits. Logs and normalized progress share

@@ -30,13 +30,23 @@ Treat as untrusted:
 
 ## Secret rule
 
-The graph should eventually contain only references such as:
+The graph contains only references such as:
 
 ```text
-secret_ref: local/github-token
+secret_ref: env/GITHUB_TOKEN
 ```
 
-Secret resolution belongs to the execution environment, not the graph authoring format.
+Secret resolution belongs to the execution environment, not the graph authoring format. The `env` provider and
+Shell nodes are implemented (F3.8, ADR-0029): values are resolved once per run, delivered only to the assigned
+node through its environment and redacted from events and output. This limits who receives a value and detects
+leaks afterwards; it does not protect a value from the process it was granted to. The `local` (keychain) provider,
+Agent grants and policy enforcement are not implemented.
+
+A graph or `--input` that contains the resolved value of an assigned secret fails preflight with
+`secret_value_in_graph` or `secret_value_in_input` before the store copies the graph and before `run_started`
+(F3.8 requirement 12). The diagnostic names the secret and the location, never the value. A secret declared but
+assigned to no node is not resolved, so this check cannot see it. A very short secret (1-3 characters) is redacted in
+unrelated text and refuses unrelated graphs; this fail-loud behavior is a deliberate v0 trade-off.
 
 ## Future blast radius model
 

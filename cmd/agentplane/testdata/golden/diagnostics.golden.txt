@@ -76,6 +76,51 @@
 ## E_REQUIRED_INPUT_UNBOUND exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_REQUIRED_INPUT_UNBOUND","message":"required input \"i\" on node \"b\" has no valid binding","graph_id":"g","location":{"node_id":"b","path":"nodes.b.inputs.i"},"suggestion":"add one compatible edge or graph input binding"}],"failure":null,"error":null}
 
+## E_SECRET_AMBIENT_BYPASS exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_AMBIENT_BYPASS","message":"node \"b\" names X, the variable behind secret \"tok\", but is not assigned that secret","graph_id":"g","location":{"node_id":"b","path":"nodes.b.config"},"suggestion":"assign the secret with secret_env or stop naming X in this node; this check applies in every mode"}],"failure":null,"error":null}
+
+## E_SECRET_ENTRY_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENTRY_INVALID","message":"secret \"tok\" has unsupported field \"value\"; only secret_ref is allowed","graph_id":"g","location":{"path":"secrets.tok"},"suggestion":"remove the extra fields; a graph never holds a secret value"}],"failure":null,"error":null}
+
+## E_SECRET_ENV_AGENT_UNSUPPORTED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_AGENT_UNSUPPORTED","message":"node \"g\": secret_env is not supported on agent nodes yet","graph_id":"g","location":{"node_id":"g","path":"nodes.g.config.secret_env"},"suggestion":"remove secret_env; secrets can be assigned to shell nodes only for now"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"unknown agent config field \"secret_env\"","graph_id":"g","location":{"node_id":"g","path":"nodes.g.config"},"suggestion":"correct the configuration of node \"g\""}],"failure":null,"error":null}
+
+## E_SECRET_ENV_COLLISION exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_COLLISION","message":"node \"a\": secret_env variable T collides with env","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config.secret_env"},"suggestion":"give the secret a variable name no other channel of this node uses; names are compared case-insensitively"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"shell node \"a\": secret_env environment name \"T\" conflicts with env","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config"},"suggestion":"correct the configuration of node \"a\""}],"failure":null,"error":null}
+
+## E_SECRET_ENV_DUPLICATE exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_DUPLICATE","message":"node \"a\": secret_env names \"T\" and \"t\", which are the same variable","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config.secret_env"},"suggestion":"keep one entry per variable name; names are compared case-insensitively"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"shell node \"a\": secret_env has duplicate environment name \"t\"","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config"},"suggestion":"correct the configuration of node \"a\""}],"failure":null,"error":null}
+
+## E_SECRET_ENV_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_INVALID","message":"node \"a\": secret_env must map environment variable names to declared secret names","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config.secret_env"},"suggestion":"write secret_env: {GH_TOKEN: gh_token}"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"shell node \"a\": secret_env must be a mapping of string values","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config"},"suggestion":"correct the configuration of node \"a\""}],"failure":null,"error":null}
+
+## E_SECRET_ENV_NAME_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_NAME_INVALID","message":"node \"a\": secret_env entry 0 has an invalid variable name","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config.secret_env"},"suggestion":"use a non-empty name without '=' that is not AGENTPLANE_ATTEMPT"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"shell node \"a\": secret_env entry 0 has an invalid environment name; use a non-empty name without '=' that is not AGENTPLANE_ATTEMPT","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config"},"suggestion":"correct the configuration of node \"a\""}],"failure":null,"error":null}
+
+## E_SECRET_ENV_NODE_TYPE exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_NODE_TYPE","message":"node \"g\" is a gate node and cannot receive secrets","graph_id":"g","location":{"node_id":"g","path":"nodes.g.config.secret_env"},"suggestion":"only shell nodes may use secret_env"},{"severity":"error","code":"E_NODE_CONFIG_INVALID","message":"json: unknown field \"secret_env\"","graph_id":"g","location":{"node_id":"g","path":"nodes.g.config"},"suggestion":"correct the configuration of node \"g\""}],"failure":null,"error":null}
+
+## E_SECRET_ENV_UNDECLARED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_ENV_UNDECLARED","message":"node \"a\": secret_env[T] names secret \"ghost\", which the graph does not declare","graph_id":"g","location":{"node_id":"a","path":"nodes.a.config.secret_env"},"suggestion":"declare the secret under top-level secrets with a secret_ref"}],"failure":null,"error":null}
+
+## E_SECRET_FLOWS_TO_AGENT exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_FLOWS_TO_AGENT","message":"the output of node \"a\", which is assigned secrets, can reach agent node \"b\" through the path a -\u003e m -\u003e b (first edge a.outputs.o to m.inputs.i)","graph_id":"g","location":{"edge_index":0,"path":"edges[0]"},"suggestion":"remove the edge, pass the data through a node without a secret, or remove secret_env from node \"a\"; an agent's inputs are sent to a remote model"}],"failure":null,"error":null}
+
+## E_SECRET_NAME_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_NAME_INVALID","message":"the name of the secret at secrets[0] is invalid","graph_id":"g","location":{"path":"secrets[0]"},"suggestion":"use lowercase letters, digits and underscores, starting with a letter, at most 64 characters"}],"failure":null,"error":null}
+
+## E_SECRET_PROVIDER_UNAVAILABLE exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_PROVIDER_UNAVAILABLE","message":"secret \"tok\" uses provider \"local\", which is reserved and not available yet","graph_id":"g","location":{"path":"secrets.tok.secret_ref"},"suggestion":"use the env provider: env/\u003cVARIABLE_NAME\u003e"}],"failure":null,"error":null}
+
+## E_SECRET_PROVIDER_UNKNOWN exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_PROVIDER_UNKNOWN","message":"secret \"tok\" uses an unknown provider (available: env)","graph_id":"g","location":{"path":"secrets.tok.secret_ref"},"suggestion":"use the env provider: env/\u003cVARIABLE_NAME\u003e"}],"failure":null,"error":null}
+
+## E_SECRET_REF_INVALID exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_REF_INVALID","message":"secret \"tok\" has an invalid secret_ref: secret_ref must be \u003cprovider\u003e/\u003cname\u003e: a lowercase provider, then a name of 1-128 printable ASCII characters without '/' or spaces","graph_id":"g","location":{"path":"secrets.tok.secret_ref"},"suggestion":"use \u003cprovider\u003e/\u003cname\u003e, for example env/GITHUB_TOKEN; never write the secret value here"}],"failure":null,"error":null}
+
+## E_SECRET_REF_REQUIRED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_SECRET_REF_REQUIRED","message":"secret \"tok\" has no secret_ref","graph_id":"g","location":{"path":"secrets.tok.secret_ref"},"suggestion":"add secret_ref: env/\u003cVARIABLE_NAME\u003e to name where the runner finds the value"}],"failure":null,"error":null}
+
 ## E_TIMEOUT_INVALID exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_TIMEOUT_INVALID","message":"limits.run_timeout_seconds is 0; it must be an integer from 1 to 86400","graph_id":"g","location":{"path":"limits.run_timeout_seconds"},"suggestion":"use whole seconds from 1 to 86400, or omit the field for no limit"}],"failure":null,"error":null}
 

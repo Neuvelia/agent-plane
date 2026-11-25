@@ -84,7 +84,7 @@ Goal: make long-running local execution durable and safer.
 | F3.5 | Artifact Store Local | P0 | F1.2, F3.2 |
 | F3.6 | Graph Versioning and Run Reproducibility | P0 | F0.6, F3.2 |
 | F3.7 | Export JSON/CSV | P0 | F3.2, F3.5 |
-| F3.8 | Secrets References | P0 | F1.1, F3.1 |
+| F3.8 | Secrets References | P0 | F1.1, F3.1; spec: implemented for the `env` provider and Shell nodes (ADR-0029 proposed; Agent `secret_env` and keychain not included) |
 | F3.9 | Permissions / Execution Policy v0 | P0 | F1.2, F3.1, F3.8 |
 | F3.10 | Cost/Usage Metadata | P1 | F1.1, F3.2 |
 | F3.11 | Local Diagnostics | P1 | F3.2, F3.4 |

@@ -3,6 +3,7 @@ package runtime
 import (
 	"agentplane/internal/app/trace"
 	"agentplane/internal/domain/run"
+	"agentplane/internal/domain/secrets"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,6 +53,10 @@ type ExecutionObservation struct {
 	Progress           func(events.Type, events.Payload)
 	Check              func(events.GateCheckPayload)
 	NewCheckCapture    func() *CheckCapture
+	// SecretEnv holds the resolved secrets of this node run (F3.8). It is empty
+	// for nodes without assignment and for a loop's embedded Gate, prints only a
+	// count and refuses serialization; only the process launcher reads it.
+	SecretEnv secrets.Env
 }
 type ObservedExecutor interface {
 	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)
@@ -97,6 +102,19 @@ type Options struct {
 	// CleanupTimeout bounds each worktree removal so a hung Git cannot block
 	// run_finished. Zero means 30 seconds.
 	CleanupTimeout time.Duration
+	// WorkspaceScanner looks for granted secret values in the files a node
+	// changed (F3.8 requirement 13). Nil means such nodes record an unobserved
+	// scan; nodes without a grant never reach it.
+	WorkspaceScanner WorkspaceScanner
+	// SecretResolver resolves the secrets that nodes are assigned through
+	// secret_env (F3.8, ADR-0029). Nil means a runner without providers: a graph
+	// that assigns a secret then fails preflight with secret_provider_unavailable.
+	// Resolved values never enter Options, Result or events.
+	SecretResolver SecretResolver
+	// StoredMaterial lets preflight refuse a run whose graph or inputs hold the
+	// value of a resolved secret, before run_started (F3.8 requirement 12).
+	// Nil skips the check.
+	StoredMaterial StoredMaterial
 	// GraphVersion is the canonical encoding hashed into the run's graph
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.
@@ -126,6 +144,9 @@ type completedNode struct {
 	diagnostics  []graph.Diagnostic
 	diff         *attemptDiffResult
 	err          error
+	// scan is the node run's secret_in_workspace Check Result, set by the worker
+	// after the final attempt and emitted by the coordinator.
+	scan *events.GateCheckPayload
 }
 
 const maxEventLogChunk = 16 * 1024
@@ -151,6 +172,14 @@ type runMachine struct {
 	diffs       *diffRecorder
 	attemptIDs  IDGenerator
 	clock       trace.Clock
+	// grants is the in-memory secret environment per assigned node; read only by
+	// secretEnvFor.
+	grants map[string]secrets.Env
+	// scanner and scans serve the workspace scan of granted nodes (secret_scan.go).
+	scanner WorkspaceScanner
+	scans   scanBook
+	// resultRedactor masks the copies snapshot returns; nil without redactions.
+	resultRedactor *resultRedactor
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -506,6 +535,7 @@ func (m *runMachine) snapshot() run.Result {
 	for _, id := range m.ids {
 		result.Nodes = append(result.Nodes, *m.nodes[id])
 	}
+	m.resultRedactor.apply(&result)
 	return result
 }
 
@@ -699,7 +729,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }, SecretEnv: m.secretEnvFor(id, node)})
 		} else {
 			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 		}

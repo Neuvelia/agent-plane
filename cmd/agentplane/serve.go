@@ -21,7 +21,6 @@ import (
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
-	"agentplane/internal/shell"
 	"agentplane/internal/store"
 	"agentplane/internal/version"
 )
@@ -41,7 +40,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	recordValues := fs.Bool("record-values", false, "record bounded, redacted graph input and accepted output values as events")
 	recordDiffs := fs.Bool("record-diffs", false, "record bounded, redacted per-attempt file diffs of Agent loop nodes as events")
 	var redactEnv inputFlags
-	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events; repeatable")
+	fs.Var(&redactEnv, "redact-env", "redact a named environment value from events and run results; repeatable")
 	var isolation isolationFlags
 	isolation.register(fs)
 	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path, used only for capability detection")
@@ -195,7 +194,9 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			}
 			return persist(e)
 		}
-		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
+		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink, SecretResolver: secretResolver()}
+		configureSecretScan(&opts)
+		opts.StoredMaterial = storedMaterial{graphBytes: graphBytes, def: def, flags: inputs, values: values}
 		if err := config.isolation.configure(def, &opts); err != nil {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 		}
@@ -240,11 +241,4 @@ var onRetentionApplied func()
 
 // serveExecutor mirrors `run` without an agent adapter: shell, gate and human
 // graphs are served; an agent node fails with the adapter's own error.
-func serveExecutor(def *graph.Definition) runtime.Executor {
-	for _, node := range def.Nodes {
-		if node.Type != "shell" || node.Loop != nil {
-			return nodeExecutor{}
-		}
-	}
-	return shell.Executor{}
-}
+func serveExecutor(def *graph.Definition) runtime.Executor { return selectExecutor(def) }

@@ -493,21 +493,81 @@ version uses a `sha256-v0:` prefix so a future algorithm can be distinguished.
 
 ## Secrets
 
-Raw secrets are forbidden in graph files. Schema v0 has no generic `secret` or
-`secrets` field, and strict parsing rejects such undeclared top-level fields.
-Because node `config` is intentionally opaque, the parser cannot reliably
-identify whether an ordinary configuration string contains sensitive data;
-authors and later node implementations must not place raw secrets there.
+Raw secrets are forbidden in graph files. Because node `config` is
+intentionally opaque, the parser cannot reliably identify whether an ordinary
+configuration string contains sensitive data; authors and later node
+implementations must not place raw secrets there.
 
-Later graphs may reference named secrets:
+A graph may declare named secrets by reference only (F3.8, ADR-0029). The
+optional top-level `secrets` mapping is additive and needs no `schema_version`
+bump; it is semantic content, and a graph without it keeps its normalized bytes
+and semantic version exactly:
 
 ```yaml
 secrets:
-  github_token:
-    secret_ref: local/github-token
+  gh_token:
+    secret_ref: env/GITHUB_TOKEN
 ```
 
-This is outside Phase 0 unless required by a later activated feature.
+- A name matches `[a-z][a-z0-9_]{0,63}`. An entry has exactly one field,
+  `secret_ref`; any other field, a scalar entry or a missing `secret_ref` is a
+  blocking error that names the secret and never repeats its content
+  (`E_SECRET_ENTRY_INVALID`, `E_SECRET_REF_REQUIRED`, `E_SECRET_NAME_INVALID`).
+- `secret_ref` is `<provider>/<name>`: provider `[a-z][a-z0-9-]{0,31}`, name 1-128
+  printable ASCII characters without `/` or whitespace (`E_SECRET_REF_INVALID`).
+  `env` is the only provider; `local` is reserved for the OS keychain and
+  reported as not available (`E_SECRET_PROVIDER_UNAVAILABLE`); any other
+  provider is `E_SECRET_PROVIDER_UNKNOWN`; the diagnostic never repeats the
+  provider text, because the field before `/` may be a pasted secret.
+- A node assigns secrets with `config.secret_env`, a mapping from a child
+  environment variable to a declared secret name. Errors name the node:
+  `E_SECRET_ENV_UNDECLARED`, `E_SECRET_ENV_INVALID`, `E_SECRET_ENV_NAME_INVALID`
+  (empty, `=`, NUL or `AGENTPLANE_ATTEMPT`), `E_SECRET_ENV_DUPLICATE`
+  (case-insensitive), `E_SECRET_ENV_COLLISION` (the variable is also named by the
+  node's `env`, `env_allowlist`, `input_env` or `environment_refs`, compared
+  case-insensitively), `E_SECRET_ENV_NODE_TYPE` (Gate, Human or a loop's embedded
+  Gate) and `E_SECRET_ENV_AGENT_UNSUPPORTED` (Agent nodes cannot take
+  `secret_env` until the Codex spike reports).
+- The editor does not change secrets: edit operations that would write or drop a
+  `secret_env` binding are refused with `secrets_read_only` (ADR-0021 annotation).
+  Declarations and bindings are edited as YAML text.
+- `E_SECRET_AMBIENT_BYPASS` fails in every mode: a node that is not assigned an
+  `env`-provider secret must not name its backing variable in `env_allowlist`,
+  `environment_refs`, an `env` key or an `input_env` target.
+- `E_SECRET_FLOWS_TO_AGENT` rejects any Agent node reachable over data edges
+  from a node with a non-empty `secret_env`, directly or through other nodes of
+  any type (shell, gate, human and agent nodes do not stop the propagation).
+  Accepted output is immutable and flows raw to dependents, so a granted child
+  that echoes its secret could place the value in an Agent prompt sent to a
+  remote model. One error is reported per (source, Agent) pair on the shortest
+  path. A direct edge names the source, the target and the edge (`edges[N]`); a
+  longer path names the node ids along it (`a -> b -> agent`) and the first edge.
+  Variable names and values are never echoed; an empty `secret_env: {}` does not
+  trigger it. Not covered, because they are not edges: a shared workspace file
+  written by a Shell node and read by an Agent (detected after the fact by the
+  workspace scan) and the approval context of a human node. Graph input
+  bindings, graph outputs, Gate bindings and loop feedback do not carry one
+  node's output into another node's Agent input.
+- The Shell executor accepts `secret_env` and publishes its field descriptor
+  (`shell.config.secret_env`) to the editor, so a valid graph passes
+  `graph validate`. At run time the runner resolves each assigned secret once,
+  before `run_started`, and adds it to the child environment of the node that is
+  assigned it and no other node, never to a loop's embedded Gate. Resolution
+  failures stop the run before any event as preflight errors that name the
+  secret and the node, never the variable behind the reference or a value:
+  `secret_unresolved`, `secret_empty`, `secret_provider_unavailable`,
+  `secret_invalid_value`, `secret_redaction_bound_exceeded`,
+  `secret_delivery_unsupported`, `secret_value_in_graph` and `secret_value_in_input`. Every resolved value, with its hex,
+  percent-encoded and Base64 forms, is redacted in events, results and CLI/API
+  output. Redaction is best effort: a child that transforms its own secret
+  defeats it, and a granted process can read, store or send the value. After a
+  granted node ends, a scan of its changed files records a `secret_in_workspace`
+  Check Result; it detects after the fact, does not prevent, and does not fail
+  the node. A graph or `--input` that contains the resolved value of an assigned
+  secret fails preflight (`secret_value_in_graph`, `secret_value_in_input`)
+  before the graph is stored; a secret that is declared but assigned to no node
+  is not resolved and so is not checked. Agent
+  nodes cannot be granted secrets, and policy denial is F3.9.
 
 ## Validation categories
 

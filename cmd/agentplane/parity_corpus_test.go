@@ -56,6 +56,34 @@ var corpus = map[string]string{
 	"E_LOOP_INVALID":           corpusHead + "inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    loop:\n      max_attempts: 2\n      gate:\n        config: {check_id: c, kind: json_predicate}\n      bindings: []\nedges: []\noutputs: {}\n",
 	"E_NODE_CONFIG_INVALID":    corpusHead + "inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: \"\"}\nedges: []\noutputs: {}\n",
 	"E_TIMEOUT_INVALID":        corpusHead + "inputs: {}\nlimits: {run_timeout_seconds: 0}\nnodes:\n" + nodeShell("a", "") + "edges: []\noutputs: {}\n",
+
+	"E_SECRET_NAME_INVALID":          secretsCorpus("  Bad-Name: {secret_ref: env/X}\n", nodeShell("a", "")),
+	"E_SECRET_ENTRY_INVALID":         secretsCorpus("  tok: {secret_ref: env/X, value: nope}\n", nodeShell("a", "")),
+	"E_SECRET_REF_REQUIRED":          secretsCorpus("  tok: {}\n", nodeShell("a", "")),
+	"E_SECRET_REF_INVALID":           secretsCorpus("  tok: {secret_ref: nope}\n", nodeShell("a", "")),
+	"E_SECRET_PROVIDER_UNKNOWN":      secretsCorpus("  tok: {secret_ref: vault/x}\n", nodeShell("a", "")),
+	"E_SECRET_PROVIDER_UNAVAILABLE":  secretsCorpus("  tok: {secret_ref: local/x}\n", nodeShell("a", "")),
+	"E_SECRET_ENV_UNDECLARED":        secretsCorpus("  tok: {secret_ref: env/X}\n", secretNode("a", "{T: ghost}")),
+	"E_SECRET_ENV_INVALID":           secretsCorpus("  tok: {secret_ref: env/X}\n", secretNode("a", "[tok]")),
+	"E_SECRET_ENV_NAME_INVALID":      secretsCorpus("  tok: {secret_ref: env/X}\n", secretNode("a", "{\"A=B\": tok}")),
+	"E_SECRET_ENV_DUPLICATE":         secretsCorpus("  tok: {secret_ref: env/X}\n", secretNode("a", "{T: tok, t: tok}")),
+	"E_SECRET_ENV_COLLISION":         secretsCorpus("  tok: {secret_ref: env/X}\n", secretNode("a", "{T: tok}, env: {t: v}")),
+	"E_SECRET_ENV_NODE_TYPE":         secretsCorpus("  tok: {secret_ref: env/X}\n", "  g:\n    type: gate\n    config: {secret_env: {T: tok}}\n"),
+	"E_SECRET_ENV_AGENT_UNSUPPORTED": secretsCorpus("  tok: {secret_ref: env/X}\n", "  g:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t, secret_env: {T: tok}}\n"),
+	"E_SECRET_AMBIENT_BYPASS":        secretsCorpus("  tok: {secret_ref: env/X}\n", nodeShell("a", "")+"  b:\n    type: shell\n    config: {command: /usr/bin/true, env_allowlist: [X]}\n"),
+	"E_SECRET_FLOWS_TO_AGENT": corpusHead + "secrets:\n  tok: {secret_ref: env/X}\ninputs: {}\nnodes:\n" +
+		"  a:\n    type: shell\n    config: {command: /usr/bin/true, secret_env: {T: tok}}\n    outputs:\n      o: {type: string}\n" +
+		"  m:\n    type: shell\n    config: {command: /usr/bin/true}\n    inputs:\n      i: {type: string}\n    outputs:\n      o: {type: string}\n" +
+		"  b:\n    type: agent\n    config: {adapter: codex, workspace: /w, task: t}\n    inputs:\n      i: {type: string}\n" +
+		"edges:\n  - {from: a.outputs.o, to: m.inputs.i}\n  - {from: m.outputs.o, to: b.inputs.i}\noutputs: {}\n",
+}
+
+func secretsCorpus(secrets, nodes string) string {
+	return corpusHead + "secrets:\n" + secrets + "inputs: {}\nnodes:\n" + nodes + "edges: []\noutputs: {}\n"
+}
+
+func secretNode(id, secretEnv string) string {
+	return "  " + id + ":\n    type: shell\n    config: {command: /usr/bin/true, secret_env: " + secretEnv + "}\n"
 }
 
 // runtimeOnly are codes of the value phase (run start and resolution) or of

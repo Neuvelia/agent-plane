@@ -346,6 +346,20 @@ gains `timeout`. Readers of schemas 1-11 are unchanged. The reason is derived fr
 a typed `run.CancelCause` read with `run.ReasonOf`, never from error text. This
 change defines the shapes only; the runtime emits them in a later F3.4 task.
 
+## Secret and policy facts (F3.8/F3.9)
+
+Event schema 14 adds two typed, bounded facts, `policy_evaluated` (per node
+run: mode, `applied`, scope root, the four permissions with their state, the
+assigned secrets by name, provider and variable name, and a redaction-value
+count) and `policy_violation` (permission, closed reason, `blocked` or
+`recorded` outcome, bounded sorted evidence), plus the Check Result kinds
+`execution_policy` and `secret_in_workspace`. Evidence of a `secret_in_workspace`
+result may carry an optional `secret_name` (the secret's name, never its value;
+rejected on every other kind). No payload can hold a secret
+value. The runtime does not emit `policy_evaluated` or `policy_violation` yet (F3.9); it does emit the
+`secret_in_workspace` Check Result, one per granted node run, as an audit fact that changes no outcome
+(F3.8 requirement 13, ADR-0029).
+
 ## Workspace isolation facts (F3.1)
 
 Event schema 11 adds five typed, bounded facts for isolated Agent units:

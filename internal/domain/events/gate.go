@@ -21,7 +21,13 @@ const (
 	CheckJSONPredicate     CheckKind = "json_predicate"
 	CheckReportedFileScope CheckKind = "reported_file_scope"
 	CheckChangedFilesScope CheckKind = "changed_files_scope"
+	CheckExecutionPolicy   CheckKind = "execution_policy"
+	CheckSecretInWorkspace CheckKind = "secret_in_workspace"
 )
+
+func isPolicyCheckKind(k CheckKind) bool {
+	return k == CheckExecutionPolicy || k == CheckSecretInWorkspace
+}
 
 type CheckVerdict string
 
@@ -49,11 +55,15 @@ type CheckScope struct {
 	CheckedInputs []string `json:"checked_inputs"`
 }
 
+// GateEvidence is one typed fact behind a Check Result. SecretName (only on
+// secret_in_workspace evidence) names the granted secret found at Path, never
+// its value (F3.8 requirement 13).
 type GateEvidence struct {
 	Kind          EvidenceKind       `json:"kind"`
 	Reference     *EvidenceReference `json:"reference,omitempty"`
 	Source        EvidenceSource     `json:"source"`
 	Path          string             `json:"path,omitempty"`
+	SecretName    string             `json:"secret_name,omitempty"`
 	ExitCode      *int               `json:"exit_code,omitempty"`
 	Stdout        []byte             `json:"stdout,omitempty"`
 	Stderr        []byte             `json:"stderr,omitempty"`
@@ -129,7 +139,7 @@ func (p GateCheckPayload) Validate() error {
 	if strings.TrimSpace(p.CheckID) == "" || len(p.CheckID) > 256 || !utf8.ValidString(p.CheckID) || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 512 || !utf8.ValidString(p.Reason) {
 		return errors.New("invalid gate identity/reason")
 	}
-	if p.Kind != "command" && p.Kind != "json_predicate" && p.Kind != "reported_file_scope" && p.Kind != CheckChangedFilesScope {
+	if p.Kind != CheckCommand && p.Kind != CheckJSONPredicate && p.Kind != CheckReportedFileScope && p.Kind != CheckChangedFilesScope && !isPolicyCheckKind(p.Kind) {
 		return errors.New("invalid gate kind")
 	}
 	if p.Kind == CheckChangedFilesScope {
@@ -165,6 +175,9 @@ func (p GateCheckPayload) Validate() error {
 	if p.Evidence == nil || p.Verdict == CheckRed && len(p.Evidence) == 0 || len(p.Evidence) > 32 {
 		return errors.New("invalid gate evidence count")
 	}
+	if err := validSecretCheck(p); err != nil {
+		return err
+	}
 	if p.Kind == "command" && len(p.Evidence) != 1 {
 		return errors.New("command requires exactly one evidence item")
 	}
@@ -176,6 +189,9 @@ func (p GateCheckPayload) Validate() error {
 			if err := e.Reference.Validate(); err != nil {
 				return err
 			}
+		}
+		if err := validEvidenceSecretName(p.Kind, e.SecretName); err != nil {
+			return err
 		}
 		if !utf8.ValidString(e.Path) || len(e.Stdout) > MaxGateStream || len(e.Stderr) > MaxGateStream {
 			return errors.New("invalid gate evidence")
@@ -234,6 +250,26 @@ func CloneGate(p GateCheckPayload) GateCheckPayload {
 	return p
 }
 
+// validEvidenceSecretName allows the name only on secret_in_workspace evidence.
+// The kind already requires SchemaPolicy, so the field needs no schema check of
+// its own and older logs never carry it. The grammar repeats policySecretName
+// because this package may not import domain/secrets. The grammar does not
+// protect against a secret value (a short lowercase secret passes it). The
+// protection is that the emitter takes the name from the declared grant, never
+// from file content.
+func validEvidenceSecretName(kind CheckKind, name string) error {
+	if name == "" {
+		return nil
+	}
+	if kind != CheckSecretInWorkspace {
+		return errors.New("secret_name is only valid on secret_in_workspace evidence")
+	}
+	if !policySecretName.MatchString(name) {
+		return errors.New("invalid evidence secret_name")
+	}
+	return nil
+}
+
 func validText(s string, limit int) bool {
 	return strings.TrimSpace(s) != "" && len(s) <= limit && utf8.ValidString(s)
 }
@@ -261,7 +297,7 @@ func (r EvidenceReference) Validate() error {
 
 func (e *GateEvidence) UnmarshalJSON(data []byte) error {
 	type wire GateEvidence
-	fields, err := checkObjectFields(data, "kind", "source", "reference", "exit_code", "path", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted")
+	fields, err := checkObjectFields(data, "kind", "source", "reference", "exit_code", "path", "secret_name", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted")
 	if err != nil {
 		return err
 	}
@@ -270,7 +306,7 @@ func (e *GateEvidence) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("evidence requires %s", key)
 		}
 	}
-	for _, key := range []string{"reference", "exit_code", "path", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted"} {
+	for _, key := range []string{"reference", "exit_code", "path", "secret_name", "stdout", "stderr", "stdout_omitted", "stderr_omitted", "omitted"} {
 		if bytes.Equal(bytes.TrimSpace(fields[key]), []byte("null")) {
 			return fmt.Errorf("evidence %s may not be null", key)
 		}

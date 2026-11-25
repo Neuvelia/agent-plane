@@ -6,6 +6,9 @@ func ClonePayload(payload Payload) Payload {
 	if cloned, ok := cloneEvidencePayload(payload); ok {
 		return cloned
 	}
+	if cloned, ok := clonePolicyPayload(payload); ok {
+		return cloned
+	}
 	if cloned, ok := cloneLifecyclePayload(payload); ok {
 		return cloned
 	}

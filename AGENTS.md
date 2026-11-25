@@ -69,6 +69,11 @@ versioned operations (ADR-0020, ADR-0021) served by `POST /graphs/open`, `/graph
 descriptors owned by the validators (`internal/fields`). F2.11 adds the read-only
 capability report (`GET /capabilities`, `POST /capabilities/check`, ADR-0025) and the
 desktop welcome screen; F2.12 adds bundled graph templates and the template picker.
+F3.8 (event schema 14, ADR-0029 proposed) adds graph-declared secret references with
+the `env` provider for Shell nodes: per-node environment delivery, redaction of
+resolved values and an after-the-fact workspace scan. It is not a sandbox, does not
+protect a value from the process it is granted to, and leaves Agent `secret_env`, the
+keychain provider and policy enforcement to later work (F3.9).
 Read the
 active feature spec before changing execution contracts; do not treat the roadmap as an executable spec.
 

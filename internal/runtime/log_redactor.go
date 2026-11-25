@@ -19,13 +19,21 @@ type logRedactor struct {
 }
 
 func newLogRedactor(values []string) (*logRedactor, error) {
+	secrets := make([][]byte, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			secrets = append(secrets, []byte(value))
+		}
+	}
+	return newByteRedactor(secrets)
+}
+
+// newByteRedactor builds a redactor for non-empty byte strings. The marker is
+// chosen from bytes absent from every one of them.
+func newByteRedactor(values [][]byte) (*logRedactor, error) {
 	r := &logRedactor{pending: make(map[events.Stream][]byte, 2)}
 	var used [256]bool
-	for _, value := range values {
-		if value == "" {
-			continue
-		}
-		secret := []byte(value)
+	for _, secret := range values {
 		r.secrets = append(r.secrets, secret)
 		for _, b := range secret {
 			used[b] = true
@@ -41,30 +49,35 @@ func newLogRedactor(values []string) (*logRedactor, error) {
 		return bytes.Compare(r.secrets[i], r.secrets[j]) < 0
 	})
 	if len(r.secrets) > 0 {
-		// A byte absent from every secret prevents a replacement from
-		// containing a secret or joining surrounding bytes into one.
-		for _, b := range []byte("*#~^|!?@%+=:;") {
-			if !used[b] {
-				r.marker = []byte{b, b, b}
-				return r, nil
-			}
+		marker, ok := safeMarker(&used)
+		if !ok {
+			return nil, errors.New("log redactions cover every byte; no safe replacement marker is available")
 		}
-		for b := byte('!'); b <= '~'; b++ {
-			if !used[b] {
-				r.marker = []byte{b, b, b}
-				return r, nil
-			}
-		}
-		for i := 0; i < len(used); i++ {
-			if !used[i] {
-				b := byte(i)
-				r.marker = []byte{b, b, b}
-				return r, nil
-			}
-		}
-		return nil, errors.New("log redactions cover every byte; no safe replacement marker is available")
+		r.marker = marker
 	}
 	return r, nil
+}
+
+// safeMarker picks a byte absent from every secret, so a replacement can
+// neither contain a secret nor join surrounding bytes into one. It prefers
+// punctuation, then any printable byte, then any byte.
+func safeMarker(used *[256]bool) ([]byte, bool) {
+	for _, b := range []byte("*#~^|!?@%+=:;") {
+		if !used[b] {
+			return []byte{b, b, b}, true
+		}
+	}
+	for b := byte('!'); b <= '~'; b++ {
+		if !used[b] {
+			return []byte{b, b, b}, true
+		}
+	}
+	for i := 0; i < len(used); i++ {
+		if !used[i] {
+			return []byte{byte(i), byte(i), byte(i)}, true
+		}
+	}
+	return nil, false
 }
 
 func (r *logRedactor) clone() *logRedactor {

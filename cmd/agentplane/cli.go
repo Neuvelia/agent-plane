@@ -12,7 +12,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
-	"agentplane/internal/shell"
 	"agentplane/internal/store"
 	"agentplane/internal/version"
 )
@@ -145,7 +143,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	fs.Var(&approveNodes, "approve", "approve a human node by ID; repeatable")
 	fs.Var(&rejectNodes, "reject", "reject a human node by ID; repeatable")
 	fs.Var(&inputs, "input", "graph input as key=value; repeat for multiple inputs")
-	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs")
+	fs.Var(&redactEnv, "redact-env", "redact a named environment value from event logs and run results")
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
 		return usageError("run", err, wantsJSON(args), stdout, stderr)
 	}
@@ -199,7 +197,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues, SecretResolver: secretResolver()}
+	configureSecretScan(&opts)
+	opts.StoredMaterial = storedMaterial{graphBytes: graphBytes, def: def, flags: inputs, values: values}
 	if err := isolation.configure(def, &opts); err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
@@ -237,13 +237,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return awaitWatchOutput(ctx, done, watchOutputGrace)
 		}
 	}
-	var executor runtime.Executor = shell.Executor{}
-	for _, node := range def.Nodes {
-		if node.Type != "shell" || node.Loop != nil {
-			executor = nodeExecutor{}
-			break
-		}
-	}
+	executor := selectExecutor(def)
 	if *adapterID == "codex" {
 		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
 	}
@@ -341,35 +335,7 @@ func graphHoldsSecret(def *graph.Definition, graphBytes []byte, redactions []str
 // forgotten, and it compares parsed values, so YAML escapes, folding and unicode
 // escapes cannot hide a secret from the byte-level check on the stored snapshot.
 func definitionHoldsSecret(def *graph.Definition, secret string) bool {
-	var walk func(v reflect.Value) bool
-	walk = func(v reflect.Value) bool {
-		switch v.Kind() {
-		case reflect.String:
-			return strings.Contains(v.String(), secret)
-		case reflect.Interface, reflect.Pointer:
-			return !v.IsNil() && walk(v.Elem())
-		case reflect.Slice, reflect.Array:
-			for i := 0; i < v.Len(); i++ {
-				if walk(v.Index(i)) {
-					return true
-				}
-			}
-		case reflect.Map:
-			for _, k := range v.MapKeys() {
-				if walk(k) || walk(v.MapIndex(k)) {
-					return true
-				}
-			}
-		case reflect.Struct:
-			for i := 0; i < v.NumField(); i++ {
-				if v.Type().Field(i).IsExported() && walk(v.Field(i)) {
-					return true
-				}
-			}
-		}
-		return false
-	}
-	return def != nil && walk(reflect.ValueOf(def))
+	return definitionHolds(def, func(text string) bool { return strings.Contains(text, secret) })
 }
 
 func wantsJSON(args []string) bool {

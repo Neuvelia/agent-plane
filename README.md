@@ -7,7 +7,7 @@ The project focuses on orchestration, deterministic validation, bounded correcti
 ## Status
 
 **Phase 0 - Execution Core and Phase 1 - Agent Loop (F1.1-F1.8) are implemented;
-the real-Codex F1.7 demo is prepared but not yet executed.** F1.1 provides the adapter contract and F1.2 adds
+the real-Codex F1.7 demo was executed on 2026-11-17 against Codex 0.169.0 (`docs/validation/F1.7-real-codex-demo.md`).** F1.1 provides the adapter contract and F1.2 adds
 explicit installed-Codex execution with Git-derived evidence. F1.3 adds bounded
 normalized progress and live delivery. F1.4 adds deterministic read-only Gates;
 F1.5 adds versioned Check Results with checked-input scope, duration and typed
@@ -116,14 +116,25 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 10 (old schema 1–9 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 14 (older schema records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
 current value of each named environment variable from event logs, normalized
 progress string fields, evidence and their human display, without putting the value in CLI arguments. The variable
-must be set. Redaction does not alter graph output values explicitly exposed
-by the graph.
+must be set. The same set also masks the printed run result: string and artifact reference
+outputs and failure messages carry the marker, and number, boolean or JSON outputs
+that redaction would change are withheld (`value: null`, declared `type` kept).
+Both carry `redacted: true`, which is absent when nothing was redacted. Values
+passed to downstream nodes are not altered.
+
+A graph can declare secrets by reference (`secrets: {gh_token: {secret_ref: env/GITHUB_TOKEN}}`) and assign them
+to a Shell node with `config.secret_env: {GH_TOKEN: gh_token}`. The runner reads the variable once before the run
+starts, fails the run before any event when it is unset or empty, passes the value only to the assigned node's
+environment, and redacts it (and its hex, percent-encoded and Base64 forms) from events and output. A scan of the
+changed files of a granted node records whether the value was written into the workspace; it only reports. This
+is not a sandbox: the granted process can read, transform or send its own secret, and redaction does not catch
+every transformation. Agent nodes cannot be granted secrets yet. See `docs/features/F3.8-secrets-references.md`.
 
 `--record-values` (off by default, on `run` and `serve`) adds one
 `value_recorded` event per supplied graph input and per accepted output port

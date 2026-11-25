@@ -162,3 +162,18 @@ validated cleanly before may now report config errors they would have hit at run
 - API diagnostics equal `agentplane graph validate` for the same text, including node-config errors.
 - `/graphs/edit` does not touch the file system; `/graphs/save` is the only writer.
 - An end-to-end run shows a graph created in the UI runs from the CLI unchanged.
+
+## Annotation: secrets are read-only for edit operations (F3.8, ADR-0029)
+
+Owner decision 9A. `POST /graphs/edit` refuses, with code `secrets_read_only` (HTTP 422, `detail.node` and
+`detail.path` set, text unchanged), every operation that would write, drop or replace a secret binding:
+`set_config`/`unset_config` and `set_loop_config`/`unset_loop_config` with a path under `secret_env`, `set_loop`
+whose Gate config carries `secret_env`, and `remove_node` of a node that holds `secret_env`. No operation reaches
+the top-level `secrets` block. The code is a short, stable name, unlike the `E_EDIT_*` family, and a refused batch
+is atomic like any other failure. Other config fields, `rename_node` and every other operation are unchanged.
+
+`PUT /graphs/save` is not an operation: it writes the text the client sends after the checks above (grant, hash,
+size, UTF-8, atomic replace) and does not parse secrets. Declarations and bindings can therefore still be changed
+by typing YAML in the text view and saving. This is a known limitation, not a guarantee: the read-only rule
+bounds what the visual editor and operation clients can do, not what a person with a write grant can type. A
+secret value never appears in the graph, because the file holds references only.

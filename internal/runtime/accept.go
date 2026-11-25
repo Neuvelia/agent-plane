@@ -13,6 +13,7 @@ import (
 // It returns only nodes eligible for another bounded attempt.
 func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *graph.Definition, results []completedNode, state *batchState) []string {
 	var retry []string
+	machine.recordSecretScans(results)
 	for _, work := range results {
 		if work.baseline != nil {
 			state.baselines[work.id] = work.baseline
@@ -157,5 +158,6 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 		machine.recordAcceptedOutputs(work.id, acceptedAttempt)
 		machine.transitionNode(work.id, run.NodeSucceeded)
 	}
+	machine.closeUnscannedWindows(ctx, results, retry)
 	return retry
 }
