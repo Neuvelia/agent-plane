@@ -548,11 +548,11 @@ secrets:
   workspace scan) and the approval context of a human node. Graph input
   bindings, graph outputs, Gate bindings and loop feedback do not carry one
   node's output into another node's Agent input.
-- This iteration defines the graph surface and validation only. The Shell
-  executor does not accept `secret_env` yet, so `agentplane run` and
-  `graph validate` reject it as an unknown config field until the runtime
-  pipeline delivers granted values (F3.8 T3/T4b); nothing is resolved or
-  delivered, and no field descriptor is published to the editor yet.
+- The Shell executor accepts `secret_env` and publishes its field descriptor
+  (`shell.config.secret_env`) to the editor, so a valid graph passes
+  `graph validate`. Secret values are not delivered yet (F3.8 T3/T4b): a Shell
+  node that configures `secret_env` fails closed as a configuration failure when
+  it runs, and its process is never started. Nothing is resolved or injected.
 
 ## Validation categories
 

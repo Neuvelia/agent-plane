@@ -593,6 +593,16 @@
     ]
    },
    {
+    "id": "shell.config.secret_env",
+    "key": "secret_env",
+    "kind": "map",
+    "item": {
+     "id": "shell.config.secret_name",
+     "kind": "string",
+     "format": "secret_name"
+    }
+   },
+   {
     "id": "shell.config.stdout_json",
     "key": "stdout_json",
     "kind": "bool",

@@ -27,6 +27,7 @@ func TestConfigFieldsEqualTheExecutor(t *testing.T) {
 			"shell.config.env_allowlist": []any{"HOME"},
 			"shell.config.env":           map[string]any{"MODE": "x"},
 			"shell.config.input_env":     map[string]any{"name": "NAME_VAR"},
+			"shell.config.secret_env":    map[string]any{"TOKEN": "gh_token"},
 			"shell.config.stdout_json":   true,
 		},
 		Validate: func(n graph.NodeDefinition) error { return Executor{}.ValidateNodeConfig("n", n) },
@@ -55,5 +56,5 @@ func TestOutputPortsEqualTheExecutor(t *testing.T) {
 }
 
 func TestConfigKeysArePinnedToTheSpec(t *testing.T) {
-	fieldstest.PinKeys(t, ConfigFields(), "command", "args", "cwd", "env_allowlist", "env", "input_env", "stdout_json")
+	fieldstest.PinKeys(t, ConfigFields(), "command", "args", "cwd", "env_allowlist", "env", "input_env", "secret_env", "stdout_json")
 }

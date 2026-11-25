@@ -167,6 +167,8 @@ func goodFormat(format fields.Format, sample string) []string {
 		return []string{"a/b", "dir/"}
 	case fields.FormatJSONScalar:
 		return []string{"1", "true", "null", `"s"`}
+	case fields.FormatSecretName:
+		return []string{"a", "tok_1"}
 	}
 	return nil
 }
@@ -353,6 +355,8 @@ func badFormat(format fields.Format) []string {
 		return []string{"", "/abs/file", "../outside"}
 	case fields.FormatJSONScalar:
 		return []string{"", "{", "[1]", "{\"a\":1}"}
+	case fields.FormatSecretName:
+		return []string{"", "Bad-Name", "1abc", "A", strings.Repeat("a", 65)}
 	}
 	return nil
 }
