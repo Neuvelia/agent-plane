@@ -321,8 +321,12 @@ func TestScanDoesNotBlockOnFifoSwappedInAfterLstat(t *testing.T) {
 	done := make(chan secrets.ScanReport, 1)
 	go func() {
 		done <- scanAfterSwap(t, root, secrets.DefaultScanLimits(), func(abs string) {
-			mustDo(t, os.Remove(abs))
-			mustDo(t, syscall.Mkfifo(abs, 0o600))
+			// The FIFO exists while the original does, so their inodes differ
+			// by construction; a Remove-then-Mkfifo swap would pass SameFile
+			// only when the filesystem happens to reuse the freed inode.
+			replacement := abs + ".fifo"
+			mustDo(t, syscall.Mkfifo(replacement, 0o600))
+			mustDo(t, os.Rename(replacement, abs))
 		})
 	}()
 	select {
