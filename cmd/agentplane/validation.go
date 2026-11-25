@@ -82,5 +82,5 @@ func graphIDText(id string) string {
 	if graph.ValidIdentifier(id) {
 		return id
 	}
-	return "<invalid identifier>"
+	return graph.InvalidIdentifierText
 }

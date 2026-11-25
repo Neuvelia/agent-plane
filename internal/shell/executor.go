@@ -343,13 +343,13 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 		}
 	}
 	if value, present := node.Config["env"]; present {
-		cfg.env, err = stringMap(value, "env")
+		cfg.env, err = stringMap(value, "env", entryText)
 		if err != nil {
 			return cfg, err
 		}
 	}
 	if value, present := node.Config["input_env"]; present {
-		cfg.inputEnv, err = stringMap(value, "input_env")
+		cfg.inputEnv, err = stringMap(value, "input_env", inputEntryText)
 		if err != nil {
 			return cfg, err
 		}
@@ -436,7 +436,9 @@ func stringList(value any, field string) ([]string, error) {
 	}
 }
 
-func stringMap(value any, field string) (map[string]string, error) {
+// stringMap reads a mapping of strings; label names an entry in errors and
+// decides which keys may be quoted.
+func stringMap(value any, field string, label func(string, int, string) string) (map[string]string, error) {
 	raw, keys, err := sortedEntries(value, field)
 	if err != nil {
 		return nil, err
@@ -445,13 +447,13 @@ func stringMap(value any, field string) (map[string]string, error) {
 	for index, key := range keys {
 		item, ok := raw[key].(string)
 		if !ok {
-			return nil, fmt.Errorf("%s must be a string", entryText(field, index, key))
+			return nil, fmt.Errorf("%s must be a string", label(field, index, key))
 		}
 		if !validEnvName(key) {
-			return nil, fmt.Errorf("%s has an invalid name; use a non-empty name without '='", entryText(field, index, key))
+			return nil, fmt.Errorf("%s has an invalid name; use a non-empty name without '='", label(field, index, key))
 		}
 		if strings.ContainsRune(item, 0) {
-			return nil, fmt.Errorf("%s contains a NUL byte", entryText(field, index, key))
+			return nil, fmt.Errorf("%s contains a NUL byte", label(field, index, key))
 		}
 		result[key] = item
 	}

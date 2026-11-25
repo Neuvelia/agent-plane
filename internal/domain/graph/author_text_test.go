@@ -53,6 +53,9 @@ func TestDiagnosticsNeverQuoteInvalidAuthorText(t *testing.T) {
 			seconds := 5
 			d.Nodes[s] = NodeDefinition{Type: "human", TimeoutSeconds: &seconds, Outputs: map[string]PortDefinition{"decision": {Type: ValueTypeString}}}
 		}},
+		{"node type with secret_env", func(d *Definition) {
+			d.Nodes["t"] = NodeDefinition{Type: s, Config: NodeConfig{secretEnvKey: map[string]string{"T": "t"}}}
+		}},
 		{"agent node id with secret_env", func(d *Definition) {
 			d.Nodes[s] = NodeDefinition{Type: "agent", Config: NodeConfig{secretEnvKey: map[string]string{"T": "t"}}}
 		}},
@@ -82,10 +85,28 @@ func TestDiagnosticsNeverQuoteInvalidAuthorText(t *testing.T) {
 
 func TestInvalidNodeIDDiagnosticsPointAtNodesCollection(t *testing.T) {
 	definition := authorTextBaseDefinition()
-	definition.Nodes[pastedSecret] = NodeDefinition{Inputs: map[string]PortDefinition{"x": {Type: ValueTypeString, Required: true}}}
-	for _, diagnostic := range Validate(definition).Diagnostics {
-		if diagnostic.Location.NodeID == "" && diagnostic.Location.Path != "nodes" && strings.HasPrefix(diagnostic.Location.Path, "nodes") {
-			t.Errorf("%s located at %q, want the nodes collection", diagnostic.Code, diagnostic.Location.Path)
+	seconds := 0
+	definition.Nodes[pastedSecret] = NodeDefinition{
+		Type:           "shell",
+		TimeoutSeconds: &seconds,
+		Inputs:         map[string]PortDefinition{"x": {Type: ValueTypeString, Required: true}},
+		Outputs:        map[string]PortDefinition{"y": {Type: ValueTypeString}},
+	}
+	diagnostics := Validate(definition).Diagnostics
+	if len(diagnostics) < 4 {
+		t.Fatalf("diagnostics = %#v, want identifier, timeout, unbound input and unused output", diagnostics)
+	}
+	for _, diagnostic := range diagnostics {
+		location := diagnostic.Location
+		if location.NodeID == pastedSecret {
+			t.Errorf("%s carries the invalid node id", diagnostic.Code)
+		}
+		inValidNode := strings.HasPrefix(location.Path, "nodes.a.") || strings.HasPrefix(location.Path, "nodes.b.")
+		if strings.HasPrefix(location.Path, "nodes") && location.Path != "nodes" && !inValidNode {
+			t.Errorf("%s located at %q, want the nodes collection", diagnostic.Code, location.Path)
+		}
+		if diagnostic.Code == "E_TIMEOUT_INVALID" && !strings.HasPrefix(diagnostic.Message, "timeout_seconds is 0") {
+			t.Errorf("timeout message %q does not name the field", diagnostic.Message)
 		}
 	}
 }

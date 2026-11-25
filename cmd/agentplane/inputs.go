@@ -17,7 +17,8 @@ func (f *inputFlags) Set(value string) error { *f = append(*f, value); return ni
 
 // Flag text never appears in these errors, which reach the terminal before the
 // F3.8 input guard runs: a value typed where a key or a variable name belongs
-// may be a secret. Entries are named by their position on the command line.
+// may be a secret. Entries are named by their position in the input list (the
+// --input flags, or the inputs array of a serve request).
 func validateInputSyntax(flags inputFlags) error {
 	seen := make(map[string]bool, len(flags))
 	for position, item := range flags {
@@ -26,7 +27,7 @@ func validateInputSyntax(flags inputFlags) error {
 			return fmt.Errorf("--input must have the form key=value")
 		}
 		if seen[key] {
-			return fmt.Errorf("--input #%d repeats the key of an earlier --input", position+1)
+			return fmt.Errorf("input #%d repeats the key of an earlier input", position+1)
 		}
 		seen[key] = true
 	}

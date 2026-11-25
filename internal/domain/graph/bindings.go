@@ -141,7 +141,8 @@ func (p *BindingPlan) ValidateGraphInputs(values map[string]Value) ValidationRes
 // Their keys come from outside the graph (--input, the API) and are never
 // echoed, even when they match the identifier grammar: the F3.8 input guard
 // runs after this check, so a pasted secret would otherwise reach the
-// terminal, logs or an API response. Entries are numbered in key order.
+// terminal, logs or an API response. The diagnostics are numbered only to tell
+// them apart; the numbers do not identify a key.
 func (p *BindingPlan) unknownInputDiagnostics(values map[string]Value) []Diagnostic {
 	var unknown int
 	for inputID := range values {

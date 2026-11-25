@@ -11,16 +11,17 @@ import (
 // secret. Text that matches the grammar is graph structure that events already
 // carry and is quoted as usual.
 
-// invalidKeyText stands in for author text that is not shown.
-const invalidKeyText = "<invalid identifier>"
+// InvalidIdentifierText stands in for author text that is not shown. Adapters
+// that report configuration errors use the same placeholder.
+const InvalidIdentifierText = "<invalid identifier>"
 
 // quotedKey quotes key when it matches the identifier grammar and returns
-// invalidKeyText otherwise.
+// InvalidIdentifierText otherwise.
 func quotedKey(key string) string {
 	if validIdentifier(key) {
 		return fmt.Sprintf("%q", key)
 	}
-	return invalidKeyText
+	return InvalidIdentifierText
 }
 
 // mapPath addresses key under prefix. An invalid key is not echoed, so the
@@ -52,4 +53,13 @@ func fieldPath(prefix, key, field string) string {
 		return prefix + "." + key + "." + field
 	}
 	return prefix
+}
+
+// typeText shows a node type unquoted, as messages always have, unless it fails
+// the identifier grammar.
+func typeText(nodeType string) string {
+	if validIdentifier(nodeType) {
+		return nodeType
+	}
+	return InvalidIdentifierText
 }

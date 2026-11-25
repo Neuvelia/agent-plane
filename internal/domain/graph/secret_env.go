@@ -31,7 +31,7 @@ func (v *definitionValidator) validateNodeSecretEnv(nodeID string, node NodeDefi
 		v.error("E_SECRET_ENV_AGENT_UNSUPPORTED", fmt.Sprintf("node %s: secret_env is not supported on agent nodes yet", quotedKey(nodeID)), loc, "remove secret_env; secrets can be assigned to shell nodes only for now")
 		return nil, false
 	default:
-		v.error("E_SECRET_ENV_NODE_TYPE", fmt.Sprintf("node %s is a %s node and cannot receive secrets", quotedKey(nodeID), node.Type), loc, "only shell nodes may use secret_env")
+		v.error("E_SECRET_ENV_NODE_TYPE", fmt.Sprintf("node %s is a %s node and cannot receive secrets", quotedKey(nodeID), typeText(node.Type)), loc, "only shell nodes may use secret_env")
 		return nil, false
 	}
 	entries, ok := configStringMap(raw)

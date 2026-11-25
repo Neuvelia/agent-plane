@@ -55,7 +55,9 @@ field name, and the location points at the enclosing collection (`nodes`, `input
 and the text of `--input`/`--redact-env` flags are never echoed, even when they look like identifiers. Text that
 matches the grammar is graph structure and is still quoted, so a secret that happens to be a valid identifier can
 appear in a diagnostic; `run` and `serve` then refuse the graph with `secret_value_in_graph`, `graph validate` does
-not resolve secrets and cannot. YAML syntax errors and Agent/Gate configuration errors are not yet covered.
+not resolve secrets and cannot. Not yet covered: YAML syntax errors from the parser library, Agent and Gate
+configuration errors (`environment_refs`, `allowed_paths`, Gate inputs), and graph edit operation errors served to the
+desktop editor (`internal/adapter/yamlgraph/edit`), which quote the ids and names in the requested operation.
 
 ## Future blast radius model
 

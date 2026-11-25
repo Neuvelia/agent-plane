@@ -157,7 +157,7 @@ func (v *definitionValidator) validateIdentifier(identifier, path, kind, nodeID 
 	if validIdentifier(identifier) {
 		return
 	}
-	v.error("E_IDENTIFIER_INVALID", fmt.Sprintf("%s %s does not match the identifier grammar", kind, invalidKeyText), DiagnosticLocation{NodeID: nodeID, Path: path}, "use lowercase letters, digits, hyphens, and underscores")
+	v.error("E_IDENTIFIER_INVALID", fmt.Sprintf("%s %s does not match the identifier grammar", kind, InvalidIdentifierText), DiagnosticLocation{NodeID: nodeID, Path: path}, "use lowercase letters, digits, hyphens, and underscores")
 }
 
 func (v *definitionValidator) validateValueType(valueType ValueType, path, nodeID string) {

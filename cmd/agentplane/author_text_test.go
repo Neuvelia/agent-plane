@@ -41,6 +41,21 @@ func TestGraphValidateNeverEchoesInvalidAuthorText(t *testing.T) {
 	}
 }
 
+// The YAML adapter checks timeout_seconds before the validator runs.
+func TestTimeoutPrecheckNeverEchoesInvalidNodeID(t *testing.T) {
+	text := "schema_version: 0\nid: g\ninputs: {}\nnodes:\n" +
+		"  \"N=sk-" + authorMarker + "\":\n    type: shell\n    timeout_seconds: \"x\"\n    config: {command: /usr/bin/true}\n" +
+		"edges: []\noutputs: {}\n"
+	path := writeGraph(t, text)
+	for _, extra := range [][]string{nil, {"--json"}} {
+		exit, out, errout := cli(t, append([]string{"graph", "validate", path}, extra...)...)
+		if exit == 0 || !strings.Contains(out+errout, "E_TIMEOUT_INVALID at nodes:") {
+			t.Fatalf("exit=%d stdout=%s stderr=%s", exit, out, errout)
+		}
+		requireNoAuthorText(t, "graph validate", out+errout)
+	}
+}
+
 func TestRunNeverEchoesUndeclaredInputKeyOrRedactEnvName(t *testing.T) {
 	testenv.RequireExecutable(t, "/bin/sh")
 	marker := filepath.Join(t.TempDir(), "ran")
@@ -50,6 +65,8 @@ func TestRunNeverEchoesUndeclaredInputKeyOrRedactEnvName(t *testing.T) {
 		"undeclared input": {"--input", key + "=x"},
 		"duplicate input":  {"--input", key + "=x", "--input", key + "=y"},
 		"redact-env value": {"--redact-env", "sk-" + authorMarker},
+		"approve value":    {"--approve", "sk-" + authorMarker},
+		"reject value":     {"--reject", "sk-" + authorMarker},
 	} {
 		for _, extra := range [][]string{nil, {"--json"}} {
 			t.Run(name, func(t *testing.T) {

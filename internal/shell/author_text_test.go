@@ -30,6 +30,7 @@ func TestConfigErrorsNeverQuoteAuthorText(t *testing.T) {
 		{"env value type", "a", shellNode(graph.NodeConfig{"env": map[string]any{pastedValue: 1}}, nil), "env entry 0 must be a string"},
 		{"env NUL", "a", shellNode(graph.NodeConfig{"env": map[string]string{pastedValue: "a\x00"}}, nil), "env entry 0 contains a NUL byte"},
 		{"input_env undeclared input", "a", shellNode(graph.NodeConfig{"input_env": map[string]string{pastedValue: "X"}}, nil), "undeclared input"},
+		{"input_env key that is only an env identifier", "a", shellNode(graph.NodeConfig{"input_env": map[string]any{"ghp_Live9f3Q": 5}}, nil), "input_env entry 0 must be a string"},
 		{"input_env name", "a", shellNode(graph.NodeConfig{"input_env": map[string]string{"text": pastedAssignment}}, inputs), `input_env input "text" has an invalid environment name`},
 		{"input_env conflicts with env", "a", shellNode(graph.NodeConfig{"env": map[string]string{pastedValue: "x"}, "input_env": map[string]string{"text": pastedValue}}, inputs), `input "text" maps to environment name <not shown>, which conflicts with env`},
 		{"input_env conflicts with env_allowlist", "a", shellNode(graph.NodeConfig{"env_allowlist": []string{pastedValue}, "input_env": map[string]string{"text": pastedValue}}, inputs), "conflicts with env_allowlist"},
