@@ -150,6 +150,9 @@ func safetyNet(text []byte, before, want *graph.Definition, presentation bool) *
 }
 
 func (s *session) apply(op Op) (*QueryResult, *Error) {
+	if err := s.guardSecrets(op); err != nil {
+		return nil, err
+	}
 	switch op.Op {
 	case OpAddNode:
 		return nil, s.addNode(op)

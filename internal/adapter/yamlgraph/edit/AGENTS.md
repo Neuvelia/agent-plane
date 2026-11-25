@@ -16,6 +16,7 @@ package edits a graph document in memory; it does not save a file.
 | Config value text for the inspector's Advanced section (read-only) | `snippets.go` |
 | Blank lines, BOM, line endings and encoding | `envelope.go` |
 | Structured operation failures | `errors.go` |
+| Secret bindings are read-only: guard run before every operation (F3.8) | `secrets.go` |
 
 ## Preserve these contracts
 

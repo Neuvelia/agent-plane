@@ -34,6 +34,11 @@ const (
 	CodeGraphInputTypeConflict = "E_EDIT_GRAPH_INPUT_TYPE_CONFLICT" // a retype would break a binding
 	CodeBindingNotFound        = "E_EDIT_BINDING_NOT_FOUND"         // remove_graph_input_binding of a binding that is not there
 	CodeGraphOutputInvalid     = "E_EDIT_GRAPH_OUTPUT_INVALID"      // a graph output name or source that cannot be used
+
+	// CodeSecretsReadOnly is added by F3.8 (ADR-0029): an operation would change a
+	// secret binding (config.secret_env). Unlike the E_EDIT_* codes it is the
+	// short code the owner decision 9A fixed for this refusal.
+	CodeSecretsReadOnly = "secrets_read_only"
 )
 
 // Error is a structured, actionable editing failure: what failed, which
