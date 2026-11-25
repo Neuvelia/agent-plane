@@ -273,3 +273,68 @@ func TestSecretNameAndKeyTextIsQuotedOnlyWhenItMatchesTheGrammar(t *testing.T) {
 		assertNoLiteral(t, c.name, bad, result)
 	}
 }
+
+func TestUnknownSecretProviderIsNeverEchoed(t *testing.T) {
+	const pasted = "sk-proj-abcd1234"
+	result := validateText(t, secretsGraph("secrets:\n  tok:\n    secret_ref: "+pasted+"/token\n", shellNode("a", "")))
+	d := diagnosticFor(t, result, "E_SECRET_PROVIDER_UNKNOWN")
+	if !strings.Contains(d.Message, `"tok"`) {
+		t.Errorf("message must still name the secret: %+v", d)
+	}
+	assertNoLiteral(t, "unknown provider", pasted, result)
+}
+
+func TestSecretEnvKeyTextIsQuotedOnlyWhenItMatchesTheGrammar(t *testing.T) {
+	const bad = "ghp_Pasted-Token.9"
+	const badUpper = "GHP_Pasted-Token.9"
+	cases := []struct{ name, nodes, code string }{
+		{"undeclared", shellNode("a", "      secret_env: {\""+bad+"\": nope}\n"), "E_SECRET_ENV_UNDECLARED"},
+		{"duplicate", shellNode("a", "      secret_env: {\""+bad+"\": gh_token, \""+badUpper+"\": gh_token}\n"), "E_SECRET_ENV_DUPLICATE"},
+		{"collision", shellNode("a", "      env: {\""+bad+"\": x}\n      secret_env: {\""+bad+"\": gh_token}\n"), "E_SECRET_ENV_COLLISION"},
+	}
+	for _, c := range cases {
+		result := validateText(t, secretsGraph(oneSecret, c.nodes))
+		d := diagnosticFor(t, result, c.code)
+		if !strings.Contains(d.Message, `"a"`) {
+			t.Errorf("%s: message must still name the node: %+v", c.name, d)
+		}
+		assertNoLiteral(t, c.name, "Pasted", result)
+	}
+}
+
+func TestValidateSecretEnvReportsEveryEntryProblemOnce(t *testing.T) {
+	result := validateText(t, secretsGraph(oneSecret, shellNode("a", "      secret_env: {\"A=B\": gh_token, GH_TOKEN: nope}\n")))
+	var codes []string
+	for _, d := range result.Diagnostics {
+		if strings.HasPrefix(d.Code, "E_SECRET_ENV_") {
+			codes = append(codes, d.Code)
+		}
+	}
+	want := []string{"E_SECRET_ENV_NAME_INVALID", "E_SECRET_ENV_UNDECLARED"}
+	if strings.Join(codes, ",") != strings.Join(want, ",") {
+		t.Fatalf("codes = %v, want %v", codes, want)
+	}
+}
+
+func TestAmbientBypassQuotesTheVariableOnlyWhenItMatchesTheGrammar(t *testing.T) {
+	const pasted = "ghp_Ab.Cd-Ef12"
+	backing := "secrets:\n  gh_token:\n    secret_ref: \"env/" + pasted + "\"\n"
+	nodes := shellNode("a", "      secret_env: {GH_TOKEN: gh_token}\n") +
+		shellNode("thief", "      env_allowlist: [\""+pasted+"\"]\n")
+	result := validateText(t, secretsGraph(backing, nodes))
+	d := diagnosticFor(t, result, "E_SECRET_AMBIENT_BYPASS")
+	if !strings.Contains(d.Message, `"thief"`) {
+		t.Errorf("message must still name the node: %+v", d)
+	}
+	assertNoLiteral(t, "ambient bypass", "ghp_Ab", result)
+	assertNoLiteral(t, "ambient bypass", "Cd-Ef12", result)
+}
+
+func TestAmbientBypassNamesAValidIdentifier(t *testing.T) {
+	nodes := shellNode("a", "      secret_env: {GH_TOKEN: gh_token}\n") +
+		shellNode("thief", "      env_allowlist: [GITHUB_TOKEN]\n")
+	d := diagnosticFor(t, validateText(t, secretsGraph(oneSecret, nodes)), "E_SECRET_AMBIENT_BYPASS")
+	if !strings.Contains(d.Message, "names GITHUB_TOKEN,") || !strings.Contains(d.Suggestion, "naming GITHUB_TOKEN in") {
+		t.Errorf("a valid identifier is still named: %+v", d)
+	}
+}

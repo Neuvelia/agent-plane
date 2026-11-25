@@ -517,7 +517,8 @@ secrets:
   printable ASCII characters without `/` or whitespace (`E_SECRET_REF_INVALID`).
   `env` is the only provider; `local` is reserved for the OS keychain and
   reported as not available (`E_SECRET_PROVIDER_UNAVAILABLE`); any other
-  provider is `E_SECRET_PROVIDER_UNKNOWN`.
+  provider is `E_SECRET_PROVIDER_UNKNOWN`; the diagnostic never repeats the
+  provider text, because the field before `/` may be a pasted secret.
 - A node assigns secrets with `config.secret_env`, a mapping from a child
   environment variable to a declared secret name. Errors name the node:
   `E_SECRET_ENV_UNDECLARED`, `E_SECRET_ENV_INVALID`, `E_SECRET_ENV_NAME_INVALID`
