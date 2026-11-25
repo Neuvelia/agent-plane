@@ -550,9 +550,22 @@ secrets:
   node's output into another node's Agent input.
 - The Shell executor accepts `secret_env` and publishes its field descriptor
   (`shell.config.secret_env`) to the editor, so a valid graph passes
-  `graph validate`. Secret values are not delivered yet (F3.8 T3/T4b): a Shell
-  node that configures `secret_env` fails closed as a configuration failure when
-  it runs, and its process is never started. Nothing is resolved or injected.
+  `graph validate`. At run time the runner resolves each assigned secret once,
+  before `run_started`, and adds it to the child environment of the node that is
+  assigned it and no other node, never to a loop's embedded Gate. Resolution
+  failures stop the run before any event as preflight errors that name the
+  secret and the node, never the variable behind the reference or a value:
+  `secret_unresolved`, `secret_empty`, `secret_provider_unavailable`,
+  `secret_invalid_value`, `secret_redaction_bound_exceeded` and
+  `secret_delivery_unsupported`. Every resolved value, with its hex,
+  percent-encoded and Base64 forms, is redacted in events, results and CLI/API
+  output. Redaction is best effort: a child that transforms its own secret
+  defeats it, and a granted process can read, store or send the value. After a
+  granted node ends, a scan of its changed files records a `secret_in_workspace`
+  Check Result; it detects after the fact, does not prevent, and does not fail
+  the node. Not yet enforced: a graph literal equal to a resolved value is not
+  rejected before the store copies the graph (F3.8 spec, criterion 9). Agent
+  nodes cannot be granted secrets, and policy denial is F3.9.
 
 ## Validation categories
 

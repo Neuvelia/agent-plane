@@ -101,26 +101,6 @@ Cons: breaks every existing graph and Agent adapter; recommended for v1 under en
 - Delegated Agent confinement depends on the vendor sandbox version.
 - Reads, descendants of the node command and exfiltration by a granted process remain out of reach.
 
-## Addendum: run result redaction (F3.8 C4.5)
-
-The redaction set also covers the `run.Result` that `runtime.Run` returns, at one seam (`runMachine.snapshot`),
-on copies only: accepted outputs and downstream inputs stay raw. Text-like outputs are masked, number, boolean
-and JSON outputs are withheld rather than rewritten, and `Failure.Err` keeps `errors.Is` through a
-wrapper without an `Unwrap` chain, and `errors.As` reaches only a masked copy of typed errors that implement
-`Redacted(mask)` (`shell.ExecutionError`, `agent.ExecutionError`), never the raw cause. Only the first such type in the chain is exposed: types it wraps (for example
-`shell.ExecutionError` under `agent.ExecutionError`) are not reachable through `errors.As`. `--redact-env` values are in the same set, so they now mask graph outputs
-too. The CLI field `redacted` is additive; `cli_schema_version` stays 1. No new decision about contracts
-beyond this addendum.
-
-## Addendum: workspace scan wiring (C4.7b)
-
-The runtime scans a granted node's changed files once, after its last attempt, and records a node-run scoped
-`secret_in_workspace` Check Result. Until F3.9 it is an audit fact and never changes a node or run outcome.
-Known gaps that F3.9 must close before enforcing: in a shared workspace the scan attributes neighbours' changes
-(two granted nodes in one repository may both get a red result), so enforce mode must settle attribution before
-blocking a node; and the red `reason` (`secret_found_in_workspace`) differs from the schema 14 fixture
-(`secret_in_workspace_violation`) and is to be unified with the F3.9 policy reasons.
-
 ## Compatibility and migration
 
 Graphs without `policy` or `secrets` behave and hash identically. Readers of older event schemas see no new
@@ -132,7 +112,43 @@ Acceptance criteria in both specs: byte scans of the store directory and API res
 filesystem-level assertions that enforced writes did not happen; unenforceable requests fail preflight in enforce
 mode; Windows launcher tests; architecture test for provider/platform imports; spike reports for Landlock and Codex.
 
-## Addendum: secrets must not reach an Agent over data edges
+## Implementation notes (F3.8)
+
+These notes record how F3.8 implemented this ADR. They change no decision; the status stays proposed until F3.9
+and the T13 acceptance.
+
+### Scope as implemented
+
+F3.8 ships the `env` provider and Shell nodes only: the graph surface and validation, one preflight that resolves
+assigned secrets and builds the redaction set, per-node environment delivery, redaction of events, results and the
+CLI/API output, and the workspace scan as an audit fact. Agent `secret_env` is rejected by validation
+(`E_SECRET_ENV_AGENT_UNSUPPORTED`) until the Codex spike. Event schema 14 defines `policy_evaluated` and
+`policy_violation`, but the runtime does not emit them yet; the policy stage, enforcement modes, `secret_policy_denied`
+and the `policy` graph fields belong to F3.9. Decision 11 (`SecretReceiver`, `secret_delivery_unsupported`) was added
+during F3.8 implementation and needed no new decision about scope or trust. Known gap: a graph literal equal to a
+resolved secret is not rejected before the store copies the graph (F3.8 acceptance criterion 9).
+
+### Run result redaction (C4.5)
+
+The redaction set also covers the `run.Result` that `runtime.Run` returns, at one seam (`runMachine.snapshot`),
+on copies only: accepted outputs and downstream inputs stay raw. Text-like outputs are masked, number, boolean
+and JSON outputs are withheld rather than rewritten, and `Failure.Err` keeps `errors.Is` through a
+wrapper without an `Unwrap` chain, and `errors.As` reaches only a masked copy of typed errors that implement
+`Redacted(mask)` (`shell.ExecutionError`, `agent.ExecutionError`), never the raw cause. Only the first such type in the chain is exposed: types it wraps (for example
+`shell.ExecutionError` under `agent.ExecutionError`) are not reachable through `errors.As`. `--redact-env` values are in the same set, so they now mask graph outputs
+too. The CLI field `redacted` is additive; `cli_schema_version` stays 1. No new decision about contracts
+beyond this addendum.
+
+### Workspace scan wiring (C4.7b)
+
+The runtime scans a granted node's changed files once, after its last attempt, and records a node-run scoped
+`secret_in_workspace` Check Result. Until F3.9 it is an audit fact and never changes a node or run outcome.
+Known gaps that F3.9 must close before enforcing: in a shared workspace the scan attributes neighbours' changes
+(two granted nodes in one repository may both get a red result), so enforce mode must settle attribution before
+blocking a node; and the red `reason` (`secret_found_in_workspace`) differs from the schema 14 fixture
+(`secret_in_workspace_violation`) and is to be unified with the F3.9 policy reasons.
+
+### Secrets must not reach an Agent over data edges
 
 Decided by the product owner after the reviews of PR #167 and PR #169. A node's accepted output is immutable and
 flows raw to its dependents; the redaction of requirement C applies to recorded copies only. A granted child can

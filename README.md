@@ -116,7 +116,7 @@ cannot be combined with `--json`.
 versioned envelope has `cli_schema_version: 1`, `command`, `status`,
 `diagnostics`, `failure`, and `error`. A started run also has `graph_id`,
 `graph_version`, `run_id`, `nodes`, `outputs`, and `events`. Graph output values
-carry `name`, `type`, and a JSON value of that type. Events use event schema 10 (old schema 1–9 records remain readable), including base64-encoded log bytes and authoritative per-run sequence
+carry `name`, `type`, and a JSON value of that type. Events use event schema 14 (older schema records remain readable), including base64-encoded log bytes and authoritative per-run sequence
 numbers. A preflight failure has no run ID or events. A started run includes
 `nodes` and `outputs` arrays even when empty. The CLI does not automatically
 discover secrets in child output. Repeat `--redact-env NAME` to redact the
@@ -127,6 +127,14 @@ outputs and failure messages carry the marker, and number, boolean or JSON outpu
 that redaction would change are withheld (`value: null`, declared `type` kept).
 Both carry `redacted: true`, which is absent when nothing was redacted. Values
 passed to downstream nodes are not altered.
+
+A graph can declare secrets by reference (`secrets: {gh_token: {secret_ref: env/GITHUB_TOKEN}}`) and assign them
+to a Shell node with `config.secret_env: {GH_TOKEN: gh_token}`. The runner reads the variable once before the run
+starts, fails the run before any event when it is unset or empty, passes the value only to the assigned node's
+environment, and redacts it (and its hex, percent-encoded and Base64 forms) from events and output. A scan of the
+changed files of a granted node records whether the value was written into the workspace; it only reports. This
+is not a sandbox: the granted process can read, transform or send its own secret, and redaction does not catch
+every transformation. Agent nodes cannot be granted secrets yet. See `docs/features/F3.8-secrets-references.md`.
 
 `--record-values` (off by default, on `run` and `serve`) adds one
 `value_recorded` event per supplied graph input and per accepted output port

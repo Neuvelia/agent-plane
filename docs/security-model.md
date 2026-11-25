@@ -30,13 +30,17 @@ Treat as untrusted:
 
 ## Secret rule
 
-The graph should eventually contain only references such as:
+The graph contains only references such as:
 
 ```text
-secret_ref: local/github-token
+secret_ref: env/GITHUB_TOKEN
 ```
 
-Secret resolution belongs to the execution environment, not the graph authoring format.
+Secret resolution belongs to the execution environment, not the graph authoring format. The `env` provider and
+Shell nodes are implemented (F3.8, ADR-0029): values are resolved once per run, delivered only to the assigned
+node through its environment and redacted from events and output. This limits who receives a value and detects
+leaks afterwards; it does not protect a value from the process it was granted to. The `local` (keychain) provider,
+Agent grants and policy enforcement are not implemented.
 
 ## Future blast radius model
 

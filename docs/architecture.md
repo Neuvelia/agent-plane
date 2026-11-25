@@ -356,7 +356,9 @@ count) and `policy_violation` (permission, closed reason, `blocked` or
 `execution_policy` and `secret_in_workspace`. Evidence of a `secret_in_workspace`
 result may carry an optional `secret_name` (the secret's name, never its value;
 rejected on every other kind). No payload can hold a secret
-value. Nothing emits these facts yet; the runtime pipeline lands in later F3.8 tasks (ADR-0029).
+value. The runtime does not emit `policy_evaluated` or `policy_violation` yet (F3.9); it does emit the
+`secret_in_workspace` Check Result, one per granted node run, as an audit fact that changes no outcome
+(F3.8 requirement 13, ADR-0029).
 
 ## Workspace isolation facts (F3.1)
 
