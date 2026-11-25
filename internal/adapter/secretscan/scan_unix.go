@@ -136,12 +136,17 @@ func (r *scanRun) scanRegular(ctx context.Context, abs, rel string, lstat fs.Fil
 	}
 	defer func() { _ = file.Close() }() // read-only: a close failure loses nothing
 	opened, err := file.Stat()
+	// The mode is checked before identity so a non-regular file is classified by
+	// what was opened, not by whether the filesystem reused the inode number.
 	switch {
-	case err != nil || !os.SameFile(lstat, opened):
+	case err != nil:
 		r.gaps[secrets.GapUnreadable]++
 		return nil
 	case !opened.Mode().IsRegular():
 		r.gaps[secrets.GapNotRegularFile]++
+		return nil
+	case !os.SameFile(lstat, opened):
+		r.gaps[secrets.GapUnreadable]++
 		return nil
 	}
 	data, err := r.read(ctx, file)
