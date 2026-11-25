@@ -556,15 +556,17 @@ secrets:
   failures stop the run before any event as preflight errors that name the
   secret and the node, never the variable behind the reference or a value:
   `secret_unresolved`, `secret_empty`, `secret_provider_unavailable`,
-  `secret_invalid_value`, `secret_redaction_bound_exceeded` and
-  `secret_delivery_unsupported`. Every resolved value, with its hex,
+  `secret_invalid_value`, `secret_redaction_bound_exceeded`,
+  `secret_delivery_unsupported`, `secret_value_in_graph` and `secret_value_in_input`. Every resolved value, with its hex,
   percent-encoded and Base64 forms, is redacted in events, results and CLI/API
   output. Redaction is best effort: a child that transforms its own secret
   defeats it, and a granted process can read, store or send the value. After a
   granted node ends, a scan of its changed files records a `secret_in_workspace`
   Check Result; it detects after the fact, does not prevent, and does not fail
-  the node. Not yet enforced: a graph literal equal to a resolved value is not
-  rejected before the store copies the graph (F3.8 spec, criterion 9). Agent
+  the node. A graph or `--input` that contains the resolved value of an assigned
+  secret fails preflight (`secret_value_in_graph`, `secret_value_in_input`)
+  before the graph is stored; a secret that is declared but assigned to no node
+  is not resolved and so is not checked. Agent
   nodes cannot be granted secrets, and policy denial is F3.9.
 
 ## Validation categories

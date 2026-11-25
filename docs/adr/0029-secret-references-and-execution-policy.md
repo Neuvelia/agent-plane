@@ -125,8 +125,9 @@ CLI/API output, and the workspace scan as an audit fact. Agent `secret_env` is r
 (`E_SECRET_ENV_AGENT_UNSUPPORTED`) until the Codex spike. Event schema 14 defines `policy_evaluated` and
 `policy_violation`, but the runtime does not emit them yet; the policy stage, enforcement modes, `secret_policy_denied`
 and the `policy` graph fields belong to F3.9. Decision 11 (`SecretReceiver`, `secret_delivery_unsupported`) was added
-during F3.8 implementation and needed no new decision about scope or trust. Known gap: a graph literal equal to a
-resolved secret is not rejected before the store copies the graph (F3.8 acceptance criterion 9).
+during F3.8 implementation and needed no new decision about scope or trust. A graph or `--input` holding the resolved
+value of an assigned secret fails preflight (`secret_value_in_graph`, `secret_value_in_input`); a secret declared
+but assigned to no node is not resolved and is not checked.
 
 ### Run result redaction (C4.5)
 
