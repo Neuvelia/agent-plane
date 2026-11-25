@@ -38,6 +38,11 @@ secret_ref: local/github-token
 
 Secret resolution belongs to the execution environment, not the graph authoring format.
 
+A graph or `--input` that contains the resolved value of an assigned secret fails preflight with
+`secret_value_in_graph` or `secret_value_in_input` before the store copies the graph and before `run_started`
+(F3.8 requirement 12). The diagnostic names the secret and the location, never the value. A secret declared but
+assigned to no node is not resolved, so this check cannot see it.
+
 ## Future blast radius model
 
 Expected classes:

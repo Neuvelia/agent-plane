@@ -107,6 +107,10 @@ type Options struct {
 	// that assigns a secret then fails preflight with secret_provider_unavailable.
 	// Resolved values never enter Options, Result or events.
 	SecretResolver SecretResolver
+	// StoredMaterial lets preflight refuse a run whose graph or inputs hold the
+	// value of a resolved secret, before run_started (F3.8 requirement 12).
+	// Nil skips the check.
+	StoredMaterial StoredMaterial
 	// GraphVersion is the canonical encoding hashed into the run's graph
 	// version (graph.Encoder). It is required: the runtime has no serialization
 	// format of its own, and the composition root supplies the YAML adapter.
