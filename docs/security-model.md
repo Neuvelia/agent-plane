@@ -42,6 +42,11 @@ node through its environment and redacted from events and output. This limits wh
 leaks afterwards; it does not protect a value from the process it was granted to. The `local` (keychain) provider,
 Agent grants and policy enforcement are not implemented.
 
+A graph or `--input` that contains the resolved value of an assigned secret fails preflight with
+`secret_value_in_graph` or `secret_value_in_input` before the store copies the graph and before `run_started`
+(F3.8 requirement 12). The diagnostic names the secret and the location, never the value. A secret declared but
+assigned to no node is not resolved, so this check cannot see it.
+
 ## Future blast radius model
 
 Expected classes:
