@@ -50,6 +50,9 @@ func preflightSecrets(ctx context.Context, definition *graph.Definition, executo
 	if len(faults) > 0 {
 		return secretResolution{}, secretFailure(definition.ID, faults)
 	}
+	if err := guardStoredMaterial(definition, options.StoredMaterial, plan, values); err != nil {
+		return secretResolution{}, err
+	}
 	template, err := buildSecretTemplate(redactions, plan, values)
 	if err != nil {
 		return secretResolution{}, err
