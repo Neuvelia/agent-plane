@@ -35,6 +35,9 @@ func (m storedMaterial) Locations(holds func(text string) bool) []string {
 			found = append(found, "inputs")
 		case holds(raw) || anyHolds(valueStrings(m.values[key]), holds):
 			found = append(found, "inputs."+key)
+		case holds(item):
+			// A value containing "=" can span key and value; the key may be part of it.
+			found = append(found, "inputs")
 		}
 	}
 	return found
