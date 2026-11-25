@@ -128,3 +128,15 @@ only place that composes `internal/adapter/attemptdiff` behind
 graphs open no session and no scratch directory. The flag prints a one-line
 notice on stderr; redaction of file content and paths comes from `--redact-env`.
 In `serve` the flag is fixed at startup and every run opens its own session.
+
+## Secret delivery (F3.8, ADR-0029)
+
+`secrets.go` is the only place that builds the `env` secret provider
+(`envsecrets.Provider{Lookup: os.LookupEnv}`); `run` and `serve` both pass it as
+`Options.SecretResolver`, so `serve` reads its own process environment when a
+run starts and keeps no resolved value between runs. `executors.go` chooses the
+executor for both: a plain Shell graph keeps the bare `shell.Executor{}`, but a
+graph with any `secret_env` node, loop or non-Shell node gets `nodeExecutor`,
+the only composed executor that hands `ExecutionObservation.SecretEnv` to Shell
+(`ReceivesSecrets` is true for `shell` only). Known gap, tracked as C4.5: the
+accepted outputs shown by the CLI document are not redacted yet.

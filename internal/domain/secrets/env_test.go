@@ -68,6 +68,21 @@ func TestEnvRefusesMarshaling(t *testing.T) {
 	}
 }
 
+func TestEnvPickReturnsOnlyRequestedVariablesOnce(t *testing.T) {
+	env := NewEnv([]Binding{
+		{Variable: "A", Value: NewValue("a-value")},
+		{Variable: "B", Value: NewValue("b-value")},
+		{Variable: "A", Value: NewValue("duplicate")},
+	})
+	got := env.Pick(map[string]string{"A": "x", "MISSING": "y"})
+	if len(got) != 1 || got[0] != "A=a-value" {
+		t.Fatalf("Pick = %v, want only A=a-value", got)
+	}
+	if len(Env{}.Pick(map[string]string{"A": "x"})) != 0 {
+		t.Error("an empty Env produced entries")
+	}
+}
+
 func TestEnvFormatAgreesWithCount(t *testing.T) {
 	cases := map[string]Env{
 		"[secret env: 0 variables]": {},

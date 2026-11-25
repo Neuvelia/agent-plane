@@ -158,6 +158,7 @@ func initializeRun(ctx context.Context, definition *graph.Definition, options Op
 	// Graph inputs are recorded directly after run_started, before any other fact.
 	machine.values = newValueRecorder(options.RecordValues, prepared.redactionTemplate)
 	machine.diffs = prepared.diffs
+	machine.grants = prepared.grants
 	machine.recordGraphInputs(prepared.graphInputs)
 	for _, id := range definition.Units {
 		if err := machine.units.register(id, machine.result.RunID, machine.nodes[id].NodeRunID, machine.result.GraphVersion, prepared.scopes[id], prepared.scopeRedacted[id]); err != nil {

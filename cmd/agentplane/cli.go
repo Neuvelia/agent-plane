@@ -21,7 +21,6 @@ import (
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
-	"agentplane/internal/shell"
 	"agentplane/internal/store"
 	"agentplane/internal/version"
 )
@@ -199,7 +198,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues}
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues, SecretResolver: secretResolver()}
 	if err := isolation.configure(def, &opts); err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
@@ -237,13 +236,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return awaitWatchOutput(ctx, done, watchOutputGrace)
 		}
 	}
-	var executor runtime.Executor = shell.Executor{}
-	for _, node := range def.Nodes {
-		if node.Type != "shell" || node.Loop != nil {
-			executor = nodeExecutor{}
-			break
-		}
-	}
+	executor := selectExecutor(def)
 	if *adapterID == "codex" {
 		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
 	}

@@ -45,6 +45,21 @@ func (e Env) Environ() []string {
 	return entries
 }
 
+// Pick returns NAME=value entries only for the requested variables, each at
+// most once and in Env order. Variables that are not bound produce no entry, so
+// plaintext of unrequested bindings is never materialized.
+func (e Env) Pick(variables map[string]string) []string {
+	var entries []string
+	seen := make(map[string]bool, len(variables))
+	for _, b := range e.bindings {
+		if _, wanted := variables[b.Variable]; wanted && !seen[b.Variable] {
+			seen[b.Variable] = true
+			entries = append(entries, b.Variable+"="+b.Value.Reveal())
+		}
+	}
+	return entries
+}
+
 // Format implements fmt.Formatter so that no verb prints a value.
 func (e Env) Format(f fmt.State, _ rune) {
 	noun := "variables"

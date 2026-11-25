@@ -21,7 +21,6 @@ import (
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
-	"agentplane/internal/shell"
 	"agentplane/internal/store"
 	"agentplane/internal/version"
 )
@@ -195,7 +194,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			}
 			return persist(e)
 		}
-		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink}
+		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink, SecretResolver: secretResolver()}
 		if err := config.isolation.configure(def, &opts); err != nil {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: err.Error()}
 		}
@@ -240,11 +239,4 @@ var onRetentionApplied func()
 
 // serveExecutor mirrors `run` without an agent adapter: shell, gate and human
 // graphs are served; an agent node fails with the adapter's own error.
-func serveExecutor(def *graph.Definition) runtime.Executor {
-	for _, node := range def.Nodes {
-		if node.Type != "shell" || node.Loop != nil {
-			return nodeExecutor{}
-		}
-	}
-	return shell.Executor{}
-}
+func serveExecutor(def *graph.Definition) runtime.Executor { return selectExecutor(def) }

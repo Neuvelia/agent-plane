@@ -3,6 +3,7 @@ package runtime
 import (
 	"agentplane/internal/app/trace"
 	"agentplane/internal/domain/run"
+	"agentplane/internal/domain/secrets"
 	"context"
 	"encoding/json"
 	"errors"
@@ -52,6 +53,10 @@ type ExecutionObservation struct {
 	Progress           func(events.Type, events.Payload)
 	Check              func(events.GateCheckPayload)
 	NewCheckCapture    func() *CheckCapture
+	// SecretEnv holds the resolved secrets of this node run (F3.8). It is empty
+	// for nodes without assignment and for a loop's embedded Gate, prints only a
+	// count and refuses serialization; only the process launcher reads it.
+	SecretEnv secrets.Env
 }
 type ObservedExecutor interface {
 	ExecuteNodeObserved(context.Context, string, graph.NodeDefinition, map[string]graph.Value, ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error)
@@ -156,6 +161,9 @@ type runMachine struct {
 	diffs       *diffRecorder
 	attemptIDs  IDGenerator
 	clock       trace.Clock
+	// grants is the in-memory secret environment per assigned node; read only by
+	// secretEnvFor.
+	grants map[string]secrets.Env
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -704,7 +712,7 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }})
+			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }, SecretEnv: m.secretEnvFor(id, node)})
 		} else {
 			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
 		}

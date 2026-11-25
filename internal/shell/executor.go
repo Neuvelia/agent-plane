@@ -5,7 +5,6 @@ package shell
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -95,10 +94,11 @@ type config struct {
 // argument text as shell syntax. Only inputs listed in input_env enter the
 // child process environment.
 func (e Executor) Execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value) (Result, error) {
-	return execute(ctx, nodeID, node, inputs, nil, 0, e)
+	return e.execute(ctx, Request{NodeID: nodeID, Node: node, Inputs: inputs})
 }
 
-func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int, e Executor) (Result, error) {
+func (e Executor) execute(ctx context.Context, request Request) (Result, error) {
+	nodeID, node := request.NodeID, request.Node
 	result := Result{ExitCode: -1}
 	if ctx == nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: errors.New("context is nil")}
@@ -107,29 +107,25 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
-	if err := requireSecretDelivery(cfg); err != nil {
+	grantedEnvironment, err := secretEnvironment(cfg, request.Secrets)
+	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
 	if err := ctx.Err(); err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureCanceled, Result: result, Cause: err}
 	}
-	inputEnvironment, err := buildInputEnvironment(cfg, node, inputs)
+	inputEnvironment, err := buildInputEnvironment(cfg, node, request.Inputs)
 	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: result, Cause: err}
 	}
 
-	cmd := exec.Command(cfg.command, cfg.args...)
-	cmd.Dir = cfg.cwd
-	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
-	if attempt > 0 {
-		cmd.Env = append(cmd.Env, AttemptEnv+"="+strconv.Itoa(attempt))
-	}
+	cmd := newCommand(cfg, request.Attempt, inputEnvironment, grantedEnvironment)
 	// A descendant may inherit stdout or stderr after the direct child exits.
 	// Bound the pipe drain so Wait can finish even if a descendant escapes.
 	cmd.WaitDelay = time.Second
 	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &logWriter{capture: &stdout, stream: "stdout", observe: observe}
-	cmd.Stderr = &logWriter{capture: &stderr, stream: "stderr", observe: observe}
+	cmd.Stdout = &logWriter{capture: &stdout, stream: "stdout", observe: request.Observe}
+	cmd.Stderr = &logWriter{capture: &stderr, stream: "stderr", observe: request.Observe}
 	tree, err := proctree.Start(cmd)
 	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureStart, Result: result, Cause: err}
@@ -152,6 +148,19 @@ func execute(ctx context.Context, nodeID string, node graph.NodeDefinition, inpu
 	}
 	failure.NodeID, failure.Result, failure.Termination = nodeID, result, cancellation.record()
 	return result, failure
+}
+
+// newCommand builds the child with an explicit environment: configured values,
+// mapped inputs, the granted secrets, then the loop attempt number.
+func newCommand(cfg config, attempt int, inputEnvironment, grantedEnvironment []string) *exec.Cmd {
+	cmd := exec.Command(cfg.command, cfg.args...)
+	cmd.Dir = cfg.cwd
+	cmd.Env = append(buildEnvironment(cfg), inputEnvironment...)
+	cmd.Env = append(cmd.Env, grantedEnvironment...)
+	if attempt > 0 {
+		cmd.Env = append(cmd.Env, AttemptEnv+"="+strconv.Itoa(attempt))
+	}
+	return cmd
 }
 
 type cancellation struct {
@@ -235,39 +244,10 @@ func (Executor) ValidateNodeConfig(id string, node graph.NodeDefinition) error {
 }
 
 // ExecuteNodeAttempt is ExecuteNodeWithLogs for a loop producer attempt.
-// attempt 0 means "not a loop attempt" and adds no variable.
+// attempt 0 means "not a loop attempt" and adds no variable. It grants no
+// secrets: a node that configures secret_env must be run through Run.
 func (e Executor) ExecuteNodeAttempt(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte), attempt int) (map[string]graph.Value, error) {
-	cfg, configErr := parseConfig(node)
-	if configErr != nil {
-		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: configErr}
-	}
-	names, outputErr := checkOutputs(node, cfg)
-	if outputErr != nil {
-		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureConfig, Result: Result{ExitCode: -1}, Cause: outputErr}
-	}
-	result, err := execute(ctx, nodeID, node, inputs, observe, attempt, e)
-	if err != nil {
-		return nil, err
-	}
-	outputs := make(map[string]graph.Value, len(node.Outputs))
-	for _, name := range names {
-		switch name {
-		case "stdout":
-			outputs[name] = graph.NewStringValue(result.Stdout)
-		case "stderr":
-			outputs[name] = graph.NewStringValue(result.Stderr)
-		case "exit_code":
-			value, _ := graph.NewNumberValue(json.Number(strconv.Itoa(result.ExitCode)))
-			outputs[name] = value
-		case "json":
-			value, parseErr := graph.NewJSONValue(json.RawMessage(result.Stdout))
-			if parseErr != nil {
-				return nil, &ExecutionError{NodeID: nodeID, Kind: FailureOutput, Result: result, Cause: fmt.Errorf("stdout is not one complete JSON value: %w", parseErr)}
-			}
-			outputs[name] = value
-		}
-	}
-	return outputs, nil
+	return e.Run(ctx, Request{NodeID: nodeID, Node: node, Inputs: inputs, Observe: observe, Attempt: attempt})
 }
 
 // checkOutputs returns the declared output names, sorted, or the first one a

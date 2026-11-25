@@ -1,18 +1,11 @@
 package shell
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
 	"agentplane/internal/domain/secrets"
 )
-
-// errSecretDeliveryUnavailable is returned when a node configures secret_env
-// but no secret values were provided to the executor (F3.8, ADR-0029). The
-// process is never started, so nothing is silently skipped and nothing leaks.
-// It names neither the variable nor the secret.
-var errSecretDeliveryUnavailable = errors.New("secret_env is configured but this build does not deliver secret values yet; the command was not started")
 
 // parseSecretEnv reads secret_env: environment variable name -> NAME of a
 // declared secret. Only names are held here, never values. The rules mirror
@@ -94,13 +87,4 @@ func secretEnvConflict(variable string, cfg config) string {
 		}
 	}
 	return ""
-}
-
-// requireSecretDelivery fails closed: until secret values are delivered, a
-// node that configures secret_env must not start.
-func requireSecretDelivery(cfg config) error {
-	if len(cfg.secretEnv) > 0 {
-		return errSecretDeliveryUnavailable
-	}
-	return nil
 }

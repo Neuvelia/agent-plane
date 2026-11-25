@@ -16,6 +16,7 @@ The root `AGENTS.md` still applies. This file adds rules for
 | Bounded progress, logs and redaction | `progress.go`, `log_redactor.go` |
 | Redaction set for resolved secrets: raw, hex, percent and Base64 (three alignments) forms from `internal/domain/secrets.Forms`, bounded to 64 secrets x 16 KiB x 16 forms with the structured `secret_redaction_bound_exceeded` preflight error; `--redact-env` values stay raw-only (F3.8) | `redaction_set.go` |
 | `SecretResolver` port (one method) for resolving a `secrets.Ref` to a `secrets.Value`, and the optional `SecretReceiver` executor capability | `secret_resolver.go`, `secret_receiver.go` |
+| Delivery (C4.4): `ExecutionObservation.SecretEnv` is read from `runMachine.grants` by `secretEnvFor` in `invoke`, only for the assigned node and only when the invoked node type equals the assigned one, so a loop's embedded Gate (same node ID, type `gate`) never receives values | `secret_grants.go` |
 | Secret preflight (F3.8, ADR-0029): resolves only assigned secrets, once per reference, judges values, builds the run redaction template and `grants`; runs after graph validation and before `unitScopes`/`run_started`; a graph without assignments returns at once | `secret_preflight.go`, called from `preflight.go` |
 | Opt-in recorded run values (ADR-0023) | `values.go`, called from `preflight.go` and `accept.go` |
 | Opt-in attempt diff capture port, budget and emission (ADR-0026) | `attemptdiff.go`, called from `preflight.go`, `loop.go` and `accept.go` |
