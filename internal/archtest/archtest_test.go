@@ -58,14 +58,19 @@ var legacyLayers = map[string]layer{
 	"internal/agent/adaptertest": layerAdapter,
 }
 
-// rootOnlyRule names the R7 violation for secret providers (ADR-0029). It is a
+// rootOnlyRule names the R7 violation for adapters that touch plaintext secrets
+// (ADR-0029). It is a
 // separate rule from the layer rules because delivery -> adapter imports are
 // baselined; this one must never be (TestRootOnlyRuleIsNotBaselined).
-const rootOnlyRule = "R7 secret providers are imported only by the composition root"
+const rootOnlyRule = "R7 secret providers and the secret scanner are imported only by the composition root"
 
-// rootOnlyPackages are providers of secret values; only cmd/agentplane may
-// import them, so no other layer can reach a plaintext source.
-var rootOnlyPackages = map[string]bool{"internal/adapter/envsecrets": true}
+// rootOnlyPackages are providers of secret values and the workspace scanner that
+// receives them; only cmd/agentplane may import them, so no other layer can
+// reach a plaintext source or sink.
+var rootOnlyPackages = map[string]bool{
+	"internal/adapter/envsecrets": true,
+	"internal/adapter/secretscan": true,
+}
 
 // forbiddenStdlib are standard-library packages that domain and application
 // code must reach only through ports (R4).
@@ -293,6 +298,10 @@ func TestRulesDetectViolations(t *testing.T) {
 		{"secret provider imported by app", layerApp, "internal/runtime", modulePath + "/internal/adapter/envsecrets", true},
 		{"secret provider imported by adapter", layerAdapter, "internal/shell", modulePath + "/internal/adapter/envsecrets", true},
 		{"secret provider imported by root", layerRoot, "cmd/agentplane", modulePath + "/internal/adapter/envsecrets", false},
+		{"secret scanner imported by delivery", layerDelivery, "internal/api", modulePath + "/internal/adapter/secretscan", true},
+		{"secret scanner imported by app", layerApp, "internal/runtime", modulePath + "/internal/adapter/secretscan", true},
+		{"secret scanner imported by adapter", layerAdapter, "internal/shell", modulePath + "/internal/adapter/secretscan", true},
+		{"secret scanner imported by root", layerRoot, "cmd/agentplane", modulePath + "/internal/adapter/secretscan", false},
 		{"anyone imports version", layerDomain, "internal/domain/graph", modulePath + "/internal/version", false},
 	}
 	for _, tc := range cases {

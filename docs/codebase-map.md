@@ -12,8 +12,9 @@ durable contract.
 | `internal/domain/graph` | Graph definition types, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
 | `internal/domain/events` | Typed event payloads, schema compatibility, ordering and delivery | `event.go`, `delivery.go` |
 | `internal/domain/run` | Run and node states with legal transitions, results, approval requests, correlation and feedback values | `state.go`, `result.go` |
-| `internal/domain/secrets` | Secret reference grammar, ambient-bypass rule, redaction forms, and the `Value` type that never formats or marshals its plaintext (F3.8, ADR-0029) | `ref.go`, `value.go`, `errors.go` |
+| `internal/domain/secrets` | Secret reference grammar, ambient-bypass rule, redaction forms, and the `Value` type that never formats or marshals its plaintext (F3.8, ADR-0029) | `ref.go`, `value.go`, `scan.go`, `errors.go` |
 | `internal/adapter/envsecrets` | The `env` secret provider: reads the runner environment behind `runtime.SecretResolver`; imported only by `cmd/agentplane` (F3.8) | `provider.go` |
+| `internal/adapter/secretscan` | File-only scan of named workspace files for granted secret values (F3.8 requirement 13): never follows symlinks, bounded, reports paths and secret names only; unix only; imported only by `cmd/agentplane`, not yet wired (C4.7b) | `scan_unix.go`, `confine_unix.go` |
 | `internal/adapter/yamlgraph` | YAML parsing of graph definitions into the domain types | `yamlgraph.go`, `dto.go` |
 | `internal/adapter/yamlgraph/edit` | The graph editor engine: in-memory, fidelity-preserving YAML operations (ADR-0020), served by the API | `apply.go`, `ops.go`, `doc.go` |
 | `internal/adapter/system` | Wall clock and random run identifiers behind engine ports | `system.go` |
@@ -48,6 +49,7 @@ packages only):
 | `domain/graph` | `fields` |
 | `domain/secrets` | none |
 | `adapter/envsecrets` | `domain/secrets` |
+| `adapter/secretscan` | `domain/secrets` |
 | `domain/run` | `domain/events`, `domain/graph` |
 | `adapter/yamlgraph` | `domain/graph` |
 | `adapter/yamlgraph/edit` | `adapter/yamlgraph`, `domain/graph`, `fields` |
