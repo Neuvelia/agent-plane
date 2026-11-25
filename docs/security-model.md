@@ -45,7 +45,8 @@ Agent grants and policy enforcement are not implemented.
 A graph or `--input` that contains the resolved value of an assigned secret fails preflight with
 `secret_value_in_graph` or `secret_value_in_input` before the store copies the graph and before `run_started`
 (F3.8 requirement 12). The diagnostic names the secret and the location, never the value. A secret declared but
-assigned to no node is not resolved, so this check cannot see it.
+assigned to no node is not resolved, so this check cannot see it. A very short secret (1-3 characters) is redacted in
+unrelated text and refuses unrelated graphs; this fail-loud behavior is a deliberate v0 trade-off.
 
 ## Future blast radius model
 
