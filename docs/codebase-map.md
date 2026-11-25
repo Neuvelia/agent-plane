@@ -12,11 +12,13 @@ durable contract.
 | `internal/domain/graph` | Graph definition types, semantic validation, bindings, value types and graph versioning | `definition.go`, `validation.go`, `bindings.go` |
 | `internal/domain/events` | Typed event payloads, schema compatibility, ordering and delivery | `event.go`, `delivery.go` |
 | `internal/domain/run` | Run and node states with legal transitions, results, approval requests, correlation and feedback values | `state.go`, `result.go` |
+| `internal/domain/secrets` | Secret reference grammar, ambient-bypass rule, redaction forms, and the `Value` type that never formats or marshals its plaintext (F3.8, ADR-0029) | `ref.go`, `value.go`, `errors.go` |
+| `internal/adapter/envsecrets` | The `env` secret provider: reads the runner environment behind `runtime.SecretResolver`; imported only by `cmd/agentplane` (F3.8) | `provider.go` |
 | `internal/adapter/yamlgraph` | YAML parsing of graph definitions into the domain types | `yamlgraph.go`, `dto.go` |
 | `internal/adapter/yamlgraph/edit` | The graph editor engine: in-memory, fidelity-preserving YAML operations (ADR-0020), served by the API | `apply.go`, `ops.go`, `doc.go` |
 | `internal/adapter/system` | Wall clock and random run identifiers behind engine ports | `system.go` |
 | `internal/app/trace` | Event collector that retains lifecycle, evidence and bounded logs | `collector.go` |
-| `internal/archtest` | Test that enforces the layer dependency rules over production imports | `archtest_test.go`, `baseline.txt` |
+| `internal/archtest` | Test that enforces the layer dependency rules over production imports, plus the non-baselinable rule that only `cmd/agentplane` imports secret providers | `archtest_test.go`, `baseline.txt` |
 | `internal/fields` | Field descriptor types for node configuration; each validator owns and exports its descriptors (`ConfigFields`, `OutputPorts`) | `fields.go`, `fieldstest/` |
 | `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording | `scheduler.go`, `loop.go`, `unit.go`, `values.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
@@ -44,6 +46,8 @@ packages only):
 | --- | --- |
 | `fields`, `gitlocate`, `version` | none |
 | `domain/graph` | `fields` |
+| `domain/secrets` | none |
+| `adapter/envsecrets` | `domain/secrets` |
 | `domain/run` | `domain/events`, `domain/graph` |
 | `adapter/yamlgraph` | `domain/graph` |
 | `adapter/yamlgraph/edit` | `adapter/yamlgraph`, `domain/graph`, `fields` |
@@ -52,7 +56,7 @@ packages only):
 | `worktree` | `gitstate` |
 | `adapter/attemptdiff` | `domain/diff`, `domain/events`, `gitstate` |
 | `capability` | `agent`, `gitlocate` |
-| `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `gitlocate`, `gitstate` |
+| `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `domain/secrets`, `gitlocate`, `gitstate` |
 | `agent` | `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime` |
 | `agent/codex` | `agent`, `domain/events`, `gitstate` |
 | `shell` | `domain/graph`, `fields` |
