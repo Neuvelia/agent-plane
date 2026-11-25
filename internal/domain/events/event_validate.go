@@ -6,6 +6,8 @@ import (
 )
 
 // Validate checks the event envelope before it becomes a serialized fact.
+//
+//nolint:gocognit,gocyclo,funlen // moved verbatim from event.go (legacy complexity); splitting by event family is tracked separately
 func (e Event) Validate() error {
 	if e.SchemaVersion < 0 || e.SchemaVersion > SchemaVersion {
 		return fmt.Errorf("unsupported event schema version %d", e.SchemaVersion)
