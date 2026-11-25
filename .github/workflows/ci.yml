@@ -1,34 +1,130 @@
 name: ci
 
+# Pull requests run against their merge commit; `main` runs after the merge. A
+# push to any other branch runs nothing: open a pull request, or start the
+# workflow by hand (`workflow_dispatch`), which also runs macOS and Windows.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+# A new push to a pull request cancels its older run. On main a run always
+# completes, and GitHub keeps only the newest waiting run, so merges that land
+# faster than a run share one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+# Runner selection (docs/development-workflow.md, "Self-hosted runners"). Each
+# repository variable holds a JSON `runs-on` value, for example
+# `["self-hosted","linux","x64"]`; unset, the GitHub-hosted runner is used, so
+# deleting a variable is the way back. Every `runs-on` below repeats the
+# fallback because `env` is not available to `runs-on`.
+#   CI_RUNNER_LINUX     every Linux job, including `detect` and `all-checks-pass`
+#   CI_RUNNER_MACOS     check (macos-arm64)
+#   CI_RUNNER_WINDOWS   check (windows-x64)
+#   CI_OTHER_OS_ON_PR   'true' runs macOS and Windows on pull requests too
+
 jobs:
-  check:
+  detect:
+    # A pull request runs a lane only when a path that lane reads changed. A
+    # push to main and a manual run always run every lane.
+    #   go:      any non-Markdown path outside desktop/, plus desktop/test/fixtures
+    #            (Go tests read them) and .github/
+    #   desktop: desktop/, .agents/ (the renderer bundles the templates) and .github/
+    #   e2e:     any non-Markdown path: the sidecar, graphs and renderer are all inputs
+    # No Go test, desktop build or e2e reads a Markdown file, so a Markdown-only
+    # change runs no lane. Re-check that before a test starts reading one.
+    name: Detect changed areas
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.lanes.outputs.go }}
+      desktop: ${{ steps.lanes.outputs.desktop }}
+      e2e: ${{ steps.lanes.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # A pull request checks out its merge commit; its first parent is the
+          # base branch, so HEAD^1..HEAD is exactly what the pull request brings.
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Select lanes
+        id: lanes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            echo "go=true" "desktop=true" "e2e=true" | tr ' ' '\n' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # Without --no-renames a moved file lists only its new path.
+          changed="$(git diff --name-only --no-renames HEAD^1 HEAD)"
+          printf 'Changed paths:\n%s\n' "$changed"
+          code="$(grep -Ev '\.md$' <<<"$changed" || true)"
+          outside_desktop="$(grep -Ev '^desktop/' <<<"$code" || true)"
+          fixtures="$(grep -E '^desktop/test/fixtures/' <<<"$code" || true)"
+          desktop="$(grep -E '^(\.github/|\.agents/|desktop/)' <<<"$code" || true)"
+          lane() {
+            if [[ -n "$2" ]]; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          lane go "$outside_desktop$fixtures"
+          lane desktop "$desktop"
+          lane e2e "$code"
+
+  check-linux:
+    name: check (linux-x64)
+    needs: detect
+    if: needs.detect.outputs.go == 'true'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
+        run: make build
+
+  check-other-os:
+    # macOS costs ten GitHub-hosted minutes per minute and Windows two, so on
+    # hosted runners they run on main and on manual runs only. Set
+    # CI_OTHER_OS_ON_PR once they run on self-hosted machines.
     name: check (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
+    needs: detect
+    if: >-
+      needs.detect.outputs.go == 'true' &&
+      (github.event_name != 'pull_request' || vars.CI_OTHER_OS_ON_PR == 'true')
+    runs-on: ${{ fromJSON(matrix.runner) }}
     strategy:
-      # One OS failing must not hide the others: each OS needs its own evidence.
+      # One OS failing must not hide the other: each OS needs its own evidence.
       fail-fast: false
       matrix:
         include:
-          - name: linux-x64
-            os: ubuntu-latest
-            experimental: false
-            timeout: 30
           - name: macos-arm64
-            os: macos-latest
+            runner: ${{ vars.CI_RUNNER_MACOS || '"macos-latest"' }}
             experimental: false
             timeout: 30
           # Windows is not yet a supported target: main does not pass there
           # (see docs/development-workflow.md, "CI matrix"). Its result is
           # reported but does not block; drop `experimental` once it is green.
           - name: windows-x64
-            os: windows-latest
+            runner: ${{ vars.CI_RUNNER_WINDOWS || '"windows-latest"' }}
             experimental: true
             # A hung Windows test otherwise runs to the 10 min go test limit.
             timeout: 20
@@ -39,10 +135,14 @@ jobs:
         shell: bash
     steps:
       # Windows runners check out with CRLF, which makes `gofmt -l` flag every
-      # Go file. Keep LF so formatting checks mean the same on all OSes.
+      # Go file. Keep LF so formatting checks mean the same on all OSes. Only
+      # on Windows: elsewhere it would edit a self-hosted runner's global config.
       - name: Keep LF line endings
+        if: runner.os == 'Windows'
         run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -56,7 +156,10 @@ jobs:
         run: make build
 
   lint:
-    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.go == 'true'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,7 +174,12 @@ jobs:
           version: v2.5.0
 
   race:
-    runs-on: ubuntu-latest
+    # The race detector needs cgo, so a self-hosted Linux runner needs a C
+    # compiler (scripts/ci/setup-linux-runner.sh installs one).
+    needs: detect
+    if: needs.detect.outputs.go == 'true'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -83,7 +191,10 @@ jobs:
       - run: go test -race ./...
 
   desktop:
-    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.desktop == 'true'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -100,10 +211,13 @@ jobs:
 
   # Real Electron + real sidecar under a virtual display, plus the Storybook
   # smoke. Separate from `check`/`desktop` so Go-only work never waits on it;
-  # no path filter (the sidecar binary and graphs are inputs too) and it is not
-  # a required check unless the branch protection says so deliberately.
+  # it skips only Markdown-only pull requests (the sidecar binary and graphs
+  # are inputs too) and it is not a required check unless the branch
+  # protection says so deliberately.
   desktop-e2e:
-    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.e2e == 'true'
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -132,8 +246,15 @@ jobs:
       # locked Playwright version comes from `npm ci`, never from a fresh npx download.
       - name: Install desktop dependencies
         run: npm ci --prefix desktop
+      # A hosted runner installs the system libraries with sudo on every run. A
+      # self-hosted runner has no sudo; scripts/ci/setup-linux-runner.sh
+      # installed them once, so only the browser is fetched here.
       - name: Install Chromium system dependencies
+        if: runner.environment == 'github-hosted'
         run: npx --prefix desktop playwright install --with-deps chromium
+      - name: Install Chromium
+        if: runner.environment != 'github-hosted'
+        run: npx --prefix desktop playwright install chromium
       # `make desktop-*` run `npm ci` (never `npm install`) and pick xvfb-run on Linux.
       - name: Electron e2e
         run: make desktop-e2e E2E_SHOTS=e2e-shots
@@ -146,3 +267,32 @@ jobs:
           name: desktop-e2e-screenshots
           path: desktop/e2e-shots
           if-no-files-found: ignore
+
+  all-checks-pass:
+    # The one check branch protection should require. A lane the pull request
+    # does not touch is skipped, and a skipped job never reports the name a
+    # required check waits for; this job always reports. It fails when any
+    # lane failed or was cancelled, or when `detect` did not succeed.
+    # desktop-e2e is left out: it is not a required check (see its comment).
+    name: All required checks pass
+    if: always()
+    needs: [detect, check-linux, check-other-os, lint, race, desktop]
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_LINUX || '"ubuntu-latest"') }}
+    timeout-minutes: 5
+    steps:
+      - name: Evaluate results
+        shell: bash
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if [[ "$(echo "$RESULTS" | jq -r '.detect.result')" != "success" ]]; then
+            echo "::error::detect did not succeed"
+            exit 1
+          fi
+          bad="$(echo "$RESULTS" | jq -r 'to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key')"
+          if [[ -n "$bad" ]]; then
+            echo "::error::failed or cancelled: $(tr '\n' ' ' <<<"$bad")"
+            exit 1
+          fi
