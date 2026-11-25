@@ -101,6 +101,17 @@ Cons: breaks every existing graph and Agent adapter; recommended for v1 under en
 - Delegated Agent confinement depends on the vendor sandbox version.
 - Reads, descendants of the node command and exfiltration by a granted process remain out of reach.
 
+## Addendum: run result redaction (F3.8 C4.5)
+
+The redaction set also covers the `run.Result` that `runtime.Run` returns, at one seam (`runMachine.snapshot`),
+on copies only: accepted outputs and downstream inputs stay raw. Text-like outputs are masked, number, boolean
+and JSON outputs are withheld rather than rewritten, and `Failure.Err` keeps `errors.Is` through a
+wrapper without an `Unwrap` chain, and `errors.As` reaches only a masked copy of typed errors that implement
+`Redacted(mask)` (`shell.ExecutionError`, `agent.ExecutionError`), never the raw cause. Only the first such type in the chain is exposed: types it wraps (for example
+`shell.ExecutionError` under `agent.ExecutionError`) are not reachable through `errors.As`. `--redact-env` values are in the same set, so they now mask graph outputs
+too. The CLI field `redacted` is additive; `cli_schema_version` stays 1. No new decision about contracts
+beyond this addendum.
+
 ## Compatibility and migration
 
 Graphs without `policy` or `secrets` behave and hash identically. Readers of older event schemas see no new
