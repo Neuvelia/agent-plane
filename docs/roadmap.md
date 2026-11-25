@@ -23,7 +23,7 @@ Goal: prove graph/node/edge/run semantics without UI.
 
 Exit: a three-node graph runs independent branches concurrently, joins them, passes explicit data, emits structured events, and exits deterministically.
 
-## Phase 1 - Agent Loop (implemented; real-agent demo pending)
+## Phase 1 - Agent Loop (implemented; real-Codex F1.7 demo executed 2026-11-17, `docs/validation/F1.7-real-codex-demo.md`)
 
 Goal: execute one real coding agent behind an adapter and add deterministic correction.
 
@@ -55,7 +55,7 @@ Goal: move graph authoring and execution debugging from terminal to a local IDE.
 | F2.3 | Edge/Data Mapping Editor | P0 | F2.1, F0.3 |
 | F2.4 | Graph Validation UI | P0 | F2.1-F2.3, F0.2 |
 | F2.5 | Live Execution Map | P0 | F1.3, F2.1 |
-| F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: accepted for implementation, remaining gap only) |
+| F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: implemented in the renderer; gap spec) |
 | F2.7 | Run Inspector - Node Detail | P0 | F2.6, F1.6 (spec: accepted for implementation, remaining gap only) |
 | F2.8 | Attempt Compare | P1 | F2.7, F1.6 |
 | F2.9 | Local Run History + SQLite | P0 | F0.6, F2.6 |
@@ -68,8 +68,8 @@ specs in `docs/features/` list what is already delivered and cover only the rema
 
 Exit: a developer authors and runs a graph, watches execution live, inspects
 reason/evidence, handles a human gate and returns to an older run without a
-terminal except for launching the application. F2.10 requires a local
-pause/approval contract; its spec and ADR must define that before UI coding.
+terminal except for launching the application. The F2.10 local approval
+contract is ADR-0017 (implemented).
 
 ## Phase 3 - Local Production Ready
 

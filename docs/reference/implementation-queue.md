@@ -32,7 +32,7 @@ dependent Shell node, ordered events, and a deterministic terminal result.
 
 Review each feature spec before implementing it. F1.1-F1.8 are implemented;
 Phase 2 features require their own reviewed specs before activation.
-F1.7 has a prepared after-merge real-Codex demo; execution evidence is pending. See
+The F1.7 real-Codex demo was executed on 2026-11-17 (`docs/validation/F1.7-real-codex-demo.md`). See
 `docs/roadmap.md` for dependencies and phase exit criteria.
 
 ## Phase 0 milestone demo (achieved)
