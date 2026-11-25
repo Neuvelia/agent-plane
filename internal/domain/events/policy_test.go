@@ -115,6 +115,10 @@ func TestPolicyEventsRoundTripAndBounds(t *testing.T) {
 		return e
 	}
 	bad := map[string]Event{
+		"permission applied under unapplied policy": evalWith(func(p *PolicyEvaluatedPayload) {
+			p.Mode = PolicyModeEnforce
+			p.Permissions[1].Applied = true
+		}),
 		"unknown mode":        evalWith(func(p *PolicyEvaluatedPayload) { p.Mode = "strict" }),
 		"unknown root kind":   evalWith(func(p *PolicyEvaluatedPayload) { p.ScopeRootKind = "tmp" }),
 		"relative scope root": evalWith(func(p *PolicyEvaluatedPayload) { p.ScopeRoot = "wt" }),
@@ -185,6 +189,10 @@ func TestPolicyEventsRoundTripAndBounds(t *testing.T) {
 			p.Applied = true
 			p.Permissions[0].State = PolicyStatePrevented
 			p.Permissions[0].Applied = true
+		}),
+		evalWith(func(p *PolicyEvaluatedPayload) {
+			p.Mode = PolicyModeEnforce
+			p.Applied = true
 		}),
 		violWith(func(p *PolicyViolationPayload) { p.Evidence = evidence(MaxPolicyEvidence) }),
 		violWith(func(p *PolicyViolationPayload) { p.Evidence = []string{long(MaxPolicyEvidenceBytes)} }),

@@ -41,7 +41,8 @@ the CLI, local run store, loopback API and desktop client.
   the per-run `MaxRunValueBytes` budget and whether recording is enabled.
 - `policy_evaluated` and `policy_violation` (schema 14, ADR-0029) describe a
   secret by name only and use closed vocabularies; a value, length, hash or
-  prefix field needs a reviewed schema change.
+  prefix field needs a reviewed schema change. A permission with `applied: true`
+  requires the event-level `applied: true`; the converse is legal.
 - Lifecycle, evidence, checks, attempt facts, Return Envelopes, approval,
   workspace isolation facts (schema 11, ADR-0024), attempt diffs (schema 12,
   ADR-0026) and cancel/timeout facts (schema 13, ADR-0028) survive progress retention limits. Logs and normalized progress share

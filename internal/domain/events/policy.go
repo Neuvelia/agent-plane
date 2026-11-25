@@ -180,6 +180,11 @@ func (p PolicyEvaluatedPayload) validatePermissions() error {
 		if err := perm.validate(p.Mode); err != nil {
 			return err
 		}
+		// Applied on the event means "the run enforces the policy"; a permission
+		// cannot be applied by a run that does not (the converse is legal).
+		if perm.Applied && !p.Applied {
+			return fmt.Errorf("permission %s is applied while the policy is not", perm.Name)
+		}
 	}
 	return nil
 }
