@@ -17,6 +17,9 @@ func decodePayload(data json.RawMessage, target any) error {
 	return decoder.Decode(target)
 }
 
+// UnmarshalJSON strictly decodes an event envelope and its typed payload.
+//
+//nolint:gocognit,gocyclo,funlen // moved verbatim from event.go (legacy complexity); splitting by event family is tracked separately
 func (e *Event) UnmarshalJSON(data []byte) error {
 	var wire struct {
 		SchemaVersion int             `json:"event_schema_version"`
