@@ -1,0 +1,109 @@
+name: ci-other-os
+
+# `make check` on macOS and Windows. A GitHub-hosted macOS minute costs ten
+# Linux minutes and a Windows minute two, so this does not run per pull request
+# (docs/development-workflow.md, "CI matrix"):
+#   - weekday nights, macOS only, and only when main changed in the last day;
+#   - by hand on any branch (Actions -> ci-other-os -> Run workflow), choosing
+#     the OS. Do that before merging changes to process, path or Git handling.
+on:
+  schedule:
+    - cron: '41 2 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      os:
+        description: Operating systems to check
+        type: choice
+        default: macos
+        options: [macos, windows, both]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-other-os-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    name: Select operating systems
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      macos: ${{ steps.select.outputs.macos }}
+      windows: ${{ steps.select.outputs.windows }}
+    steps:
+      - name: Select
+        id: select
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          CHOICE: ${{ inputs.os }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "schedule" ]]; then
+            # 26 hours, so a late start never misses a commit.
+            since="$(date -u -d '-26 hours' +%Y-%m-%dT%H:%M:%SZ)"
+            count="$(gh api "repos/$GITHUB_REPOSITORY/commits?sha=main&since=$since&per_page=1" --jq length)"
+            if [[ "$count" == "0" ]]; then
+              echo "main has not changed since $since; nothing to check."
+              CHOICE=none
+            else
+              CHOICE=macos
+            fi
+          fi
+          case "$CHOICE" in
+            macos) echo "macos=true" >> "$GITHUB_OUTPUT"; echo "windows=false" >> "$GITHUB_OUTPUT" ;;
+            windows) echo "macos=false" >> "$GITHUB_OUTPUT"; echo "windows=true" >> "$GITHUB_OUTPUT" ;;
+            both) echo "macos=true" >> "$GITHUB_OUTPUT"; echo "windows=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "macos=false" >> "$GITHUB_OUTPUT"; echo "windows=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+  check-macos:
+    name: check (macos-arm64)
+    needs: plan
+    if: needs.plan.outputs.macos == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
+        run: make build
+
+  # Windows is not yet a supported target: main does not pass there (see
+  # docs/development-workflow.md, "CI matrix"), so it runs only when asked.
+  check-windows:
+    name: check (windows-x64)
+    needs: plan
+    if: needs.plan.outputs.windows == 'true'
+    runs-on: windows-latest
+    # A hung Windows test otherwise runs to the 10 min go test limit.
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows runners check out with CRLF, which makes `gofmt -l` flag every
+      # Go file. Keep LF so formatting checks mean the same on all OSes.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # scripts/check.sh is the body of `make check`; invoking it directly
+      # avoids depending on GNU make being present on Windows runners.
+      - name: Check
+        run: ./scripts/check.sh

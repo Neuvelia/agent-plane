@@ -105,58 +105,59 @@ This command is a foundation for later selective verification and does not
 replace `make check`.
 
 For changes under `desktop/`, also run `npm run check` there. CI reports the
-Go `make check`/build, full `go test -race ./...` and desktop `npm run check`
-as separate jobs on pushes and pull requests. For concurrency changes, run
-the affected race tests locally before the full gate. Browser story smoke and
-real Electron e2e are separate checks; use `desktop/AGENTS.md` to choose them
-for the affected behavior.
+Go lint, `make check`, full `go test -race ./...` and build in one Linux job,
+and desktop `npm run check`, Electron e2e and Storybook smoke in another (see
+"CI matrix"). For concurrency changes, run the affected race tests locally
+before the full gate. Use `desktop/AGENTS.md` to choose the local browser story
+smoke and Electron e2e for the affected behavior.
 
 A green check is necessary, not sufficient. Acceptance criteria still need human and reviewer inspection.
 
 ## CI matrix
 
+GitHub-hosted minutes are limited, so CI spends them where a change can fail.
 `.github/workflows/ci.yml` runs on pull requests, on pushes to `main` and on
 manual runs (`workflow_dispatch`, any branch); a push to another branch runs
 nothing. A newer push to a pull request cancels its older run; on `main` every
-run completes. It runs `scripts/check.sh` (the body of `make check`) on three
-runners: `linux-x64` (`ubuntu-latest`), `macos-arm64` (`macos-latest`) and
-`windows-x64` (`windows-latest`). Linux and macOS are required and also run
-`make build`. Windows is reported but non-blocking (`continue-on-error`, 20
-minute cap) because main does not pass there yet; only that job checks out
-with LF line endings so `gofmt -l` means the same on every OS. Remove
-`experimental` for Windows once it is green. The desktop shell stays outside
-this gate (`make desktop-check`).
+run completes.
 
-A GitHub-hosted macOS minute costs ten Linux minutes and a Windows minute two,
-so `check (macos-arm64)` and `check (windows-x64)` run on `main` and on manual
-runs, and on pull requests only when the repository variable
-`CI_OTHER_OS_ON_PR` is `true`. A macOS-only regression in a pull request is
-therefore caught on `main` unless the author starts the workflow on the branch
-by hand; do that for changes to process, path or Git handling.
+A `detect` job picks the jobs a pull request runs from the paths it changes. A
+change made only of Markdown files runs none, because no test or build reads
+Markdown. `check (linux-x64)` runs for any other path outside `desktop/` and
+for `desktop/test/fixtures/`, which Go tests read. `desktop` runs for
+`desktop/`, the sidecar sources (`cmd/`, `internal/`, `go.mod`, `go.sum`,
+`Makefile`), `.agents/` and `.github/`. Pushes to `main`, manual runs and a
+failed `detect` run every job. A skipped job counts as passed for a required
+check.
 
-A `detect` job picks the lanes a pull request runs from the paths it changes.
-A change made only of Markdown files runs none, because no test or build reads
-Markdown. Go jobs (`check`, `lint`, `race`) run for any other path outside
-`desktop/`, and for `desktop/test/fixtures/`, which Go tests read. `desktop`
-runs for `desktop/`, `.agents/` (the renderer bundles the templates) and
-`.github/`. `desktop-e2e` runs for any non-Markdown path. Pushes to `main` and
-manual runs run every lane. `All required checks pass` always reports and
-fails when a lane failed or was cancelled; it is the check branch protection
-should require, since a skipped lane never reports its own name.
+`check (linux-x64)` holds all Linux Go evidence in one job: `golangci-lint`
+(findings new since the merge base, so it checks out the full history), then
+`scripts/check.sh` (the body of `make check`), `go test -race ./...` and
+`make build`. A lint failure does not stop the later steps.
 
-Two desktop jobs run beside it. `desktop` runs `npm ci --ignore-scripts` and
-`npm run check` (typecheck, reducer tests, build, Storybook build, bundle scan).
-`desktop-e2e` first runs `npm ci` and installs the Playwright Chromium system
-dependencies (which also provide xvfb), then `make desktop-e2e` (real Electron
-against `bin/agentplane` under `xvfb-run`) and `make desktop-stories`
-(Storybook smoke in Playwright Chromium). Both pin Node 24 and
-use `npm ci`; `desktop-e2e` caches the npm cache, `~/.cache/electron` and
-`~/.cache/ms-playwright`, and uploads `desktop/e2e-shots` as the
-`desktop-e2e-screenshots` artifact on failure. `desktop-e2e` skips only
-Markdown-only pull requests, so a sidecar or graph change is also exercised.
-`desktop` is part of `All required checks pass`; `desktop-e2e` is not:
-Go-only work does not wait on them unless branch protection says otherwise. If
-the e2e flakes, capture a Playwright trace rather than retrying silently.
+`desktop` runs `npm ci` and `npm run check` (typecheck, reducer tests, build,
+Storybook build, bundle scan), builds `bin/agentplane`, installs the Playwright
+Chromium system dependencies (which also provide xvfb), then runs the real
+Electron app against the sidecar under `xvfb-run` (`e2e/demo.cjs`) and the
+Storybook smoke (`npm run stories:test`) on the `dist/` and
+`storybook-static/` the check built. It pins Node 24, caches the npm cache,
+`~/.cache/electron` and `~/.cache/ms-playwright`, and uploads
+`desktop/e2e-shots` as the `desktop-e2e-screenshots` artifact (kept 7 days)
+when the e2e fails. The e2e and smoke steps are not blocking: a failure shows
+as a failed step and a warning, not a failed job. If the e2e flakes, capture a
+Playwright trace rather than retrying silently.
+
+`.github/workflows/ci-other-os.yml` runs `scripts/check.sh` on `macos-arm64`
+(`macos-latest`, also `make build`) and `windows-x64` (`windows-latest`). A
+hosted macOS minute costs ten Linux minutes and a Windows minute two, so it
+does not run per pull request: macOS runs on weekday nights when `main`
+changed in the last day, and either OS runs by hand on any branch (Actions,
+`ci-other-os`, Run workflow). Start it on the branch before merging changes to
+process, path or Git handling; otherwise a macOS-only regression shows up the
+night after the merge. Windows is not yet a supported target because main does
+not pass there; it runs only when asked, and only that job checks out with LF
+line endings so `gofmt -l` means the same on every OS. The desktop shell stays
+outside this gate (`make desktop-check`).
 
 The Go tests compile on every OS. A test that needs something Windows lacks
 skips with a reason, using the test-only `internal/testenv` guards:
@@ -188,55 +189,7 @@ names (`RUNNER~1`) compare equal.
 
 A local `go test ./...` on Windows (Go 1.27) passes with these guards. The
 `windows-x64` job has not been observed green on a GitHub runner since they
-landed, so `experimental` stays until one run of that job is green.
-
-## Self-hosted runners
-
-Every job takes its runner from a repository variable holding a JSON `runs-on`
-value; unset, it uses the GitHub-hosted runner. Deleting a variable switches
-back.
-
-| Variable | Jobs | Example value |
-|---|---|---|
-| `CI_RUNNER_LINUX` | `detect`, `check (linux-x64)`, `lint`, `race`, `desktop`, `desktop-e2e`, `All required checks pass` | `["self-hosted","linux","x64"]` |
-| `CI_RUNNER_MACOS` | `check (macos-arm64)` | `["self-hosted","macOS","ARM64"]` |
-| `CI_RUNNER_WINDOWS` | `check (windows-x64)` | `["self-hosted","Windows","X64"]` |
-| `CI_OTHER_OS_ON_PR` | runs macOS and Windows on pull requests | `true` |
-
-`scripts/ci/setup-linux-runner.sh` prepares an Ubuntu x64 machine: build tools
-(including the C compiler `go test -race` needs, `jq` and `xvfb`), the
-Playwright Chromium and Electron system libraries, an unprivileged runner
-account and several runner services (`RUNNER_COUNT`, default 3; one runner
-runs one job, and up to five Linux jobs of one run run at once). Run it as root with a
-registration token from Settings, Actions, Runners. Go and Node are not
-installed system-wide: `setup-go` and `setup-node` fetch the versions each job
-asks for, so the machine needs outbound HTTPS to GitHub, the Go module proxy,
-the npm registry, the Playwright CDN and nodejs.org.
-
-On a self-hosted runner `desktop-e2e` installs only the Chromium browser
-(`runner.environment` is not `github-hosted`), because the runner has no sudo
-for `playwright install --with-deps`; the setup script installed those
-libraries once. After a Playwright upgrade that needs new system libraries,
-run the script again; configured runners are kept.
-
-Constraints:
-
-- Runners must not run as root: permission-bit tests skip as root and Electron
-  needs `--no-sandbox`. The script refuses a runner account that can use sudo.
-- Runners are persistent, not ephemeral: jobs share the runner account's home
-  (`~/.cache/go-build`, `~/.cache/electron`, `~/.cache/ms-playwright`) and the
-  tool cache. Tests use temporary directories, but a job can leave state for
-  the next. Wipe or rebuild the machine if a run behaves differently from a
-  clean one.
-- A runner executes the code of every pull request and every branch someone
-  starts the workflow on. The repository is private, so only collaborators can
-  do that. Keep the machine free of credentials, provider sign-ins and access
-  to internal networks; the CI jobs need no secrets. Restrict an organization
-  runner group to this repository.
-- macOS: register a runner on an Apple Silicon Mac with Xcode Command Line
-  Tools under a standard (non-admin) account, as a launchd service (`./svc.sh
-  install`). Windows: install Git for Windows so `shell: bash` resolves, and
-  remember the job is still experimental.
+landed; it stays manual-only until one run of that job is green.
 
 ## Review session
 
