@@ -8,10 +8,10 @@ func (v *definitionValidator) validateTimeouts() {
 		if node.TimeoutSeconds == nil {
 			continue
 		}
-		path := mapPath("nodes", nodeID) + ".timeout_seconds"
+		path := fieldPath("nodes", nodeID, "timeout_seconds")
 		location := DiagnosticLocation{NodeID: nodeID, Path: path}
 		if node.Type == "human" {
-			v.error("E_TIMEOUT_INVALID", fmt.Sprintf("human node %q cannot set timeout_seconds", nodeID), location, "remove timeout_seconds; a human node ends by decision or run cancel")
+			v.error("E_TIMEOUT_INVALID", fmt.Sprintf("human node %s cannot set timeout_seconds", quotedKey(nodeID)), location, "remove timeout_seconds; a human node ends by decision or run cancel")
 			continue
 		}
 		v.checkTimeoutRange(*node.TimeoutSeconds, location)

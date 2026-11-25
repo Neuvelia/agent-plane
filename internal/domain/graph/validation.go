@@ -3,7 +3,6 @@ package graph
 import (
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 )
 
@@ -110,7 +109,7 @@ func (v *definitionValidator) validateDefinition() {
 	if v.definition.ID == "" {
 		v.error("E_GRAPH_ID_REQUIRED", "graph id is required", DiagnosticLocation{Path: "id"}, "set a stable graph id")
 	} else if !validIdentifier(v.definition.ID) {
-		v.error("E_GRAPH_ID_INVALID", fmt.Sprintf("graph id %q is invalid", v.definition.ID), DiagnosticLocation{Path: "id"}, "use lowercase letters, digits, hyphens, and underscores")
+		v.error("E_GRAPH_ID_INVALID", "graph id is invalid", DiagnosticLocation{Path: "id"}, "use lowercase letters, digits, hyphens, and underscores")
 	}
 
 	v.requireCollection(v.definition.Inputs != nil, "inputs")
@@ -120,9 +119,8 @@ func (v *definitionValidator) validateDefinition() {
 
 	for _, inputID := range sortedInputIDs(v.definition.Inputs) {
 		input := v.definition.Inputs[inputID]
-		path := mapPath("inputs", inputID)
-		v.validateIdentifier(inputID, path, "graph input", "")
-		v.validateValueType(input.Type, path+".type", "")
+		v.validateIdentifier(inputID, mapPath("inputs", inputID), "graph input", "")
+		v.validateValueType(input.Type, fieldPath("inputs", inputID, "type"), "")
 	}
 
 	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
@@ -130,19 +128,17 @@ func (v *definitionValidator) validateDefinition() {
 		nodePath := mapPath("nodes", nodeID)
 		v.validateIdentifier(nodeID, nodePath, "node id", nodeID)
 		if node.Type == "" {
-			v.error("E_NODE_TYPE_REQUIRED", fmt.Sprintf("node %q is missing required type", nodeID), DiagnosticLocation{NodeID: nodeID, Path: nodePath + ".type"}, "set the node type")
+			v.error("E_NODE_TYPE_REQUIRED", fmt.Sprintf("node %s is missing required type", quotedKey(nodeID)), DiagnosticLocation{NodeID: nodeID, Path: nodePath + ".type"}, "set the node type")
 		}
 		for _, inputID := range sortedPortIDs(node.Inputs) {
 			port := node.Inputs[inputID]
-			path := mapPath(nodePath+".inputs", inputID)
-			v.validateIdentifier(inputID, path, "node input", nodeID)
-			v.validateValueType(port.Type, path+".type", nodeID)
+			v.validateIdentifier(inputID, mapPath(nodePath+".inputs", inputID), "node input", nodeID)
+			v.validateValueType(port.Type, fieldPath(nodePath+".inputs", inputID, "type"), nodeID)
 		}
 		for _, outputID := range sortedPortIDs(node.Outputs) {
 			port := node.Outputs[outputID]
-			path := mapPath(nodePath+".outputs", outputID)
-			v.validateIdentifier(outputID, path, "node output", nodeID)
-			v.validateValueType(port.Type, path+".type", nodeID)
+			v.validateIdentifier(outputID, mapPath(nodePath+".outputs", outputID), "node output", nodeID)
+			v.validateValueType(port.Type, fieldPath(nodePath+".outputs", outputID, "type"), nodeID)
 		}
 	}
 
@@ -161,14 +157,14 @@ func (v *definitionValidator) validateIdentifier(identifier, path, kind, nodeID 
 	if validIdentifier(identifier) {
 		return
 	}
-	v.error("E_IDENTIFIER_INVALID", fmt.Sprintf("%s %q is invalid", kind, identifier), DiagnosticLocation{NodeID: nodeID, Path: path}, "use lowercase letters, digits, hyphens, and underscores")
+	v.error("E_IDENTIFIER_INVALID", fmt.Sprintf("%s %s does not match the identifier grammar", kind, invalidKeyText), DiagnosticLocation{NodeID: nodeID, Path: path}, "use lowercase letters, digits, hyphens, and underscores")
 }
 
 func (v *definitionValidator) validateValueType(valueType ValueType, path, nodeID string) {
 	if supportedValueType(valueType) {
 		return
 	}
-	v.error("E_VALUE_TYPE_INVALID", fmt.Sprintf("value type %q is not supported", valueType), DiagnosticLocation{NodeID: nodeID, Path: path}, "use string, number, boolean, json, or artifact_ref")
+	v.error("E_VALUE_TYPE_INVALID", fmt.Sprintf("value type %s is not supported", quotedKey(string(valueType))), DiagnosticLocation{NodeID: nodeID, Path: path}, "use string, number, boolean, json, or artifact_ref")
 }
 
 func (v *definitionValidator) validateEdges() {
@@ -221,18 +217,18 @@ func (v *definitionValidator) validateGraphInputBindings() {
 func (v *definitionValidator) validateGraphOutputs() {
 	for _, outputID := range sortedOutputIDs(v.definition.Outputs) {
 		output := v.definition.Outputs[outputID]
-		path := mapPath("outputs", outputID) + ".from"
+		path := fieldPath("outputs", outputID, "from")
 		from, valid := v.parseNodeOutputReference(string(output.From), path, -1, "E_GRAPH_OUTPUT_REFERENCE_INVALID")
 		if !valid {
 			continue
 		}
 		node, ok := v.definition.Nodes[from.nodeID]
 		if !ok {
-			v.error("E_GRAPH_OUTPUT_SOURCE_NODE_NOT_FOUND", fmt.Sprintf("graph output %q references missing node %q", outputID, from.nodeID), DiagnosticLocation{Path: path}, "declare the node or update the graph output")
+			v.error("E_GRAPH_OUTPUT_SOURCE_NODE_NOT_FOUND", fmt.Sprintf("graph output %s references missing node %q", quotedKey(outputID), from.nodeID), DiagnosticLocation{Path: path}, "declare the node or update the graph output")
 			continue
 		}
 		if _, ok := node.Outputs[from.portID]; !ok {
-			v.error("E_GRAPH_OUTPUT_SOURCE_OUTPUT_NOT_FOUND", fmt.Sprintf("graph output %q references missing output %q on node %q", outputID, from.portID, from.nodeID), DiagnosticLocation{NodeID: from.nodeID, Path: path}, "declare the node output or update the graph output")
+			v.error("E_GRAPH_OUTPUT_SOURCE_OUTPUT_NOT_FOUND", fmt.Sprintf("graph output %s references missing output %q on node %q", quotedKey(outputID), from.portID, from.nodeID), DiagnosticLocation{NodeID: from.nodeID, Path: path}, "declare the node output or update the graph output")
 		} else {
 			v.usedOutputs[outputKey(from.nodeID, from.portID)] = true
 		}
@@ -247,7 +243,7 @@ func (v *definitionValidator) validateRequiredInputs() {
 				continue
 			}
 			path := mapPath(mapPath("nodes", nodeID)+".inputs", inputID)
-			v.error("E_REQUIRED_INPUT_UNBOUND", fmt.Sprintf("required input %q on node %q has no valid binding", inputID, nodeID), DiagnosticLocation{NodeID: nodeID, Path: path}, "add one compatible edge or graph input binding")
+			v.error("E_REQUIRED_INPUT_UNBOUND", fmt.Sprintf("required input %s on node %s has no valid binding", quotedKey(inputID), quotedKey(nodeID)), DiagnosticLocation{NodeID: nodeID, Path: path}, "add one compatible edge or graph input binding")
 		}
 	}
 }
@@ -304,7 +300,7 @@ func (v *definitionValidator) validateUnusedOutputs() {
 				continue
 			}
 			path := mapPath(mapPath("nodes", nodeID)+".outputs", outputID)
-			v.warning("W_DECLARED_OUTPUT_UNUSED", fmt.Sprintf("output %q on node %q is not consumed", outputID, nodeID), DiagnosticLocation{NodeID: nodeID, Path: path}, "remove the output or bind it to an edge or graph output")
+			v.warning("W_DECLARED_OUTPUT_UNUSED", fmt.Sprintf("output %s on node %s is not consumed", quotedKey(outputID), quotedKey(nodeID)), DiagnosticLocation{NodeID: nodeID, Path: path}, "remove the output or bind it to an edge or graph output")
 		}
 	}
 }
@@ -312,7 +308,7 @@ func (v *definitionValidator) validateUnusedOutputs() {
 func (v *definitionValidator) parseNodeOutputReference(reference, path string, edgeIndex int, code string) (nodeOutputReference, bool) {
 	parsed, ok := parseNodeOutputReference(reference)
 	if !ok {
-		v.error(code, fmt.Sprintf("%q is not a valid node output reference", reference), edgeLocation(edgeIndex, path), "use NODE.outputs.PORT")
+		v.error(code, "the reference is not a valid node output reference", edgeLocation(edgeIndex, path), "use NODE.outputs.PORT")
 	}
 	return parsed, ok
 }
@@ -320,7 +316,7 @@ func (v *definitionValidator) parseNodeOutputReference(reference, path string, e
 func (v *definitionValidator) parseNodeInputReference(reference, path string, edgeIndex int, code string) (nodeInputReference, bool) {
 	parsed, ok := parseNodeInputReference(reference)
 	if !ok {
-		v.error(code, fmt.Sprintf("%q is not a valid node input reference", reference), edgeLocation(edgeIndex, path), "use NODE.inputs.PORT")
+		v.error(code, "the reference is not a valid node input reference", edgeLocation(edgeIndex, path), "use NODE.inputs.PORT")
 	}
 	return parsed, ok
 }
@@ -328,7 +324,7 @@ func (v *definitionValidator) parseNodeInputReference(reference, path string, ed
 func (v *definitionValidator) parseNodeInputReferenceForBinding(reference, path string, bindingIndex int) (nodeInputReference, bool) {
 	parsed, ok := parseNodeInputReference(reference)
 	if !ok {
-		v.error("E_GRAPH_INPUT_TARGET_REFERENCE_INVALID", fmt.Sprintf("%q is not a valid node input reference", reference), bindingLocation(bindingIndex, path), "use NODE.inputs.PORT")
+		v.error("E_GRAPH_INPUT_TARGET_REFERENCE_INVALID", "the reference is not a valid node input reference", bindingLocation(bindingIndex, path), "use NODE.inputs.PORT")
 	}
 	return parsed, ok
 }
@@ -338,7 +334,7 @@ func (v *definitionValidator) parseGraphInputReference(reference, path string, b
 	if ok {
 		return inputID, true
 	}
-	v.error("E_GRAPH_INPUT_REFERENCE_INVALID", fmt.Sprintf("%q is not a valid graph input reference", reference), bindingLocation(bindingIndex, path), "use inputs.INPUT")
+	v.error("E_GRAPH_INPUT_REFERENCE_INVALID", "the reference is not a valid graph input reference", bindingLocation(bindingIndex, path), "use inputs.INPUT")
 	return "", false
 }
 
@@ -403,20 +399,20 @@ func (v *definitionValidator) addProvider(nodeID, inputID string, location Diagn
 		path := mapPath(mapPath("nodes", nodeID)+".inputs", inputID)
 		location.NodeID = nodeID
 		location.Path = path
-		v.error("E_INPUT_MULTIPLE_PROVIDERS", fmt.Sprintf("input %q on node %q has multiple providers", inputID, nodeID), location, "bind exactly one source to this input")
+		v.error("E_INPUT_MULTIPLE_PROVIDERS", fmt.Sprintf("input %s on node %s has multiple providers", quotedKey(inputID), quotedKey(nodeID)), location, "bind exactly one source to this input")
 	}
 }
 
 func (v *definitionValidator) error(code, message string, location DiagnosticLocation, suggestion string) {
-	v.diagnostics = append(v.diagnostics, Diagnostic{Severity: SeverityError, Code: code, Message: message, GraphID: v.graphID(), Location: location, Suggestion: suggestion})
+	v.diagnostics = append(v.diagnostics, Diagnostic{Severity: SeverityError, Code: code, Message: message, GraphID: v.graphID(), Location: safeLocation(location), Suggestion: suggestion})
 }
 
 func (v *definitionValidator) warning(code, message string, location DiagnosticLocation, suggestion string) {
-	v.diagnostics = append(v.diagnostics, Diagnostic{Severity: SeverityWarning, Code: code, Message: message, GraphID: v.graphID(), Location: location, Suggestion: suggestion})
+	v.diagnostics = append(v.diagnostics, Diagnostic{Severity: SeverityWarning, Code: code, Message: message, GraphID: v.graphID(), Location: safeLocation(location), Suggestion: suggestion})
 }
 
 func (v *definitionValidator) graphID() string {
-	if v.definition == nil {
+	if v.definition == nil || !validIdentifier(v.definition.ID) {
 		return ""
 	}
 	return v.definition.ID
@@ -523,13 +519,6 @@ func outputKey(nodeID, outputID string) string {
 	return nodeID + "\x00" + outputID
 }
 
-func mapPath(prefix, key string) string {
-	if validIdentifier(key) {
-		return prefix + "." + key
-	}
-	return prefix + "[" + strconv.Quote(key) + "]"
-}
-
 func edgeLocation(edgeIndex int, path string) DiagnosticLocation {
 	if edgeIndex < 0 {
 		return DiagnosticLocation{Path: path}
@@ -560,7 +549,7 @@ func (v *definitionValidator) validateUnits() {
 			continue
 		}
 		if id == "" || !ok || seen[id] || n.Type != "agent" || n.Loop == nil {
-			v.error("E_UNIT_INVALID", fmt.Sprintf("unit %q must uniquely reference an existing loop Agent node", id), DiagnosticLocation{NodeID: id, Path: fmt.Sprintf("units[%d]", i)}, "use each loop Agent node ID at most once")
+			v.error("E_UNIT_INVALID", fmt.Sprintf("unit %s must uniquely reference an existing loop Agent node", quotedKey(id)), DiagnosticLocation{NodeID: id, Path: fmt.Sprintf("units[%d]", i)}, "use each loop Agent node ID at most once")
 		}
 		seen[id] = true
 	}

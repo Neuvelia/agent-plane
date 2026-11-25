@@ -542,7 +542,10 @@ func TestValidateReportsRequiredFieldsAndInvalidIdentifiers(t *testing.T) {
 	}
 }
 
-func TestValidateRetainsInvalidDottedNodeIDInLocation(t *testing.T) {
+// An invalid node id is author text that may be a pasted secret, so the
+// diagnostic points at the nodes collection and carries neither the id nor a
+// path that contains it (F3.8 follow-up on author text in messages).
+func TestValidateLocatesInvalidNodeIDAtNodesCollectionWithoutEchoingIt(t *testing.T) {
 	result := graph.Validate(&graph.Definition{
 		SchemaVersion: graph.SchemaVersionV0,
 		ID:            "invalid-node-id",
@@ -554,9 +557,12 @@ func TestValidateRetainsInvalidDottedNodeIDInLocation(t *testing.T) {
 		Outputs: map[string]graph.OutputDefinition{},
 	})
 
-	diagnostic := assertDiagnostic(t, result, "E_IDENTIFIER_INVALID", `nodes["bad.id"]`)
-	if diagnostic.Location.NodeID != "bad.id" {
-		t.Fatalf("diagnostic node id = %q, want %q", diagnostic.Location.NodeID, "bad.id")
+	diagnostic := assertDiagnostic(t, result, "E_IDENTIFIER_INVALID", "nodes")
+	if diagnostic.Location.NodeID != "" {
+		t.Fatalf("diagnostic node id = %q, want empty", diagnostic.Location.NodeID)
+	}
+	if strings.Contains(diagnostic.Message, "bad.id") {
+		t.Fatalf("message echoes the invalid id: %q", diagnostic.Message)
 	}
 }
 
