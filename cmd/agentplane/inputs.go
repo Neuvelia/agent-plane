@@ -15,15 +15,19 @@ type inputFlags []string
 func (f *inputFlags) String() string         { return strings.Join(*f, ",") }
 func (f *inputFlags) Set(value string) error { *f = append(*f, value); return nil }
 
+// Flag text never appears in these errors, which reach the terminal before the
+// F3.8 input guard runs: a value typed where a key or a variable name belongs
+// may be a secret. Entries are named by their position in the input list (the
+// --input flags, or the inputs array of a serve request).
 func validateInputSyntax(flags inputFlags) error {
 	seen := make(map[string]bool, len(flags))
-	for _, item := range flags {
+	for position, item := range flags {
 		key, _, ok := strings.Cut(item, "=")
 		if !ok || key == "" {
 			return fmt.Errorf("--input must have the form key=value")
 		}
 		if seen[key] {
-			return fmt.Errorf("duplicate --input key %q", key)
+			return fmt.Errorf("input #%d repeats the key of an earlier input", position+1)
 		}
 		seen[key] = true
 	}
@@ -33,17 +37,17 @@ func validateInputSyntax(flags inputFlags) error {
 func redactionsFromEnv(names inputFlags) ([]string, error) {
 	seen := make(map[string]bool, len(names))
 	var values []string
-	for _, name := range names {
+	for position, name := range names {
 		if name == "" || strings.ContainsAny(name, "=\x00") {
-			return nil, fmt.Errorf("invalid --redact-env name %q", name)
+			return nil, fmt.Errorf("--redact-env #%d is not a valid variable name; use a non-empty name without '='", position+1)
 		}
 		if seen[name] {
-			return nil, fmt.Errorf("duplicate --redact-env name %q", name)
+			return nil, fmt.Errorf("--redact-env #%d repeats an earlier name", position+1)
 		}
 		seen[name] = true
 		value, ok := os.LookupEnv(name)
 		if !ok {
-			return nil, fmt.Errorf("--redact-env variable %q is not set", name)
+			return nil, fmt.Errorf("--redact-env #%d names a variable that is not set", position+1)
 		}
 		if value != "" {
 			values = append(values, value)

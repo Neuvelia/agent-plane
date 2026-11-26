@@ -2,7 +2,6 @@ package yamlgraph
 
 import (
 	"fmt"
-	"strconv"
 
 	"go.yaml.in/yaml/v3"
 
@@ -37,9 +36,11 @@ func checkTimeouts(data []byte) error {
 	}
 	for i := 0; i+1 < len(nodes.Content); i += 2 {
 		id := nodes.Content[i].Value
-		path := "nodes." + id + ".timeout_seconds"
-		if !graph.ValidIdentifier(id) {
-			path = "nodes[" + strconv.Quote(id) + "].timeout_seconds"
+		// An id outside the grammar may be a pasted secret and is not echoed
+		// (F3.8 criterion 18); the path is then the nodes collection.
+		path := "nodes"
+		if graph.ValidIdentifier(id) {
+			path = "nodes." + id + ".timeout_seconds"
 		}
 		if err := checkTimeoutScalar(field(nodes.Content[i+1], "timeout_seconds"), path); err != nil {
 			return err

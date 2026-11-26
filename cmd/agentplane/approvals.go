@@ -104,13 +104,16 @@ func decisionProvider(def *graph.Definition, approve, reject inputFlags, interac
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
+	// Flag text is quoted only when it is a human node id: anything else may be
+	// a value typed in the wrong place (F3.8 criterion 18).
 	for _, group := range []struct {
+		flag    string
 		names   inputFlags
 		approve bool
-	}{{approve, true}, {reject, false}} {
-		for _, id := range group.names {
+	}{{"--approve", approve, true}, {"--reject", reject, false}} {
+		for position, id := range group.names {
 			if !human[id] {
-				return nil, fmt.Errorf("--approve/--reject name %q is not a human node (human nodes in this graph: %s)", id, listOrNone(ids))
+				return nil, fmt.Errorf("%s #%d does not name a human node (human nodes in this graph: %s)", group.flag, position+1, listOrNone(ids))
 			}
 			if _, dup := flags[id]; dup {
 				return nil, fmt.Errorf("node %q has both or repeated --approve/--reject flags", id)

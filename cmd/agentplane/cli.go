@@ -111,12 +111,12 @@ func validateCommand(args []string, stdout, stderr io.Writer) int {
 		status, code = "invalid", exitGraph
 	}
 	if *jsonMode {
-		return writeJSON(stdout, stderr, cliDocument{Command: "graph validate", Status: status, GraphID: def.ID, Diagnostics: nonNilDiagnostics(validation.Diagnostics)}, code)
+		return writeJSON(stdout, stderr, cliDocument{Command: "graph validate", Status: status, GraphID: shownGraphID(def.ID), Diagnostics: nonNilDiagnostics(validation.Diagnostics)}, code)
 	}
 	if err := renderDiagnostics(stderr, validation.Diagnostics); err != nil {
 		return presentationError(err, stderr)
 	}
-	if _, err := fmt.Fprintf(stderr, "Graph %s: %s\n", def.ID, status); err != nil {
+	if _, err := fmt.Fprintf(stderr, "Graph %s: %s\n", graphIDText(def.ID), status); err != nil {
 		return presentationError(err, stderr)
 	}
 	return code
