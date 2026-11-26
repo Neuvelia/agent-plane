@@ -58,7 +58,7 @@ Goal: move graph authoring and execution debugging from terminal to a local IDE.
 | F2.6 | Run Inspector - Overview | P0 | F0.6, F1.5 (spec: implemented in the renderer; gap spec) |
 | F2.7 | Run Inspector - Node Detail | P0 | F2.6, F1.6 (spec: accepted for implementation, remaining gap only) |
 | F2.8 | Attempt Compare | P1 | F2.7, F1.6 |
-| F2.9 | Local Run History + SQLite | P0 | F0.6, F2.6 |
+| F2.9 | Local Run History + SQLite (implemented as JSONL; SQLite rejected, ADR-0019, ADR-0027) | P0 | F0.6, F2.6 |
 | F2.10 | Human Gate UI | P0 | F2.5, F2.6; local pause/approval contract |
 | F2.11 | Onboarding + Capability Detection | P1 | F1.1, F1.2 |
 | F2.12 | Graph Templates | P1 | F2.1-F2.4 |

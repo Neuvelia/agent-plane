@@ -29,7 +29,7 @@ loopback API, run store and desktop client are mapped in
 
 ```text
 +-----------------------------------------------------------+
-| Future UI / IDE                                           |
+| Local IDE (desktop/, Electron)                            |
 | Graph editor, live execution map, run inspector           |
 +-----------------------------+-----------------------------+
                               |
@@ -96,13 +96,10 @@ The runtime should not rely on hidden shared conversational context between node
 
 ## Node types
 
-Phase 0 requires only Shell Node for real execution while graph/runtime contracts are proven.
+Implemented node types: Shell, Agent, Gate and Human.
 
 Later node types:
 
-- Agent
-- Gate
-- Human
 - Code
 - Splitter
 - Merge
@@ -113,7 +110,7 @@ A node type should exist because it has distinct execution semantics, not becaus
 
 ## Local correction loop
 
-The later agent loop is:
+The node-local loop (F1.6 Agent, F1.6a Shell) is:
 
 ```text
 produce
@@ -139,21 +136,8 @@ Requirements:
 
 ## State model
 
-Target node lifecycle:
-
-```text
-PENDING
-  -> READY
-  -> RUNNING
-  -> CHECKING
-      -> SUCCEEDED
-      -> CORRECTING -> RUNNING
-      -> WAITING_FOR_HUMAN
-      -> FAILED
-      -> CANCELED
-```
-
-Phase 0 may use the smaller scheduler state set:
+Domain node states (decided 2026-11-26; the architecture plan's
+`CHECKING`/`CORRECTING`/`WAITING_FOR_HUMAN` states are not used):
 
 ```text
 pending -> ready -> running -> succeeded|failed|cancelled
@@ -161,6 +145,14 @@ pending -> ready -> running -> succeeded|failed|cancelled
     |         +-----> skipped|cancelled
     +---------------> failed|skipped|cancelled
 ```
+
+Run states are `running`, `succeeded`, `failed` and `cancelled`. Checking,
+correction and waiting for a human are phases visible through events
+(`attempt_*`, `gate_check`, `approval_requested`/`approval_decided`), not
+states. An exhausted loop is node `failed` with failure kind
+`needs_intervention`. Presentation statuses such as `retrying`,
+`waiting_human` and `interrupted` (a store-derived status, F3.2) are derived
+by readers and never written as events.
 
 F0.4 keeps ordered in-memory transition facts. F0.6 adds structured events
 and correlation IDs from those same transitions.
@@ -191,13 +183,13 @@ is limited to 4 MiB encoded event JSON / 4096 items and live delivery to 1 MiB /
 1024 items including its in-flight head. Finalization joins the delivery pump
 before retaining omissions and run_finished for replay. Lifecycle/evidence and
 legacy Shell capture are outside these progress budgets; total memory is not
-constant. Durable delivery remains later work. See ADR-0011.
+constant. Durable persist-before-deliver is F3.2 (ADR-0027). See ADR-0011.
 
 F1.4 schema 4 adds a bounded typed `gate_check` fact, retained independently
 of progress budgets on green and red before terminal lifecycle. Operational
 failures have no verdict. F1.5 emits schema 5 with the full version-1 CheckResult,
 including required nonnegative duration_ns, checked-input scope and typed
-references. Readers accept schemas 1–8; schema 4 Gate facts remain a distinct
+references. Readers accept every earlier schema; schema 4 Gate facts remain a distinct
 legacy payload with no invented metadata. Full results require schema 5.
 `events.CheckResults(trace, runID, nodeRunID)` returns detached current results
 in sequence order, including red; legacy inspection uses
@@ -220,7 +212,7 @@ callbacks arriving later are discarded. Logs, progress, checks and producer
 evidence carry the current AttemptID. Attempt lifecycle and checks are retained
 independently of progress limits.
 
-Readers accept schemas 1–8. Full CheckResults in schema 5 through 8 remain
+Readers accept every earlier schema. Full CheckResults in schema 5 through 8 remain
 available through `events.CheckResults`; `events.AttemptCheckResults` adds a
 detached attempt filter and does not invent attempts for older facts. Graph
 schema 0 remains additive, nil-loop hashes stay unchanged, and CLI envelope
@@ -388,8 +380,8 @@ recorded only when diff recording is enabled: one event per changed file (path,
 change kind, hashes, sizes, line counts and a patch of at most 16 KiB, or an
 `omitted_reason`) and one summary event per attempt with an empty path. The
 payload shape and its validation live in `internal/domain/events/diff.go`; the
-patch text comes from the pure `internal/domain/diff` package. Capture,
-redaction and budgets are later F2.8b tasks. Readers of schemas 1-11 decode
+patch text comes from the pure `internal/domain/diff` package. Capture
+(`internal/adapter/attemptdiff`), redaction and budgets are implemented behind `--record-diffs`. Readers of schemas 1-11 decode
 unchanged, and a schema 11 stream containing `attempt_diff` is invalid.
 
 Known limits of F3.1: downstream isolated nodes do not see upstream file changes
@@ -399,5 +391,5 @@ agent to stage or commit (Codex's sandbox cannot write the worktree index),
 untracked and ignored source files are absent from worktrees, there is no
 `workspaces prune` (crash leftovers are `agentplane-` prefixed, cleanup is
 F3.3/F3.11), and the feature supports Linux and macOS only.
-Readers accept schemas 1-10 and older streams contain none of these facts. See
+Readers accept every earlier schema and older streams contain none of these facts. See
 ADR-0024.

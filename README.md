@@ -78,8 +78,11 @@ go build -o bin/agentplane ./cmd/agentplane
 
 ```text
 agentplane graph validate PATH [--json]
-agentplane run PATH [--input key=value]... [--redact-env NAME]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json]
-agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always]
+agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json]
+agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH]
+agentplane runs list [--store-dir DIR] [--json]
+agentplane runs show RUN_ID [--store-dir DIR] [--json]
+agentplane runs prune [--store-dir DIR] [--dry-run] [--json]
 agentplane version
 ```
 

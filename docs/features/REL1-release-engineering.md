@@ -14,7 +14,7 @@ semantics.
 
 ## Problem
 
-AgentPlane builds only from source. There is no `LICENSE`, no release tag, the
+AgentPlane builds only from source. `LICENSE` exists (PolyForm Noncommercial 1.0.0); there is no release tag, the
 version is a constant (`0.0.0-dev` in `internal/version`), nothing builds
 archives, and the desktop app cannot run outside a checkout: `desktop/electron/main.cjs`
 looks for `bin/agentplane` next to the repository (or in `AGENTPLANE_BIN`), so a

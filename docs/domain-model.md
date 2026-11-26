@@ -108,7 +108,7 @@ Examples: full log, diff, report, JSON payload, patch, test output.
 
 ### Approval
 
-Later record of a human gate decision including who, what, when, and optional comment.
+Recorded by `approval_requested` / `approval_decided` events (F2.10, ADR-0017): which node, the decision, when, and an optional comment. Actor identity arrives with Team features (F5.10).
 
 ### Workspace
 
