@@ -123,6 +123,15 @@ type Options struct {
 	Clock trace.Clock
 	// IDs generates run, node-run and attempt identifiers. Required.
 	IDs IDGenerator
+	// RunMetadata describes the repository and engine for run_started (F2.9,
+	// F3.6). Optional and best effort: it must degrade to empty fields when Git
+	// or a repository is absent and can never fail or delay a run beyond ctx.
+	RunMetadata func(context.Context) RunMetadata
+}
+
+// RunMetadata is the optional provenance recorded in run_started.
+type RunMetadata struct {
+	RepoName, RepoBranch, RepoCommit, RuntimeVersion string
 }
 
 // IDGenerator is the engine's source of identifiers; the composition root
@@ -144,6 +153,10 @@ type completedNode struct {
 	diagnostics  []graph.Diagnostic
 	diff         *attemptDiffResult
 	err          error
+	// timedOut: the node deadline ended this attempt while the run was live.
+	// shutdown: the executor ignored cancellation and was abandoned.
+	timedOut bool
+	shutdown bool
 	// scan is the node run's secret_in_workspace Check Result, set by the worker
 	// after the final attempt and emitted by the coordinator.
 	scan *events.GateCheckPayload
@@ -166,12 +179,19 @@ type runMachine struct {
 	result      run.Result
 	emitter     *trace.Collector
 	startedAt   time.Time
+	metadata    RunMetadata
 	nodeStarted map[string]time.Time
 	decisions   DecisionProvider
 	values      *valueRecorder
 	diffs       *diffRecorder
 	attemptIDs  IDGenerator
 	clock       trace.Clock
+	// ctx is the run context, including the run deadline. It is read only to
+	// derive the typed cancel cause for terminal reasons (ADR-0028).
+	ctx        context.Context
+	cancelMu   sync.Mutex
+	cancelSent bool
+	runEnded   bool
 	// grants is the in-memory secret environment per assigned node; read only by
 	// secretEnvFor.
 	grants map[string]secrets.Env
@@ -197,6 +217,20 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err != nil {
 		return run.Result{}, err
 	}
+	// The run deadline (F3.4) cancels a derived run context with a typed cause.
+	// It starts after run_started so it measures the run, not preflight. Without
+	// a limit the caller's context is used unchanged.
+	if definition.Limits != nil && definition.Limits.RunTimeoutSeconds != nil {
+		var cancelRun context.CancelCauseFunc
+		ctx, cancelRun = context.WithCancelCause(ctx)
+		defer cancelRun(nil)
+		timer := time.AfterFunc(time.Duration(*definition.Limits.RunTimeoutSeconds)*timeoutUnit, func() {
+			cancelRun(run.CancelCause{Reason: run.CancelRunTimeout})
+		})
+		defer timer.Stop()
+	}
+	machine.ctx = ctx
+	defer context.AfterFunc(ctx, machine.requestRunCancel)()
 	plan := prepared.plan
 	graphInputs := prepared.graphInputs
 	redactionTemplate := prepared.redactionTemplate
@@ -331,6 +365,9 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 	}
 	m.emitter = trace.NewCollectorWithLiveEvents(ctx, options.Clock, runID, definition.ID, version, live)
 	m.emitter.SetPersist(persist)
+	if options.RunMetadata != nil {
+		m.metadata = collectMetadata(ctx, options.RunMetadata)
+	}
 	m.record("", "", string(run.RunRunning))
 	return m, nil
 }
@@ -348,7 +385,7 @@ func (m *runMachine) record(id, from, to string) {
 	if id == "" {
 		if from == "" {
 			event.Type = events.RunStarted
-			event.Payload = events.RunStartedPayload{NodeCount: len(m.ids)}
+			event.Payload = events.RunStartedPayload{NodeCount: len(m.ids), RepoName: m.metadata.RepoName, RepoBranch: m.metadata.RepoBranch, RepoCommit: m.metadata.RepoCommit, RuntimeVersion: m.metadata.RuntimeVersion}
 		} else {
 			event.Type = events.RunFinished
 			counts := events.NodeCounts{}
@@ -365,7 +402,13 @@ func (m *runMachine) record(id, from, to string) {
 				}
 			}
 			failureKind, _ := eventFailure(m.result.Failure)
-			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: m.clock.Now().Sub(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
+			switch {
+			case to == string(run.RunCancelled):
+				m.result.Reason = m.causeReason()
+			case failureKind == string(run.FailureTimeout):
+				m.result.Reason = run.CancelNodeTimeout
+			}
+			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: m.clock.Now().Sub(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind, Reason: string(m.result.Reason)}
 		}
 	} else {
 		node := m.nodes[id]
@@ -377,11 +420,18 @@ func (m *runMachine) record(id, from, to string) {
 			event.Type, event.Payload = events.NodeStarted, events.NodeStartedPayload{}
 		default:
 			failureKind, codes := eventFailure(node.Failure)
+			if to == string(run.NodeCancelled) && node.Reason == "" {
+				node.Reason = m.cancelledNodeReason()
+			}
+			reason := ""
+			if to == string(run.NodeCancelled) || failureKind == string(run.FailureTimeout) {
+				reason = string(node.Reason)
+			}
 			if from == string(run.NodeRunning) {
 				duration := m.clock.Now().Sub(m.nodeStarted[id]).Milliseconds()
-				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes, DurationMS: &duration}
+				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, Reason: reason, DiagnosticCodes: codes, DurationMS: &duration}
 			} else {
-				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes}
+				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, Reason: reason, DiagnosticCodes: codes}
 			}
 		}
 	}
@@ -430,8 +480,59 @@ func (m *runMachine) finish(ctx context.Context, to run.State) {
 		panic(fmt.Sprintf("invalid scheduler run transition: %s -> %s", m.result.State, to))
 	}
 	from := m.result.State
+	if to == run.RunCancelled {
+		m.requestRunCancel()
+	}
+	m.cancelMu.Lock()
+	m.runEnded = true
+	m.cancelMu.Unlock()
 	m.result.State = to
 	m.record("", string(from), string(to))
+}
+
+// causeReason reads the typed cancel cause of the run context. Error text and
+// the bare context errors never yield a reason.
+func (m *runMachine) causeReason() run.CancelReason {
+	if m.ctx == nil || m.ctx.Err() == nil {
+		return ""
+	}
+	reason, _ := run.ReasonOf(context.Cause(m.ctx))
+	return reason
+}
+
+// cancelledNodeReason explains a cancelled node: the run cause, or a failed
+// sibling when the run context is still live.
+func (m *runMachine) cancelledNodeReason() run.CancelReason {
+	if m.ctx != nil && m.ctx.Err() != nil {
+		return m.causeReason()
+	}
+	return run.CancelSiblingFailed
+}
+
+// requestRunCancel emits the run-scoped cancel_requested fact once, before any
+// process termination or terminal fact, and never after run_finished. A cancel
+// without a typed cause (a bare context.Canceled) has no reason and emits nothing.
+func (m *runMachine) requestRunCancel() {
+	m.cancelMu.Lock()
+	defer m.cancelMu.Unlock()
+	if m.cancelSent || m.runEnded {
+		return
+	}
+	reason := m.causeReason()
+	if reason == "" {
+		return
+	}
+	m.cancelSent = true
+	source := events.CancelSourceSignal
+	switch reason {
+	case run.CancelRunTimeout, run.CancelNodeTimeout:
+		source = events.CancelSourceDeadline
+	case run.CancelUserCancel:
+		source = events.CancelSourceAPI
+	case run.CancelSiblingFailed:
+		source = events.CancelSourceFailure
+	}
+	m.appendEvent(events.Event{Type: events.CancelRequested, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeRun, Reason: string(reason), Source: source}})
 }
 
 //nolint:gocognit // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
@@ -598,6 +699,22 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 	var evidence *events.NodeEvidencePayload
 	var check *events.GateCheckPayload
 	checkInvalid := false
+	runCtx := ctx
+	if node.TimeoutSeconds != nil {
+		var cancelNode context.CancelCauseFunc
+		ctx, cancelNode = context.WithCancelCause(runCtx)
+		timer := time.AfterFunc(time.Duration(*node.TimeoutSeconds)*timeoutUnit, func() {
+			cancelNode(run.CancelCause{Reason: run.CancelNodeTimeout, Node: id})
+		})
+		defer timer.Stop()
+		defer cancelNode(nil)
+	}
+	abandoned := false
+	call := func(fn func() execOutcome) {
+		var o execOutcome
+		o, abandoned = callBounded(ctx, fn)
+		outputs, evidence, err = o.outputs, o.evidence, o.err
+	}
 	streaming, hasLogs := executor.(LogStreamingExecutor)
 	observed, hasObserved := executor.(ObservedExecutor)
 	if hasLogs || hasObserved {
@@ -729,9 +846,15 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }, SecretEnv: m.secretEnvFor(id, node)})
+			call(func() execOutcome {
+				o, ev, e := observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }, SecretEnv: m.secretEnvFor(id, node)})
+				return execOutcome{outputs: o, evidence: ev, err: e}
+			})
 		} else {
-			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+			call(func() execOutcome {
+				o, e := streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+				return execOutcome{outputs: o, err: e}
+			})
 		}
 		logMu.Lock()
 		emitLog(events.Stdout, redactor.Flush(events.Stdout))
@@ -740,9 +863,23 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 		closed = true
 		logMu.Unlock()
 	} else if correlated, ok := executor.(CorrelatedExecutor); ok {
-		outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
+		call(func() execOutcome {
+			o, e := correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
+			return execOutcome{outputs: o, err: e}
+		})
 	} else {
-		outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
+		call(func() execOutcome {
+			o, e := executor.ExecuteNode(ctx, id, node, resolved)
+			return execOutcome{outputs: o, err: e}
+		})
+	}
+	timedOut := err != nil && nodeTimedOut(runCtx, ctx)
+	if timedOut {
+		m.appendEvent(events.Event{Type: events.CancelRequested, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeNode, Reason: events.ReasonNodeTimeout, Source: events.CancelSourceDeadline}})
+	}
+	if err != nil && !abandoned && (timedOut || runCtx.Err() != nil) {
+		m.requestRunCancel()
+		m.reportProcessTermination(id, attemptID, err)
 	}
 	if evidence != nil {
 		snapshot := *evidence
@@ -760,5 +897,18 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 		}
 		evidence = &snapshot
 	}
-	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err}
+	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err, timedOut: timedOut && !abandoned, shutdown: abandoned}
+}
+
+// collectMetadata calls the provider defensively: a panic or a hung provider
+// yields empty metadata, never a failed or stalled run.
+func collectMetadata(ctx context.Context, provider func(context.Context) RunMetadata) (meta RunMetadata) {
+	defer func() {
+		if recover() != nil {
+			meta = RunMetadata{}
+		}
+	}()
+	bounded, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return provider(bounded)
 }

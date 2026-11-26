@@ -839,3 +839,64 @@ func cancelWhenReady(t *testing.T, executor Executor, mode string) error {
 		return nil
 	}
 }
+
+func TestExecuteBoundsCapturedOutputWithExplicitOmissionMarker(t *testing.T) {
+	var observed int
+	var mu sync.Mutex
+	observe := func(_ string, data []byte) { mu.Lock(); observed += len(data); mu.Unlock() }
+	e := Executor{captureLimit: 1000}
+	_, err := e.ExecuteNodeWithLogs(context.Background(), "worker", helperNode("bulk"), nil, observe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if observed != 2<<20 {
+		t.Fatalf("observer saw %d bytes; streaming must stay complete", observed)
+	}
+	result, err := e.Execute(context.Background(), "worker", helperNode("bulk"), nil)
+	if err != nil || result.ExitCode != 0 {
+		t.Fatalf("err=%v exit=%d", err, result.ExitCode)
+	}
+	wantOmitted := uint64(1<<20 - 1000)
+	if result.StdoutOmitted != wantOmitted || result.StderrOmitted != wantOmitted {
+		t.Fatalf("omitted = %d/%d, want %d", result.StdoutOmitted, result.StderrOmitted, wantOmitted)
+	}
+	for stream, text := range map[string]string{"stdout": result.Stdout, "stderr": result.Stderr} {
+		if !strings.HasPrefix(text, strings.Repeat("x", 1000)) || !strings.Contains(text, fmt.Sprintf("[agentplane: %d bytes of %s omitted; capture limit 1000 bytes]", wantOmitted, stream)) {
+			t.Fatalf("%s lacks bounded prefix or omission marker: %.120q", stream, text[len(text)-min(len(text), 120):])
+		}
+		if len(text) > 1000+200 {
+			t.Fatalf("%s retained %d bytes", stream, len(text))
+		}
+	}
+}
+
+func TestExecuteWithinCaptureLimitHasNoMarker(t *testing.T) {
+	result, err := (Executor{captureLimit: 1 << 20}).Execute(context.Background(), "worker", helperNode("bulk"), nil)
+	if err != nil || result.StdoutOmitted != 0 || result.StderrOmitted != 0 || strings.Contains(result.Stdout, "agentplane:") {
+		t.Fatalf("exact-limit output must be retained whole: %d/%d %v", result.StdoutOmitted, result.StderrOmitted, err)
+	}
+}
+
+func TestExecuteKeepsOmittedFailureEvidenceBounded(t *testing.T) {
+	var failure *ExecutionError
+	node := helperNode("bulk")
+	_, err := (Executor{captureLimit: 100}).ExecuteNode(context.Background(), "worker", withOutput(node, "json"), nil)
+	if !errors.As(err, &failure) || failure.Kind != FailureOutput || failure.Result.StdoutOmitted == 0 || !strings.Contains(failure.Error(), "capture limit") {
+		t.Fatalf("truncated stdout must not parse as JSON: %v", err)
+	}
+}
+
+func TestLogWriterNeverSplitsARune(t *testing.T) {
+	w := &logWriter{limit: 4, stream: "stdout"}
+	_, _ = w.Write([]byte("ab\u00e9\u00e9")) // a b, then two 2-byte runes; the limit cuts the second
+	text, omitted := w.retained()
+	if !strings.HasPrefix(text, "ab\u00e9\n[agentplane: 2 bytes of stdout omitted") || omitted != 2 {
+		t.Fatalf("text=%q omitted=%d", text, omitted)
+	}
+}
+
+func withOutput(node graph.NodeDefinition, name string) graph.NodeDefinition {
+	node.Outputs = map[string]graph.PortDefinition{name: {Type: graph.ValueTypeJSON, Required: true}}
+	node.Config["stdout_json"] = true
+	return node
+}

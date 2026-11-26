@@ -33,7 +33,7 @@ func TestTypedProgressRedactionEveryBoundary(t *testing.T) {
 				o.Progress(events.TextDelta, events.TextDeltaPayload{SourceID: secret, Text: secret[i:] + " end"})
 				o.Progress(events.ToolCallStarted, events.ToolCallPayload{CallID: secret, Name: secret, Status: "in_progress"})
 			}}
-			d := definition(map[string]graph.NodeDefinition{"n": {Type: "test"}})
+			d := definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}})
 			r, err := Run(context.Background(), d, nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{secret}})
 			if err != nil {
 				t.Fatal(err)
@@ -64,7 +64,7 @@ func TestNormalizedProgressOrderAndCorrelation(t *testing.T) {
 			o.Progress(k, payloads[i])
 		}
 	}}
-	r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -109,7 +109,7 @@ func TestRun100MiBAbsentReaderAndFullQueueCancellation(t *testing.T) {
 			live := make(chan events.Event)
 			done := make(chan run.Result, 1)
 			go func() {
-				r, e := Run(ctx, definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LiveEvents: live})
+				r, e := Run(ctx, definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LiveEvents: live})
 				if e != nil {
 					panic(e)
 				}
@@ -149,7 +149,7 @@ func TestRun100MiBAbsentReaderAndFullQueueCancellation(t *testing.T) {
 func TestProgressUnicodeSplittingPreservesPublicText(t *testing.T) {
 	text := strings.Repeat("界", 12000)
 	ex := typedExecutor{func(o ExecutionObservation) { o.Progress(events.TextDelta, events.TextDeltaPayload{Text: text}) }}
-	r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"unrelated-secret"}})
+	r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"unrelated-secret"}})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -230,7 +230,7 @@ func TestNormalizedRedactionRejectsUnsafeUTF8BeforeExecution(t *testing.T) {
 			called = true
 			o.Progress(events.TextDelta, events.TextDeltaPayload{Text: tc.text})
 		}}
-		result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: tc.redactions})
+		result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: tc.redactions})
 		if err == nil {
 			encoded, marshalErr := json.Marshal(result.Events)
 			if marshalErr != nil {
@@ -262,7 +262,7 @@ func TestLegacyByteLogsKeepNonUTF8MarkerCompatibility(t *testing.T) {
 		log("stdout", []byte("SENSITIVE"))
 		return nil, nil
 	})
-	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{string(ascii), "SENSITIVE", "\uFFFD"}})
+	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{string(ascii), "SENSITIVE", "\uFFFD"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +289,7 @@ func TestNormalizedUTF8SecretsStayRedactedAfterJSON(t *testing.T) {
 	ex := typedExecutor{func(o ExecutionObservation) {
 		o.Progress(events.TextDelta, events.TextDeltaPayload{Text: "before é and SENSITIVE \uFFFD after"})
 	}}
-	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "test"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SENSITIVE", "\uFFFD"}})
+	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"n": {Type: "shell"}}), nil, ex, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SENSITIVE", "\uFFFD"}})
 	if err != nil {
 		t.Fatal(err)
 	}

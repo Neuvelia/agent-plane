@@ -727,6 +727,16 @@
      "key": "context_inputs",
      "kind": "list",
      "max_items": 8
+    },
+    {
+     "default": "fail",
+     "enum": [
+      "fail",
+      "continue"
+     ],
+     "id": "human.config.on_reject",
+     "key": "on_reject",
+     "kind": "enum"
     }
    ],
    "outputs": [

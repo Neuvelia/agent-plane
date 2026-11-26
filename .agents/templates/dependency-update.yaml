@@ -61,6 +61,7 @@ nodes:
     config:
       command: /usr/bin/printf
       args: ["update accepted\n"]
+      input_env: {decision: DECISION}
     inputs:
       decision: {type: string, required: true}
 graph_input_bindings:

@@ -508,7 +508,7 @@ func nodeResult(result run.Result, id string) run.NodeResult {
 
 func TestIsolationConflictNeedsInterventionKeepsAcceptedValues(t *testing.T) {
 	d := unitGraph(t.TempDir(), []string{"a", "b"}, "a", "b")
-	d.Nodes["tail"] = graph.NodeDefinition{Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}}
+	d.Nodes["tail"] = graph.NodeDefinition{Type: "shell", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}}
 	d.Edges = []graph.EdgeDefinition{{From: "b.outputs.raw_metadata", To: "tail.inputs.result"}}
 	a := okAdapter()
 	w := &fakeWorkspaces{root: t.TempDir(), conflict: map[string][]string{"b": {"shared.txt", "docs/x.md"}}}

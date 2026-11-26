@@ -352,6 +352,16 @@ value. The runtime does not emit `policy_evaluated` or `policy_violation` yet (F
 `secret_in_workspace` Check Result, one per granted node run, as an audit fact that changes no outcome
 (F3.8 requirement 13, ADR-0029).
 
+## Additive schema notes (no number consumed)
+
+The optional `omitempty` `run_started` fields `repo_name`, `repo_branch`,
+`repo_commit` and `runtime_version` (F2.9) ride on the existing schema without a
+bump: absent in older logs, never a path.
+
+The `test_command` Gate check kind (F1.4a, ADR-0035) is likewise additive: it is a
+new `kind` value of a loop-embedded Gate, so graph schema 0 and the event schema
+are unchanged, and its evidence rides on the existing `check_result`.
+
 ## Workspace isolation facts (F3.1)
 
 Event schema 11 adds five typed, bounded facts for isolated Agent units:

@@ -263,3 +263,29 @@ func TestAgentExecutorRejectsNilContext(t *testing.T) {
 		t.Fatalf("nil context error = %v", err)
 	}
 }
+
+func TestAgentUnavailableAndUnregisteredErrorsAreActionable(t *testing.T) {
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}}
+	inputs := map[string]graph.Value{"job": graph.NewStringValue("task")}
+	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: false, DisplayName: "Codex CLI"}}
+	for name, adapters := range map[string]map[agent.AdapterID]agent.AgentAdapter{
+		"unavailable":  {"test-adapter": m},
+		"unregistered": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := runtime.Run(context.Background(), agentGraph(t.TempDir()), inputs, agent.Executor{Adapters: adapters}, opts)
+			if err != nil || result.Failure == nil {
+				t.Fatalf("Run = %+v, %v", result, err)
+			}
+			msg := result.Failure.Err.Error()
+			for _, want := range []string{"--adapter", "--codex-bin ABSOLUTE_PATH", "test-adapter"} {
+				if !strings.Contains(msg, want) {
+					t.Fatalf("message %q lacks %q", msg, want)
+				}
+			}
+			if name == "unavailable" && !strings.Contains(msg, "Codex CLI") {
+				t.Fatalf("message %q does not name the CLI", msg)
+			}
+		})
+	}
+}

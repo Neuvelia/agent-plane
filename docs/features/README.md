@@ -37,6 +37,7 @@ feature contract.
 | `F1.6-correction-loop.md` | Implemented; ADR-0014 |
 | `F1.7-return-envelope-scoped-retry.md` | Implemented; ADR-0015 |
 | `F1.8-changed-files-scope-check.md` | Implemented; ADR-0016 |
+| `F1.4a-test-command-loop-check.md` | Implemented; ADR-0035 (proposed) |
 
 ## Phase 2 - Local IDE and vertical slice
 
@@ -67,6 +68,9 @@ feature contract.
 | `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | In progress: tasks 1-6 merged (process-tree termination on Unix, cancel/timeout event types, `timeout_seconds` parsed); runtime enforcement and cancel/timeout events not emitted yet; ADR-0028 proposed |
 | `F3.8-secrets-references.md` | Implemented for the `env` provider and Shell nodes (event schema 14; Linux only verified); Agent `secret_env`, keychain provider and F3.9 policy not included; 15 of 17 acceptance criteria ticked, two partly covered (7, 15), the enforce variant of 10 waits for F3.9; ADR-0029 accepted (shared with F3.9) |
 | `F3.9-execution-policy-v0.md` | Draft; event types `policy_evaluated`/`policy_violation` (schema 14) exist but are not emitted; ADR-0029 accepted (shared with F3.8) |
+| `F3.9c-requested-permissions-ui.md` | Draft; ADR-0032 proposed; blocked on F3.9; closes the permissions-UI gap of F2.2/F3.9 (#184) |
+| `F3.1c-shell-workspace-isolation.md` | Draft; ADR-0034 proposed; extends ADR-0024 to loop Shell producers (#189) |
+| `F2.3b-json-field-selection.md` | Draft; ADR-0033 proposed (needs owner choice vs. future Code node; #185) |
 
 ## Release engineering - drafts (not roadmap F-IDs)
 

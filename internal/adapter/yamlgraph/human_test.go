@@ -26,6 +26,9 @@ func TestHumanNodeValidation(t *testing.T) {
 		{"prompt too long", "    config: {prompt: \"" + strings.Repeat("a", 1025) + "\"}\n    outputs: {decision: {type: string}}\n", false},
 		{"context input undeclared", "    config: {context_inputs: [missing]}\n    outputs: {decision: {type: string}}\n", false},
 		{"context input not string", "    config: {context_inputs: [data]}\n    inputs: {data: {type: json}}\n    outputs: {decision: {type: string}}\n", false},
+		{"on_reject fail", "    config: {on_reject: fail}\n    outputs: {decision: {type: string}}\n", true},
+		{"on_reject unknown value", "    config: {on_reject: retry}\n    outputs: {decision: {type: string}}\n", false},
+		{"on_reject not string", "    config: {on_reject: true}\n    outputs: {decision: {type: string}}\n", false},
 		{"context input ok", "    config: {context_inputs: [note]}\n    inputs: {note: {type: string}}\n    outputs: {decision: {type: string}}\n", true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -55,5 +58,52 @@ func TestHumanNodeCannotLoop(t *testing.T) {
 	}
 	if graph.Validate(d).Valid() {
 		t.Fatal("a human node with a loop must be invalid")
+	}
+}
+
+func TestHumanOnRejectContinueNeedsAConsumerOfDecision(t *testing.T) {
+	const head = `schema_version: 0
+id: h
+inputs: {}
+nodes:
+  ask:
+    type: human
+    config: {on_reject: continue}
+    outputs: {decision: {type: string, required: true}}
+`
+	const after = `  after:
+    type: shell
+    inputs: {verdict: {type: string, required: true}}
+    outputs: {}
+`
+	const afterEnv = `  after:
+    type: shell
+    config: {command: /bin/true, input_env: {verdict: VERDICT}}
+    inputs: {verdict: {type: string, required: true}}
+    outputs: {}
+`
+	for _, tt := range []struct {
+		name, doc string
+		ok        bool
+	}{
+		{"edge to an input the target ignores", head + after + "edges: [{from: ask.outputs.decision, to: after.inputs.verdict}]\noutputs: {}\n", false},
+		{"edge consumer", head + afterEnv + "edges:\n  - {from: ask.outputs.decision, to: after.inputs.verdict}\noutputs: {}\n", true},
+		{"graph output consumer", head + "edges: []\noutputs: {verdict: {from: ask.outputs.decision}}\n", true},
+		{"no consumer", head + "edges: []\noutputs: {}\n", false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			d, err := yamlgraph.Parse([]byte(tt.doc))
+			if err != nil {
+				t.Fatal(err)
+			}
+			result := graph.Validate(d)
+			bad := false
+			for _, diag := range result.Diagnostics {
+				bad = bad || diag.Code == "E_HUMAN_REJECT_UNROUTED"
+			}
+			if bad == tt.ok {
+				t.Fatalf("ok=%v diagnostics=%v", tt.ok, result.Diagnostics)
+			}
+		})
 	}
 }

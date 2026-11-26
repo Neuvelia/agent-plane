@@ -41,8 +41,10 @@ the scheduler independent of operating-system process details.
 - The scheduler and generic node result do not gain process-specific fields.
 - Failure evidence is available through `errors.As` on the generic runtime
   failure's `Err` field.
-- Captured output is currently unbounded in memory; larger log/artifact
-  handling belongs to a later feature.
+- Captured output is bounded: at most 1 MiB per stream is retained, with an
+  explicit omission marker and omitted byte counts (F0.5 requirement 10).
+  Streaming to the log observer is unaffected. Storing the full log as an
+  artifact belongs to a later feature (F3.5).
 - Shell nodes cannot yet consume bound inputs as process arguments or
   environment values; a future explicit mapping contract is required.
 

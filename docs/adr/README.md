@@ -26,6 +26,8 @@ F1.7: [ADR-0015 - Static units, Return Envelopes and immutable acceptance](0015-
 
 F1.8: [ADR-0016 - Git-observed changed-files scope checking](0016-changed-files-scope-check.md).
 
+F1.4a: [ADR-0035 - Test command as a loop check](0035-test-command-loop-check.md) (proposed).
+
 Phase 2 vertical slice (accepted):
 [ADR-0017 - Human node and local approval](0017-human-node-and-local-approval.md),
 [ADR-0018 - Correction loop for Shell producers](0018-shell-node-correction-loop.md),
@@ -56,6 +58,13 @@ F3.4 cancellation and timeouts (proposed):
 
 F3.8 secret references and F3.9 execution policy (proposed):
 [ADR-0029 - Secret references and execution policy v0](0029-secret-references-and-execution-policy.md).
+
+Owner-decision gaps (Q17, 2026-11-26; all proposed, none implemented):
+[ADR-0032 - Requested permissions in the desktop](0032-requested-permissions-in-desktop.md) (F3.9c),
+[ADR-0033 - JSON field selection in data bindings](0033-json-field-selection-in-bindings.md) (F2.3b),
+[ADR-0034 - Workspace isolation for Shell nodes](0034-shell-node-workspace-isolation.md) (F3.1c).
+
+F2.10: [ADR-0036 - Human reject routing and approval context](0036-human-reject-routing-and-gate-context.md) (proposed).
 
 Release engineering (proposed):
 [ADR-0030 - Distribution channels, desktop shell and release tooling](0030-distribution-and-release-channels.md),

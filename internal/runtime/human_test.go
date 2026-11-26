@@ -133,6 +133,35 @@ func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 	}
 }
 
+func TestHumanRejectWithOnRejectContinueRoutesRejectedDecisionDownstream(t *testing.T) {
+	def := humanDef(map[string]graph.NodeDefinition{
+		"after": {Type: "shell", Config: graph.NodeConfig{"input_env": map[string]any{"decision": "DECISION"}}, Inputs: map[string]graph.PortDefinition{"decision": {Type: graph.ValueTypeString, Required: true}}},
+	})
+	node := def.Nodes["gate"]
+	node.Config = map[string]any{"prompt": "ship it?", "on_reject": graph.HumanRejectContinue}
+	def.Nodes["gate"] = node
+	def.Edges = []graph.EdgeDefinition{{From: "gate.outputs.decision", To: "after.inputs.decision"}}
+	var got string
+	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, in map[string]graph.Value) (map[string]graph.Value, error) {
+		if id == "after" {
+			got, _ = in["decision"].AsString()
+		}
+		return map[string]graph.Value{}, nil
+	})
+	result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
+		return run.Decision{Approve: false, Comment: "no"}, nil
+	})})
+	if err != nil || result.State != run.RunSucceeded || result.Failure != nil {
+		t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+	}
+	if got != "rejected" {
+		t.Fatalf("dependent saw decision %q, want rejected", got)
+	}
+	if _, dec := humanEvents(result); len(dec) != 1 || dec[0].Payload.(events.ApprovalDecidedPayload).Decision != "rejected" {
+		t.Fatalf("approval_decided must still record the rejection: %+v", dec)
+	}
+}
+
 func TestHumanWaitSharesBatchWithIndependentNode(t *testing.T) {
 	// Deterministic overlap proof: the decision is withheld until the sibling
 	// node has finished, so both must be in flight in the same batch.

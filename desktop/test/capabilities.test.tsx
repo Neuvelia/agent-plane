@@ -21,7 +21,7 @@ describe('capability rows', () => {
       expect(k, r).toBeDefined()
       for (const c of Object.values(catalogues)) expect(c[k!], r).toBeTruthy()
     }
-    for (const id of ['engine', 'git', 'codex', 'claude', 'cursor-agent', 'gemini']) expect(catalogues.pl[`cap.tool.${id}` as keyof typeof catalogues.pl], id).toBeTruthy()
+    for (const id of ['engine', 'git', 'codex', 'claude', 'cursor-agent', 'gemini', 'shell', 'docker']) expect(catalogues.pl[`cap.tool.${id}` as keyof typeof catalogues.pl], id).toBeTruthy()
   })
 
   it('maps the agent CLI and Codex states the owner decision names', () => {
@@ -31,6 +31,15 @@ describe('capability rows', () => {
     expect(rowText(tool({ id: 'codex', kind: 'agent_adapter', status: 'not_configured', reason: 'no_binary_configured' })).meaning).toBe('cap.meaning.codex.notConfigured')
     expect(rowText(tool({ status: 'missing', reason: 'developer_tools_missing' })).meaning).toBe('cap.meaning.git.devtools')
     expect(rowText(tool({ status: 'available' })).still).toBeUndefined()
+  })
+
+  it('maps the shell and optional Docker rows (#188)', () => {
+    expect(rowText(tool({ id: 'shell', kind: 'tool', status: 'available' }))).toMatchObject({ meaning: 'cap.meaning.shell.available' })
+    expect(rowText(tool({ id: 'shell', kind: 'tool', status: 'missing' })).meaning).toBe('cap.meaning.shell.missing')
+    expect(rowText(tool({ id: 'shell', kind: 'tool', status: 'unsupported_platform', reason: 'platform_not_supported' })).meaning).toBe('cap.meaning.shell.platform')
+    expect(rowText(tool({ id: 'shell', kind: 'tool', status: 'error', reason: 'not_executable' })).still).toBe('cap.still.noShell')
+    expect(rowText(tool({ id: 'docker', kind: 'tool', status: 'available' })).meaning).toBe('cap.meaning.docker.available')
+    expect(rowText(tool({ id: 'docker', kind: 'tool', status: 'missing' }))).toMatchObject({ meaning: 'cap.meaning.docker.missing' })
   })
 
   it('shows an unknown status, reason or id verbatim and never as available', () => {
@@ -106,7 +115,7 @@ describe('capability panel states', () => {
   it('loaded shows the Engine row with both versions, then every tool with a status word', () => {
     const out = html({ state: 'loaded', report: recorded as CapabilityReport, refreshing: false })
     expect(out).toContain('engine 0.0.0-dev · app 1.2.3')
-    for (const id of ['engine', 'git', 'codex', 'claude', 'cursor-agent', 'gemini']) expect(out).toContain(`data-testid="cap-${id}"`)
+    for (const id of ['engine', 'git', 'codex', 'claude', 'cursor-agent', 'gemini', 'shell', 'docker']) expect(out).toContain(`data-testid="cap-${id}"`)
     expect(out).toContain('Not configured')
     expect(out).toContain('aria-live="polite"')
   })

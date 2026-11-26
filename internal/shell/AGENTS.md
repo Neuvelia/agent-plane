@@ -59,8 +59,13 @@ runtime owns scheduling, accepted node values, loops and event emission.
 - `Execute` returns raw `Result`: separate complete stdout/stderr capture,
   exit code and start/end timestamps. `ExecutionError` retains that result and
   unwraps its cause for config, start, exit, cancellation and output failures.
-  Its raw captured streams are not automatically redacted and are currently
-  unbounded in memory. A failed process publishes no accepted graph outputs.
+  Its raw captured streams are not automatically redacted (run results mask
+  them through `Redacted`, F3.8). Each stream
+  retains at most `DefaultCaptureLimit` (1 MiB) leading bytes; the rest is
+  drained and streamed to the observer but omitted from `Result`, reported in
+  `StdoutOmitted`/`StderrOmitted` and in a marker ending the retained text. A
+  declared `json` output fails when stdout was truncated. The full log as an
+  artifact is deferred to F3.5. A failed process publishes no accepted graph outputs.
   Only declared `stdout`, `stderr`, `exit_code` and optional `json` outputs may
   be returned. `json` requires `stdout_json: true` and the entire stdout must
   be one valid JSON value; arbitrary surrounding prose is not parsed.
@@ -82,7 +87,8 @@ runtime owns scheduling, accepted node values, loops and event emission.
   fatal, not retry signals. Runtime withholds a rejected attempt's output,
   preserves accepted siblings and stops at the configured attempt budget.
   Rejected attempts may leave workspace side effects; this is not isolation
-  or rollback.
+  or rollback. A failing test as the check is the embedded Gate kind
+  `test_command` (F1.4a, ADR-0035), not a non-zero producer exit.
 
 Read `docs/features/F0.5-shell-node.md`,
 `docs/adr/0005-shell-node-execution-contract.md`,

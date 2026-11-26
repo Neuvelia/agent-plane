@@ -58,6 +58,7 @@ nodes:
     config:
       command: /usr/bin/printf
       args: ["audit acknowledged\n"]
+      input_env: {decision: DECISION}
     inputs:
       decision: {type: string, required: true}
 edges:

@@ -60,6 +60,7 @@ nodes:
     config:
       command: /usr/bin/printf
       args: ["fix accepted\n"]
+      input_env: {decision: DECISION}
     inputs:
       decision: {type: string, required: true}
 graph_input_bindings:

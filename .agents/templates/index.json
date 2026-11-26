@@ -26,12 +26,20 @@
       "expected_diagnostics": []
     },
     {
+      "id": "modify-test-approve",
+      "file": "modify-test-approve.yaml",
+      "requires": [],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [],
+      "expected_diagnostics": [{"code": "W_EDGE_INPUT_UNUSED", "path": "edges[2].to"}]
+    },
+    {
       "id": "agent-scoped-approval",
       "file": "agent-scoped-approval.yaml",
       "requires": ["git", "codex"],
       "platforms": ["linux", "darwin"],
       "placeholders": [{"path": "nodes.implement.config.workspace", "marker": "FILL"}],
-      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.implement.config"}]
+      "expected_diagnostics": [{"code": "W_EDGE_INPUT_UNUSED", "path": "edges[0].to"}, {"code": "W_EDGE_INPUT_UNUSED", "path": "edges[2].to"}, {"code": "E_NODE_CONFIG_INVALID", "path": "nodes.implement.config"}]
     },
     {
       "id": "fix-issue",
@@ -39,7 +47,7 @@
       "requires": ["git", "codex"],
       "platforms": ["linux", "darwin"],
       "placeholders": [{"path": "nodes.fix.config.workspace", "marker": "FILL"}],
-      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.fix.config"}]
+      "expected_diagnostics": [{"code": "W_EDGE_INPUT_UNUSED", "path": "edges[0].to"}, {"code": "W_EDGE_INPUT_UNUSED", "path": "edges[2].to"}, {"code": "E_NODE_CONFIG_INVALID", "path": "nodes.fix.config"}]
     },
     {
       "id": "code-review",
@@ -47,7 +55,7 @@
       "requires": ["git", "codex"],
       "platforms": ["linux", "darwin"],
       "placeholders": [{"path": "nodes.review.config.workspace", "marker": "FILL"}],
-      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.review.config"}]
+      "expected_diagnostics": [{"code": "W_EDGE_INPUT_UNUSED", "path": "edges[0].to"}, {"code": "W_EDGE_INPUT_UNUSED", "path": "edges[2].to"}, {"code": "E_NODE_CONFIG_INVALID", "path": "nodes.review.config"}]
     },
     {
       "id": "dependency-update",
@@ -55,7 +63,7 @@
       "requires": ["git", "codex"],
       "platforms": ["linux", "darwin"],
       "placeholders": [{"path": "nodes.update.config.workspace", "marker": "FILL"}],
-      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.update.config"}]
+      "expected_diagnostics": [{"code": "W_EDGE_INPUT_UNUSED", "path": "edges[0].to"}, {"code": "W_EDGE_INPUT_UNUSED", "path": "edges[2].to"}, {"code": "E_NODE_CONFIG_INVALID", "path": "nodes.update.config"}]
     },
     {
       "id": "repo-audit",
@@ -63,7 +71,7 @@
       "requires": ["git", "codex"],
       "platforms": ["linux", "darwin"],
       "placeholders": [{"path": "nodes.audit.config.workspace", "marker": "FILL"}],
-      "expected_diagnostics": [{"code": "E_NODE_CONFIG_INVALID", "path": "nodes.audit.config"}]
+      "expected_diagnostics": [{"code": "W_EDGE_INPUT_UNUSED", "path": "edges[0].to"}, {"code": "W_EDGE_INPUT_UNUSED", "path": "edges[2].to"}, {"code": "E_NODE_CONFIG_INVALID", "path": "nodes.audit.config"}]
     }
   ]
 }

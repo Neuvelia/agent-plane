@@ -60,6 +60,9 @@ func collectOutputs(nodeID string, node graph.NodeDefinition, names []string, re
 			value, _ := graph.NewNumberValue(json.Number(strconv.Itoa(result.ExitCode)))
 			outputs[name] = value
 		case "json":
+			if result.StdoutOmitted > 0 {
+				return nil, &ExecutionError{NodeID: nodeID, Kind: FailureOutput, Result: result, Cause: fmt.Errorf("stdout exceeded the capture limit (%d bytes omitted); it cannot be one complete JSON value", result.StdoutOmitted)}
+			}
 			value, parseErr := graph.NewJSONValue(json.RawMessage(result.Stdout))
 			if parseErr != nil {
 				return nil, &ExecutionError{NodeID: nodeID, Kind: FailureOutput, Result: result, Cause: fmt.Errorf("stdout is not one complete JSON value: %w", parseErr)}

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/gate"
 )
 
 // nodeConfigCode is the diagnostic for a node whose static configuration the
@@ -35,6 +37,12 @@ func validateGraph(def *graph.Definition) graph.ValidationResult {
 		}
 		if err := executor.ValidateNodeConfig(id, n); err != nil {
 			report(err, "config")
+		}
+		if n.Type == "gate" && n.Config["kind"] == gate.KindTestCommand {
+			// A test command runs author code and may write; only a loop's
+			// embedded Gate, where rejected attempts already leave side effects
+			// (ADR-0018), may carry one (ADR-0035).
+			report(errors.New("a test_command Gate is valid only as a loop's embedded Gate"), "config.kind")
 		}
 		if n.Loop != nil {
 			if err := executor.ValidateNodeConfig(id, n.Loop.GateNode()); err != nil {

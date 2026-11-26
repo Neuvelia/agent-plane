@@ -78,6 +78,7 @@ func Validate(definition *Definition) ValidationResult {
 	validator.validateRequiredInputs()
 	validator.validateCycles()
 	validator.validateUnusedOutputs()
+	validator.validateUnconsumedInputs()
 	return validator.result()
 }
 
@@ -129,6 +130,8 @@ func (v *definitionValidator) validateDefinition() {
 		v.validateIdentifier(nodeID, nodePath, "node id", nodeID)
 		if node.Type == "" {
 			v.error("E_NODE_TYPE_REQUIRED", fmt.Sprintf("node %s is missing required type", quotedKey(nodeID)), DiagnosticLocation{NodeID: nodeID, Path: nodePath + ".type"}, "set the node type")
+		} else if !KnownNodeType(node.Type) {
+			v.error("E_NODE_TYPE_UNKNOWN", fmt.Sprintf("node %s has unknown type %s", quotedKey(nodeID), quotedKey(node.Type)), DiagnosticLocation{NodeID: nodeID, Path: nodePath + ".type"}, "use one of the allowed node types: "+strings.Join(nodeTypes, ", "))
 		}
 		for _, inputID := range sortedPortIDs(node.Inputs) {
 			port := node.Inputs[inputID]
@@ -303,6 +306,114 @@ func (v *definitionValidator) validateUnusedOutputs() {
 			v.warning("W_DECLARED_OUTPUT_UNUSED", fmt.Sprintf("output %s on node %s is not consumed", quotedKey(outputID), quotedKey(nodeID)), DiagnosticLocation{NodeID: nodeID, Path: path}, "remove the output or bind it to an edge or graph output")
 		}
 	}
+}
+
+// nodeTypes lists the node types schema v0 allows, in documentation order.
+var nodeTypes = []string{"shell", "agent", "gate", "human"}
+
+// KnownNodeType reports whether nodeType is an allowed schema-v0 node type.
+func KnownNodeType(nodeType string) bool {
+	for _, known := range nodeTypes {
+		if nodeType == known {
+			return true
+		}
+	}
+	return false
+}
+
+// validateUnconsumedInputs warns when a valid edge delivers a value to a node
+// input that the target node's type never reads (F0.2). Graph input bindings
+// are not checked here. The warning does not block execution.
+func (v *definitionValidator) validateUnconsumedInputs() {
+	reported := make(map[string]bool)
+	for _, dep := range v.dependencies {
+		edge := v.definition.Edges[dep.edgeIndex]
+		to, ok := parseNodeInputReference(string(edge.To))
+		if !ok {
+			continue
+		}
+		node := v.definition.Nodes[to.nodeID]
+		key := inputKey(to.nodeID, to.portID)
+		if reported[key] || !KnownNodeType(node.Type) || nodeConsumesInput(node, to.portID) {
+			continue
+		}
+		reported[key] = true
+		v.warning("W_EDGE_INPUT_UNUSED", fmt.Sprintf("input %q on node %q receives edge %q but the %s node does not use it", to.portID, to.nodeID, edge.From, node.Type), edgeLocation(dep.edgeIndex, fmt.Sprintf("edges[%d].to", dep.edgeIndex)), unconsumedInputSuggestion(node.Type, to.portID))
+	}
+}
+
+func unconsumedInputSuggestion(nodeType, inputID string) string {
+	switch nodeType {
+	case "shell":
+		return fmt.Sprintf("map the input in config.input_env, for example input_env: {%s: NAME}, or remove the edge", inputID)
+	case "human":
+		return "list the input in config.context_inputs or remove the edge"
+	case "gate":
+		return "reference the input from the Gate config (input, left_input or right_input) or remove the edge"
+	default:
+		return "use the input (an Agent consumes only task) or remove the edge"
+	}
+}
+
+// nodeConsumesInput reports whether the node's static configuration reads the
+// named input. Shell reads input_env keys, Agent reads task, Gate reads the
+// inputs its config names, Human reads context_inputs; a loop binding with
+// source node.inputs.X also forwards the input to the embedded Gate.
+func nodeConsumesInput(node NodeDefinition, inputID string) bool {
+	if node.Loop != nil {
+		for _, binding := range node.Loop.Bindings {
+			if binding.From == "node.inputs."+inputID {
+				return true
+			}
+		}
+	}
+	switch node.Type {
+	case "shell":
+		return configMapHasKey(node.Config["input_env"], inputID)
+	case "agent":
+		return inputID == "task"
+	case "gate":
+		for _, key := range []string{"input", "left_input", "right_input"} {
+			if name, ok := node.Config[key].(string); ok && name == inputID {
+				return true
+			}
+		}
+		return false
+	case "human":
+		items, _ := node.Config["context_inputs"].([]any)
+		for _, item := range items {
+			if name, ok := item.(string); ok && name == inputID {
+				return true
+			}
+		}
+		if names, ok := node.Config["context_inputs"].([]string); ok {
+			for _, name := range names {
+				if name == inputID {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	return true
+}
+
+func configMapHasKey(value any, key string) bool {
+	switch m := value.(type) {
+	case map[string]any:
+		_, ok := m[key]
+		return ok
+	case map[string]string:
+		_, ok := m[key]
+		return ok
+	case NodeConfig:
+		_, ok := m[key]
+		return ok
+	case map[any]any:
+		_, ok := m[key]
+		return ok
+	}
+	return false
 }
 
 func (v *definitionValidator) parseNodeOutputReference(reference, path string, edgeIndex int, code string) (nodeOutputReference, bool) {

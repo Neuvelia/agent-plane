@@ -38,7 +38,7 @@ func runsCommand(sub string, args []string, stdout, stderr io.Writer) int {
 			return writeJSON(stdout, stderr, cliDocument{Command: name, Status: "ok", Diagnostics: nonNilDiagnostics(nil), Runs: &runs}, exitOK)
 		}
 		for _, r := range runs {
-			if _, err := fmt.Fprintf(stdout, "%s  %s  %-11s %s  %d events\n", r.RunID, r.StartedAt.Format("2006-01-02T15:04:05Z"), r.Status, r.GraphID, r.EventCount); err != nil {
+			if _, err := fmt.Fprintf(stdout, "%s  %s  %-11s %s  %d events%s\n", r.RunID, r.StartedAt.Format("2006-01-02T15:04:05Z"), r.Status, r.GraphID, r.EventCount, sourceSuffix(r)); err != nil {
 				return presentationError(err, stderr)
 			}
 		}
@@ -64,4 +64,22 @@ func runsCommand(sub string, args []string, stdout, stderr io.Writer) int {
 		}
 	}
 	return exitOK
+}
+
+// sourceSuffix renders the optional repository provenance of a stored run as
+// "  branch@shortcommit"; it is empty for runs that recorded none.
+func sourceSuffix(r store.Summary) string {
+	commit := r.RepoCommit
+	if len(commit) > 12 {
+		commit = commit[:12]
+	}
+	switch {
+	case r.RepoBranch != "" && commit != "":
+		return "  " + r.RepoBranch + "@" + commit
+	case commit != "":
+		return "  @" + commit
+	case r.RepoBranch != "":
+		return "  " + r.RepoBranch
+	}
+	return ""
 }

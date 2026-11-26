@@ -208,7 +208,7 @@ func TestPreflightRedactionErrorWording(t *testing.T) {
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
-	_, err := preflightRun(context.Background(), definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}}), nil, exec, Options{LogRedactions: []string{string(allBytes)}})
+	_, err := preflightRun(context.Background(), definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}}), nil, exec, Options{LogRedactions: []string{string(allBytes)}})
 	if err == nil {
 		t.Fatal("redactions without a safe marker were accepted")
 	}

@@ -19,10 +19,20 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 			state.baselines[work.id] = work.baseline
 		}
 		nodeResult := machine.nodes[work.id]
+		// An executor abandoned because the run itself was cancelled (run
+		// timeout, user cancel) is a cancelled node, not a shutdown failure; the
+		// abandonment is only a diagnostic (ADR-0028).
+		if work.shutdown && ctx.Err() != nil {
+			work.err = ctx.Err()
+			work.shutdown = false
+		}
 		if definition.Nodes[work.id].Loop != nil {
 			outcome := "execution_error"
 			if work.err != nil && ctx.Err() != nil && (errors.Is(work.err, context.Canceled) || errors.Is(work.err, context.DeadlineExceeded)) {
 				outcome = "cancelled"
+			}
+			if work.timedOut && ctx.Err() == nil {
+				outcome = "timeout"
 			}
 			if work.check != nil && !work.checkInvalid {
 				machine.appendEvent(events.Event{Type: events.GateCheck, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.CloneGate(*work.check)})
@@ -71,6 +81,14 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 				checkID = work.check.CheckID
 			}
 			machine.appendEvent(events.Event{Type: events.AttemptFinished, NodeID: work.id, NodeRunID: nodeResult.NodeRunID, AttemptID: work.attemptID, Payload: events.AttemptFinishedPayload{Outcome: outcome, CheckID: checkID}})
+			// A timed-out attempt consumes one attempt of the budget and has no
+			// CheckResult, so the next attempt gets no feedback (F3.4 Q3). Unit
+			// nodes publish envelopes per attempt and do not retry on timeout.
+			if outcome == "timeout" && !work.shutdown && ctx.Err() == nil && machine.units[work.id] == nil && state.numbers[work.id] < definition.Nodes[work.id].Loop.Attempts() {
+				delete(state.feedbacks, work.id)
+				retry = append(retry, work.id)
+				continue
+			}
 			if outcome == "rejected" && ctx.Err() == nil {
 				state.feedbacks[work.id] = &run.CorrectionFeedback{PreviousAttemptID: work.attemptID, CheckResult: events.CloneGate(*work.check), IntendedScope: originalScope(definition.Nodes[work.id])}
 				retry = append(retry, work.id)
@@ -117,6 +135,15 @@ func (machine *runMachine) acceptBatchResults(ctx context.Context, definition *g
 				nodeResult.Failure = &run.Failure{NodeID: work.id, Kind: run.FailureExecutor, Err: work.err}
 				if errors.As(work.err, &rejectedError{}) {
 					nodeResult.Failure.Kind = run.FailureRejected
+				}
+				// The typed cause, not the error text, makes a timeout distinct
+				// from a failure (ADR-0028).
+				if work.timedOut {
+					nodeResult.Failure.Kind = run.FailureTimeout
+					nodeResult.Reason = run.CancelNodeTimeout
+				}
+				if work.shutdown {
+					nodeResult.Failure.Kind = run.FailureShutdown
 				}
 				if len(work.diagnostics) > 0 {
 					nodeResult.Failure.Kind = run.FailureOutputContract

@@ -45,7 +45,7 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 	}
 	adapter, ok := e.Adapters[cfg.adapter]
 	if !ok || adapter == nil || adapter.ID() != cfg.adapter {
-		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: errors.New("adapter is not registered under its logical ID")}
+		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: fmt.Errorf("adapter %q is not registered, so its CLI cannot be launched; run with --adapter codex --codex-bin ABSOLUTE_PATH to register the Codex adapter", cfg.adapter)}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorExecution, Cause: err}
@@ -60,7 +60,7 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: kind, Cause: err}
 	}
 	if !report.Available {
-		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: errors.New("adapter reported unavailable")}
+		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: unavailableCause(cfg.adapter, report)}
 	}
 	if report.Workspace != nil && !*report.Workspace {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnsupported, Cause: errors.New("adapter does not support workspace execution")}
@@ -99,6 +99,15 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 		*evidence = &p
 	}
 	return values, nil
+}
+
+// unavailableCause names the missing CLI and tells the user how to fix it.
+func unavailableCause(id AdapterID, report CapabilityReport) error {
+	name := report.DisplayName
+	if name == "" {
+		name = string(id)
+	}
+	return fmt.Errorf("%s was not found at the configured binary path; install it and run with --adapter %s --codex-bin ABSOLUTE_PATH pointing at the installed executable", name, id)
 }
 
 func outputValues(node graph.NodeDefinition, output AgentExecutionOutput) (map[string]graph.Value, error) {

@@ -41,6 +41,20 @@
       "status": "missing",
       "version": "",
       "reason": ""
+    },
+    {
+      "id": "shell",
+      "kind": "tool",
+      "status": "available",
+      "version": "",
+      "reason": ""
+    },
+    {
+      "id": "docker",
+      "kind": "tool",
+      "status": "missing",
+      "version": "",
+      "reason": ""
     }
   ]
 }

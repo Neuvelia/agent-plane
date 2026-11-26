@@ -150,6 +150,9 @@ func (s *Summary) observe(e events.Event) (terminal bool) {
 	if s.GraphID == "" {
 		s.GraphID, s.GraphVersion, s.StartedAt = e.GraphID, e.GraphVersion, e.Timestamp
 	}
+	if p, ok := e.Payload.(events.RunStartedPayload); ok {
+		s.RepoName, s.RepoBranch, s.RepoCommit, s.RuntimeVersion = p.RepoName, p.RepoBranch, p.RepoCommit, p.RuntimeVersion
+	}
 	if p, ok := e.Payload.(events.RunFinishedPayload); ok {
 		s.Status = p.Status
 		finishedAt := e.Timestamp

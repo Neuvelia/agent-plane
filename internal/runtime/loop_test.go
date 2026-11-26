@@ -80,7 +80,7 @@ func (e composition) PreflightNode(ctx context.Context, id string, n graph.NodeD
 func loopDefinition(budget int) *graph.Definition {
 	return &graph.Definition{SchemaVersion: 0, ID: "loop", Inputs: map[string]graph.InputDefinition{}, Edges: []graph.EdgeDefinition{{From: "work.outputs.raw_metadata", To: "down.inputs.result"}}, Outputs: map[string]graph.OutputDefinition{}, Nodes: map[string]graph.NodeDefinition{
 		"work": {Type: "agent", Config: graph.NodeConfig{"adapter": "fake", "task": "original SECRET task", "workspace": os.TempDir(), "allowed_paths": []string{"src/SECRET"}}, Outputs: map[string]graph.PortDefinition{"raw_metadata": {Type: graph.ValueTypeJSON, Required: true}}, Loop: &graph.LoopDefinition{MaxAttempts: budget, Gate: graph.LoopGateDefinition{Inputs: map[string]graph.PortDefinition{"candidate": {Type: graph.ValueTypeJSON, Required: true}}, Config: graph.NodeConfig{"check_id": "quality", "kind": "json_predicate", "input": "candidate", "field": []string{"ok"}, "operator": "eq", "expected": true}}, Bindings: []graph.LoopBinding{{From: "candidate.outputs.raw_metadata", To: "gate.inputs.candidate"}}}},
-		"down": {Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}},
+		"down": {Type: "shell", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}},
 	}}
 }
 
@@ -321,7 +321,7 @@ func TestLoopCancellationBoundaries(t *testing.T) {
 						return v, p, err
 					}
 					entered = gateDone
-					d.Nodes["peer"] = graph.NodeDefinition{Type: "test"}
+					d.Nodes["peer"] = graph.NodeDefinition{Type: "shell"}
 				}
 			}
 			type outcome struct {
@@ -447,7 +447,7 @@ func TestLoopCompletedPeerNeverRerunsAndBarrier(t *testing.T) {
 		return v, p, err
 	}
 	d := loopDefinition(3)
-	d.Nodes["peer"] = graph.NodeDefinition{Type: "test"}
+	d.Nodes["peer"] = graph.NodeDefinition{Type: "shell"}
 	done := make(chan run.Result, 1)
 	go func() {
 		r, err := runtime.Run(context.Background(), d, nil, e, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 2})

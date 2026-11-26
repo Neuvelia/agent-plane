@@ -610,3 +610,101 @@ func hasDiagnosticCode(result graph.ValidationResult, code string) bool {
 	}
 	return false
 }
+
+func TestValidateRejectsUnknownNodeType(t *testing.T) {
+	result := graph.Validate(parseDefinition(t, `
+schema_version: 0
+id: unknown-type
+inputs: {}
+nodes:
+  worker:
+    type: foo
+edges: []
+outputs: {}
+`))
+	diagnostic := assertDiagnostic(t, result, "E_NODE_TYPE_UNKNOWN", "nodes.worker.type")
+	if result.Valid() || diagnostic.Severity != graph.SeverityError || diagnostic.Location.NodeID != "worker" {
+		t.Fatalf("diagnostic = %#v valid=%v, want blocking error for node worker", diagnostic, result.Valid())
+	}
+	for _, want := range []string{`"foo"`, "worker"} {
+		if !strings.Contains(diagnostic.Message, want) {
+			t.Fatalf("message %q lacks %s", diagnostic.Message, want)
+		}
+	}
+	for _, allowed := range []string{"shell", "agent", "gate", "human"} {
+		if !strings.Contains(diagnostic.Suggestion, allowed) {
+			t.Fatalf("suggestion %q lacks allowed type %s", diagnostic.Suggestion, allowed)
+		}
+	}
+}
+
+func TestValidateWarnsWhenEdgeTargetIgnoresInput(t *testing.T) {
+	const base = `
+schema_version: 0
+id: edge-unused
+inputs: {}
+nodes:
+  producer:
+    type: shell
+    outputs: {text: {type: string}}
+  consumer:
+    type: shell
+    inputs: {text: {type: string, required: true}}
+    outputs: {done: {type: string}}
+%s
+edges:
+  - from: producer.outputs.text
+    to: consumer.inputs.text
+outputs:
+  done: {from: consumer.outputs.done}
+`
+	unmapped := graph.Validate(parseDefinition(t, strings.Replace(base, "%s", "", 1)))
+	diagnostic := assertDiagnostic(t, unmapped, "W_EDGE_INPUT_UNUSED", "edges[0].to")
+	if diagnostic.Severity != graph.SeverityWarning || diagnostic.Location.NodeID != "" && diagnostic.Location.NodeID != "consumer" || !unmapped.Valid() {
+		t.Fatalf("diagnostic = %#v valid=%v, want nonblocking warning", diagnostic, unmapped.Valid())
+	}
+	if !strings.Contains(diagnostic.Suggestion, "input_env") {
+		t.Fatalf("suggestion %q does not mention input_env", diagnostic.Suggestion)
+	}
+
+	mapped := graph.Validate(parseDefinition(t, strings.Replace(base, "%s", "    config:\n      input_env: {text: TEXT}", 1)))
+	if hasDiagnosticCode(mapped, "W_EDGE_INPUT_UNUSED") {
+		t.Fatalf("input_env mapping still warns: %#v", mapped.Diagnostics)
+	}
+}
+
+func TestValidateEdgeInputConsumptionPerNodeType(t *testing.T) {
+	result := graph.Validate(parseDefinition(t, `
+schema_version: 0
+id: consumers
+inputs: {}
+nodes:
+  producer:
+    type: shell
+    outputs: {a: {type: string}, b: {type: string}, c: {type: string}, d: {type: string}}
+  human:
+    type: human
+    inputs: {summary: {type: string}, other: {type: string}}
+    outputs: {decision: {type: string, required: true}}
+    config: {context_inputs: [summary]}
+  agent:
+    type: agent
+    inputs: {task: {type: string, required: true}}
+    outputs: {summary: {type: string}}
+edges:
+  - {from: producer.outputs.a, to: human.inputs.summary}
+  - {from: producer.outputs.b, to: human.inputs.other}
+  - {from: producer.outputs.c, to: agent.inputs.task}
+outputs: {}
+`))
+	assertDiagnostic(t, result, "W_EDGE_INPUT_UNUSED", "edges[1].to")
+	count := 0
+	for _, d := range result.Diagnostics {
+		if d.Code == "W_EDGE_INPUT_UNUSED" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("W_EDGE_INPUT_UNUSED count = %d, want 1 (diagnostics %#v)", count, result.Diagnostics)
+	}
+}

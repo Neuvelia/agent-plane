@@ -31,6 +31,14 @@ export interface RunSummary {
   event_count: number
   /** Semantic version of the executed graph; equals the document API's `version` for the same bytes. Absent in older stores. */
   graph_version?: string
+  /** Timestamp of run_finished; absent while the run has none. */
+  finished_at?: string
+  /** Repository identity recorded in run_started (F2.9); absent for older runs or outside a Git work tree. Branch is absent on a detached HEAD. */
+  repo_name?: string
+  repo_branch?: string
+  repo_commit?: string
+  /** Engine version that produced the run. */
+  runtime_version?: string
   truncated?: boolean
   /** Last durable sequence of a run that has no terminal event and no live writer. */
   interrupted_at_sequence?: number

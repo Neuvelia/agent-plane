@@ -21,6 +21,9 @@ const (
 	CheckJSONPredicate     CheckKind = "json_predicate"
 	CheckReportedFileScope CheckKind = "reported_file_scope"
 	CheckChangedFilesScope CheckKind = "changed_files_scope"
+	// CheckTestCommand is a loop Gate that ran an author-chosen test command
+	// (ADR-0035): exit 0 is green, any other exit status is red.
+	CheckTestCommand       CheckKind = "test_command"
 	CheckExecutionPolicy   CheckKind = "execution_policy"
 	CheckSecretInWorkspace CheckKind = "secret_in_workspace"
 )
@@ -139,7 +142,7 @@ func (p GateCheckPayload) Validate() error {
 	if strings.TrimSpace(p.CheckID) == "" || len(p.CheckID) > 256 || !utf8.ValidString(p.CheckID) || strings.TrimSpace(p.Reason) == "" || len(p.Reason) > 512 || !utf8.ValidString(p.Reason) {
 		return errors.New("invalid gate identity/reason")
 	}
-	if p.Kind != CheckCommand && p.Kind != CheckJSONPredicate && p.Kind != CheckReportedFileScope && p.Kind != CheckChangedFilesScope && !isPolicyCheckKind(p.Kind) {
+	if p.Kind != CheckCommand && p.Kind != CheckJSONPredicate && p.Kind != CheckReportedFileScope && p.Kind != CheckChangedFilesScope && p.Kind != CheckTestCommand && !isPolicyCheckKind(p.Kind) {
 		return errors.New("invalid gate kind")
 	}
 	if p.Kind == CheckChangedFilesScope {
@@ -178,7 +181,7 @@ func (p GateCheckPayload) Validate() error {
 	if err := validSecretCheck(p); err != nil {
 		return err
 	}
-	if p.Kind == "command" && len(p.Evidence) != 1 {
+	if (p.Kind == "command" || p.Kind == CheckTestCommand) && len(p.Evidence) != 1 {
 		return errors.New("command requires exactly one evidence item")
 	}
 	for _, e := range p.Evidence {
@@ -209,6 +212,10 @@ func (p GateCheckPayload) Validate() error {
 		if p.Kind == "command" {
 			if e.ExitCode == nil || (*e.ExitCode != 0 && *e.ExitCode != 1) || (p.Verdict == "green") != (*e.ExitCode == 0) {
 				return errors.New("inconsistent gate command verdict")
+			}
+		} else if p.Kind == CheckTestCommand {
+			if e.ExitCode == nil || *e.ExitCode < 0 || (p.Verdict == "green") != (*e.ExitCode == 0) {
+				return errors.New("inconsistent test command verdict")
 			}
 		} else if e.ExitCode != nil || len(e.Stdout)+len(e.Stderr) > 0 || e.StdoutOmitted != 0 || e.StderrOmitted != 0 {
 			return errors.New("unexpected gate process evidence")

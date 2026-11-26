@@ -18,11 +18,12 @@ const entry = (id: string) => TEMPLATES.find((t) => t.id === id)!
 const onDisk = (id: string) => readFileSync(join(repo, '.agents', 'templates', `${id}.yaml`), 'utf8')
 
 describe('bundled templates', () => {
-  it('are the eight index entries in the picker order, parallel-shell suggested first', () => {
+  it('are the nine index entries in the picker order, parallel-shell suggested first', () => {
     expect(TEMPLATES.map((t) => t.id)).toEqual([
       'parallel-shell',
       'shell-check-loop',
       'human-approval',
+      'modify-test-approve',
       'agent-scoped-approval',
       'fix-issue',
       'code-review',
@@ -135,8 +136,8 @@ describe('picker markup', () => {
   it('lists Blank graph and the eight templates in order as one radio group with the first checked', () => {
     const html = render('en', linux)
     expect(entries(html)).toEqual(['blank', ...TEMPLATE_ORDER])
-    expect(html.match(/type="radio"/g)).toHaveLength(9)
-    expect(html.match(/name="start"/g)).toHaveLength(9)
+    expect(html.match(/type="radio"/g)).toHaveLength(10)
+    expect(html.match(/name="start"/g)).toHaveLength(10)
     expect(html.match(/checked=""/g)).toHaveLength(1)
     expect(html).toMatch(/Suggested first graph/)
   })
@@ -159,7 +160,7 @@ describe('picker markup', () => {
   it('states which templates have values to fill', () => {
     const html = render('en', linux)
     expect(html.match(/1 value to fill before it can run/g)).toHaveLength(5)
-    expect(html.match(/runs as is/g)).toHaveLength(3)
+    expect(html.match(/runs as is/g)).toHaveLength(4)
   })
 })
 

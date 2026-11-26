@@ -38,8 +38,18 @@ const (
 // Payload is implemented only by the event payloads defined in this package.
 type Payload interface{ eventPayload() }
 
+// RunStartedPayload opens a run. The optional fields are additive (F2.9, F3.6):
+// a log written before they existed decodes with them empty, and they are
+// omitted when the repository or Git is unavailable.
 type RunStartedPayload struct {
 	NodeCount int `json:"node_count"`
+	// RepoName is the base name of the Git work tree the run started in, never
+	// a path. RepoBranch is empty on a detached HEAD.
+	RepoName   string `json:"repo_name,omitempty"`
+	RepoBranch string `json:"repo_branch,omitempty"`
+	RepoCommit string `json:"repo_commit,omitempty"`
+	// RuntimeVersion is the engine version that produced the run.
+	RuntimeVersion string `json:"runtime_version,omitempty"`
 }
 type ChangedFile struct {
 	Path       string `json:"path"`

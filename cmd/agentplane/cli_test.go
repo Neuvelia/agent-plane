@@ -132,6 +132,10 @@ func TestGraphValidateAndErrors(t *testing.T) {
 	if code, _, stderr := invoke(t, context.Background(), "graph", "validate", bad); code != 3 || !strings.Contains(stderr, "E_GRAPH_OUTPUT") {
 		t.Fatalf("invalid: %d %q", code, stderr)
 	}
+	unknown := graphFile(t, strings.Replace(oneNode, "type: shell", "type: foo", 1))
+	if code, _, stderr := invoke(t, context.Background(), "graph", "validate", unknown); code != 3 || !strings.Contains(stderr, "E_NODE_TYPE_UNKNOWN") || !strings.Contains(stderr, "nodes.work.type") || !strings.Contains(stderr, "shell, agent, gate, human") {
+		t.Fatalf("unknown type: %d %q", code, stderr)
+	}
 	malformed := graphFile(t, "schema_version: [")
 	if code, _, stderr := invoke(t, context.Background(), "graph", "validate", malformed); code != 3 || !strings.Contains(stderr, "parse") {
 		t.Fatalf("malformed: %d %q", code, stderr)

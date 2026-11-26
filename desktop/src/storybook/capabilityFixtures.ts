@@ -20,7 +20,7 @@ export const clisFound = withRows(linux, { claude: { status: 'detected_no_adapte
 export const codexUnsupportedVersion = withRows(linux, { codex: { status: 'unsupported_version', reason: 'missing_required_flags' } })
 export const windows = withRows(
   linux,
-  { git: { status: 'unsupported_platform', version: '', reason: 'platform_not_supported' }, codex: { status: 'unsupported_platform', reason: 'platform_not_supported' }, claude: { status: 'detected_no_adapter' } },
+  { git: { status: 'unsupported_platform', version: '', reason: 'platform_not_supported' }, codex: { status: 'unsupported_platform', reason: 'platform_not_supported' }, shell: { status: 'unsupported_platform', reason: 'platform_not_supported' }, claude: { status: 'detected_no_adapter' } },
   { os: 'windows', arch: 'amd64' },
 )
 export const detectionError = withRows(linux, { git: { status: 'error', version: '', reason: 'probe_timeout' }, codex: { status: 'error', reason: 'probe_failed' } })

@@ -9,7 +9,8 @@ import { useI18n } from './i18n/context'
 import { ApprovalBox, NodePanel } from './NodePanel'
 import { nodeView, displayStatus, type RunView } from './reducer'
 import { criticalPath } from './criticalPath'
-import { filterEvents, timeline, type EventFilter } from './insight'
+import { filterEvents, formatDuration, timeline, type EventFilter } from './insight'
+import { filterRuns, groupRuns, NO_REPO, repoOf, runDurationMs, shortVersion, sortedUnique, sourceLabel, type RunFilter, type RunGroupBy } from './runsFilter'
 import { matchingNodes, type NodeFilter } from './nodeFilter'
 import { clockTime, NodeFilterBar, OutcomeCard, RunIdentity, RunSummaryCard } from './overview'
 import { NodeTimeline } from './timelineView'
@@ -25,7 +26,13 @@ import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Step, Ta
 export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
   const { t, locale } = useI18n()
   const { data: runs, status, retry } = usePoll(listRuns, 1500)
+  const [filter, setFilter] = useState<RunFilter>({ repo: '', graph: '' })
+  const [groupBy, setGroupBy] = useState<RunGroupBy>('none')
   useConnectionReport('runs', status === 'error')
+  const shown = useMemo(() => filterRuns(runs ?? [], filter), [runs, filter])
+  const repos = useMemo(() => sortedUnique((runs ?? []).map(repoOf)), [runs])
+  const graphs = useMemo(() => sortedUnique((runs ?? []).map((r) => r.graph_id)), [runs])
+  const groupLabel = (key: string) => (groupBy === 'repo' && key === NO_REPO ? t('runs.noRepo') : key)
   return (
     <section>
       <h1>{t('runs.title')}</h1>
@@ -38,35 +45,96 @@ export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
           {t('runs.empty')}
         </div>
       ) : (
-        <table className="runs" data-testid="runs-table">
-          <thead>
-            <tr>
-              <th>{t('runs.col.status')}</th>
-              <th>{t('runs.col.graph')}</th>
-              <th>{t('runs.col.started')}</th>
-              <th>{t('runs.col.events')}</th>
-              <th>{t('runs.col.run')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {runs.map((r) => (
-              <tr key={r.run_id} data-testid="run-row">
-                <td>
-                  <RunPill status={r.status} />
-                </td>
-                {/* A real button; its ::after stretches over the row so the whole row is clickable. */}
-                <td>
-                  <button type="button" className="row-link" onClick={() => onOpen(r.run_id)} data-testid="run-open">
-                    {r.graph_id}
-                  </button>
-                </td>
-                <td className="mono">{formatDateTime(locale, r.started_at)}</td>
-                <td className="mono">{r.event_count}</td>
-                <td className="mono mu">{r.run_id.slice(0, 8)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <>
+          <div className="runs-filters" data-testid="runs-filters">
+            <Field label={t('runs.filter.repo')} htmlFor="runs-filter-repo">
+              <select id="runs-filter-repo" className="input" value={filter.repo} onChange={(e) => setFilter({ ...filter, repo: e.target.value })} data-testid="runs-filter-repo">
+                <option value="">{t('runs.filter.all')}</option>
+                {repos.map((r) => (
+                  <option key={r} value={r}>
+                    {r === NO_REPO ? t('runs.noRepo') : r}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t('runs.filter.graph')} htmlFor="runs-filter-graph">
+              <select id="runs-filter-graph" className="input" value={filter.graph} onChange={(e) => setFilter({ ...filter, graph: e.target.value })} data-testid="runs-filter-graph">
+                <option value="">{t('runs.filter.all')}</option>
+                {graphs.map((g) => (
+                  <option key={g} value={g}>
+                    {g}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <SegmentedControl
+              label={t('runs.groupBy')}
+              value={groupBy}
+              onChange={setGroupBy}
+              segments={(['none', 'repo', 'graph'] as const).map((g) => ({ value: g, label: t(`runs.group.${g}`), testId: `runs-group-${g}` }))}
+            />
+          </div>
+          {shown.length === 0 ? (
+            <div className="empty-state" data-testid="runs-no-match">
+              {t('runs.noMatch')}
+            </div>
+          ) : (
+            <table className="runs" data-testid="runs-table">
+              <thead>
+                <tr>
+                  <th>{t('runs.col.status')}</th>
+                  <th>{t('runs.col.graph')}</th>
+                  <th>{t('runs.col.version')}</th>
+                  <th>{t('runs.col.source')}</th>
+                  <th>{t('runs.col.started')}</th>
+                  <th>{t('runs.col.duration')}</th>
+                  <th>{t('runs.col.events')}</th>
+                  <th>{t('runs.col.run')}</th>
+                </tr>
+              </thead>
+              {groupRuns(shown, groupBy).map((g) => (
+                <tbody key={g.key} data-testid={groupBy === 'none' ? undefined : 'run-group'}>
+                  {groupBy !== 'none' && (
+                    <tr className="run-group-head">
+                      <th colSpan={8} scope="colgroup">
+                        {groupLabel(g.key)} <span className="mu mono">({g.runs.length})</span>
+                      </th>
+                    </tr>
+                  )}
+                  {g.runs.map((r) => {
+                    const ms = runDurationMs(r)
+                    const source = sourceLabel(r)
+                    return (
+                      <tr key={r.run_id} data-testid="run-row">
+                        <td>
+                          <RunPill status={r.status} />
+                        </td>
+                        {/* A real button; its ::after stretches over the row so the whole row is clickable. */}
+                        <td>
+                          <button type="button" className="row-link" onClick={() => onOpen(r.run_id)} data-testid="run-open">
+                            {r.graph_id}
+                          </button>
+                        </td>
+                        <td className="mono mu" title={r.graph_version} data-testid="run-graph-version">
+                          {shortVersion(r.graph_version) ?? '—'}
+                        </td>
+                        <td className="mono" title={r.runtime_version ? `${r.repo_commit ?? ''} · v${r.runtime_version}` : r.repo_commit} data-testid="run-source">
+                          {source ?? '—'}
+                        </td>
+                        <td className="mono">{formatDateTime(locale, r.started_at)}</td>
+                        <td className="mono" data-testid="run-duration">
+                          {ms === undefined ? '—' : formatDuration(ms, locale)}
+                        </td>
+                        <td className="mono">{r.event_count}</td>
+                        <td className="mono mu">{r.run_id.slice(0, 8)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              ))}
+            </table>
+          )}
+        </>
       )}
     </section>
   )
@@ -200,7 +268,7 @@ export function RunInspector({ runId, onBack }: { runId: string; onBack: () => v
         <TimelineCard run={run} graph={graph} filter={nodeFilter} onFilter={setNodeFilter} hidden={dimmed} selected={focus} critical={critical} onSelect={setSelected} />
         </div>
         <div className="stack">
-          <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} />
+          <NodePanel key={focus ?? ''} run={run} nodeId={focus} lost={lost !== null} kind={graph?.nodes.find((n) => n.id === focus)?.type} upstream={graph?.edges.filter((e) => e.to === focus).map((e) => e.from)} onOpenNode={setSelected} />
           <EventsCard run={run} />
         </div>
       </div>

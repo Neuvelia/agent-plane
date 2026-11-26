@@ -72,10 +72,10 @@ func unitBatch(roots []string, budget int) *graph.Definition {
 		d.Nodes[id] = n
 		d.Units = append(d.Units, id)
 		down := "down_" + id
-		d.Nodes[down] = graph.NodeDefinition{Type: "test", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}}
+		d.Nodes[down] = graph.NodeDefinition{Type: "shell", Inputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeJSON, Required: true}}}
 		d.Edges = append(d.Edges, graph.EdgeDefinition{From: graph.NodeOutputReference(id + ".outputs.raw_metadata"), To: graph.NodeInputReference(down + ".inputs.result")})
 	}
-	d.Nodes["join"] = graph.NodeDefinition{Type: "test", Inputs: map[string]graph.PortDefinition{}}
+	d.Nodes["join"] = graph.NodeDefinition{Type: "shell", Inputs: map[string]graph.PortDefinition{}}
 	join := d.Nodes["join"]
 	for _, id := range names {
 		join.Inputs[id] = graph.PortDefinition{Type: graph.ValueTypeJSON, Required: true}
@@ -115,7 +115,7 @@ func TestUnitsBarrierScopedRetryAndExhaustion(t *testing.T) {
 			base := e
 			down := map[string]int{}
 			e.hook = func(ctx context.Context, id string, n graph.NodeDefinition, in map[string]graph.Value, o runtime.ExecutionObservation) (map[string]graph.Value, *events.NodeEvidencePayload, error) {
-				if n.Type == "test" {
+				if n.Type == "shell" {
 					mu.Lock()
 					defer mu.Unlock()
 					down[id]++

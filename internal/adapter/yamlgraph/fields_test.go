@@ -45,6 +45,7 @@ func TestHumanConfigFieldsEqualTheValidator(t *testing.T) {
 		Samples: map[string]any{
 			"human.config.prompt":         "Approve the change?",
 			"human.config.context_inputs": []any{"summary"},
+			"human.config.on_reject":      "fail",
 		},
 		Validate: func(n graph.NodeDefinition) error { return validateOne(n, "E_HUMAN_INVALID") },
 	})
@@ -129,6 +130,6 @@ func TestLoopProducersAndGateKindsEqualTheValidator(t *testing.T) {
 }
 
 func TestHumanAndLoopKeysArePinnedToTheSpec(t *testing.T) {
-	fieldstest.PinKeys(t, graph.HumanConfigFields(), "prompt", "context_inputs")
+	fieldstest.PinKeys(t, graph.HumanConfigFields(), "prompt", "context_inputs", "on_reject")
 	fieldstest.PinKeys(t, graph.LoopFields(), "max_attempts")
 }

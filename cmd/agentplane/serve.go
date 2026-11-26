@@ -194,7 +194,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 			}
 			return persist(e)
 		}
-		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink, SecretResolver: secretResolver()}
+		opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: config.concurrency, LogRedactions: config.redactions, RecordValues: config.recordValues, Decisions: decisions, Persist: sink, SecretResolver: secretResolver(), RunMetadata: runMetadataFor(graphPath)}
 		configureSecretScan(&opts)
 		opts.StoredMaterial = storedMaterial{graphBytes: graphBytes, def: def, flags: inputs, values: values}
 		if err := config.isolation.configure(def, &opts); err != nil {
