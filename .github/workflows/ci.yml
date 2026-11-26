@@ -32,6 +32,8 @@ jobs:
     #            (Go tests read them)
     #   desktop: desktop/, the sidecar sources (cmd/, internal/, go.mod, go.sum,
     #            Makefile), .agents/ (bundled templates and graphs) and .github/
+    #   stories: desktop/, .agents/ and .github/ only; stories render the
+    #            renderer against recorded fixtures and never start the sidecar
     # No Go test, desktop build or e2e reads a Markdown file, so a Markdown-only
     # change runs no job. Re-check that before a test starts reading one.
     name: Detect changed areas
@@ -42,6 +44,7 @@ jobs:
     outputs:
       go: ${{ steps.lanes.outputs.go }}
       desktop: ${{ steps.lanes.outputs.desktop }}
+      stories: ${{ steps.lanes.outputs.stories }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -66,6 +69,7 @@ jobs:
           if [[ "$EVENT_NAME" != "pull_request" ]]; then
             lane go all
             lane desktop all
+            lane stories all
             exit 0
           fi
           # Without --no-renames a moved file lists only its new path.
@@ -76,6 +80,7 @@ jobs:
           fixtures="$(grep -E '^desktop/test/fixtures/' <<<"$code" || true)"
           lane go "$outside_desktop$fixtures"
           lane desktop "$(grep -E '^(desktop/|cmd/|internal/|\.agents/|\.github/|go\.(mod|sum)$|Makefile$)' <<<"$code" || true)"
+          lane stories "$(grep -E '^(desktop/|\.agents/|\.github/)' <<<"$code" || true)"
 
   # One job for all Linux Go evidence: lint, `make check`, the race detector
   # and the build share one checkout, one Go setup and one build cache instead
@@ -138,7 +143,9 @@ jobs:
   # `npm run check` (typecheck, reducer tests, build, Storybook build, bundle
   # scan), then the real Electron app against the real sidecar under a virtual
   # display and the Storybook smoke, reusing the dist/ and storybook-static/
-  # that the check already built. The e2e and smoke steps do not fail the job
+  # that the check already built. The smoke (about 2 minutes, every story in
+  # two languages) runs only when the `stories` lane changed: a sidecar-only
+  # change cannot alter a story. The e2e and smoke steps do not fail the job
   # (they were never a required check): a failure shows as a failed step and a
   # warning, and uploads the e2e screenshots.
   desktop:
@@ -169,9 +176,10 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('desktop/package-lock.json') }}
-      # Install scripts run: they download the Electron binary the e2e needs.
+      # No dependency lifecycle scripts (desktop/AGENTS.md). Electron fetches
+      # its binary on first launch, into the cached ~/.cache/electron.
       - name: Install desktop dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
         working-directory: desktop
       - name: Check
         run: npm run check
@@ -190,6 +198,7 @@ jobs:
         working-directory: desktop
       - name: Storybook smoke
         id: stories
+        if: needs.detect.result == 'failure' || needs.detect.outputs.stories == 'true'
         continue-on-error: true
         run: npm run stories:test
         working-directory: desktop

@@ -73,7 +73,9 @@ pinned dev dependency used only by these two checks.
 
 CI (`.github/workflows/ci.yml`): job `desktop` runs `npm run check`, then both
 checks above (non-blocking) under xvfb with Node 24 on the `dist/` and
-`storybook-static/` the check built. It caches the npm cache, `~/.cache/electron`
+`storybook-static/` the check built; the story smoke only when `desktop/`,
+`.agents/` or `.github/` changed. The smoke renders four stories at a time;
+set `AP_STORIES_WORKERS=1` to render them one by one. It caches the npm cache, `~/.cache/electron`
 and `~/.cache/ms-playwright`, and uploads the e2e screenshots (`e2e-shots`,
 git-ignored) as an artifact on failure. Locally, pass `E2E_SHOTS=<dir>` to save them.
 

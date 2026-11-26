@@ -138,12 +138,17 @@ check.
 `check (macos-arm64)` (`macos-latest`) runs `scripts/check.sh` and `make
 build`; lint and `-race` stay Linux-only. Linux and macOS are required targets.
 
-`desktop` runs `npm ci` and `npm run check` (typecheck, reducer tests, build,
-Storybook build, bundle scan), builds `bin/agentplane`, installs the Playwright
-Chromium system dependencies (which also provide xvfb), then runs the real
-Electron app against the sidecar under `xvfb-run` (`e2e/demo.cjs`) and the
-Storybook smoke (`npm run stories:test`) on the `dist/` and
-`storybook-static/` the check built. It pins Node 24, caches the npm cache,
+`desktop` runs `npm ci --ignore-scripts` (Electron fetches its binary on
+first launch) and `npm run check` (typecheck, reducer tests, build, Storybook
+build, bundle scan), builds `bin/agentplane`, installs the Playwright Chromium
+system dependencies (which also provide xvfb), then runs the real Electron app
+against the sidecar under `xvfb-run` (`e2e/demo.cjs`) and the Storybook smoke
+(`npm run stories:test`) on the `dist/` and `storybook-static/` the check
+built. The smoke renders every story in EN and PL, four at a time
+(`AP_STORIES_WORKERS` overrides), and waits for the fit-view fade only on React
+Flow stories; it runs only when a pull request changes `desktop/`, `.agents/`
+or `.github/`, because stories use recorded fixtures and never start the
+sidecar. It pins Node 24, caches the npm cache,
 `~/.cache/electron` and `~/.cache/ms-playwright`, and uploads
 `desktop/e2e-shots` as the `desktop-e2e-screenshots` artifact (kept 7 days)
 when the e2e fails. The e2e and smoke steps are not blocking: a failure shows
