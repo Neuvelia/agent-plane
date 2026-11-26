@@ -181,7 +181,7 @@ func (p GateCheckPayload) Validate() error {
 	if err := validSecretCheck(p); err != nil {
 		return err
 	}
-	if (p.Kind == "command" || p.Kind == CheckTestCommand) && len(p.Evidence) != 1 {
+	if (p.Kind == CheckCommand || p.Kind == CheckTestCommand) && len(p.Evidence) != 1 {
 		return errors.New("command requires exactly one evidence item")
 	}
 	for _, e := range p.Evidence {
@@ -209,7 +209,7 @@ func (p GateCheckPayload) Validate() error {
 		if string(e.Source) != string(source) {
 			return errors.New("invalid gate evidence source")
 		}
-		if p.Kind == "command" {
+		if p.Kind == CheckCommand {
 			if e.ExitCode == nil || (*e.ExitCode != 0 && *e.ExitCode != 1) || (p.Verdict == "green") != (*e.ExitCode == 0) {
 				return errors.New("inconsistent gate command verdict")
 			}

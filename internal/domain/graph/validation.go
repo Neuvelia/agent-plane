@@ -360,12 +360,8 @@ func unconsumedInputSuggestion(nodeType, inputID string) string {
 // inputs its config names, Human reads context_inputs; a loop binding with
 // source node.inputs.X also forwards the input to the embedded Gate.
 func nodeConsumesInput(node NodeDefinition, inputID string) bool {
-	if node.Loop != nil {
-		for _, binding := range node.Loop.Bindings {
-			if binding.From == "node.inputs."+inputID {
-				return true
-			}
-		}
+	if loopForwardsInput(node, inputID) {
+		return true
 	}
 	switch node.Type {
 	case "shell":
@@ -373,29 +369,50 @@ func nodeConsumesInput(node NodeDefinition, inputID string) bool {
 	case "agent":
 		return inputID == "task"
 	case "gate":
-		for _, key := range []string{"input", "left_input", "right_input"} {
-			if name, ok := node.Config[key].(string); ok && name == inputID {
-				return true
-			}
-		}
-		return false
+		return gateNamesInput(node.Config, inputID)
 	case "human":
-		items, _ := node.Config["context_inputs"].([]any)
+		return humanListsInput(node.Config["context_inputs"], inputID)
+	}
+	return true
+}
+
+func loopForwardsInput(node NodeDefinition, inputID string) bool {
+	if node.Loop == nil {
+		return false
+	}
+	for _, binding := range node.Loop.Bindings {
+		if binding.From == "node.inputs."+inputID {
+			return true
+		}
+	}
+	return false
+}
+
+func gateNamesInput(config NodeConfig, inputID string) bool {
+	for _, key := range []string{"input", "left_input", "right_input"} {
+		if name, ok := config[key].(string); ok && name == inputID {
+			return true
+		}
+	}
+	return false
+}
+
+func humanListsInput(value any, inputID string) bool {
+	switch items := value.(type) {
+	case []any:
 		for _, item := range items {
 			if name, ok := item.(string); ok && name == inputID {
 				return true
 			}
 		}
-		if names, ok := node.Config["context_inputs"].([]string); ok {
-			for _, name := range names {
-				if name == inputID {
-					return true
-				}
+	case []string:
+		for _, name := range items {
+			if name == inputID {
+				return true
 			}
 		}
-		return false
 	}
-	return true
+	return false
 }
 
 func configMapHasKey(value any, key string) bool {

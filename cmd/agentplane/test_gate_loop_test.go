@@ -14,7 +14,7 @@ import (
 // TestGateLoopHelper is the child process of the test_command loop tests
 // (ADR-0035). produce writes a state file that is wrong on attempt 1; check
 // exits non-zero unless the state file says "good".
-func TestGateLoopHelper(t *testing.T) {
+func TestGateLoopHelper(_ *testing.T) {
 	if os.Getenv("AGENTPLANE_GATE_LOOP_HELPER") != "1" {
 		return
 	}

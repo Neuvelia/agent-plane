@@ -15,7 +15,7 @@ import (
 )
 
 // TestTestCommandHelperProcess is the child process of the test_command tests.
-func TestTestCommandHelperProcess(t *testing.T) {
+func TestTestCommandHelperProcess(_ *testing.T) {
 	if os.Getenv("AGENTPLANE_TEST_COMMAND_HELPER") != "1" {
 		return
 	}

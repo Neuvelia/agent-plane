@@ -43,6 +43,17 @@ func validateTestCommand(c config, n graph.NodeDefinition) error {
 	if c.SideEffects != SideEffectsNone && c.SideEffects != SideEffectsWorkspace {
 		return fmt.Errorf("test_command side_effects must be %s or %s", SideEffectsNone, SideEffectsWorkspace)
 	}
+	if err := validateTestEnv(c); err != nil {
+		return err
+	}
+	candidate, ok := n.Inputs[c.Input]
+	if c.Input == "" || !ok || !candidate.Required || (candidate.Type != graph.ValueTypeString && candidate.Type != graph.ValueTypeJSON) {
+		return fmt.Errorf("test_command input %q must be a required string or JSON port", c.Input)
+	}
+	return nil
+}
+
+func validateTestEnv(c config) error {
 	for _, name := range c.EnvAllowlist {
 		if err := checkEnvName("env_allowlist", name); err != nil {
 			return err
@@ -55,10 +66,6 @@ func validateTestCommand(c config, n graph.NodeDefinition) error {
 		if strings.ContainsRune(c.Env[name], 0) {
 			return fmt.Errorf("env %q contains a NUL byte", name)
 		}
-	}
-	candidate, ok := n.Inputs[c.Input]
-	if c.Input == "" || !ok || !candidate.Required || (candidate.Type != graph.ValueTypeString && candidate.Type != graph.ValueTypeJSON) {
-		return fmt.Errorf("test_command input %q must be a required string or JSON port", c.Input)
 	}
 	return nil
 }

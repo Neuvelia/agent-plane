@@ -192,8 +192,8 @@ func TestExecutorIgnoringContextIsAbandonedAsShutdown(t *testing.T) {
 
 type terminationError struct{ outcome proctree.Outcome }
 
-func (e terminationError) Error() string                         { return "terminated" }
-func (e terminationError) Unwrap() error                         { return context.DeadlineExceeded }
+func (terminationError) Error() string                           { return "terminated" }
+func (terminationError) Unwrap() error                           { return context.DeadlineExceeded }
 func (e terminationError) ProcessTermination() *proctree.Outcome { return &e.outcome }
 
 func TestProcessTerminatedIsEmittedBetweenCancelRequestedAndTerminal(t *testing.T) {
@@ -205,7 +205,7 @@ func TestProcessTerminatedIsEmittedBetweenCancelRequestedAndTerminal(t *testing.
 	})
 	result, _ := Run(context.Background(), def, nil, exec, timeoutOptions())
 	req, term, fin := eventIndex(result, events.CancelRequested, "a"), eventIndex(result, events.ProcessTerminated, "a"), eventIndex(result, events.NodeFinished, "a")
-	if req < 0 || term < 0 || fin < 0 || !(req < term && term < fin) {
+	if req < 0 || term < 0 || fin < 0 || req >= term || term >= fin {
 		t.Fatalf("order cancel_requested=%d process_terminated=%d node_finished=%d", req, term, fin)
 	}
 	if p := result.Events[term].Payload.(events.ProcessTerminatedPayload); p.Method != "forced" || p.GraceMS != 1000 || p.ElapsedMS != 2000 {
