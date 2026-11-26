@@ -3,8 +3,8 @@ name: ci
 # Pull requests run against their merge commit; `main` runs after the merge. A
 # push to any other branch runs nothing: open a pull request, or start the
 # workflow by hand (`workflow_dispatch`). A draft pull request runs nothing
-# either; marking it ready for review starts the run. macOS and Windows run in
-# ci-other-os.yml, not here (docs/development-workflow.md, "CI matrix").
+# either; marking it ready for review starts the run. Windows runs by hand in
+# ci-other-os.yml (docs/development-workflow.md, "CI matrix").
 on:
   push:
     branches: [main]
@@ -112,6 +112,27 @@ jobs:
         run: go test -race ./...
       - name: Build CLI
         if: ${{ !cancelled() }}
+        run: make build
+
+  # `make check` and the build on macOS, a required target. It runs for the same
+  # paths as the Linux job; lint and -race stay Linux-only.
+  check-macos:
+    name: check (macos-arm64)
+    needs: detect
+    if: ${{ !cancelled() && (needs.detect.result == 'failure' || needs.detect.outputs.go == 'true') }}
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
         run: make build
 
   # `npm run check` (typecheck, reducer tests, build, Storybook build, bundle
