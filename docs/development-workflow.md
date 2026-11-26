@@ -118,8 +118,10 @@ A green check is necessary, not sufficient. Acceptance criteria still need human
 GitHub-hosted minutes are limited, so CI spends them where a change can fail.
 `.github/workflows/ci.yml` runs on pull requests, on pushes to `main` and on
 manual runs (`workflow_dispatch`, any branch); a push to another branch runs
-nothing. A newer push to a pull request cancels its older run; on `main` every
-run completes.
+nothing. A draft pull request runs nothing either: every job skips until it
+is marked ready for review, which starts a run (start the workflow by hand on
+the branch for earlier feedback). A newer push to a pull request cancels its
+older run; on `main` every run completes.
 
 A `detect` job picks the jobs a pull request runs from the paths it changes. A
 change made only of Markdown files runs none, because no test or build reads

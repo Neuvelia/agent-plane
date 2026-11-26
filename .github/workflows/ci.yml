@@ -2,12 +2,14 @@ name: ci
 
 # Pull requests run against their merge commit; `main` runs after the merge. A
 # push to any other branch runs nothing: open a pull request, or start the
-# workflow by hand (`workflow_dispatch`). macOS and Windows run in
+# workflow by hand (`workflow_dispatch`). A draft pull request runs nothing
+# either; marking it ready for review starts the run. macOS and Windows run in
 # ci-other-os.yml, not here (docs/development-workflow.md, "CI matrix").
 on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 
 permissions:
@@ -24,7 +26,8 @@ jobs:
   detect:
     # A pull request runs a job only when a path that job reads changed. A push
     # to main and a manual run always run every job, and so does any job when
-    # this one fails (each job's `if` checks `needs.detect.result`).
+    # this one fails (each job's `if` checks for `failure`, so a draft's
+    # skipped `detect` skips them).
     #   go:      any non-Markdown path outside desktop/, plus desktop/test/fixtures/
     #            (Go tests read them)
     #   desktop: desktop/, the sidecar sources (cmd/, internal/, go.mod, go.sum,
@@ -32,6 +35,8 @@ jobs:
     # No Go test, desktop build or e2e reads a Markdown file, so a Markdown-only
     # change runs no job. Re-check that before a test starts reading one.
     name: Detect changed areas
+    # A draft skips this job and therefore every job below.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -80,7 +85,7 @@ jobs:
   check-linux:
     name: check (linux-x64)
     needs: detect
-    if: ${{ !cancelled() && (needs.detect.result != 'success' || needs.detect.outputs.go == 'true') }}
+    if: ${{ !cancelled() && (needs.detect.result == 'failure' || needs.detect.outputs.go == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -117,7 +122,7 @@ jobs:
   # warning, and uploads the e2e screenshots.
   desktop:
     needs: detect
-    if: ${{ !cancelled() && (needs.detect.result != 'success' || needs.detect.outputs.desktop == 'true') }}
+    if: ${{ !cancelled() && (needs.detect.result == 'failure' || needs.detect.outputs.desktop == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
