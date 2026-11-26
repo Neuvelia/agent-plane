@@ -35,7 +35,9 @@ jobs:
     #   stories: desktop/, .agents/ and .github/ only; stories render the
     #            renderer against recorded fixtures and never start the sidecar
     # No Go test, desktop build or e2e reads a Markdown file, so a Markdown-only
-    # change runs no job. Re-check that before a test starts reading one.
+    # change runs no job, except under docs/roadmap/, docs/features/ and
+    # docs/adr/: scripts/roadmapcheck (run by check.sh) reads those (ADR-0038).
+    # Re-check that before a test starts reading another one.
     name: Detect changed areas
     # A draft skips this job and therefore every job below.
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft
@@ -78,7 +80,8 @@ jobs:
           code="$(grep -Ev '\.md$' <<<"$changed" || true)"
           outside_desktop="$(grep -Ev '^desktop/' <<<"$code" || true)"
           fixtures="$(grep -E '^desktop/test/fixtures/' <<<"$code" || true)"
-          lane go "$outside_desktop$fixtures"
+          roadmap="$(grep -E '^docs/(roadmap|features|adr)/' <<<"$changed" || true)"
+          lane go "$outside_desktop$fixtures$roadmap"
           lane desktop "$(grep -E '^(desktop/|cmd/|internal/|\.agents/|\.github/|go\.(mod|sum)$|Makefile$)' <<<"$code" || true)"
           lane stories "$(grep -E '^(desktop/|\.agents/|\.github/)' <<<"$code" || true)"
 
