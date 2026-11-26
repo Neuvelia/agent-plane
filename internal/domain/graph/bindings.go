@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 	"sort"
+	"strings"
 )
 
 // BindingPlan is a validated, immutable view of declared graph bindings.
@@ -132,12 +133,38 @@ func (p *BindingPlan) ValidateGraphInputs(values map[string]Value) ValidationRes
 			diagnostics = append(diagnostics, p.diagnostic("E_GRAPH_INPUT_VALUE_TYPE_MISMATCH", fmt.Sprintf("graph input %q expects %s but received %s", inputID, input.Type, value.Type()), DiagnosticLocation{Path: path}, "supply a value with the declared type"))
 		}
 	}
-	for _, inputID := range sortedKeys(values) {
+	diagnostics = append(diagnostics, p.unknownInputDiagnostics(values)...)
+	return sortedValidationResult(diagnostics)
+}
+
+// unknownInputDiagnostics reports supplied values the graph does not declare.
+// Their keys come from outside the graph (--input, the API) and are never
+// echoed, even when they match the identifier grammar: the F3.8 input guard
+// runs after this check, so a pasted secret would otherwise reach the
+// terminal, logs or an API response. The diagnostics are numbered only to tell
+// them apart; the numbers do not identify a key.
+func (p *BindingPlan) unknownInputDiagnostics(values map[string]Value) []Diagnostic {
+	var unknown int
+	for inputID := range values {
 		if _, declared := p.graphInputs[inputID]; !declared {
-			diagnostics = append(diagnostics, p.diagnostic("E_GRAPH_INPUT_VALUE_UNKNOWN", fmt.Sprintf("graph input %q is not declared", inputID), DiagnosticLocation{Path: mapPath("inputs", inputID)}, "remove the value or declare the graph input"))
+			unknown++
 		}
 	}
-	return sortedValidationResult(diagnostics)
+	suggestion := "remove the value or declare the graph input; declared inputs: " + p.declaredInputList()
+	diagnostics := make([]Diagnostic, 0, unknown)
+	for range unknown {
+		message := fmt.Sprintf("a supplied graph input is not declared (%d of %d)", len(diagnostics)+1, unknown)
+		diagnostics = append(diagnostics, p.diagnostic("E_GRAPH_INPUT_VALUE_UNKNOWN", message, DiagnosticLocation{Path: "inputs"}, suggestion))
+	}
+	return diagnostics
+}
+
+func (p *BindingPlan) declaredInputList() string {
+	ids := sortedInputIDs(p.graphInputs)
+	if len(ids) == 0 {
+		return "none"
+	}
+	return strings.Join(ids, ", ")
 }
 
 // ResolveNodeInputs maps available declared source values to one node's

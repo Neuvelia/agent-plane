@@ -1,0 +1,41 @@
+name: ci-other-os
+
+# `make check` on Windows, started by hand on any branch (Actions ->
+# ci-other-os -> Run workflow). Windows is not yet a supported target: main
+# does not pass there (docs/development-workflow.md, "CI matrix"), so it does
+# not run per pull request. macOS runs in ci.yml.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-other-os-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-windows:
+    name: check (windows-x64)
+    runs-on: windows-latest
+    # A hung Windows test otherwise runs to the 10 min go test limit.
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Windows runners check out with CRLF, which makes `gofmt -l` flag every
+      # Go file. Keep LF so formatting checks mean the same on all OSes.
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      # scripts/check.sh is the body of `make check`; invoking it directly
+      # avoids depending on GNU make being present on Windows runners.
+      - name: Check
+        run: ./scripts/check.sh

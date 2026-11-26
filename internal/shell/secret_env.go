@@ -20,13 +20,13 @@ func parseSecretEnv(value any, cfg config) (map[string]string, error) {
 		return nil, err
 	}
 	seen := make(map[string]bool, len(entries))
-	for _, variable := range sortedMapKeys(entries) {
-		if err := checkSecretEnvEntry(variable, entries[variable], cfg); err != nil {
+	for index, variable := range sortedMapKeys(entries) {
+		if err := checkSecretEnvEntry(index, variable, entries[variable], cfg); err != nil {
 			return nil, err
 		}
 		folded := strings.ToUpper(variable)
 		if seen[folded] {
-			return nil, fmt.Errorf("secret_env has duplicate environment name %q", variable)
+			return nil, fmt.Errorf("%s repeats an earlier environment name; names are compared case-insensitively", entryText("secret_env", index, variable))
 		}
 		seen[folded] = true
 	}
@@ -48,22 +48,22 @@ func secretEnvEntries(value any) (map[string]string, error) {
 		}
 		item, ok := raw[key].(string)
 		if !ok {
-			return nil, fmt.Errorf("secret_env[%q] must be a string", key)
+			return nil, fmt.Errorf("%s must be a string", entryText("secret_env", index, key))
 		}
 		if strings.ContainsRune(item, 0) {
-			return nil, fmt.Errorf("secret_env[%q] contains a NUL byte", key)
+			return nil, fmt.Errorf("%s contains a NUL byte", entryText("secret_env", index, key))
 		}
 		result[key] = item
 	}
 	return result, nil
 }
 
-func checkSecretEnvEntry(variable, secretName string, cfg config) error {
+func checkSecretEnvEntry(index int, variable, secretName string, cfg config) error {
 	if !secrets.ValidName(secretName) {
-		return fmt.Errorf("secret_env[%q] must name a declared secret: a lowercase name of 1-64 characters", variable)
+		return fmt.Errorf("%s must name a declared secret: a lowercase name of 1-64 characters", entryText("secret_env", index, variable))
 	}
 	if conflict := secretEnvConflict(variable, cfg); conflict != "" {
-		return fmt.Errorf("secret_env environment name %q conflicts with %s", variable, conflict)
+		return fmt.Errorf("%s conflicts with %s", entryText("secret_env", index, variable), conflict)
 	}
 	return nil
 }

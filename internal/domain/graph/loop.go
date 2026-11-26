@@ -58,8 +58,9 @@ func (v *definitionValidator) validateLoops() {
 		}
 		for _, name := range sortedPortIDs(l.Gate.Inputs) {
 			port := l.Gate.Inputs[name]
-			v.validateIdentifier(name, "nodes."+id+".loop.gate.inputs."+name, "Gate input", id)
-			v.validateValueType(port.Type, "nodes."+id+".loop.gate.inputs."+name, id)
+			path := mapPath("nodes."+id+".loop.gate.inputs", name)
+			v.validateIdentifier(name, path, "Gate input", id)
+			v.validateValueType(port.Type, path, id)
 			if port.Required && !targets[name] {
 				fail("required Gate input has no binding")
 			}

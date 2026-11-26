@@ -489,7 +489,7 @@ func TestUnknownGraphInputAndWrongNodeOutputTypeHaveStructuredErrors(t *testing.
 	if !diagnostics.Valid() {
 		t.Fatalf("CompileBindings() diagnostics = %#v", diagnostics.Diagnostics)
 	}
-	assertDiagnostic(t, plan.ValidateGraphInputs(map[string]graph.Value{"typo": graph.NewStringValue("unexpected")}), "E_GRAPH_INPUT_VALUE_UNKNOWN", "inputs.typo")
+	assertDiagnostic(t, plan.ValidateGraphInputs(map[string]graph.Value{"typo": graph.NewStringValue("unexpected")}), "E_GRAPH_INPUT_VALUE_UNKNOWN", "inputs")
 	inputs, result := plan.ResolveNodeInputs("consumer", nil, map[string]map[string]graph.Value{
 		"producer": {"value": graph.NewBooleanValue(true)},
 	})

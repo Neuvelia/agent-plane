@@ -28,15 +28,15 @@ func (v *definitionValidator) validateNodeSecretEnv(nodeID string, node NodeDefi
 	switch node.Type {
 	case "shell":
 	case "agent":
-		v.error("E_SECRET_ENV_AGENT_UNSUPPORTED", fmt.Sprintf("node %q: secret_env is not supported on agent nodes yet", nodeID), loc, "remove secret_env; secrets can be assigned to shell nodes only for now")
+		v.error("E_SECRET_ENV_AGENT_UNSUPPORTED", fmt.Sprintf("node %s: secret_env is not supported on agent nodes yet", quotedKey(nodeID)), loc, "remove secret_env; secrets can be assigned to shell nodes only for now")
 		return nil, false
 	default:
-		v.error("E_SECRET_ENV_NODE_TYPE", fmt.Sprintf("node %q is a %s node and cannot receive secrets", nodeID, node.Type), loc, "only shell nodes may use secret_env")
+		v.error("E_SECRET_ENV_NODE_TYPE", fmt.Sprintf("node %s is a %s node and cannot receive secrets", quotedKey(nodeID), typeText(node.Type)), loc, "only shell nodes may use secret_env")
 		return nil, false
 	}
 	entries, ok := configStringMap(raw)
 	if !ok {
-		v.error("E_SECRET_ENV_INVALID", fmt.Sprintf("node %q: secret_env must map environment variable names to declared secret names", nodeID), loc, "write secret_env: {GH_TOKEN: gh_token}")
+		v.error("E_SECRET_ENV_INVALID", fmt.Sprintf("node %s: secret_env must map environment variable names to declared secret names", quotedKey(nodeID)), loc, "write secret_env: {GH_TOKEN: gh_token}")
 		return nil, false
 	}
 	scan := &secretEnvScan{nodeID: nodeID, node: node, loc: loc, entries: entries, seen: map[string]string{}}
@@ -55,21 +55,21 @@ func (v *definitionValidator) validateNodeSecretEnv(nodeID string, node NodeDefi
 // declared one; a collision is reported but the assignment still counts.
 func (v *definitionValidator) validateSecretEnvEntry(scan *secretEnvScan, index int, variable string) (string, bool) {
 	if !secrets.ValidEnvName(variable) {
-		v.error("E_SECRET_ENV_NAME_INVALID", fmt.Sprintf("node %q: secret_env entry %d has an invalid variable name", scan.nodeID, index), scan.loc, "use a non-empty name without '=' that is not AGENTPLANE_ATTEMPT")
+		v.error("E_SECRET_ENV_NAME_INVALID", fmt.Sprintf("node %s: secret_env entry %d has an invalid variable name", quotedKey(scan.nodeID), index), scan.loc, "use a non-empty name without '=' that is not AGENTPLANE_ATTEMPT")
 		return "", false
 	}
 	if other, dup := scan.seen[strings.ToUpper(variable)]; dup {
-		v.error("E_SECRET_ENV_DUPLICATE", fmt.Sprintf("node %q: secret_env names %s and %s, which are the same variable", scan.nodeID, quotedEnv(other, "an earlier entry"), quotedEnv(variable, fmt.Sprintf("the entry at position %d", index))), scan.loc, "keep one entry per variable name; names are compared case-insensitively")
+		v.error("E_SECRET_ENV_DUPLICATE", fmt.Sprintf("node %s: secret_env names %s and %s, which are the same variable", quotedKey(scan.nodeID), quotedEnv(other, "an earlier entry"), quotedEnv(variable, fmt.Sprintf("the entry at position %d", index))), scan.loc, "keep one entry per variable name; names are compared case-insensitively")
 		return "", false
 	}
 	scan.seen[strings.ToUpper(variable)] = variable
 	secret := scan.entries[variable]
 	if _, declared := v.definition.Secrets[secret]; !declared {
-		v.error("E_SECRET_ENV_UNDECLARED", fmt.Sprintf("node %q: secret_env[%s] names %s, which the graph does not declare", scan.nodeID, envLabel(index, variable), secretNameText(secret)), scan.loc, "declare the secret under top-level secrets with a secret_ref")
+		v.error("E_SECRET_ENV_UNDECLARED", fmt.Sprintf("node %s: secret_env[%s] names %s, which the graph does not declare", quotedKey(scan.nodeID), envLabel(index, variable), secretNameText(secret)), scan.loc, "declare the secret under top-level secrets with a secret_ref")
 		return "", false
 	}
 	if channel := collidingChannel(scan.node, variable); channel != "" {
-		v.error("E_SECRET_ENV_COLLISION", fmt.Sprintf("node %q: secret_env variable %s collides with %s", scan.nodeID, envLabel(index, variable), channel), scan.loc, "give the secret a variable name no other channel of this node uses; names are compared case-insensitively")
+		v.error("E_SECRET_ENV_COLLISION", fmt.Sprintf("node %s: secret_env variable %s collides with %s", quotedKey(scan.nodeID), envLabel(index, variable), channel), scan.loc, "give the secret a variable name no other channel of this node uses; names are compared case-insensitively")
 	}
 	return secret, true
 }
@@ -101,7 +101,7 @@ func (v *definitionValidator) validateEmbeddedGateSecretEnv(nodeID string, node 
 		return
 	}
 	if _, present := node.Loop.Gate.Config[secretEnvKey]; present {
-		v.error("E_SECRET_ENV_NODE_TYPE", fmt.Sprintf("node %q: the loop gate is a gate node and cannot receive secrets", nodeID),
+		v.error("E_SECRET_ENV_NODE_TYPE", fmt.Sprintf("node %s: the loop gate is a gate node and cannot receive secrets", quotedKey(nodeID)),
 			DiagnosticLocation{NodeID: nodeID, Path: mapPath("nodes", nodeID) + ".loop.gate.config.secret_env"}, "remove secret_env from the loop gate")
 	}
 }

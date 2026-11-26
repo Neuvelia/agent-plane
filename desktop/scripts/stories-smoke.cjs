@@ -1,6 +1,7 @@
 'use strict'
 // node scripts/stories-smoke.cjs   (after `npm run build-storybook`)
 // AP_CHROMIUM=/path/to/chrome uses an installed browser instead of Playwright's.
+// AP_STORIES_WORKERS=n sets how many stories render at once (default: up to 4).
 // Opens every story in a real browser, in English and Polish, and fails on:
 //   - a missing required story (screen states of F2.5a 6c, every primitive),
 //   - any request that is not served by the static Storybook itself,
@@ -12,6 +13,7 @@ const http = require('node:http')
 const fs = require('node:fs')
 const path = require('node:path')
 const assert = require('node:assert/strict')
+const os = require('node:os')
 
 const root = path.resolve(__dirname, '..', 'storybook-static')
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2', '.svg': 'image/svg+xml', '.png': 'image/png', '.map': 'application/json' }
@@ -62,35 +64,28 @@ const server = http.createServer((req, res) => {
     throw new Error(`${e.message}\nInstall the browser once with: npx playwright install chromium`)
   })
   const failures = []
+  const workers = Math.max(1, Number(process.env.AP_STORIES_WORKERS) || Math.min(4, os.cpus().length))
   for (const locale of ['en', 'pl']) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
-    const page = await context.newPage()
-    let current = ''
-    const fail = (msg) => failures.push(`[${locale}] ${current}: ${msg}`)
-    page.on('request', (r) => {
-      if (!r.url().startsWith(origin) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) fail(`external request ${r.url()}`)
-    })
-    page.on('pageerror', (e) => fail(`page error ${e.message}`))
-    page.on('console', (m) => m.type() === 'error' && fail(`console error ${m.text()}`))
-    for (const id of ids) {
-      current = id
-      await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale}`)
-      await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
-      await page.waitForTimeout(900) // let React Flow finish its fit-view fade-in
-      await page.addScriptTag({ content: axeSource })
-      // The Storybook a11y addon runs its own axe on render; wait for it to finish.
-      let result
-      for (let tries = 0; tries < 20 && !result; tries++) {
-        try {
-          result = await page.evaluate(() => axe.run('#storybook-root'))
-        } catch (e) {
-          if (!/already running/.test(String(e))) throw e
-          await page.waitForTimeout(250)
-        }
+    const queue = [...ids]
+    // Each page takes the next story from the shared queue; failures name the
+    // story that page was rendering, so the report matches a sequential run.
+    const worker = async () => {
+      const page = await context.newPage()
+      let current = ''
+      const fail = (msg) => failures.push(`[${locale}] ${current}: ${msg}`)
+      page.on('request', (r) => {
+        if (!r.url().startsWith(origin) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) fail(`external request ${r.url()}`)
+      })
+      page.on('pageerror', (e) => fail(`page error ${e.message}`))
+      page.on('console', (m) => m.type() === 'error' && fail(`console error ${m.text()}`))
+      while (queue.length) {
+        current = queue.shift()
+        await checkStory(page, origin, current, locale, fail)
       }
-      if (!result) { fail('axe never became available'); continue }
-      for (const v of result.violations) fail(`axe ${v.id}: ${v.help} (${v.nodes.length} nodes) e.g. ${v.nodes[0].html.slice(0, 160)} -> ${(v.nodes[0].any[0] || v.nodes[0].all[0] || {}).message}`)
+      await page.close()
     }
+    await Promise.all(Array.from({ length: workers }, worker))
     await context.close()
   }
   await browser.close()
@@ -104,3 +99,23 @@ const server = http.createServer((req, res) => {
   console.error(e)
   process.exit(1)
 })
+
+async function checkStory(page, origin, id, locale, fail) {
+  await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale}`)
+  await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
+  // Only React Flow views fade in after fit-view; other stories are ready once rendered.
+  if (await page.$('#storybook-root .react-flow')) await page.waitForTimeout(900)
+  await page.addScriptTag({ content: axeSource })
+  // The Storybook a11y addon runs its own axe on render; wait for it to finish.
+  let result
+  for (let tries = 0; tries < 20 && !result; tries++) {
+    try {
+      result = await page.evaluate(() => axe.run('#storybook-root'))
+    } catch (e) {
+      if (!/already running/.test(String(e))) throw e
+      await page.waitForTimeout(250)
+    }
+  }
+  if (!result) return fail('axe never became available')
+  for (const v of result.violations) fail(`axe ${v.id}: ${v.help} (${v.nodes.length} nodes) e.g. ${v.nodes[0].html.slice(0, 160)} -> ${(v.nodes[0].any[0] || v.nodes[0].all[0] || {}).message}`)
+}

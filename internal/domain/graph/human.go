@@ -36,7 +36,7 @@ func (v *definitionValidator) validateHumanNodes() {
 		allowed := fields.AllowedKeys(HumanConfigFields(), n.Config)
 		for key, value := range n.Config {
 			if !allowed[key] {
-				fail(fmt.Sprintf("unsupported human config key %q", key), "use only prompt and context_inputs")
+				fail(fmt.Sprintf("unsupported human config key %s", quotedKey(key)), "use only prompt and context_inputs")
 				continue
 			}
 			switch key {
@@ -53,7 +53,7 @@ func (v *definitionValidator) validateHumanNodes() {
 				}
 				for _, name := range names {
 					if in, declared := n.Inputs[name]; !declared || in.Type != ValueTypeString {
-						fail(fmt.Sprintf("context_inputs entry %q is not a declared string input", name), "declare the input with type string")
+						fail(fmt.Sprintf("context_inputs entry %s is not a declared string input", quotedKey(name)), "declare the input with type string")
 					}
 				}
 			}

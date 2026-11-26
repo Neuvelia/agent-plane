@@ -35,7 +35,7 @@ func (v *definitionValidator) validateSecrets() {
 	}
 	for _, b := range secrets.AmbientBypasses(refs, channels) {
 		v.error("E_SECRET_AMBIENT_BYPASS",
-			fmt.Sprintf("node %q names %s, the variable behind secret %q, but is not assigned that secret", b.NodeID, bypassVariable(b.Variable, "a variable"), b.Secret),
+			fmt.Sprintf("node %s names %s, the variable behind secret %q, but is not assigned that secret", quotedKey(b.NodeID), bypassVariable(b.Variable, "a variable"), b.Secret),
 			DiagnosticLocation{NodeID: b.NodeID, Path: mapPath("nodes", b.NodeID) + ".config"},
 			fmt.Sprintf("assign the secret with secret_env or stop naming %s in this node; this check applies in every mode", bypassVariable(b.Variable, "that variable")))
 	}

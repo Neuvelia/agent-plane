@@ -238,7 +238,7 @@ const AttemptEnv = "AGENTPLANE_ATTEMPT"
 // ValidateNodeConfig checks static shell configuration without running it.
 func (Executor) ValidateNodeConfig(id string, node graph.NodeDefinition) error {
 	if _, err := parseConfig(node); err != nil {
-		return fmt.Errorf("shell node %q: %w", id, err)
+		return fmt.Errorf("shell node %s: %w", keyText(id), err)
 	}
 	return nil
 }
@@ -299,7 +299,7 @@ func (w *logWriter) Write(data []byte) (int, error) {
 
 func parseConfig(node graph.NodeDefinition) (config, error) {
 	if node.Type != "shell" {
-		return config{}, fmt.Errorf("node type must be shell, got %q", node.Type)
+		return config{}, fmt.Errorf("node type must be shell, got %s", keyText(node.Type))
 	}
 	keys := make([]string, 0, len(node.Config))
 	for key := range node.Config {
@@ -309,7 +309,7 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 	allowed := fields.AllowedKeys(ConfigFields(), node.Config)
 	for _, key := range keys {
 		if !allowed[key] {
-			return config{}, fmt.Errorf("unknown shell config field %q", key)
+			return config{}, fmt.Errorf("unknown shell config field %s", keyText(key))
 		}
 	}
 	var cfg config
@@ -336,20 +336,20 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 		if err != nil {
 			return cfg, err
 		}
-		for _, key := range cfg.envAllowlist {
+		for index, key := range cfg.envAllowlist {
 			if !validEnvName(key) {
-				return cfg, fmt.Errorf("invalid env_allowlist name %q", key)
+				return cfg, fmt.Errorf("env_allowlist[%d] is not a valid environment name; use a non-empty name without '='", index)
 			}
 		}
 	}
 	if value, present := node.Config["env"]; present {
-		cfg.env, err = stringMap(value, "env")
+		cfg.env, err = stringMap(value, "env", entryText)
 		if err != nil {
 			return cfg, err
 		}
 	}
 	if value, present := node.Config["input_env"]; present {
-		cfg.inputEnv, err = stringMap(value, "input_env")
+		cfg.inputEnv, err = stringMap(value, "input_env", inputEntryText)
 		if err != nil {
 			return cfg, err
 		}
@@ -358,27 +358,27 @@ func parseConfig(node graph.NodeDefinition) (config, error) {
 			variable := cfg.inputEnv[inputID]
 			port, declared := node.Inputs[inputID]
 			if !declared {
-				return cfg, fmt.Errorf("input_env refers to undeclared input %q", inputID)
+				return cfg, fmt.Errorf("input_env refers to undeclared input %s", keyText(inputID))
 			}
 			if port.Type != graph.ValueTypeString {
-				return cfg, fmt.Errorf("input_env input %q must be a string input", inputID)
+				return cfg, fmt.Errorf("input_env input %s must be a string input", keyText(inputID))
 			}
 			if !validEnvName(variable) {
-				return cfg, fmt.Errorf("input_env input %q has invalid environment name %q", inputID, variable)
+				return cfg, fmt.Errorf("input_env input %s has an invalid environment name; use a non-empty name without '='", keyText(inputID))
 			}
 			for usedVariable, other := range used {
 				if strings.EqualFold(usedVariable, variable) {
-					return cfg, fmt.Errorf("input_env has duplicate environment name %q for inputs %q and %q", variable, other, inputID)
+					return cfg, fmt.Errorf("input_env has duplicate environment name %s for inputs %s and %s; names are compared case-insensitively", envText(variable, "<not shown>"), keyText(other), keyText(inputID))
 				}
 			}
 			for explicit := range cfg.env {
 				if strings.EqualFold(explicit, variable) {
-					return cfg, fmt.Errorf("input_env environment name %q conflicts with env", variable)
+					return cfg, fmt.Errorf("input_env input %s maps to environment name %s, which conflicts with env", keyText(inputID), envText(variable, "<not shown>"))
 				}
 			}
 			for _, allowed := range cfg.envAllowlist {
 				if strings.EqualFold(allowed, variable) {
-					return cfg, fmt.Errorf("input_env environment name %q conflicts with env_allowlist", variable)
+					return cfg, fmt.Errorf("input_env input %s maps to environment name %s, which conflicts with env_allowlist", keyText(inputID), envText(variable, "<not shown>"))
 				}
 			}
 			used[variable] = inputID
@@ -436,22 +436,24 @@ func stringList(value any, field string) ([]string, error) {
 	}
 }
 
-func stringMap(value any, field string) (map[string]string, error) {
+// stringMap reads a mapping of strings; label names an entry in errors and
+// decides which keys may be quoted.
+func stringMap(value any, field string, label func(string, int, string) string) (map[string]string, error) {
 	raw, keys, err := sortedEntries(value, field)
 	if err != nil {
 		return nil, err
 	}
 	result := map[string]string{}
-	for _, key := range keys {
+	for index, key := range keys {
 		item, ok := raw[key].(string)
 		if !ok {
-			return nil, fmt.Errorf("%s[%q] must be a string", field, key)
+			return nil, fmt.Errorf("%s must be a string", label(field, index, key))
 		}
 		if !validEnvName(key) {
-			return nil, fmt.Errorf("invalid %s name %q", field, key)
+			return nil, fmt.Errorf("%s has an invalid name; use a non-empty name without '='", label(field, index, key))
 		}
 		if strings.ContainsRune(item, 0) {
-			return nil, fmt.Errorf("%s[%q] contains a NUL byte", field, key)
+			return nil, fmt.Errorf("%s contains a NUL byte", label(field, index, key))
 		}
 		result[key] = item
 	}
@@ -503,16 +505,16 @@ func buildInputEnvironment(cfg config, node graph.NodeDefinition, inputs map[str
 		value, present := inputs[inputID]
 		if !present {
 			if node.Inputs[inputID].Required {
-				return nil, fmt.Errorf("input_env required input %q is missing", inputID)
+				return nil, fmt.Errorf("input_env required input %s is missing", keyText(inputID))
 			}
 			continue
 		}
 		text, ok := value.AsString()
 		if !ok {
-			return nil, fmt.Errorf("input_env input %q requires a string value", inputID)
+			return nil, fmt.Errorf("input_env input %s requires a string value", keyText(inputID))
 		}
 		if strings.ContainsRune(text, 0) {
-			return nil, fmt.Errorf("input_env input %q contains a NUL byte", inputID)
+			return nil, fmt.Errorf("input_env input %s contains a NUL byte", keyText(inputID))
 		}
 		environment = append(environment, cfg.inputEnv[inputID]+"="+text)
 	}
