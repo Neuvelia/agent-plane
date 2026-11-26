@@ -78,8 +78,11 @@ go build -o bin/agentplane ./cmd/agentplane
 
 ```text
 agentplane graph validate PATH [--json]
-agentplane run PATH [--input key=value]... [--redact-env NAME]... [--store-dir DIR] [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json]
-agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always]
+agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json]
+agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH]
+agentplane runs list [--store-dir DIR] [--json]
+agentplane runs show RUN_ID [--store-dir DIR] [--json]
+agentplane runs prune [--store-dir DIR] [--dry-run] [--json]
 agentplane version
 ```
 
@@ -175,8 +178,8 @@ exits 1; stdout may contain an incomplete document in that case.
 | 130 | Run cancelled by Ctrl+C or SIGTERM |
 
 On Ctrl+C or SIGTERM, the CLI cancels the run context and waits for the
-scheduler. The current Shell executor terminates its direct child;
-process-tree termination is outside Phase 0. If a watch output pipe stops
+scheduler. Shell and Codex executors terminate the whole process tree on
+cancellation (`internal/proctree`, ADR-0028; Unix, Windows is F3.4a). If a watch output pipe stops
 reading, cancellation may omit late live presentation, while the retained
 lifecycle/evidence remains complete and progress loss is explicit.
 
@@ -315,12 +318,12 @@ Distinct proven physical Git worktrees can run concurrently; advisory disjoint
 paths do not grant concurrency in a shared checkout. Bounded declared conflict
 facts describe potential overlap/unknown scope or identity. Scope is advisory:
 accepted runtime values remain immutable even if another unit changes their
-files. Git-observed scope enforcement is F1.8 (below); filesystem isolation remains F3.1 work.
+files. Git-observed scope enforcement is F1.8 (below); filesystem isolation is the opt-in F3.1 worktree mode.
 
 See [the example graph](docs/examples/scoped-retry.yaml),
 [ADR-0015](docs/adr/0015-return-envelope-and-unit-acceptance.md) and the
-[prepared after-merge real-Codex demo](docs/validation/F1.7-real-codex-demo.md).
-The recipe is not a record of a completed real-provider validation.
+[real-Codex demo](docs/validation/F1.7-real-codex-demo.md), executed once on
+2026-11-17 against Codex 0.169.0.
 
 ## Changed-files scope check (F1.8)
 

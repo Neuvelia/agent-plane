@@ -1,6 +1,6 @@
 # ADR-0029 - Secret references and execution policy v0
 
-**Status:** proposed
+**Status:** accepted (owner, 2026-11-26); the F3.9 execution-policy part is accepted as the design and is not implemented yet
 **Date:** 2026-11-17
 **Features:** F3.8 (`docs/features/F3.8-secrets-references.md`), F3.9 (`docs/features/F3.9-execution-policy-v0.md`)
 

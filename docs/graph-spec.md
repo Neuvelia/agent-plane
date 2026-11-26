@@ -577,7 +577,8 @@ Examples:
 
 - invalid schema;
 - duplicate IDs;
-- missing node/type;
+- missing node or missing `type` field (an unrecognized `type` value is not
+  yet rejected by `graph validate`; it fails at execution, see the 2026-11-25 audit);
 - missing referenced node/input/output;
 - incompatible binding;
 - cycle;
@@ -645,7 +646,7 @@ retains at most 8192 bytes after streaming redaction,
 with omitted safe-byte counts; byte evidence serializes as base64. Facts have
 at most 32 evidence items and 32768 encoded payload bytes, are validated and
 copied before retention, and remain available after progress/live omissions.
-Readers accept event schemas 1–5; schema-4 Gate facts decode as distinct legacy
+Readers accept every earlier event schema; schema-4 Gate facts decode as distinct legacy
 minimal payloads without invented duration/scope. Full results require schema 5;
 CLI envelope remains version 1. Optional evidence references distinguish known
 identifiers, unavailable or invalid diagnostic references, and absence. File
@@ -655,7 +656,7 @@ See ADR-0012, ADR-0013 and `docs/examples/gate.yaml`.
 
 ### Node-local correction loop (F1.6)
 
-An Agent may declare `loop` alongside `config`. The embedded Gate is not a
+An Agent (and, since F1.6a/ADR-0018, a Shell node) may declare `loop` alongside `config`. The embedded Gate is not a
 DAG node and exports no outputs. `max_attempts` is an integer from 1 through
 10, including the initial produce call; omission defaults to 3. Explicit null,
 zero, fractions and out-of-range values are invalid. The Agent must explicitly
@@ -731,7 +732,7 @@ scope or unknown identity, capped at 64 details plus an omitted count. It is
 retained independently of progress limits and makes no assertion of actual
 file changes or filesystem isolation. Green `return_envelope` freezes accepted
 runtime values/provenance once; red retries only that unit within its existing
-budget. Operational failures produce no envelope. Readers retain schemas1–6,
+budget. Operational failures produce no envelope. Readers retain every earlier schema,
 typed CheckResults/attempt lookup support5/6/7, CLI schema stays1. See ADR-0015,
 [static-unit example](examples/scoped-retry.yaml) and the
 [prepared real-Codex recipe](validation/F1.7-real-codex-demo.md).

@@ -25,6 +25,10 @@ Read these files before making architectural changes:
 
 ## Current product phase
 
+As of 2026-11-26: Phase 2 (Local IDE) is being completed and Phase 3 (Local
+Production Ready) is in progress; Phases 0 and 1 meet their exit criteria with
+open acceptance gaps listed in `docs/roadmap/audit/AUDIT-2026-11-25.md`.
+
 Phase 0: Execution Core is implemented on `main` through F0.7. F1.1 Agent
 Adapter Contract and F1.2 installed-Codex execution are implemented, including
 Git-derived evidence and a verified real CLI smoke. F1.3 adds bounded normalized
@@ -44,14 +48,14 @@ units: one linked Git worktree per node run, accepted units integrated onto a
 run-scoped ref, and a non-fatal `source_workspace_changed` guard. It is not a
 sandbox, gives downstream nodes no view of upstream files, does not isolate Shell
 nodes, and supports Linux/macOS only; a real-Codex run passed once
-(`docs/validation/F3.1-real-codex-demo.md`). F3.2 (ADR-0027, proposed) makes a run's durable
+(`docs/validation/F3.1-real-codex-demo.md`). F3.2 (ADR-0027) makes a run's durable
 state exactly its JSONL event log: persist-before-deliver, durable creation, a run
 lock that separates `running` from `interrupted` (derived, no new event), a
 rebuildable `summary.json`, `store.json` and explicit `runs prune` retention.
 Implemented on Linux; the Windows tests have not been run.
 F2.8b adds opt-in `--record-diffs` capture of bounded, redacted per-attempt file diffs for loop Agent
 nodes as `attempt_diff` events (event schema 12, ADR-0026); the desktop diff panel is not implemented.
-A Phase 2 vertical slice is also active (event schema 11): F1.6a adds the bounded
+A Phase 2 vertical slice is also implemented (approval events: event schema 9): F1.6a adds the bounded
 loop to Shell nodes (ADR-0018), F2.10 adds the `human` node and local approval
 events (ADR-0017), F2.9 adds an opt-in JSONL run store with `runs list/show`, and
 F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
@@ -59,7 +63,7 @@ F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
 schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
 Storybook; the API and event contracts are unchanged. Slice E6 of F2.3 adds
-opt-in, bounded and redacted `value_recorded` events (event schema 11,
+opt-in, bounded and redacted `value_recorded` events (event schema 10,
 ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
 starts the sidecar with it; the E5b.1 values reducer and run picker and the E5b.2 edge inspector (the recorded value of a selected edge or graph input binding, shown as text only) are implemented in the renderer. The graph
 editor (F2.1, F2.4 Issues panel) and the F2.2 node inspector edit graph files through
@@ -69,7 +73,7 @@ versioned operations (ADR-0020, ADR-0021) served by `POST /graphs/open`, `/graph
 descriptors owned by the validators (`internal/fields`). F2.11 adds the read-only
 capability report (`GET /capabilities`, `POST /capabilities/check`, ADR-0025) and the
 desktop welcome screen; F2.12 adds bundled graph templates and the template picker.
-F3.8 (event schema 14, ADR-0029 proposed) adds graph-declared secret references with
+F3.8 (event schema 14, ADR-0029) adds graph-declared secret references with
 the `env` provider for Shell nodes: per-node environment delivery, redaction of
 resolved values and an after-the-fact workspace scan. It is not a sandbox, does not
 protect a value from the process it is granted to, and leaves Agent `secret_env`, the
@@ -175,6 +179,8 @@ internal/agent/          provider-neutral Agent contract and adapters
 internal/shell/          Shell execution
 internal/gate/           deterministic checks
 internal/gitstate/       Git-observed workspace state, hardened Git runner
+internal/proctree/       process-tree ownership and termination (ADR-0028)
+internal/testenv/        test-only platform guards
 internal/worktree/       linked Git worktrees for workspace isolation (F3.1)
 internal/store/          local run history
 internal/api/            loopback API for local clients

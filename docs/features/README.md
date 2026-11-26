@@ -21,8 +21,8 @@ contract decisions are in ADR-0009. F1.2 adds explicit Codex CLI routing and
 Git-derived evidence (ADR-0010), verified by a real disposable-repository smoke.
 F1.3 adds bounded normalized progress (ADR-0011). F1.4 adds deterministic Gate checks (ADR-0012). F1.5 adds versioned Check Results (ADR-0013), F1.6 bounded correction
 attempts (ADR-0014), and F1.7 static-unit envelopes/immutable runtime acceptance
-(ADR-0015). Shared files remain mutable; the after-merge real-Codex demo is
-prepared but has not been executed in this implementation. F1.8 adds opt-in
+(ADR-0015). Shared files remain mutable; the real-Codex F1.7 demo was executed on
+2026-11-17 (`docs/validation/F1.7-real-codex-demo.md`). F1.8 adds opt-in
 Git-observed changed-files scope checking (ADR-0016). See `docs/roadmap.md` for the complete ID catalog,
 dependencies and phase exit criteria. A roadmap entry is not an executable
 feature contract.
@@ -63,10 +63,10 @@ feature contract.
 | Feature | Spec status |
 | --- | --- |
 | `F3.1-workspace-isolation.md` | Implemented (opt-in Agent worktree isolation, ADR-0024; event schema 11); real-Codex demo passed once, see `docs/validation/F3.1-real-codex-demo.md` |
-| `F3.2-durable-run-state.md` | Implemented on Linux (Windows tests not run); ADR-0027 proposed (JSONL, no SQLite) |
-| `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | Draft; ADR-0028 proposed; criteria split by dependency on F3.2 |
-| `F3.8-secrets-references.md` | Implemented for the `env` provider and Shell nodes (event schema 14; Linux only verified); Agent `secret_env`, keychain provider and F3.9 policy not included; 15 of 17 acceptance criteria ticked, two partly covered (7, 15), the enforce variant of 10 waits for F3.9; ADR-0029 proposed (shared with F3.9) |
-| `F3.9-execution-policy-v0.md` | Draft; ADR-0029 proposed (shared with F3.8) |
+| `F3.2-durable-run-state.md` | Implemented on Linux (Windows tests not run); ADR-0027 accepted (JSONL, no SQLite) |
+| `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | In progress: tasks 1-6 merged (process-tree termination on Unix, cancel/timeout event types, `timeout_seconds` parsed); runtime enforcement and cancel/timeout events not emitted yet; ADR-0028 proposed |
+| `F3.8-secrets-references.md` | Implemented for the `env` provider and Shell nodes (event schema 14; Linux only verified); Agent `secret_env`, keychain provider and F3.9 policy not included; 15 of 17 acceptance criteria ticked, two partly covered (7, 15), the enforce variant of 10 waits for F3.9; ADR-0029 accepted (shared with F3.9) |
+| `F3.9-execution-policy-v0.md` | Draft; event types `policy_evaluated`/`policy_violation` (schema 14) exist but are not emitted; ADR-0029 accepted (shared with F3.8) |
 
 ## Release engineering - drafts (not roadmap F-IDs)
 
@@ -77,9 +77,9 @@ feature contract.
 
 ## Later phases
 
-F2-F6 remain roadmap scope. Their IDs and priorities are tracked in
-`docs/roadmap.md`; implementation specs are created when a feature becomes
-active.
+F3.3, F3.5, F3.6, F3.7, F3.10, F3.11 and all of F4-F6 have no spec yet. Their
+IDs and priorities are tracked in `docs/roadmap.md`; implementation specs are
+created when a feature becomes active.
 
 ## Rules
 
