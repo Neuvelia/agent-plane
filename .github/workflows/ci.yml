@@ -1,77 +1,132 @@
 name: ci
 
+# Pull requests run against their merge commit; `main` runs after the merge. A
+# push to any other branch runs nothing: open a pull request, or start the
+# workflow by hand (`workflow_dispatch`). A draft pull request runs nothing
+# either; marking it ready for review starts the run. Windows runs by hand in
+# ci-other-os.yml (docs/development-workflow.md, "CI matrix").
 on:
   push:
+    branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-jobs:
-  check:
-    name: check (${{ matrix.name }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      # One OS failing must not hide the others: each OS needs its own evidence.
-      fail-fast: false
-      matrix:
-        include:
-          - name: linux-x64
-            os: ubuntu-latest
-            experimental: false
-            timeout: 30
-          - name: macos-arm64
-            os: macos-latest
-            experimental: false
-            timeout: 30
-          # Windows is not yet a supported target: main does not pass there
-          # (see docs/development-workflow.md, "CI matrix"). Its result is
-          # reported but does not block; drop `experimental` once it is green.
-          - name: windows-x64
-            os: windows-latest
-            experimental: true
-            # A hung Windows test otherwise runs to the 10 min go test limit.
-            timeout: 20
-    continue-on-error: ${{ matrix.experimental }}
-    timeout-minutes: ${{ matrix.timeout }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      # Windows runners check out with CRLF, which makes `gofmt -l` flag every
-      # Go file. Keep LF so formatting checks mean the same on all OSes.
-      - name: Keep LF line endings
-        run: git config --global core.autocrlf false
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      # scripts/check.sh is the body of `make check`; invoking it directly
-      # avoids depending on GNU make being present on Windows runners.
-      - name: Check
-        run: ./scripts/check.sh
-      - name: Build CLI
-        if: runner.os != 'Windows'
-        run: make build
+# A new push to a pull request cancels its older run. On main a run always
+# completes, and GitHub keeps only the newest waiting run, so merges that land
+# faster than a run share one.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-  lint:
+jobs:
+  detect:
+    # A pull request runs a job only when a path that job reads changed. A push
+    # to main and a manual run always run every job, and so does any job when
+    # this one fails (each job's `if` checks for `failure`, so a draft's
+    # skipped `detect` skips them).
+    #   go:      any non-Markdown path outside desktop/, plus desktop/test/fixtures/
+    #            (Go tests read them)
+    #   desktop: desktop/, the sidecar sources (cmd/, internal/, go.mod, go.sum,
+    #            Makefile), .agents/ (bundled templates and graphs) and .github/
+    #   stories: desktop/, .agents/ and .github/ only; stories render the
+    #            renderer against recorded fixtures and never start the sidecar
+    # No Go test, desktop build or e2e reads a Markdown file, so a Markdown-only
+    # change runs no job. Re-check that before a test starts reading one.
+    name: Detect changed areas
+    # A draft skips this job and therefore every job below.
+    if: github.event_name != 'pull_request' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.lanes.outputs.go }}
+      desktop: ${{ steps.lanes.outputs.desktop }}
+      stories: ${{ steps.lanes.outputs.stories }}
     steps:
       - uses: actions/checkout@v4
         with:
+          # A pull request checks out its merge commit; its first parent is the
+          # base branch, so HEAD^1..HEAD is exactly what the pull request brings.
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Select lanes
+        id: lanes
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          lane() {
+            if [[ -n "$2" ]]; then
+              echo "$1=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "$1=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
+          if [[ "$EVENT_NAME" != "pull_request" ]]; then
+            lane go all
+            lane desktop all
+            lane stories all
+            exit 0
+          fi
+          # Without --no-renames a moved file lists only its new path.
+          changed="$(git diff --name-only --no-renames HEAD^1 HEAD)"
+          printf 'Changed paths:\n%s\n' "$changed"
+          code="$(grep -Ev '\.md$' <<<"$changed" || true)"
+          outside_desktop="$(grep -Ev '^desktop/' <<<"$code" || true)"
+          fixtures="$(grep -E '^desktop/test/fixtures/' <<<"$code" || true)"
+          lane go "$outside_desktop$fixtures"
+          lane desktop "$(grep -E '^(desktop/|cmd/|internal/|\.agents/|\.github/|go\.(mod|sum)$|Makefile$)' <<<"$code" || true)"
+          lane stories "$(grep -E '^(desktop/|\.agents/|\.github/)' <<<"$code" || true)"
+
+  # One job for all Linux Go evidence: lint, `make check`, the race detector
+  # and the build share one checkout, one Go setup and one build cache instead
+  # of three. Lint runs first because it fails fastest. Plain `go test` (inside
+  # check.sh) still runs before `-race`: it is the `make check` contract and
+  # runs the wall-clock tests that skip under the race detector.
+  check-linux:
+    name: check (linux-x64)
+    needs: detect
+    if: ${{ !cancelled() && (needs.detect.result == 'failure' || needs.detect.outputs.go == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # .golangci.yml reports only findings new since the merge base with
+          # origin/main, which needs the history.
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
-      - uses: golangci/golangci-lint-action@v8
+      - name: Lint
+        uses: golangci/golangci-lint-action@v8
         with:
           version: v2.5.0
+      # A lint failure must not hide test evidence: every later step still runs.
+      - name: Check
+        if: ${{ !cancelled() }}
+        run: ./scripts/check.sh
+      - name: Race
+        if: ${{ !cancelled() }}
+        run: go test -race ./...
+      - name: Build CLI
+        if: ${{ !cancelled() }}
+        run: make build
 
-  race:
-    runs-on: ubuntu-latest
+  # `make check` and the build on macOS, a required target. It runs for the same
+  # paths as the Linux job; lint and -race stay Linux-only.
+  check-macos:
+    name: check (macos-arm64)
+    needs: detect
+    if: ${{ !cancelled() && (needs.detect.result == 'failure' || needs.detect.outputs.go == 'true') }}
+    runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,29 +135,22 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - run: go test -race ./...
+      - name: Check
+        run: ./scripts/check.sh
+      - name: Build CLI
+        run: make build
 
+  # `npm run check` (typecheck, reducer tests, build, Storybook build, bundle
+  # scan), then the real Electron app against the real sidecar under a virtual
+  # display and the Storybook smoke, reusing the dist/ and storybook-static/
+  # that the check already built. The smoke (about 2 minutes, every story in
+  # two languages) runs only when the `stories` lane changed: a sidecar-only
+  # change cannot alter a story. The e2e and smoke steps do not fail the job
+  # (they were never a required check): a failure shows as a failed step and a
+  # warning, and uploads the e2e screenshots.
   desktop:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
-      - run: npm ci --ignore-scripts
-        working-directory: desktop
-      - run: npm run check
-        working-directory: desktop
-
-  # Real Electron + real sidecar under a virtual display, plus the Storybook
-  # smoke. Separate from `check`/`desktop` so Go-only work never waits on it;
-  # no path filter (the sidecar binary and graphs are inputs too) and it is not
-  # a required check unless the branch protection says so deliberately.
-  desktop-e2e:
+    needs: detect
+    if: ${{ !cancelled() && (needs.detect.result == 'failure' || needs.detect.outputs.desktop == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -128,21 +176,40 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('desktop/package-lock.json') }}
-      # System libraries (and xvfb) first, so the Electron run below has them; the
-      # locked Playwright version comes from `npm ci`, never from a fresh npx download.
+      # No dependency lifecycle scripts (desktop/AGENTS.md). Electron fetches
+      # its binary on first launch, into the cached ~/.cache/electron.
       - name: Install desktop dependencies
-        run: npm ci --prefix desktop
-      - name: Install Chromium system dependencies
-        run: npx --prefix desktop playwright install --with-deps chromium
-      # `make desktop-*` run `npm ci` (never `npm install`) and pick xvfb-run on Linux.
+        run: npm ci --ignore-scripts
+        working-directory: desktop
+      - name: Check
+        run: npm run check
+        working-directory: desktop
+      - name: Build sidecar
+        run: make build
+      # The locked Playwright version comes from `npm ci`, never from a fresh
+      # npx download; --with-deps also installs xvfb.
+      - name: Install Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+        working-directory: desktop
       - name: Electron e2e
-        run: make desktop-e2e E2E_SHOTS=e2e-shots
+        id: e2e
+        continue-on-error: true
+        run: xvfb-run -a node e2e/demo.cjs e2e-shots
+        working-directory: desktop
       - name: Storybook smoke
-        run: make desktop-stories
+        id: stories
+        if: needs.detect.result == 'failure' || needs.detect.outputs.stories == 'true'
+        continue-on-error: true
+        run: npm run stories:test
+        working-directory: desktop
+      - name: Report non-blocking failures
+        if: steps.e2e.outcome == 'failure' || steps.stories.outcome == 'failure'
+        run: echo "::warning title=Desktop e2e::Electron e2e ${{ steps.e2e.outcome }}, Storybook smoke ${{ steps.stories.outcome }}"
       - name: Upload e2e screenshots
-        if: failure()
+        if: steps.e2e.outcome == 'failure'
         uses: actions/upload-artifact@v4
         with:
           name: desktop-e2e-screenshots
           path: desktop/e2e-shots
           if-no-files-found: ignore
+          retention-days: 7

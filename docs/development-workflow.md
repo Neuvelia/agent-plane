@@ -105,37 +105,62 @@ This command is a foundation for later selective verification and does not
 replace `make check`.
 
 For changes under `desktop/`, also run `npm run check` there. CI reports the
-Go `make check`/build, full `go test -race ./...` and desktop `npm run check`
-as separate jobs on pushes and pull requests. For concurrency changes, run
-the affected race tests locally before the full gate. Browser story smoke and
-real Electron e2e are separate checks; use `desktop/AGENTS.md` to choose them
-for the affected behavior.
+Go lint, `make check`, full `go test -race ./...` and build in one Linux job,
+and desktop `npm run check`, Electron e2e and Storybook smoke in another (see
+"CI matrix"). For concurrency changes, run the affected race tests locally
+before the full gate. Use `desktop/AGENTS.md` to choose the local browser story
+smoke and Electron e2e for the affected behavior.
 
 A green check is necessary, not sufficient. Acceptance criteria still need human and reviewer inspection.
 
 ## CI matrix
 
-`.github/workflows/ci.yml` runs `scripts/check.sh` (the body of `make check`)
-on every push and pull request, on three runners: `linux-x64`
-(`ubuntu-latest`), `macos-arm64` (`macos-latest`) and `windows-x64`
-(`windows-latest`). Linux and macOS are required and also run `make build`.
-Windows is reported but non-blocking (`continue-on-error`, 20 minute cap)
-because main does not pass there yet; the job checks out with LF line endings
-so `gofmt -l` means the same on every OS. Remove `experimental` for Windows once
-it is green. The desktop shell stays outside this gate (`make desktop-check`).
+CI runs only the jobs a change can fail. `.github/workflows/ci.yml` runs on pull requests, on pushes to `main` and on
+manual runs (`workflow_dispatch`, any branch); a push to another branch runs
+nothing. A draft pull request runs nothing either: every job skips until it
+is marked ready for review, which starts a run (start the workflow by hand on
+the branch for earlier feedback). A newer push to a pull request cancels its
+older run; on `main` every run completes.
 
-Two desktop jobs run beside it. `desktop` runs `npm ci --ignore-scripts` and
-`npm run check` (typecheck, reducer tests, build, Storybook build, bundle scan).
-`desktop-e2e` first runs `npm ci` and installs the Playwright Chromium system
-dependencies (which also provide xvfb), then `make desktop-e2e` (real Electron
-against `bin/agentplane` under `xvfb-run`) and `make desktop-stories`
-(Storybook smoke in Playwright Chromium). Both pin Node 24 and
-use `npm ci`; `desktop-e2e` caches the npm cache, `~/.cache/electron` and
-`~/.cache/ms-playwright`, and uploads `desktop/e2e-shots` as the
-`desktop-e2e-screenshots` artifact on failure. They have no path filter, so a
-sidecar or graph change is also exercised, and they are not required checks:
-Go-only work does not wait on them unless branch protection says otherwise. If
-the e2e flakes, capture a Playwright trace rather than retrying silently.
+A `detect` job picks the jobs a pull request runs from the paths it changes. A
+change made only of Markdown files runs none, because no test or build reads
+Markdown. `check (linux-x64)` and `check (macos-arm64)` run for any other path
+outside `desktop/` and for `desktop/test/fixtures/`, which Go tests read. `desktop` runs for
+`desktop/`, the sidecar sources (`cmd/`, `internal/`, `go.mod`, `go.sum`,
+`Makefile`), `.agents/` and `.github/`. Pushes to `main`, manual runs and a
+failed `detect` run every job. A skipped job counts as passed for a required
+check.
+
+`check (linux-x64)` holds all Linux Go evidence in one job: `golangci-lint`
+(findings new since the merge base, so it checks out the full history), then
+`scripts/check.sh` (the body of `make check`), `go test -race ./...` and
+`make build`. A lint failure does not stop the later steps.
+`check (macos-arm64)` (`macos-latest`) runs `scripts/check.sh` and `make
+build`; lint and `-race` stay Linux-only. Linux and macOS are required targets.
+
+`desktop` runs `npm ci --ignore-scripts` (Electron fetches its binary on
+first launch) and `npm run check` (typecheck, reducer tests, build, Storybook
+build, bundle scan), builds `bin/agentplane`, installs the Playwright Chromium
+system dependencies (which also provide xvfb), then runs the real Electron app
+against the sidecar under `xvfb-run` (`e2e/demo.cjs`) and the Storybook smoke
+(`npm run stories:test`) on the `dist/` and `storybook-static/` the check
+built. The smoke renders every story in EN and PL, four at a time
+(`AP_STORIES_WORKERS` overrides), and waits for the fit-view fade only on React
+Flow stories; it runs only when a pull request changes `desktop/`, `.agents/`
+or `.github/`, because stories use recorded fixtures and never start the
+sidecar. It pins Node 24, caches the npm cache,
+`~/.cache/electron` and `~/.cache/ms-playwright`, and uploads
+`desktop/e2e-shots` as the `desktop-e2e-screenshots` artifact (kept 7 days)
+when the e2e fails. The e2e and smoke steps are not blocking: a failure shows
+as a failed step and a warning, not a failed job. If the e2e flakes, capture a
+Playwright trace rather than retrying silently.
+
+`.github/workflows/ci-other-os.yml` runs `scripts/check.sh` on `windows-x64`
+(`windows-latest`), only when started by hand on a branch (Actions,
+`ci-other-os`, Run workflow). Windows is not yet a supported target because
+main does not pass there. Only that job checks out with LF line endings so
+`gofmt -l` means the same on every OS. The desktop shell stays outside this
+gate (`make desktop-check`).
 
 The Go tests compile on every OS. A test that needs something Windows lacks
 skips with a reason, using the test-only `internal/testenv` guards:
@@ -167,7 +192,7 @@ names (`RUNNER~1`) compare equal.
 
 A local `go test ./...` on Windows (Go 1.27) passes with these guards. The
 `windows-x64` job has not been observed green on a GitHub runner since they
-landed, so `experimental` stays until one run of that job is green.
+landed; it stays manual-only until one run of that job is green.
 
 ## Review session
 

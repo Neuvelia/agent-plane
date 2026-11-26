@@ -182,7 +182,12 @@ func TestCLIIsolationHumanOutputNamesBaseRefAndSandboxCaveat(t *testing.T) {
 		t.Fatalf("exit=%d stderr=%s", exit, stderr)
 	}
 	base := isolationGit(t, f.source, "rev-parse", "HEAD")
-	for _, want := range []string{base, "refs/agentplane/", "not a sandbox", "git merge", f.root} {
+	// The CLI prints resolved paths (macOS: /var -> /private/var).
+	root, err := filepath.EvalSymlinks(f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{base, "refs/agentplane/", "not a sandbox", "git merge", root} {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("human output lacks %q:\n%s", want, stderr)
 		}
@@ -206,8 +211,14 @@ func TestCLIIsolationConflictExitsFourAndRetainsWorktree(t *testing.T) {
 	if _, err := os.Stat(doc.Isolation.Retained[0].Path); err != nil {
 		t.Fatalf("retained path missing: %v", err)
 	}
-	if !strings.HasPrefix(doc.Isolation.Retained[0].Path, f.root+string(filepath.Separator)) {
-		t.Fatalf("retained path %q outside --worktree-root %q", doc.Isolation.Retained[0].Path, f.root)
+	// The CLI reports the resolved path; on macOS the temp root /var/... is a
+	// symlink to /private/var/..., so compare against the resolved root.
+	root, err := filepath.EvalSymlinks(f.root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(doc.Isolation.Retained[0].Path, root+string(filepath.Separator)) {
+		t.Fatalf("retained path %q outside --worktree-root %q", doc.Isolation.Retained[0].Path, root)
 	}
 }
 
