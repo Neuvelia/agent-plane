@@ -208,6 +208,9 @@ func TestUnsupportedPlatformStartsNoProcess(t *testing.T) {
 	bin := fakeBinary(t, `: > `+marker+`; printf 'git version 2.43.0\n'`)
 	r := Detector{GOOS: "windows", GitPath: bin, Agents: []Agent{{ID: "codex", Adapter: codex.Adapter{Binary: bin}}}}.Detect(context.Background())
 	for _, tool := range r.Tools {
+		if tool.ID == "docker" {
+			continue // a PATH lookup starts no process and is reported on every OS
+		}
 		if tool.Status != StatusUnsupportedPlatform || tool.Reason != ReasonPlatformNotSupported {
 			t.Fatalf("row %+v", tool)
 		}

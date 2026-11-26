@@ -209,16 +209,19 @@ func (p GateCheckPayload) Validate() error {
 		if string(e.Source) != string(source) {
 			return errors.New("invalid gate evidence source")
 		}
-		if p.Kind == CheckCommand {
+		switch p.Kind {
+		case CheckCommand:
 			if e.ExitCode == nil || (*e.ExitCode != 0 && *e.ExitCode != 1) || (p.Verdict == "green") != (*e.ExitCode == 0) {
 				return errors.New("inconsistent gate command verdict")
 			}
-		} else if p.Kind == CheckTestCommand {
+		case CheckTestCommand:
 			if e.ExitCode == nil || *e.ExitCode < 0 || (p.Verdict == "green") != (*e.ExitCode == 0) {
 				return errors.New("inconsistent test command verdict")
 			}
-		} else if e.ExitCode != nil || len(e.Stdout)+len(e.Stderr) > 0 || e.StdoutOmitted != 0 || e.StderrOmitted != 0 {
-			return errors.New("unexpected gate process evidence")
+		default:
+			if e.ExitCode != nil || len(e.Stdout)+len(e.Stderr) > 0 || e.StdoutOmitted != 0 || e.StderrOmitted != 0 {
+				return errors.New("unexpected gate process evidence")
+			}
 		}
 	}
 	b, err := json.Marshal(p)

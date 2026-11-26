@@ -46,6 +46,10 @@ func validateTestCommand(c config, n graph.NodeDefinition) error {
 	if err := validateTestEnv(c); err != nil {
 		return err
 	}
+	return validateTestInput(c, n)
+}
+
+func validateTestInput(c config, n graph.NodeDefinition) error {
 	candidate, ok := n.Inputs[c.Input]
 	if c.Input == "" || !ok || !candidate.Required || (candidate.Type != graph.ValueTypeString && candidate.Type != graph.ValueTypeJSON) {
 		return fmt.Errorf("test_command input %q must be a required string or JSON port", c.Input)
