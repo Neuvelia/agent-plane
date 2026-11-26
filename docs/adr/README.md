@@ -48,15 +48,25 @@ Phase 3:
 (accepted; real-Codex sandbox spike passed; implemented by F3.1, with a real-Codex run recorded in
 `docs/validation/F3.1-real-codex-demo.md`).
 
-F3.2 durable run state (proposed; implemented, awaiting owner acceptance):
+F3.2 durable run state (accepted 2026-11-26):
 [ADR-0027 - Durable run state on an append-only JSONL log](0027-durable-run-state.md).
 
 F3.4 cancellation and timeouts (proposed):
 [ADR-0028 - Cancel and timeout reasons, cross-platform process ownership](0028-cancel-timeout-reasons-and-process-ownership.md).
 
-F3.8 secret references and F3.9 execution policy (proposed):
+F3.8 secret references and F3.9 execution policy (accepted 2026-11-26; F3.9 not implemented):
 [ADR-0029 - Secret references and execution policy v0](0029-secret-references-and-execution-policy.md).
 
 Release engineering (proposed):
 [ADR-0030 - Distribution channels, desktop shell and release tooling](0030-distribution-and-release-channels.md),
 [ADR-0031 - Public roadmap status feed and landing synchronization](0031-public-roadmap-status-feed.md).
+
+Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
+`docs/roadmap/decisions/README.md`):
+[ADR-0032 - Canonical vocabulary: CLI name, state model and event names](0032-canonical-vocabulary-cli-states-events.md),
+[ADR-0033 - Canonical graph format, graph version and JSON input](0033-canonical-graph-format.md),
+[ADR-0034 - Canonical Agent adapter interface](0034-canonical-agent-adapter-interface.md),
+[ADR-0035 - Runtime stack and repository layout](0035-stack-and-repository-layout.md),
+[ADR-0036 - Roadmap precedence for phase scope; units, blast radius and ordering](0036-roadmap-scope-precedence.md),
+[ADR-0037 - Direction: a test command as a loop check](0037-test-command-check-direction.md),
+[ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md).
