@@ -212,3 +212,21 @@ func TestUnknownFieldIsALoadError(t *testing.T) {
 		t.Fatalf("want an unknown-field error, got %v", err)
 	}
 }
+
+func TestExportWritesOneRowsFilePerDatasetWithNullForMissingIssue(t *testing.T) {
+	root := fixture(t, validFeatures, validPhases, taggedTest)
+	dir := filepath.Join(t.TempDir(), "export")
+	if err := exportFromRoot(root, dir, "abc123"); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"features.json", "criteria.json", "phases.json", "demos.json", "divergences.json"} {
+		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
+			t.Fatalf("missing %s: %v", name, err)
+		}
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "criteria.json"))
+	text := string(data)
+	if !strings.Contains(text, `"issue": null`) || !strings.Contains(text, `"value": "abc123"`) {
+		t.Fatalf("unexpected criteria export:\n%s", text)
+	}
+}

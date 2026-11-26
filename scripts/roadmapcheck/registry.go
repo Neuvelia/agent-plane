@@ -71,14 +71,14 @@ type phasesFile struct {
 }
 
 type phase struct {
-	ID            int      `yaml:"id"`
-	Name          string   `yaml:"name"`
-	Release       string   `yaml:"release"`
-	Goal          string   `yaml:"goal"`
-	ExitCriterion string   `yaml:"exit_criterion"`
-	ExitStatus    string   `yaml:"exit_status"`
-	ExitEvidence  []string `yaml:"exit_evidence"`
-	Note          string   `yaml:"note"`
+	ID            int      `yaml:"id" json:"id"`
+	Name          string   `yaml:"name" json:"name"`
+	Release       string   `yaml:"release" json:"release"`
+	Goal          string   `yaml:"goal" json:"goal"`
+	ExitCriterion string   `yaml:"exit_criterion" json:"exit_criterion"`
+	ExitStatus    string   `yaml:"exit_status" json:"exit_status"`
+	ExitEvidence  []string `yaml:"exit_evidence" json:"exit_evidence"`
+	Note          string   `yaml:"note" json:"note"`
 }
 
 type demo struct {

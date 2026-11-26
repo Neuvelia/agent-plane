@@ -6,6 +6,8 @@
 //
 //	go run ./scripts/roadmapcheck          # validate; fail if STATUS.md is stale
 //	go run ./scripts/roadmapcheck -write   # validate and regenerate STATUS.md
+//	go run ./scripts/roadmapcheck -export DIR -revision REV
+//	                                       # also write dashboard JSON files to DIR
 //
 // Errors exit with status 1; warnings are printed and never fail the run.
 package main
@@ -21,12 +23,17 @@ import (
 func main() {
 	write := flag.Bool("write", false, "regenerate docs/roadmap/STATUS.md")
 	root := flag.String("root", ".", "repository root")
+	exportDir := flag.String("export", "", "also write the dashboard JSON files to this directory")
+	revision := flag.String("revision", "", "revision label (for example a commit SHA) for the export meta")
 	flag.Parse()
 	mode := verifyStatus
 	if *write {
 		mode = writeStatus
 	}
 	failed, err := run(*root, mode, os.Stdout)
+	if err == nil && !failed && *exportDir != "" {
+		err = exportFromRoot(*root, *exportDir, *revision)
+	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "roadmapcheck:", err)
 		os.Exit(1)
@@ -75,4 +82,12 @@ func syncStatus(c *checker, root, rendered string, mode statusMode) error {
 		c.out.errorf(statusPath, "out of date; run `make roadmap` and commit the result")
 	}
 	return nil
+}
+
+func exportFromRoot(root, dir, revision string) error {
+	reg, phases, err := loadRegistry(root)
+	if err != nil {
+		return err
+	}
+	return exportDashboard(dir, revision, reg, phases)
 }

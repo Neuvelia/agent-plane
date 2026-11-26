@@ -151,6 +151,33 @@ criterion/divergence `issue` fields.
 The reusable prompts in `prompts/` (see `prompts/README.md`) encode this
 workflow for agents.
 
+## Automation and dashboard
+
+Two scheduled Claude Code tasks run on the default branch. Each fire is a fresh
+session, and its full instructions live in the task itself:
+
+| Task | When (Europe/Warsaw) | What it does |
+| --- | --- | --- |
+| Roadmap daily check | every day, 06:42 | Runs `go run ./scripts/roadmapcheck -export DIR -revision <sha>`, refreshes the dashboard's data files, and reports errors, warnings and the day's roadmap changes. It changes nothing in the repository. |
+| Roadmap weekly re-audit | Mondays, 07:39 | Runs the incremental re-audit below with `prompts/re-audit.md` and opens a `[roadmap] audit <date>` PR. It never merges and never changes product code. |
+
+The **dashboard** is a private claude.ai artifact of type Data, owned by the
+repository owner. It reads five JSON files that `roadmapcheck -export` writes:
+
+- `features.json`
+- `criteria.json`
+- `phases.json`
+- `demos.json`
+- `divergences.json`
+
+Each file is `{rows, meta}`, and `meta` carries the revision. The dashboard is
+a view, never a source of truth. A stale dashboard means the daily task did not
+run; it does not mean the status changed.
+
+```bash
+go run ./scripts/roadmapcheck -export /tmp/roadmap-export -revision "$(git rev-parse --short HEAD)"
+```
+
 ## Re-audit procedure
 
 Run it on demand, or before a phase is declared done. Use
