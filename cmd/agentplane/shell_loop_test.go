@@ -160,6 +160,7 @@ func TestShellEnvRejectsReservedAttemptVariableWithAClearMessage(t *testing.T) {
 }
 
 // Downstream must see the green candidate's value and never a red one.
+// roadmap: F1.6-AC3
 func TestShellLoopDownstreamReceivesTheGreenValueOnly(t *testing.T) {
 	testenv.RequireExecutable(t, "/usr/bin/printenv", "/bin/sh")
 	graph := shellLoopGraph(`if [ "$AGENTPLANE_ATTEMPT" = 1 ]; then echo '{"ready":false,"v":"RED"}'; else echo '{"ready":true,"v":"GREEN"}'; fi`, 3)

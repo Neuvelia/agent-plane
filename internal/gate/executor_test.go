@@ -148,6 +148,8 @@ func diffNode(t *testing.T) graph.NodeDefinition {
 func paths() map[string]graph.Value {
 	return map[string]graph.Value{"left": graph.NewStringValue("left"), "right": graph.NewStringValue("right")}
 }
+
+// roadmap: F1.4-AC2
 func TestRealReadOnlyDiffDescriptorGreenRedAndBounded(t *testing.T) {
 	testenv.RequireDarwinOrLinux(t, "the command Gate")
 	for _, same := range []bool{true, false} {

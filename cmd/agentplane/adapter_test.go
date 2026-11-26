@@ -12,6 +12,7 @@ import (
 	"agentplane/internal/testenv"
 )
 
+// roadmap: F1.2-AC1
 func TestCLIExplicitCodexAdapterAgentAndShell(t *testing.T) {
 	dir := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {

@@ -138,6 +138,7 @@ func TestRunLinearDAGResolvesBoundInputs(t *testing.T) {
 	}
 }
 
+// roadmap: F0.3-AC2, F0.4-AC1, F0.4-AC2
 func TestRunDiamondWaitsForBothBranchesAndAllowsOverlap(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
 		"left":  {Type: "test", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString}}},
@@ -362,6 +363,7 @@ func TestRunChoosesLowestNodeIDWhenConcurrentNodesFail(t *testing.T) {
 	}
 }
 
+// roadmap: F0.3-AC1
 func TestRunMissingBoundOutputFailsConsumerBeforeExecution(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
 		"source": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
@@ -492,6 +494,7 @@ func TestRunDoesNotDispatchAfterCancellationDuringReadiness(t *testing.T) {
 	}
 }
 
+// roadmap: F0.4-AC3
 func TestRunTransitionsAreOrderedAndTerminalExactlyOnce(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {

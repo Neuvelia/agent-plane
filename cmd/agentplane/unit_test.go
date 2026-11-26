@@ -17,6 +17,7 @@ import (
 	"agentplane/internal/testenv"
 )
 
+// roadmap: F1.7-AC1
 func TestCLIFakeCodexUnitsRetryOnlyRejectedCandidate(t *testing.T) {
 	for _, mode := range []string{"correct", "exhaust"} {
 		t.Run(mode, func(t *testing.T) {

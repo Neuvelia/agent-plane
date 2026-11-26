@@ -83,6 +83,7 @@ func TestTemplateExamplesReportTheirPlaceholders(t *testing.T) {
 	}
 }
 
+// roadmap: F0.2-AC2
 func TestConfigErrorsBecomeDiagnosticsWithTheNodeAndPath(t *testing.T) {
 	diags := configDiagnostics(validateGraph(parseGraph(t, shellNoCommand)).Diagnostics)
 	if len(diags) != 1 {

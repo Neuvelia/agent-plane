@@ -414,6 +414,7 @@ func TestMalformedLayoutIsNeverOverwritten(t *testing.T) {
 	}
 }
 
+// roadmap: F2.1-AC2
 func TestPresentationOperations(t *testing.T) {
 	src := string(repoGraphs(t)["demo-vertical.yaml"])
 	base := version(t, src)

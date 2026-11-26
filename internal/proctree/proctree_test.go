@@ -21,6 +21,7 @@ func waitGone(t *testing.T, pids ...int) {
 	}
 }
 
+// roadmap: F3.4-AC1
 func TestTerminateKillsGrandchild(t *testing.T) {
 	tree, r := startHelper(t, "spawn")
 	leader, child := readPIDs(t, r)

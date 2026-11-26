@@ -49,6 +49,7 @@ func noopExecutor() Executor {
 	})
 }
 
+// roadmap: F2.10-AC1
 func TestHumanApprovePublishesDecisionAndRequestPrecedesDecision(t *testing.T) {
 	def := humanDef(map[string]graph.NodeDefinition{
 		"after": {Type: "shell", Inputs: map[string]graph.PortDefinition{"decision": {Type: graph.ValueTypeString, Required: true}}},
@@ -102,6 +103,7 @@ func TestHumanApprovePublishesDecisionAndRequestPrecedesDecision(t *testing.T) {
 	}
 }
 
+// roadmap: F2.10-AC2
 func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 	def := humanDef(map[string]graph.NodeDefinition{
 		"after": {Type: "shell", Inputs: map[string]graph.PortDefinition{"decision": {Type: graph.ValueTypeString, Required: true}}},
@@ -133,6 +135,7 @@ func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 	}
 }
 
+// roadmap: F2.10-AC1
 func TestHumanWaitSharesBatchWithIndependentNode(t *testing.T) {
 	// Deterministic overlap proof: the decision is withheld until the sibling
 	// node has finished, so both must be in flight in the same batch.

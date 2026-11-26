@@ -256,6 +256,7 @@ func TestInputEnvironmentRejectsInvalidMappingsBeforeProcessStart(t *testing.T) 
 	}
 }
 
+// roadmap: F0.5-AC2
 func TestExecuteNodeReportsSeparateBoundedLogChunks(t *testing.T) {
 	node := helperNode("bulk")
 	var mu sync.Mutex
@@ -348,6 +349,7 @@ func TestLargeShellRunLogsAreCompleteAndBounded(t *testing.T) {
 	}
 }
 
+// roadmap: F0.5-AC1
 func TestExecuteNonzeroExitPreservesEvidence(t *testing.T) {
 	result, err := (Executor{}).Execute(context.Background(), "worker", helperNode("fail"), nil)
 	var executionErr *ExecutionError
@@ -436,6 +438,7 @@ func TestExecuteDistinguishesStartErrors(t *testing.T) {
 	}
 }
 
+// roadmap: F0.5-AC3
 func TestExecuteCancellationTerminatesChild(t *testing.T) {
 	marker := filepath.Join(t.TempDir(), "ready")
 	ctx, cancel := context.WithCancel(context.Background())
@@ -531,6 +534,7 @@ func TestExecuteNodeRejectsUnsupportedOutputBeforeProcessStarts(t *testing.T) {
 	}
 }
 
+// roadmap: F0.5-AC1
 func TestNonzeroExitFailsSchedulerWithTypedEvidence(t *testing.T) {
 	node := helperNode("fail")
 	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}}

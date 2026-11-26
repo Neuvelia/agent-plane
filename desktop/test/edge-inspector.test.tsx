@@ -64,7 +64,7 @@ describe('edge value states and their precedence', () => {
     expect((demoOpen as unknown as { version: string }).version).toBe(VERSION)
   })
 
-  it('a recorded value is the value state, with its provenance', () => {
+  it('a recorded value is the value state, with its provenance [F2.3-AC1]', () => {
     const v = viewOf(FAST)
     expect(v).toMatchObject({ state: 'value', value: { value: 'fast branch done', type: 'string' } })
   })

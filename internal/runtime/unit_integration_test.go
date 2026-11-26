@@ -84,6 +84,8 @@ func unitBatch(roots []string, budget int) *graph.Definition {
 	d.Nodes["join"] = join
 	return d
 }
+
+// roadmap: F1.7-AC1, F1.7-AC2
 func TestUnitsBarrierScopedRetryAndExhaustion(t *testing.T) {
 	for _, budget := range []int{0, 1, 2, 3} {
 		t.Run(fmt.Sprint(budget), func(t *testing.T) {

@@ -379,6 +379,7 @@ async function startDemo(app, page) {
     await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'binding-source')
     await page.selectOption('[data-testid="binding-source"]', 'a.outputs.stdout')
     await page.waitForSelector('[data-testid="connect-option-b.inputs.text"]:not([aria-disabled])')
+    // roadmap: F2.3-AC2
     // A refused target stays in the list with the engine's own reason, and Enter on it sends nothing.
     const reason = await page.locator('[data-testid="target-option"][data-ref="b.inputs.count"] [data-testid="target-reason"]').textContent()
     assert.match(reason, /string.*number/, 'the refusal is the engine message')
@@ -544,6 +545,7 @@ async function startDemo(app, page) {
     await page.waitForFunction(() => !document.querySelector('[data-testid="template-picker"]'))
     assert.equal(await page.isVisible('[data-testid="editor-empty"]'), true, 'cancel creates nothing')
 
+    // roadmap: F2.1-AC1
     // Keyboard only: arrow to a template, Enter, save, Save and run. The saved file is the template with only the id line changed.
     await stubSave(path.join(graphDir, 'from-template'))
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'editor-new', 'Escape returns focus to the New graph trigger')
@@ -593,6 +595,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="nav-editor"]')
     await page.click('[data-testid="editor-open"]')
     await page.waitForSelector('[data-testid="issue"]')
+    // roadmap: F2.4-AC1
     // Same diagnostics as the CLI, and the config error is there before any run.
     const cliOut = JSON.parse(require('node:child_process').spawnSync(engine, ['graph', 'validate', issuesFile, '--json'], { encoding: 'utf8' }).stdout)
     const panelCodes = await page.$$eval('[data-testid="issue"]', (els) => els.map((e) => e.getAttribute('data-code')).sort())
@@ -606,6 +609,7 @@ async function startDemo(app, page) {
     assert.match(await page.textContent('[data-testid="run-blocked"]'), /4 errors/)
     await page.click('[data-testid="run-blocked-focus"]')
     await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'selected-heading')
+    // roadmap: F2.4-AC2
     // Filter, badges and focus on an edge issue, with the YAML scrolled to its line.
     await page.click('[data-testid="issues-filter-warning"]')
     assert.equal(await page.locator('[data-testid="issue"][data-severity="error"]').count(), 0)
@@ -679,6 +683,7 @@ async function startDemo(app, page) {
     const yamlText = () => page.locator('[data-testid="yaml-content"]').textContent()
     const waitYaml = (s) => page.waitForFunction((x) => document.querySelector('[data-testid="yaml-content"]')?.textContent?.includes(x), s)
     const commandInput = '[data-testid="field-shell.config.command"] input'
+    // roadmap: F2.2-AC2
     // Change the command: typing alone sends nothing, Enter commits one operation.
     await page.focus(commandInput)
     await page.keyboard.press(`${mod}+a`)
@@ -717,6 +722,7 @@ async function startDemo(app, page) {
     await key('advanced-remove-retries')
     await page.waitForFunction(() => !document.querySelector('[data-testid="advanced-entry-retries"]'))
     await page.waitForFunction(() => !document.querySelector('[data-testid="run-blocked"]'))
+    // roadmap: F2.2-AC1
     // An invalid value is saved as typed, its diagnostic is shown in the inspector, and Run is disabled.
     await page.focus(commandInput)
     await page.keyboard.press(`${mod}+a`)
@@ -881,6 +887,7 @@ async function startDemo(app, page) {
     assert.match(await attempt.textContent(), /accepted/)
     await page.click('[data-testid="attempt-tab-1"]')
     assert.match(await attempt.textContent(), /rejected/)
+    // roadmap: F2.7-AC1
     assert.match(await attempt.locator('[data-testid="check-reason"]').textContent(), /predicate mismatch/)
     await page.click('[data-testid="attempt-tab-2"]')
     assert.match(await attempt.textContent(), /accepted/)
@@ -945,6 +952,7 @@ async function startDemo(app, page) {
     // F2.3 E6: the switch is a main-process file read at start. The runs above were not recorded; the ones below are.
     fs.writeFileSync(path.join(work, 'user', 'recording.json'), JSON.stringify({ version: 1, enabled: true, redactEnv: [] }))
 
+    // roadmap: F2.9-AC1, F2.5-AC2
     // 4. History survives an application restart and the map is rebuilt from events.
     ;({ app, page } = await launch())
     // After Skip, a relaunch opens the dashboard, not the welcome screen.
@@ -960,6 +968,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="nav-runs"]')
     await page.waitForSelector('[data-testid="run-row"]')
     assert.equal(await page.locator('[data-testid="run-row"]').count(), 3, "the demo run and the two runs started from the editor")
+    // roadmap: F2.9-AC2
     assert.match(await page.textContent('[data-testid="run-row"]'), /Succeeded/)
     await page.click('[data-testid="run-row"]')
     await waitStatus(page, 'apply', 'succeeded')
@@ -973,6 +982,7 @@ async function startDemo(app, page) {
     assert.equal(await page.locator('[data-testid^="attempt-tab-"]').count(), 2)
     await shot(page, '5-after-restart')
 
+    // roadmap: F2.10-AC2
     // 5. Reject: the run fails, the dependent node is skipped.
     await startDemo(app, page)
     await waitStatus(page, 'approve', 'waiting_human')
@@ -984,6 +994,7 @@ async function startDemo(app, page) {
     await shot(page, '6-rejected')
     await shot(page, '6-rejected')
 
+    // roadmap: F2.3-AC1
     // F2.3 E5b.2: the edge inspector shows what the engine recorded on an edge, from the store, in the editor.
     const valuesGraph = path.join(graphDir, 'values.yaml')
     fs.writeFileSync(valuesGraph, original)

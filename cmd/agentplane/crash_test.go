@@ -239,6 +239,7 @@ func storedLines(t *testing.T, dir, id string) []map[string]any {
 
 var childReady = regexp.MustCompile(`child-ready:(\d+)`)
 
+// roadmap: F3.2-AC1
 func TestKillNineAfterNodeFinishedLeavesDurablePrefix(t *testing.T) {
 	dir := t.TempDir()
 	child := startCrashChild(t, "TestCrashHelperProcess", "cli", true, "run", graphFile(t, crashGraph), "--store-dir", dir, "--watch")
@@ -333,6 +334,7 @@ func TestNoStreamedNonProgressEventIsMissingFromDiskAfterKill(t *testing.T) {
 	}
 }
 
+// roadmap: F3.2-AC2
 func TestStoredEventsEqualLiveEventsForAFinishedRun(t *testing.T) {
 	requireDemoTools(t)
 	dir := t.TempDir()

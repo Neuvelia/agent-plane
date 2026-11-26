@@ -164,6 +164,7 @@ func TestTemplatesFollowTheFileRules(t *testing.T) {
 // The desktop picker's draft is the template with its id line replaced
 // (desktop/src/templates.ts); the engine must treat that draft as an ordinary,
 // editable graph: canvas not read-only and a no-op edit returns the same bytes.
+// roadmap: F2.1-AC1, F2.12-AC1
 func TestTemplateDraftsOpenEditableAndRoundTrip(t *testing.T) {
 	for _, tpl := range loadTemplates(t) {
 		id := tpl.entry.ID

@@ -10,6 +10,7 @@ import (
 	"agentplane/internal/agent/adaptertest"
 )
 
+// roadmap: F1.1-AC1, F3.10-AC1
 func TestMockAdapterContract(t *testing.T) {
 	adaptertest.RunContract(t, func(_ *testing.T, scenario adaptertest.Scenario) adaptertest.ContractFixture {
 		input := agent.AgentExecutionInput{RunID: "run-test", NodeRunID: "node-test", Task: "unit task", Workspace: "/tmp/unit-work", AllowedPaths: []string{"src/"}, ContextRefs: []string{"docs/spec.md"}, EnvironmentRefs: []string{"TOOL_HOME"}}

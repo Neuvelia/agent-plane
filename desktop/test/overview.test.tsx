@@ -27,7 +27,7 @@ function timelineHtml(run: RunView, over: { selected?: string | null; critical?:
 describe('timeline rows', () => {
   const run = reduceAll(approve)
 
-  it('are native buttons (Enter and Space select) and the run context stays rendered around them', () => {
+  it('are native buttons (Enter and Space select) and the run context stays rendered around them [F2.6-AC1]', () => {
     const out = timelineHtml(run)
     for (const id of ['fast', 'flaky', 'approve', 'apply']) {
       expect(out).toMatch(new RegExp(`<button[^>]*type="button"[^>]*data-testid="timeline-row-${id}"`))

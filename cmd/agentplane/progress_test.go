@@ -33,6 +33,8 @@ func (w *progressBarrierWriter) Write(b []byte) (int, error) {
 	}
 	return n, e
 }
+
+// roadmap: F1.3-AC1
 func TestCLIWatchAgentProgressBeforeCompletion(t *testing.T) {
 	workspace := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {
