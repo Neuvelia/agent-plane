@@ -24,7 +24,7 @@ const (
 // string output "decision", takes only prompt/context_inputs configuration,
 // and never carries a loop.
 func (v *definitionValidator) validateHumanNodes() {
-	for _, id := range sortedNodeIDs(v.definition.Nodes) {
+	for _, id := range v.sortedNodeIDs() {
 		n := v.definition.Nodes[id]
 		if n.Type != "human" {
 			continue

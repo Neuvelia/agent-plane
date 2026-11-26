@@ -3,7 +3,7 @@ package graph
 import "fmt"
 
 func (v *definitionValidator) validateTimeouts() {
-	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
+	for _, nodeID := range v.sortedNodeIDs() {
 		node := v.definition.Nodes[nodeID]
 		if node.TimeoutSeconds == nil {
 			continue
