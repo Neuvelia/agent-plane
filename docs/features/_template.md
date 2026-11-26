@@ -3,6 +3,7 @@
 **Status:** draft
 **Priority:** P0/P1/P2
 **Target phase:**
+**Registry:** `docs/roadmap/features.yaml` entry {{FEATURE_ID}}
 
 ## Problem
 
@@ -29,9 +30,19 @@ List graph schema, runtime state, events, CLI, persistence, or other public cont
 
 Describe important invalid inputs and runtime failures.
 
+## Roadmap criteria
+
+Every roadmap criterion of this entry (`docs/roadmap/features.yaml`), with how this
+spec treats it: covered, narrowed, redefined or deferred. Name the ADR or the target
+feature ID for anything that is not covered (ADR-0038: no silent narrowing).
+
+| Criterion | Roadmap text | Treatment |
+| --- | --- | --- |
+| {{FEATURE_ID}}-AC1 | ... | covered by criterion 1 |
+
 ## Acceptance criteria
 
-- [ ] Measurable criterion.
+- [ ] Measurable criterion (proves {{FEATURE_ID}}-AC1; test tagged `// roadmap: {{FEATURE_ID}}-AC1`).
 - [ ] Measurable criterion.
 
 ## Required tests

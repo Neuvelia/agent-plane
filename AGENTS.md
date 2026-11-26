@@ -189,6 +189,7 @@ desktop/                 Electron shell and React renderer
 .agents/graphs/          example graph definitions
 docs/                    architecture and product contracts
 docs/features/           executable feature specifications
+docs/roadmap/            roadmap registry, canonical spec, status, audits (ADR-0038)
 docs/adr/                architectural decision records
 prompts/                 reusable prompts for Codex workflow
 experiments/             thesis/development measurement data
@@ -277,6 +278,53 @@ Return:
 3. checks executed and results;
 4. known limitations;
 5. follow-up work explicitly outside the feature scope.
+
+## Roadmap discipline
+
+Feature status lives in `docs/roadmap/features.yaml` (ADR-0038); `docs/roadmap/README.md`
+describes the workflow. For every feature, fix or docs change:
+
+- Before work, read the feature's entry in `docs/roadmap/features.yaml`,
+  `docs/roadmap/canonical-spec.md` and the linked ADRs. The canonical spec overrides
+  the source documents in `docs/reference/` where it decides something.
+- Stay inside the entry's `out_of_scope`; widening it needs a new ADR.
+- Any decision that changes a spec, a contract or the canonical spec is a new ADR
+  (`scripts/new-adr.sh`), never a silent edit. A divergence without an ADR is a gap:
+  record it as an open criterion or a divergence with a GitHub issue; every deferral
+  names its target feature ID.
+- Tag tests that prove a criterion (`// roadmap: F1.7-AC1` above a Go test,
+  `[F1.7-AC1]` in a vitest name, a `// roadmap:` comment in the e2e script) and list
+  them in the criterion's `evidence`.
+- After work, update criterion status/evidence, feature status, `divergences` and
+  `tasks`; run `make roadmap` and `make check`; commit `docs/roadmap/STATUS.md`.
+- Reference the feature ID in commits and pull requests (`[F1.7] ...`).
+- Reusable prompts for planning, implementation, fixes, docs, reviews, new specs and
+  re-audits live in `prompts/` (`prompts/README.md`).
+
+Roadmap invariants (roadmap §2), checked in every change and re-audit:
+
+- [ ] Local-first: no cloud account or remote service is required; listeners stay on loopback.
+- [ ] The graph is the contract: graph files run without the UI; the UI edits the file.
+- [ ] Node != agent: no LLM for deterministic transformations.
+- [ ] Retry the smallest unit: accepted siblings are never rerun.
+- [ ] Evidence before confidence: checks use tests, exit codes, scope, schemas.
+- [ ] Human gates by blast radius, not model confidence.
+- [ ] Trace is the product: every transition emits an event; every red verdict has reason and evidence.
+- [ ] The cloud never executes arbitrary commands; no such endpoint locally either.
+
+Roadmap Definition of Done (roadmap §11), in addition to the list below:
+
+- [ ] unit tests for the main semantics;
+- [ ] an end-to-end test when the execution path is touched;
+- [ ] emits the needed events; the UI never parses incidental text;
+- [ ] a readable failure mode and reason;
+- [ ] an explicit security/privacy impact;
+- [ ] no secrets in the trace;
+- [ ] configuration documented;
+- [ ] UI works after a refresh from backend/runtime state, not only component state;
+- [ ] side effects: behavior during retry/recovery is described;
+- [ ] at least one metric or event shows whether it works in real runs;
+- [ ] `docs/roadmap/features.yaml` updated and `make roadmap` / `make check` pass.
 
 ## Definition of done
 

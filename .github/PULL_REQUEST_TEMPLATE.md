@@ -1,7 +1,8 @@
 ## Feature / issue
 
-- Feature ID:
+- Feature ID (also in the PR title, `[Fx.y] ...`):
 - Spec:
+- Issues:
 
 ## What changed
 
@@ -9,8 +10,16 @@ Describe behavior, not only files.
 
 ## Acceptance criteria
 
-- [ ] Criterion 1
-- [ ] Criterion 2
+Criterion IDs from `docs/roadmap/features.yaml` (for example `F1.7-AC1`) and the tagged tests that prove them.
+
+- [ ] Fx.y-AC1 - evidence:
+- [ ] Fx.y-AC2 - evidence:
+
+## Roadmap registry
+
+- [ ] `docs/roadmap/features.yaml` updated (criterion status/evidence, feature status, divergences, tasks).
+- [ ] `make roadmap` run; `docs/roadmap/STATUS.md` committed.
+- [ ] No scope or contract change without an ADR (canonical spec: `docs/roadmap/canonical-spec.md`).
 
 ## Tests and checks
 

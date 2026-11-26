@@ -1,0 +1,1770 @@
+# Roadmap feature registry: the single source of feature status (ADR-0038).
+# Edit by hand; run `make roadmap` to validate it and regenerate STATUS.md.
+# Schema: docs/roadmap/README.md. Acceptance criteria are copied 1:1 from
+# docs/reference/full-roadmap-features.md (verified copy of the roadmap PDF).
+schema_version: 1
+needs_decision: []
+features:
+  - id: F0.1
+    name: "Graph Definition Schema v0"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: partial
+    owner_package: graph-schema
+    spec: docs/features/F0.1-graph-definition-schema-v0.md
+    depends_on: []
+    acceptance:
+      - id: F0.1-AC1
+        text: "Niepoprawny typ node'a, brakujący input i cykl dają czytelny błąd z lokalizacją."
+        status: open
+        evidence: []
+        issue: 178
+        note: "nieznany typ node'a przechodzi walidację"
+      - id: F0.1-AC2
+        text: "Ten sam plik po serializacji i ponownym odczycie zachowuje znaczenie."
+        status: met
+        evidence:
+          - "internal/adapter/yamlgraph/yaml_test.go::TestRoundTripPreservesDefinition"
+      - id: F0.1-AC3
+        text: "Przykładowy graph trzech node'ów przechodzi walidację bez ostrzeżeń."
+        status: met
+        evidence:
+          - "internal/adapter/yamlgraph/validation_test.go::TestValidateParallelExample"
+    out_of_scope:
+      - "Brak dynamicznych warunków i zaawansowanego DSL. Najpierw minimalny DAG."
+    decisions: ["ADR-0001", "ADR-0002", "ADR-0033"]
+    divergences:
+      - text: "JSON tylko przez parser YAML; brak testu kontraktowego."
+        adr: ADR-0033
+        issue: 179
+      - text: "Wersja grafu to obliczany hash graph_version, bez pola autorskiego."
+        adr: ADR-0033
+    tasks: [178, 179]
+  - id: F0.2
+    name: "Graph Validator i lint"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: partial
+    owner_package: graph-schema
+    spec: docs/features/F0.2-graph-validator-and-lint.md
+    depends_on: ["F0.1"]
+    acceptance:
+      - id: F0.2-AC1
+        text: "CLI `graph validate` zwraca exit code 0 dla poprawnego graphu i !=0 dla błędnego."
+        status: open
+        evidence: []
+        issue: 178
+        note: "type: foo daje exit 0"
+      - id: F0.2-AC2
+        text: "Komunikat zawiera feature/node id i sugestię naprawy."
+        status: met
+        evidence:
+          - "cmd/agentplane/validation_test.go::TestConfigErrorsBecomeDiagnosticsWithTheNodeAndPath"
+      - id: F0.2-AC3
+        text: "Validator ma testy dla cyklu, brakującego node'a i błędnego mappingu."
+        status: met
+        evidence:
+          - "internal/adapter/yamlgraph/validation_test.go::TestValidateDetectsTwoNodeCycle"
+          - "internal/adapter/yamlgraph/validation_test.go::TestValidateReportsMissingSourceAndTargetNodes"
+          - "internal/adapter/yamlgraph/validation_test.go::TestValidateRejectsIncompatibleBindingTypes"
+    out_of_scope:
+      - "Autofix i inteligentne sugestie z LLM pozostają poza fazą."
+    decisions: ["ADR-0002"]
+    divergences:
+      - text: "Ostrzeżenie o nieużywanym outputcie ma inną semantykę (W_DECLARED_OUTPUT_UNUSED)."
+        issue: 180
+    tasks: [178, 180]
+  - id: F0.3
+    name: "Data bindings na edge'ach"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: done
+    owner_package: graph-schema
+    spec: docs/features/F0.3-data-bindings.md
+    depends_on: ["F0.1"]
+    acceptance:
+      - id: F0.3-AC1
+        text: "Scheduler może wywnioskować gotowość node'a wyłącznie z jego zależności i inputów."
+        status: met
+        evidence:
+          - "internal/adapter/yamlgraph/bindings_test.go::TestUnboundNodesHaveNoDependencies"
+          - "internal/runtime/scheduler_test.go::TestRunMissingBoundOutputFailsConsumerBeforeExecution"
+      - id: F0.3-AC2
+        text: "Dwa node'y bez zależności uruchamiają się równolegle."
+        status: met
+        evidence:
+          - "internal/runtime/scheduler_test.go::TestRunDiamondWaitsForBothBranchesAndAllowsOverlap"
+          - "cmd/agentplane/integration_test.go::TestBuiltCLIStartsIndependentShellProcessesBeforeEitherFinishes"
+    out_of_scope:
+      - "Transformacje map/filter/join jako osobne Code node'y, nie jako rozbudowany język bindingów."
+    decisions: ["ADR-0003"]
+    divergences: []
+    tasks: []
+  - id: F0.4
+    name: "DAG Scheduler in-memory"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: done
+    owner_package: execution-core
+    spec: docs/features/F0.4-dag-scheduler.md
+    depends_on: ["F0.3"]
+    acceptance:
+      - id: F0.4-AC1
+        text: "Dwie niezależne gałęzie faktycznie nakładają się czasowo."
+        status: met
+        evidence:
+          - "internal/runtime/scheduler_test.go::TestRunDiamondWaitsForBothBranchesAndAllowsOverlap"
+          - "cmd/agentplane/integration_test.go::TestBuiltCLIStartsIndependentShellProcessesBeforeEitherFinishes"
+      - id: F0.4-AC2
+        text: "Node zależny nie startuje przed zakończeniem wymaganych poprzedników."
+        status: met
+        evidence:
+          - "internal/runtime/scheduler_test.go::TestRunDiamondWaitsForBothBranchesAndAllowsOverlap"
+          - "cmd/agentplane/integration_test.go::TestBuiltCLIPhase0DataFlow"
+      - id: F0.4-AC3
+        text: "Run kończy się jednoznacznym terminalnym stanem."
+        status: met
+        evidence:
+          - "internal/runtime/scheduler_test.go::TestRunTransitionsAreOrderedAndTerminalExactlyOnce"
+    out_of_scope:
+      - "Brak trwałego recovery po restarcie; to F3.2/F3.3."
+    decisions: ["ADR-0004", "ADR-0032"]
+    divergences: []
+    tasks: []
+  - id: F0.5
+    name: "Shell Node"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: partial
+    owner_package: adapters
+    spec: docs/features/F0.5-shell-node.md
+    depends_on: ["F0.4"]
+    acceptance:
+      - id: F0.5-AC1
+        text: "`exit 0` daje succeeded, niezerowy exit daje failed."
+        status: met
+        evidence:
+          - "internal/shell/executor_test.go::TestExecuteNonzeroExitPreservesEvidence"
+          - "internal/shell/executor_test.go::TestNonzeroExitFailsSchedulerWithTypedEvidence"
+      - id: F0.5-AC2
+        text: "stdout/stderr są widoczne w event streamie."
+        status: met
+        evidence:
+          - "internal/shell/executor_test.go::TestExecuteNodeReportsSeparateBoundedLogChunks"
+      - id: F0.5-AC3
+        text: "Proces potomny jest sprzątany po przerwaniu runa."
+        status: met
+        evidence:
+          - "internal/shell/executor_test.go::TestExecuteCancellationTerminatesChild"
+          - "internal/shell/executor_unix_test.go::TestExecuteCancellationKillsGrandchild"
+    out_of_scope:
+      - "Zaawansowany sandbox i Docker dopiero po stabilizacji podstawowego runtime."
+    decisions: ["ADR-0005", "ADR-0008", "ADR-0028"]
+    divergences:
+      - text: "Brak limitu całkowitego logu i pełnego logu jako artifactu."
+        issue: 181
+        deferred_to: F3.5
+    tasks: [181]
+  - id: F0.6
+    name: "Event Model i Run/Node IDs"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: done
+    owner_package: event-model
+    spec: docs/features/F0.6-event-model.md
+    depends_on: ["F0.4"]
+    acceptance:
+      - id: F0.6-AC1
+        text: "Dla każdego runa da się odtworzyć kolejność wykonania."
+        status: met
+        evidence:
+          - "internal/runtime/events_test.go::TestRunEmitsCorrelatedLifecycleAndUniqueIDs"
+      - id: F0.6-AC2
+        text: "Event sequence jest monotoniczny w obrębie runa."
+        status: met
+        evidence:
+          - "internal/runtime/events_test.go::TestConcurrentRunEventsHaveUniqueMonotonicSequence"
+      - id: F0.6-AC3
+        text: "Brak eventu terminalnego jest rozpoznawany jako run przerwany."
+        status: met
+        evidence:
+          - "internal/store/store_test.go::TestRunWithoutTerminalEventIsInterruptedAndEarlierEventsRead"
+          - "cmd/agentplane/store_test.go::TestKilledRunIsInterruptedAndEarlierEventsStayReadable"
+    out_of_scope:
+      - "Pełny append-only storage pojawi się w fazie 3."
+    decisions: ["ADR-0006", "ADR-0027", "ADR-0032"]
+    divergences:
+      - text: "Wykrycie przerwanego runa działa przez opcjonalny store (F2.9/F3.2)."
+        adr: ADR-0027
+    tasks: []
+  - id: F0.7
+    name: "CLI Runner"
+    kind: roadmap
+    phase: 0
+    priority: P0
+    status: done
+    owner_package: cli
+    spec: docs/features/F0.7-cli-runner.md
+    depends_on: ["F0.2", "F0.4", "F0.5", "F0.6"]
+    acceptance:
+      - id: F0.7-AC1
+        text: "Typowy graph można zwalidować i uruchomić bez UI."
+        status: met
+        evidence:
+          - "cmd/agentplane/cli_test.go::TestGraphValidateAndErrors"
+          - "cmd/agentplane/integration_test.go::TestBuiltCLIPhase0DataFlow"
+      - id: F0.7-AC2
+        text: "CI może użyć exit code i JSON outputu."
+        status: met
+        evidence:
+          - "cmd/agentplane/integration_test.go::TestBuiltBinaryExitAndJSON"
+    out_of_scope:
+      - "Interactive TUI pozostaje poza MVP."
+    decisions: ["ADR-0007", "ADR-0032"]
+    divergences: []
+    tasks: []
+  - id: F1.1
+    name: "Agent Adapter Contract"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: done
+    owner_package: adapters
+    spec: docs/features/F1.1-agent-adapter-contract.md
+    depends_on: ["F0.7"]
+    acceptance:
+      - id: F1.1-AC1
+        text: "Mock adapter przechodzi kontraktowe testy."
+        status: met
+        evidence:
+          - "internal/agent/contract_test.go::TestMockAdapterContract"
+      - id: F1.1-AC2
+        text: "Runtime nie ma kodu specyficznego dla konkretnego providera poza package adaptera."
+        status: met
+        evidence:
+          - "internal/archtest/archtest_test.go::TestDependencyRules"
+    out_of_scope:
+      - "Nie normalizować wszystkich różnic providerów na siłę; raw metadata pozostaje dostępne."
+    decisions: ["ADR-0009", "ADR-0034"]
+    divergences: []
+    tasks: []
+  - id: F1.2
+    name: "Pierwszy coding-agent adapter"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: partial
+    owner_package: adapters
+    spec: docs/features/F1.2-first-coding-agent-adapter.md
+    depends_on: ["F1.1"]
+    acceptance:
+      - id: F1.2-AC1
+        text: "Agent zmienia plik w repo testowym i wynik jest widoczny w trace."
+        status: met
+        evidence:
+          - "cmd/agentplane/adapter_test.go::TestCLIExplicitCodexAdapterAgentAndShell"
+          - "internal/agent/codex/adapter_test.go::TestFakeExecutionGitEvidenceAndSafeProgress"
+          - "docs/validation/F1.2-codex-smoke.md"
+      - id: F1.2-AC2
+        text: "Brak zainstalowanego CLI daje actionable error, nie panic."
+        status: open
+        evidence: []
+        issue: 182
+        note: "brak panic, ale komunikat nie jest actionable"
+      - id: F1.2-AC3
+        text: "Anulowanie propaguje się do procesu agenta."
+        status: met
+        evidence:
+          - "internal/agent/codex/process_test.go::TestOwnedChildCancellationAndOrdinaryExit"
+          - "internal/agent/executor_test.go::TestAgentCancellation"
+    out_of_scope:
+      - "Drugi adapter jest P1 dopiero po stabilizacji kontraktu."
+    decisions: ["ADR-0010"]
+    divergences: []
+    tasks: [182]
+  - id: F1.3
+    name: "Unified Streaming"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: diverged
+    owner_package: adapters
+    spec: docs/features/F1.3-unified-streaming.md
+    depends_on: ["F1.1", "F1.2"]
+    acceptance:
+      - id: F1.3-AC1
+        text: "CLI pokazuje postęp zanim agent skończy."
+        status: met
+        evidence:
+          - "cmd/agentplane/progress_test.go::TestCLIWatchAgentProgressBeforeCompletion"
+      - id: F1.3-AC2
+        text: "Stream nie blokuje schedulera."
+        status: met
+        evidence:
+          - "internal/runtime/progress_test.go::TestRun100MiBAbsentReaderAndFullQueueCancellation"
+      - id: F1.3-AC3
+        text: "Duży output nie powoduje niekontrolowanego wzrostu RAM."
+        status: met
+        evidence:
+          - "internal/app/trace/progress_test.go::TestBoundedProgressAbsentReader100MiB"
+    out_of_scope:
+      - "Pełna semantyczna rekonstrukcja „myśli” modelu nie jest celem produktu."
+    decisions: ["ADR-0011"]
+    divergences:
+      - text: "Surowy event providera nie jest dołączany jako debug payload; limity pamięci dotyczą progressu, nie logów Shell."
+        adr: ADR-0011
+    tasks: []
+  - id: F1.4
+    name: "Gate Node"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: diverged
+    owner_package: adapters
+    spec: docs/features/F1.4-gate-node.md
+    depends_on: ["F0.7", "F1.2"]
+    acceptance:
+      - id: F1.4-AC1
+        text: "Failing test daje verdict red i blokuje downstream."
+        status: open
+        evidence: []
+        issue: 183
+        note: "gate command dopuszcza tylko /usr/bin/diff; test nie może być gate'em (D12)"
+      - id: F1.4-AC2
+        text: "Evidence zawiera co najmniej check id, exit code oraz skrócony log."
+        status: met
+        evidence:
+          - "internal/gate/executor_test.go::TestRealReadOnlyDiffDescriptorGreenRedAndBounded"
+      - id: F1.4-AC3
+        text: "Green gate przepuszcza dokładnie raz."
+        status: met
+        evidence:
+          - "internal/runtime/loop_test.go::TestLoopInitialGreenAcceptsOnce"
+    out_of_scope:
+      - "LLM-as-judge może być dodatkiem, ale nie domyślnym kryterium bezpieczeństwa."
+    decisions: ["ADR-0012", "ADR-0037"]
+    divergences:
+      - text: "Gate command ograniczony do diff; test command jako check w pętli to luka do zamknięcia."
+        adr: ADR-0037
+        issue: 183
+        deferred_to: F1.4b
+    tasks: [183]
+  - id: F1.5
+    name: "Check Result Contract"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: diverged
+    owner_package: event-model
+    spec: docs/features/F1.5-check-result-contract.md
+    depends_on: ["F1.4"]
+    acceptance:
+      - id: F1.5-AC1
+        text: "Każdy red gate zwraca niepusty reason."
+        status: met
+        evidence:
+          - "internal/app/trace/check_result_test.go::TestCheckResultRejectsMalformedBeforeTrace"
+          - "internal/app/trace/check_result_test.go::TestGreenMayOmitEvidenceAndRedCannot"
+      - id: F1.5-AC2
+        text: "Check result jest serializowalny i zapisuje się w run trace."
+        status: met
+        evidence:
+          - "internal/app/trace/check_result_test.go::TestCheckResultReferenceRoundTrips"
+    out_of_scope:
+      - "Brak uniwersalnego confidence score w kryterium przejścia."
+    decisions: ["ADR-0013"]
+    divergences:
+      - text: "scope oznacza checked inputs; pełny output jako artifact odroczony."
+        adr: ADR-0013
+        deferred_to: F3.5
+    tasks: []
+  - id: F1.6
+    name: "Correction Loop + maxAttempts"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: done
+    owner_package: execution-core
+    spec: docs/features/F1.6-correction-loop.md
+    depends_on: ["F1.1", "F1.4", "F1.5"]
+    acceptance:
+      - id: F1.6-AC1
+        text: "Nie ma więcej prób niż limit."
+        status: met
+        evidence:
+          - "internal/runtime/loop_test.go::TestLoopBudgetsAndTrace"
+      - id: F1.6-AC2
+        text: "Każda próba jest widoczna osobno."
+        status: met
+        evidence:
+          - "internal/runtime/loop_test.go::TestLoopBudgetsAndTrace"
+      - id: F1.6-AC3
+        text: "Downstream widzi tylko zaakceptowany output, nigdy czerwony attempt."
+        status: met
+        evidence:
+          - "internal/runtime/loop_test.go::TestLoopRedGreenPublicationAndFeedback"
+          - "cmd/agentplane/shell_loop_test.go::TestShellLoopDownstreamReceivesTheGreenValueOnly"
+    out_of_scope:
+      - "Adaptacyjne limity i automatyczny replanning później."
+    decisions: ["ADR-0014", "ADR-0032"]
+    divergences: []
+    tasks: []
+  - id: F1.7
+    name: "Return Envelope / scoped retry"
+    kind: roadmap
+    phase: 1
+    priority: P0
+    status: done
+    owner_package: execution-core
+    spec: docs/features/F1.7-return-envelope-scoped-retry.md
+    depends_on: ["F1.5", "F1.6"]
+    acceptance:
+      - id: F1.7-AC1
+        text: "W teście A/B/C/D po błędzie C ponownie wykonuje się wyłącznie C."
+        status: met
+        evidence:
+          - "internal/runtime/unit_integration_test.go::TestUnitsBarrierScopedRetryAndExhaustion"
+          - "cmd/agentplane/unit_test.go::TestCLIFakeCodexUnitsRetryOnlyRejectedCandidate"
+      - id: F1.7-AC2
+        text: "A, B i D zachowują wcześniejsze accepted outputs."
+        status: met
+        evidence:
+          - "internal/runtime/unit_integration_test.go::TestUnitsBarrierScopedRetryAndExhaustion"
+    out_of_scope:
+      - "Cross-unit replanning to osobny mechanizm, nie ukryte zachowanie retry."
+    decisions: ["ADR-0015", "ADR-0036"]
+    divergences: []
+    tasks: []
+  - id: F1.8
+    name: "Changed-files Scope Check"
+    kind: roadmap
+    phase: 1
+    priority: P1
+    status: done
+    owner_package: workspace-manager
+    spec: docs/features/F1.8-changed-files-scope-check.md
+    depends_on: ["F1.2", "F1.4"]
+    acceptance:
+      - id: F1.8-AC1
+        text: "Agent zmieniający niedozwolony plik dostaje red verdict."
+        status: met
+        evidence:
+          - "cmd/agentplane/changed_scope_test.go::TestCLIChangedFilesScopeDenyUsesGitNotProviderOutput"
+      - id: F1.8-AC2
+        text: "Dozwolone pliki nie są fałszywie odrzucane."
+        status: met
+        evidence:
+          - "internal/gate/changed_files_test.go::TestChangedFilesScopeGitClassesAndMatching"
+    out_of_scope:
+      - "Semantyczny blast radius z analizą AST później."
+    decisions: ["ADR-0016"]
+    divergences: []
+    tasks: []
+  - id: F2.1
+    name: "Graph Canvas"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.1-graph-canvas.md
+    depends_on: []
+    acceptance:
+      - id: F2.1-AC1
+        text: "Graph stworzony w UI można uruchomić z CLI bez modyfikacji."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+          - "cmd/agentplane/templates_test.go::TestTemplateDraftsOpenEditableAndRoundTrip"
+      - id: F2.1-AC2
+        text: "Przesunięcie node'a nie zmienia hash semantycznej definicji."
+        status: met
+        evidence:
+          - "internal/adapter/yamlgraph/edit/edit_test.go::TestPresentationOperations"
+          - "internal/adapter/yamlgraph/version_test.go::TestSemanticVersionIgnoresPresentationAndMapInsertionOrder"
+    out_of_scope:
+      - "Zaawansowany auto-layout i grupy wizualne mogą być P1."
+    decisions: ["ADR-0020", "ADR-0021", "ADR-0022"]
+    divergences: []
+    tasks: []
+  - id: F2.2
+    name: "Node Inspector"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: partial
+    owner_package: ui
+    spec: docs/features/F2.2-node-inspector.md
+    depends_on: ["F2.1"]
+    acceptance:
+      - id: F2.2-AC1
+        text: "Nie da się zapisać konfiguracji niespełniającej schematu bez widocznego błędu."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+      - id: F2.2-AC2
+        text: "Zmiana konfiguracji jest natychmiast odzwierciedlona w pliku graphu."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Form builder dla dowolnych pluginów później."
+    decisions: ["ADR-0020", "ADR-0021"]
+    divergences:
+      - text: "Brak sekcji permissions w inspectorze."
+        issue: 184
+        deferred_to: F3.9
+    tasks: [184]
+  - id: F2.3
+    name: "Edge/Data Mapping Editor"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: partial
+    owner_package: ui
+    spec: docs/features/F2.3-edge-data-mapping-editor.md
+    depends_on: ["F2.1", "F0.3"]
+    acceptance:
+      - id: F2.3-AC1
+        text: "Użytkownik potrafi wskazać konkretną wartość przechodzącą przez edge."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+          - "desktop/test/edge-inspector.test.tsx::F2.3-AC1"
+      - id: F2.3-AC2
+        text: "Nieprawidłowy binding jest zaznaczony przed runem."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Graficzne ETL nie jest celem; złożone transformacje trafiają do Code node."
+    decisions: ["ADR-0020", "ADR-0023"]
+    divergences:
+      - text: "Brak select pola z obiektu JSON."
+        issue: 185
+      - text: "Ostrzeżenie 'target does not consume source output' przedefiniowane."
+        issue: 180
+      - text: "Wartość na edge'u tylko przy włączonym --record-values."
+        adr: ADR-0023
+    tasks: [180, 185]
+  - id: F2.4
+    name: "Graph Validation UI"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.4-graph-validation-ui.md
+    depends_on: ["F2.1", "F2.3", "F0.2"]
+    acceptance:
+      - id: F2.4-AC1
+        text: "Każdy błąd CLI ma odpowiednik w UI."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+          - "internal/api/docs_test.go::TestFullValidationIsUsedForDocuments"
+      - id: F2.4-AC2
+        text: "Użytkownik może przejść z issue do źródła problemu jednym kliknięciem."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+          - "desktop/test/editor-issues.test.ts::F2.4-AC2"
+    out_of_scope:
+      - "Automatyczne poprawki P2."
+    decisions: ["ADR-0021"]
+    divergences: []
+    tasks: []
+  - id: F2.5
+    name: "Live Execution Map"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5-live-map.md
+    depends_on: ["F1.3", "F2.1"]
+    acceptance:
+      - id: F2.5-AC1
+        text: "Stan UI jest rekonstruowany z event streamu, a nie z lokalnych timeoutów."
+        status: met
+        evidence:
+          - "desktop/test/reducer.test.ts::F2.5-AC1"
+      - id: F2.5-AC2
+        text: "Po odświeżeniu można odtworzyć stan z zapisanych eventów."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+          - "desktop/test/reducer.test.ts::F2.5-AC2"
+    out_of_scope:
+      - "Animacje są drugorzędne wobec czytelności."
+    decisions: ["ADR-0019", "ADR-0032"]
+    divergences: []
+    tasks: []
+  - id: F2.6
+    name: "Run Inspector - Overview"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.6-run-inspector-overview.md
+    depends_on: ["F0.6", "F1.5"]
+    acceptance:
+      - id: F2.6-AC1
+        text: "Kliknięcie node'a otwiera jego detail bez utraty kontekstu runa."
+        status: met
+        evidence:
+          - "desktop/test/overview.test.tsx::F2.6-AC1"
+      - id: F2.6-AC2
+        text: "Retry jest pokazany jako kolejne attempt, nie jako nadpisany log."
+        status: met
+        evidence:
+          - "desktop/test/overview.test.ts::F2.6-AC2"
+    out_of_scope:
+      - "Zaawansowana analiza critical path P1."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F2.7
+    name: "Run Inspector - Node Detail"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: partial
+    owner_package: ui
+    spec: docs/features/F2.7-run-inspector-node-detail.md
+    depends_on: ["F2.6", "F1.6"]
+    acceptance:
+      - id: F2.7-AC1
+        text: "Dla czerwonego gate można bez szukania w logu wskazać reason i evidence."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+          - "desktop/test/standalone-gate.test.tsx::F2.7-AC1"
+      - id: F2.7-AC2
+        text: "Dla retry można porównać wejście i rezultat kolejnych prób."
+        status: open
+        evidence: []
+        note: "porównywany jest poprzedni check, nie input próby"
+    out_of_scope:
+      - "Pełny diff viewer może bazować na istniejącym komponencie, bez budowy edytora Git od zera."
+    decisions: ["ADR-0019", "ADR-0023", "ADR-0026"]
+    divergences: []
+    tasks: []
+    note: "Spec F2.7 (gap spec) przyjęty, w większości niezaimplementowany: resolved input, eventy agent/tool, output/artifacts, diff summary."
+  - id: F2.8
+    name: "Attempt Compare"
+    kind: roadmap
+    phase: 2
+    priority: P1
+    status: partial
+    owner_package: ui
+    spec: docs/features/F2.8-attempt-compare.md
+    depends_on: ["F2.7", "F1.6"]
+    acceptance:
+      - id: F2.8-AC1
+        text: "Porównanie dwóch prób jest dostępne z node detail."
+        status: met
+        evidence:
+          - "desktop/test/compare.test.tsx::F2.8-AC1"
+    out_of_scope:
+      - "Semantyczne porównanie LLM-em P2."
+    decisions: ["ADR-0026"]
+    divergences:
+      - text: "Diff między próbami nie jest renderowany w desktopie (silnik F2.8b gotowy)."
+        deferred_to: F2.8b
+    tasks: []
+  - id: F2.9
+    name: "Local Run History + SQLite"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: partial
+    owner_package: local-store
+    spec: docs/features/F2.9-run-store.md
+    depends_on: ["F0.6", "F2.6"]
+    acceptance:
+      - id: F2.9-AC1
+        text: "Restart aplikacji nie usuwa historii."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+      - id: F2.9-AC2
+        text: "Kliknięcie starego runa odtwarza inspector."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Cloud sync dopiero F4.6."
+    decisions: ["ADR-0019", "ADR-0027"]
+    divergences:
+      - text: "JSONL zamiast SQLite."
+        adr: ADR-0027
+      - text: "Brak branch/commit, czasu trwania, wersji grafu i filtra per repo/graph na liście runów."
+        issue: 186
+    tasks: [186]
+  - id: F2.10
+    name: "Human Gate UI"
+    kind: roadmap
+    phase: 2
+    priority: P0
+    status: partial
+    owner_package: ui
+    spec: docs/features/F2.10-human-node.md
+    depends_on: ["F2.5", "F2.6"]
+    acceptance:
+      - id: F2.10-AC1
+        text: "Graph nie kontynuuje bez decyzji."
+        status: met
+        evidence:
+          - "internal/runtime/human_test.go::TestHumanWaitSharesBatchWithIndependentNode"
+          - "internal/runtime/human_test.go::TestHumanApprovePublishesDecisionAndRequestPrecedesDecision"
+      - id: F2.10-AC2
+        text: "Reject może zakończyć run lub skierować do jawnie skonfigurowanej ścieżki."
+        status: met
+        evidence:
+          - "internal/runtime/human_test.go::TestHumanRejectFailsNodeSkipsDependentsWithSafeCode"
+          - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Granularne role użytkowników dopiero Team."
+    decisions: ["ADR-0017", "ADR-0036"]
+    divergences:
+      - text: "Panel bez blast radius, checków, changed files i diffu; reject bez skonfigurowanej ścieżki."
+        issue: 187
+        deferred_to: F3.9
+    tasks: [187]
+  - id: F2.11
+    name: "Onboarding + Capability Detection"
+    kind: roadmap
+    phase: 2
+    priority: P1
+    status: partial
+    owner_package: ui
+    spec: docs/features/F2.11-onboarding-capability-detection.md
+    depends_on: ["F1.1", "F1.2"]
+    acceptance:
+      - id: F2.11-AC1
+        text: "Nowy użytkownik może uruchomić starter graph bez ręcznej edycji configu."
+        status: open
+        evidence: []
+        issue: 188
+        note: "starter agentowy wymaga ręcznego workspace i AGENTPLANE_CODEX_BIN"
+    out_of_scope:
+      - "Automatyczne skanowanie całego dysku nie jest wymagane."
+    decisions: ["ADR-0025"]
+    divergences:
+      - text: "Brak detekcji shell/Docker, listy repo i self-checku runnera."
+        issue: 188
+    tasks: [188, 85]
+  - id: F2.12
+    name: "Graph Templates"
+    kind: roadmap
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.12-graph-templates.md
+    depends_on: ["F2.1", "F2.4"]
+    acceptance:
+      - id: F2.12-AC1
+        text: "Template można zmodyfikować bez lock-in do generatora."
+        status: met
+        evidence:
+          - "desktop/test/templates.test.tsx::F2.12-AC1"
+          - "cmd/agentplane/templates_test.go::TestTemplateDraftsOpenEditableAndRoundTrip"
+    out_of_scope:
+      - "Publiczny marketplace poza MVP."
+    decisions: ["ADR-0020", "ADR-0021"]
+    divergences: []
+    tasks: []
+  - id: F3.1
+    name: "Workspace Isolation / Git Worktrees"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: partial
+    owner_package: workspace-manager
+    spec: docs/features/F3.1-workspace-isolation.md
+    depends_on: ["F1.7"]
+    acceptance:
+      - id: F3.1-AC1
+        text: "Dwa równoległe node'y mogą zmienić ten sam plik bez wyścigu na filesystemie."
+        status: met
+        evidence:
+          - "internal/runtime/isolation_git_test.go::TestIsolationParallelSameFileHasNoRace"
+      - id: F3.1-AC2
+        text: "Niezaakceptowany attempt nie trafia do głównego workspace."
+        status: met
+        evidence:
+          - "internal/runtime/isolation_git_test.go::TestIsolationSourceCheckoutIsUntouchedAndRefsHoldTheResult"
+    out_of_scope:
+      - "Zaawansowane semantic merge/rebase może pozostać manualne."
+    decisions: ["ADR-0024"]
+    divergences:
+      - text: "Izolacja tylko dla Agent unitów w pętli (opt-in); wynik na refie integracyjnym, bez merge do brancha."
+        adr: ADR-0024
+      - text: "Brak izolacji Shell nodes."
+        issue: 189
+    tasks: [189]
+  - id: F3.2
+    name: "Durable Run State / Append-only Event Store"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: done
+    owner_package: local-store
+    spec: docs/features/F3.2-durable-run-state.md
+    depends_on: ["F0.6", "F1.3"]
+    acceptance:
+      - id: F3.2-AC1
+        text: "Kill procesu w środku runa nie usuwa historii dotychczasowych kroków."
+        status: met
+        evidence:
+          - "cmd/agentplane/crash_test.go::TestKillNineAfterNodeFinishedLeavesDurablePrefix"
+      - id: F3.2-AC2
+        text: "Stan można zrekonstruować z eventów."
+        status: met
+        evidence:
+          - "cmd/agentplane/crash_test.go::TestStoredEventsEqualLiveEventsForAFinishedRun"
+    out_of_scope:
+      - "Rozproszony event bus nie jest potrzebny lokalnie."
+    decisions: ["ADR-0027"]
+    divergences:
+      - text: "Testy Windows nie były uruchamiane; run w CLI kontynuuje po błędzie zapisu (poprawka A1 w specu)."
+        adr: ADR-0027
+    tasks: []
+  - id: F3.3
+    name: "Resume / Recovery"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: not_started
+    owner_package: execution-core
+    depends_on: ["F3.1", "F3.2"]
+    acceptance:
+      - id: F3.3-AC1
+        text: "Po restarcie run z trzema zakończonymi node'ami nie wykonuje ich drugi raz."
+        status: open
+        evidence: []
+      - id: F3.3-AC2
+        text: "Niepewny command z side effect nie jest automatycznie replayowany."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Exactly-once side effects nie są obiecywane; celem jest jawna semantyka recovery."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F3.4
+    name: "Cancellation i Timeouts"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: in_progress
+    owner_package: execution-core
+    spec: docs/features/F3.4-cancellation-and-timeouts.md
+    depends_on: ["F1.2", "F1.6", "F3.2"]
+    acceptance:
+      - id: F3.4-AC1
+        text: "Po cancel nie pozostają procesy potomne."
+        status: met
+        evidence:
+          - "internal/proctree/proctree_test.go::TestTerminateKillsGrandchild"
+          - "internal/shell/executor_unix_test.go::TestExecuteCancellationKillsGrandchild"
+      - id: F3.4-AC2
+        text: "Timeout emituje reason i jest odróżnialny od zwykłego failure."
+        status: open
+        evidence: []
+        issue: 190
+        note: "timeouty nie są egzekwowane; cancel/timeout reasons nie są emitowane"
+    out_of_scope:
+      - "Zaawansowane quota scheduling później."
+    decisions: ["ADR-0028"]
+    divergences: []
+    tasks: [190]
+  - id: F3.5
+    name: "Artifact Store Local"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: not_started
+    owner_package: local-store
+    depends_on: ["F1.2", "F3.2"]
+    acceptance:
+      - id: F3.5-AC1
+        text: "Run inspector otwiera artifact po restarcie."
+        status: open
+        evidence: []
+      - id: F3.5-AC2
+        text: "Usunięty artifact jest pokazany jako expired/missing, nie powoduje crasha."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Cloud object storage dopiero F4.10."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F3.6
+    name: "Graph Versioning i Run Reproducibility"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: partial
+    owner_package: local-store
+    depends_on: ["F0.6", "F3.2"]
+    acceptance:
+      - id: F3.6-AC1
+        text: "Stary run wskazuje dokładny graph snapshot nawet po zmianie pliku."
+        status: open
+        evidence: []
+        note: "snapshot graph.yaml w store, brak testu zmiany pliku po runie"
+      - id: F3.6-AC2
+        text: "Dwa runy z różnymi graphami mają różne wersje."
+        status: met
+        evidence:
+          - "internal/adapter/yamlgraph/version_test.go::TestSemanticVersionIgnoresPresentationAndMapInsertionOrder"
+    out_of_scope:
+      - "Pełna deterministyczna reprodukcja LLM outputu nie jest możliwa i nie jest obiecywana."
+    decisions: []
+    divergences:
+      - text: "Brak commit/branch repo i wersji runtime w metadanych runu."
+        issue: 186
+    tasks: [186]
+  - id: F3.7
+    name: "Export JSON/CSV"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: not_started
+    owner_package: local-store
+    depends_on: ["F3.2", "F3.5"]
+    acceptance:
+      - id: F3.7-AC1
+        text: "Eksport da się wczytać niezależnym skryptem bez dostępu do SQLite."
+        status: open
+        evidence: []
+      - id: F3.7-AC2
+        text: "CSV zawiera duration, attempts, verdict, human intervention i usage jeśli dostępne."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Eksport surowych sekretów jest zabroniony."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F3.8
+    name: "Secrets References"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: partial
+    owner_package: workspace-manager
+    spec: docs/features/F3.8-secrets-references.md
+    depends_on: ["F1.1", "F3.1"]
+    acceptance:
+      - id: F3.8-AC1
+        text: "Sekret nie pojawia się w YAML, SQLite ani standardowym eksporcie."
+        status: open
+        evidence: []
+        note: "brak eksportu; nie da się sprawdzić w całości"
+      - id: F3.8-AC2
+        text: "Brak secret_ref daje czytelny preflight error."
+        status: met
+        evidence:
+          - "internal/runtime/secret_preflight_test.go::TestPreflightSecretUnresolved"
+    out_of_scope:
+      - "Centralny cloud secrets vault dopiero Team/Business."
+    decisions: ["ADR-0029"]
+    divergences:
+      - text: "Tylko provider env i Shell nodes; keychain i Agent secret_env odroczone."
+        adr: ADR-0029
+    tasks: []
+  - id: F3.9
+    name: "Permissions / Execution Policy v0"
+    kind: roadmap
+    phase: 3
+    priority: P0
+    status: not_started
+    owner_package: workspace-manager
+    spec: docs/features/F3.9-execution-policy-v0.md
+    depends_on: ["F1.2", "F3.1", "F3.8"]
+    acceptance:
+      - id: F3.9-AC1
+        text: "Node nie może pisać poza allowed paths w trybie enforce."
+        status: open
+        evidence: []
+      - id: F3.9-AC2
+        text: "UI pokazuje requested permissions przed runem."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Pełny policy language i organizacyjne policies dopiero F5.9."
+    decisions: ["ADR-0029", "ADR-0036"]
+    divergences: []
+    tasks: [184, 187]
+  - id: F3.10
+    name: "Cost/Usage Metadata"
+    kind: roadmap
+    phase: 3
+    priority: P1
+    status: partial
+    owner_package: adapters
+    depends_on: ["F1.1", "F3.2"]
+    acceptance:
+      - id: F3.10-AC1
+        text: "UI nie myli unknown z zero."
+        status: met
+        evidence:
+          - "internal/agent/contract_test.go::TestMockAdapterContract"
+          - "desktop/test/insight.test.ts::F3.10-AC1"
+      - id: F3.10-AC2
+        text: "Eksport zawiera usage metadata."
+        status: open
+        evidence: []
+        note: "brak eksportu"
+    out_of_scope:
+      - "Nie obiecywać identycznego modelu kosztu między providerami."
+    decisions: ["ADR-0009"]
+    divergences: []
+    tasks: []
+  - id: F3.11
+    name: "Local Diagnostics"
+    kind: roadmap
+    phase: 3
+    priority: P1
+    status: in_progress
+    owner_package: runner-daemon
+    depends_on: ["F3.2", "F3.4"]
+    acceptance:
+      - id: F3.11-AC1
+        text: "Bundle nie zawiera repo contents ani sekretów domyślnie."
+        status: open
+        evidence: []
+        note: "jest tylko GET /capabilities; brak bundle'a diagnostycznego"
+    out_of_scope:
+      - "Remote support tooling później."
+    decisions: ["ADR-0025"]
+    divergences: []
+    tasks: []
+  - id: F4.1
+    name: "Account + Authentication"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.2"]
+    acceptance:
+      - id: F4.1-AC1
+        text: "Lokalna aplikacja działa bez logowania."
+        status: open
+        evidence: []
+      - id: F4.1-AC2
+        text: "Po wylogowaniu token cloud jest usuwany z klienta."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "SSO/SAML dopiero enterprise."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.2
+    name: "Projects"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.1"]
+    acceptance:
+      - id: F4.2-AC1
+        text: "Remote run musi jawnie wskazywać project i runner."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Organizations/team membership dopiero faza 5."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.3
+    name: "Runner Enrollment"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: runner-daemon
+    depends_on: ["F4.1", "F4.2"]
+    acceptance:
+      - id: F4.3-AC1
+        text: "Skradziony jednorazowy kod wygasa."
+        status: open
+        evidence: []
+      - id: F4.3-AC2
+        text: "Revoked runner nie może pobierać nowych poleceń."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Automatyczne fleet provisioning później."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.4
+    name: "Outbound Secure Connection"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: runner-daemon
+    depends_on: ["F4.3"]
+    acceptance:
+      - id: F4.4-AC1
+        text: "Router/NAT użytkownika nie wymaga zmian."
+        status: open
+        evidence: []
+      - id: F4.4-AC2
+        text: "Po utracie internetu lokalny run może kontynuować zgodnie z policy."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Peer-to-peer transport nie jest potrzebny w alpha."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.5
+    name: "Runner Presence & Health"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: runner-daemon
+    depends_on: ["F4.4"]
+    acceptance:
+      - id: F4.5-AC1
+        text: "Presence aktualizuje się w rozsądnym czasie po rozłączeniu."
+        status: open
+        evidence: []
+      - id: F4.5-AC2
+        text: "Capabilities są używane w preflight."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Zaawansowany autoscaling tylko managed runners."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.6
+    name: "Remote Run Start"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.2", "F4.4", "F4.9"]
+    acceptance:
+      - id: F4.6-AC1
+        text: "Podwójne kliknięcie nie tworzy dwóch runów."
+        status: open
+        evidence: []
+      - id: F4.6-AC2
+        text: "Offline runner nie dostaje fałszywego statusu running."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Remote shell poza graph runtime jest zabroniony."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.7
+    name: "Cloud Run Metadata Sync"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.2", "F4.4", "F4.6"]
+    acceptance:
+      - id: F4.7-AC1
+        text: "Run wykonany przy chwilowym offline pojawia się w cloud po reconnect."
+        status: open
+        evidence: []
+      - id: F4.7-AC2
+        text: "Użytkownik może zobaczyć, jakie kategorie danych są synchronizowane."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Cloud nie potrzebuje pełnego kodu do podstawowego monitoringu."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.8
+    name: "Web Human Approval"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F2.10", "F4.4", "F4.7", "F4.9"]
+    acceptance:
+      - id: F4.8-AC1
+        text: "Ta sama decyzja nie jest aplikowana dwa razy."
+        status: open
+        evidence: []
+      - id: F4.8-AC2
+        text: "Stary approval link nie może zatwierdzić innego runa."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Push/mobile app można dodać później; responsywny web wystarczy."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.9
+    name: "Cloud Security Baseline"
+    kind: roadmap
+    phase: 4
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.1", "F4.4"]
+    acceptance:
+      - id: F4.9-AC1
+        text: "Threat model opisuje runner compromise, account compromise i backend breach."
+        status: open
+        evidence: []
+      - id: F4.9-AC2
+        text: "Security-sensitive endpointy mają testy authorization."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Formalne compliance certyfikacje poza alpha."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F4.10
+    name: "Optional Artifact Sync"
+    kind: roadmap
+    phase: 4
+    priority: P1
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.5", "F4.7", "F4.9"]
+    acceptance:
+      - id: F4.10-AC1
+        text: "Przy wyłączonym sync żaden artifact body nie opuszcza runnera."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Domyślnie OFF w pierwszej wersji."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.1
+    name: "Plans + Billing"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.1", "F4.2"]
+    acceptance:
+      - id: F5.1-AC1
+        text: "Wygaśnięcie subskrypcji nie blokuje dostępu do lokalnych graphów."
+        status: open
+        evidence: []
+      - id: F5.1-AC2
+        text: "Feature gating jest centralnie testowany."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Dokładne ceny są hipotezą biznesową, nie częścią kontraktu technicznego."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.2
+    name: "Scheduling"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.6", "F4.9"]
+    acceptance:
+      - id: F5.2-AC1
+        text: "Schedule nie uruchamia duplikatów przy retry backendu."
+        status: open
+        evidence: []
+      - id: F5.2-AC2
+        text: "Offline runner zachowuje czytelny missed/deferred status."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Sub-minute scheduling nie jest potrzebny."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.3
+    name: "Alerts / Notifications"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.7", "F5.2"]
+    acceptance:
+      - id: F5.3-AC1
+        text: "Jedno zdarzenie nie generuje lawiny identycznych alertów."
+        status: open
+        evidence: []
+      - id: F5.3-AC2
+        text: "Alert linkuje bezpośrednio do problematycznego run/node."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Pełny incident management nie jest celem."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.4
+    name: "Long-term History & Analytics"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.7"]
+    acceptance:
+      - id: F5.4-AC1
+        text: "Dashboard potrafi porównać co najmniej dwa okresy."
+        status: open
+        evidence: []
+      - id: F5.4-AC2
+        text: "Unknown usage nie jest liczone jako zero."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Zaawansowane BI i custom SQL mogą zostać później."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.5
+    name: "Organizations / Team Workspaces"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.1", "F4.2"]
+    acceptance:
+      - id: F5.5-AC1
+        text: "Usunięty członek traci dostęp do cloud resources natychmiast."
+        status: open
+        evidence: []
+      - id: F5.5-AC2
+        text: "Local-only assets użytkownika nie są automatycznie przejmowane przez organizację."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Enterprise directory sync później."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.6
+    name: "RBAC"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F5.5"]
+    acceptance:
+      - id: F5.6-AC1
+        text: "Approver bez Operator nie może sam wystartować runa, jeśli polityka tak zakłada."
+        status: open
+        evidence: []
+      - id: F5.6-AC2
+        text: "UI i API mają spójne uprawnienia."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Custom roles P1/P2."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.7
+    name: "Shared Graph Registry"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.6", "F5.5", "F5.6"]
+    acceptance:
+      - id: F5.7-AC1
+        text: "Run zawsze wskazuje immutable published version lub repo snapshot."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Marketplace publiczny poza v1."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.8
+    name: "Shared Constraints / Learning Edge v1"
+    kind: roadmap
+    phase: 5
+    priority: P1
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F5.6", "F5.7"]
+    acceptance:
+      - id: F5.8-AC1
+        text: "Można wskazać, który accepted run doprowadził do powstania reguły."
+        status: open
+        evidence: []
+      - id: F5.8-AC2
+        text: "Usunięcie/retire reguły nie modyfikuje historycznych runów."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Automatyczna samomodyfikacja promptów bez review jest poza v1."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.9
+    name: "Policy Engine v1"
+    kind: roadmap
+    phase: 5
+    priority: P1
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.9", "F5.6"]
+    acceptance:
+      - id: F5.9-AC1
+        text: "Graph sprzeczny z policy nie może zostać uruchomiony bez jawnego wyjątku uprawnionej osoby."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Pełny ogólny język policy może być zbyt szeroki; zaczynamy od deklaratywnych reguł domenowych."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.10
+    name: "Audit Log"
+    kind: roadmap
+    phase: 5
+    priority: P0
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F5.5", "F5.6"]
+    acceptance:
+      - id: F5.10-AC1
+        text: "Każda human approval w Team ma actor identity."
+        status: open
+        evidence: []
+      - id: F5.10-AC2
+        text: "Admin nie może „edytować” historycznego wpisu."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "WORM/compliance-grade retention później."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.11
+    name: "Budgets & Guardrails"
+    kind: roadmap
+    phase: 5
+    priority: P1
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.10", "F5.1", "F5.9"]
+    acceptance:
+      - id: F5.11-AC1
+        text: "Przekroczenie twardego limitu generuje jednoznaczny terminalny reason."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Budżet finansowy wymaga wiarygodnych danych od providera; w przeciwnym razie stosować limity techniczne."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F5.12
+    name: "Git Provider Integration"
+    kind: roadmap
+    phase: 5
+    priority: P1
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.2", "F5.6", "F5.10"]
+    acceptance:
+      - id: F5.12-AC1
+        text: "Graph może wystartować dla issue i zakończyć utworzeniem PR bez ręcznego kopiowania danych."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Merge do protected branch pozostaje kontrolowany przez Git provider i human/policies."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F6.1
+    name: "Managed Ephemeral Runners"
+    kind: roadmap
+    phase: 6
+    priority: P2
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.1", "F3.9", "F4.9", "F5.1"]
+    acceptance:
+      - id: F6.1-AC1
+        text: "Brak cross-tenant workspace reuse."
+        status: open
+        evidence: []
+      - id: F6.1-AC2
+        text: "Worker jest usuwany po terminalnym stanie."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Nie budować przed działającym local/hybrid control plane."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F6.2
+    name: "Managed Artifact Storage"
+    kind: roadmap
+    phase: 6
+    priority: P2
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.5", "F4.10", "F6.1"]
+    acceptance:
+      - id: F6.2-AC1
+        text: "Artifact access podlega RBAC i audytowi."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Nie jest wymagane dla local-first MVP."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F6.3
+    name: "Enterprise Identity"
+    kind: roadmap
+    phase: 6
+    priority: P2
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F4.1", "F5.5", "F5.6"]
+    acceptance:
+      - id: F6.3-AC1
+        text: "Deprovisioned user traci dostęp zgodnie z identity provider."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Nie wpływa na core execution semantics."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F6.4
+    name: "Advanced Policy / Approval Chains"
+    kind: roadmap
+    phase: 6
+    priority: P2
+    status: not_started
+    owner_package: cloud-api
+    depends_on: ["F3.9", "F4.8", "F5.9", "F6.3"]
+    acceptance:
+      - id: F6.4-AC1
+        text: "Operacja z wymaganiem dwóch approverów nie może przejść po jednej decyzji."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Nie zastępować zewnętrznych systemów change management, jeśli integracja wystarcza."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F6.5
+    name: "Plugin/Adapter SDK"
+    kind: roadmap
+    phase: 6
+    priority: P2
+    status: not_started
+    owner_package: adapters
+    depends_on: ["F1.1", "F1.2", "F5.7"]
+    acceptance:
+      - id: F6.5-AC1
+        text: "Przykładowy third-party adapter przechodzi conformance tests."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Marketplace i podpisywanie pluginów jako osobny etap."
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F1.4b
+    name: "Test command as a loop check"
+    kind: derived
+    parent: F1.4
+    phase: 1
+    priority: P0
+    status: not_started
+    owner_package: adapters
+    depends_on: ["F1.4", "F1.6"]
+    out_of_scope: []
+    decisions: ["ADR-0037"]
+    divergences: []
+    tasks: [183]
+    note: "Nowy feature z decyzji D12; spec i ADR do napisania."
+  - id: F1.6a
+    name: "Shell node correction loop"
+    kind: derived
+    parent: F1.6
+    phase: 1
+    priority: P1
+    status: done
+    owner_package: execution-core
+    spec: docs/features/F1.6a-shell-loop.md
+    depends_on: ["F1.6"]
+    evidence:
+      - "cmd/agentplane/shell_loop_test.go::TestShellLoopDownstreamReceivesTheGreenValueOnly"
+      - "cmd/agentplane/shell_loop_test.go::TestShellLoopNonZeroExitIsFatalNotRetried"
+    out_of_scope: []
+    decisions: ["ADR-0018"]
+    divergences: []
+    tasks: []
+  - id: F2.3-E6
+    name: "Recorded run values (value_recorded)"
+    kind: derived
+    parent: F2.3
+    phase: 2
+    priority: P0
+    status: done
+    owner_package: execution-core
+    spec: docs/features/F2.3-E6-recorded-run-values.md
+    depends_on: ["F1.7"]
+    evidence:
+      - "docs/features/F2.3-E6-recorded-run-values.md"
+    out_of_scope: []
+    decisions: ["ADR-0023"]
+    divergences: []
+    tasks: []
+  - id: F2.5a
+    name: "Desktop redesign (Tarmind design system, PL/EN)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5a-desktop-redesign.md
+    depends_on: ["F2.5"]
+    evidence:
+      - "docs/features/F2.5a-desktop-redesign.md"
+    out_of_scope: []
+    decisions: []
+    divergences: []
+    tasks: []
+    note: "Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2."
+  - id: F2.8a
+    name: "Attempt compare (desktop)"
+    kind: derived
+    parent: F2.8
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    depends_on: ["F2.7"]
+    evidence:
+      - "desktop/test/compare.test.tsx::F2.8-AC1"
+    out_of_scope: []
+    decisions: []
+    divergences: []
+    tasks: []
+  - id: F2.8b
+    name: "Attempt diff capture and display"
+    kind: derived
+    parent: F2.8
+    phase: 2
+    priority: P1
+    status: in_progress
+    owner_package: execution-core
+    depends_on: ["F2.8a"]
+    out_of_scope: []
+    decisions: ["ADR-0026"]
+    divergences: []
+    tasks: [84]
+    note: "Silnik (--record-diffs, attempt_diff) gotowy; panel w desktopie nie."
+  - id: F3.4a
+    name: "Windows process-tree termination"
+    kind: derived
+    parent: F3.4
+    phase: 3
+    priority: P0
+    status: in_progress
+    owner_package: workspace-manager
+    spec: docs/features/F3.4a-windows-process-tree-termination.md
+    depends_on: ["F3.4"]
+    out_of_scope: []
+    decisions: ["ADR-0028"]
+    divergences: []
+    tasks: []
+    note: "proctree_windows.go istnieje, nigdy nie uruchomiony na Windows."
+  - id: FX.1
+    name: "Dynamic fan-out units (foreach / Splitter)"
+    kind: future
+    phase: null
+    priority: P2
+    status: deferred
+    owner_package: execution-core
+    depends_on: ["F1.7"]
+    out_of_scope: []
+    decisions: ["ADR-0036"]
+    divergences: []
+    tasks: []
+    note: "Z decyzji D13; brak fazy w roadmapie."
+  - id: REL1
+    name: "Release engineering"
+    kind: enabler
+    phase: null
+    priority: P1
+    status: in_progress
+    owner_package: release
+    spec: docs/features/REL1-release-engineering.md
+    depends_on: []
+    out_of_scope: []
+    decisions: ["ADR-0030"]
+    divergences: []
+    tasks: []
+    note: "LICENSE jest; brak tagów i paczek."
+  - id: REL2
+    name: "Public roadmap status feed"
+    kind: enabler
+    phase: null
+    priority: P1
+    status: not_started
+    owner_package: release
+    spec: docs/features/REL2-public-roadmap-status.md
+    depends_on: ["REL3"]
+    out_of_scope: []
+    decisions: ["ADR-0031", "ADR-0038"]
+    divergences: []
+    tasks: []
+    note: "Feed ma być generowany z features.yaml (ADR-0038)."
+  - id: REL3
+    name: "Roadmap tracking harness"
+    kind: enabler
+    phase: null
+    priority: P1
+    status: in_progress
+    owner_package: release
+    depends_on: []
+    out_of_scope: []
+    decisions: ["ADR-0038"]
+    divergences: []
+    tasks: []
+    note: "features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty."

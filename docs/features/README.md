@@ -1,5 +1,9 @@
 # Feature specifications
 
+Feature status is tracked in `docs/roadmap/features.yaml` (generated view: `docs/roadmap/STATUS.md`,
+ADR-0038). The status column below is informative; the registry wins on any disagreement.
+New specs start from `_template.md` and its "Roadmap criteria" section (`prompts/new-spec.md`).
+
 A feature spec is the executable contract for one roadmap item.
 
 Implementation should not begin for a non-trivial roadmap feature until its spec has measurable acceptance criteria.

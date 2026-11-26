@@ -1,0 +1,102 @@
+# Phases, exit criteria and demo milestones (ADR-0038). Edit by hand;
+# `make roadmap` validates and regenerates STATUS.md. Exit criteria text is
+# copied 1:1 from docs/reference/full-roadmap-features.md.
+schema_version: 1
+phases:
+  - id: 0
+    name: "Execution Core"
+    release: "v0.1"
+    goal: "Udowodnić semantykę graph/node/edge/run bez inwestowania w UI."
+    exit_criterion: "Graph z trzema Shell node'ami wykonuje dwie niezależne gałęzie równolegle, poprawnie przekazuje dane, emituje eventy i kończy się deterministycznym wynikiem."
+    exit_status: met
+    exit_evidence:
+      - "cmd/agentplane/integration_test.go::TestBuiltCLIPhase0DataFlow"
+      - "cmd/agentplane/integration_test.go::TestBuiltCLIStartsIndependentShellProcessesBeforeEitherFinishes"
+  - id: 1
+    name: "Agent Loop"
+    release: "v0.2"
+    goal: "Uruchomić prawdziwego coding agenta jako node, wprowadzić deterministyczny gate i umożliwić korektę wyłącznie niepoprawnej jednostki pracy."
+    exit_criterion: "Agent modyfikuje repo, deterministyczny gate wykrywa błąd, runtime zwraca reason/evidence/scope i agent poprawia tylko swoją jednostkę w maksymalnie trzech próbach."
+    exit_status: met
+    exit_evidence:
+      - "cmd/agentplane/unit_test.go::TestCLIFakeCodexUnitsRetryOnlyRejectedCandidate"
+      - "docs/validation/F1.7-real-codex-demo.md"
+    note: "Spełnione z gate'em typu diff, nie testem; test command jako check to F1.4b (ADR-0037, #183)."
+  - id: 2
+    name: "Local IDE"
+    release: "v0.3"
+    goal: "Przenieść authoring, obserwację i debugowanie z terminala do lokalnego IDE, zachowując plikowy/wersjonowalny model graphu jako źródło prawdy."
+    exit_criterion: "Developer projektuje graph, uruchamia go, obserwuje live execution, analizuje reason/evidence, obsługuje human gate i wraca do starszego runa bez używania terminala poza uruchomieniem aplikacji."
+    exit_status: partial
+    exit_evidence:
+      - "desktop/e2e/demo.cjs"
+    note: "Spełnione dla grafów shell + human; brak e2e z node'em agent z desktopu; inspector bez input/output/diff (F2.7, F2.8)."
+  - id: 3
+    name: "Local Production Ready"
+    release: "v0.4"
+    goal: "Przekształcić demo IDE w runtime, któremu można powierzyć dłuższe i bardziej ryzykowne zadania bez utraty kontroli po awarii, restarcie lub błędzie agenta."
+    exit_criterion: "Run może być zatrzymany i wznowiony po restarcie, równoległe node'y działają w izolowanych workspace'ach, trace/artifacts są trwałe, a sekrety i permissions mają jawny model."
+    exit_status: not_met
+    exit_evidence: []
+    note: "Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegzekwowane (F3.4)."
+  - id: 4
+    name: "Connected Control Plane"
+    release: "v0.5"
+    goal: "Dodać zdalny nadzór nad lokalnymi runnerami bez obowiązkowego wysyłania kodu repo do chmury."
+    exit_criterion: "Użytkownik może sparować laptop jako runner, zobaczyć jego status, wystartować graph z web, obserwować metadata runa i zatwierdzić human gate. Repo może pozostać wyłącznie lokalnie."
+    exit_status: not_met
+    exit_evidence: []
+  - id: 5
+    name: "Pro / Team"
+    release: "v1.0"
+    goal: "Monetyzować ciągłość, zdalność, historię i współpracę - nie sztuczne limity lokalnego authoringu."
+    exit_criterion: "Produkt obsługuje płatne Pro/Team, harmonogramy i alerty, wspólną historię, organizacje, RBAC i audit. Zespół może zarządzać agentami jak systemem operacyjnym, a nie zestawem prywatnych terminali."
+    exit_status: not_met
+    exit_evidence: []
+  - id: 6
+    name: "Managed execution / enterprise"
+    release: "Post-v1"
+    goal: "Dopiero po potwierdzeniu popytu na control plane dołożyć kosztowną warstwę wykonywania nieufnego kodu klientów i funkcje enterprise."
+    exit_criterion: "Managed execution jest izolowane i mierzalne, a enterprise funkcje nie komplikują local-first core dla pojedynczego developera."
+    exit_status: not_met
+    exit_evidence: []
+demos:
+  - id: A
+    name: "Graph naprawdę ma znaczenie"
+    text: "Dwie niezależne gałęzie wykonują się równolegle; UI/CLI pokazuje oszczędność wall-clock. Ten milestone waliduje model edge jako dependency danych."
+    features: [F0.3, F0.4, F2.6]
+    status: met
+    evidence:
+      - "cmd/agentplane/integration_test.go::TestBuiltCLIStartsIndependentShellProcessesBeforeEitherFinishes"
+      - "desktop/test/insight.test.ts"
+  - id: B
+    name: "Loop naprawia unit, nie batch"
+    text: "Agent wprowadza błąd, test go odrzuca, return envelope wskazuje reason/evidence/scope, a drugi attempt poprawia wyłącznie dany unit. Inne accepted node'y nie są uruchamiane ponownie."
+    features: [F1.4, F1.5, F1.6, F1.7, F1.4b]
+    status: partial
+    evidence:
+      - "cmd/agentplane/unit_test.go::TestCLIFakeCodexUnitsRetryOnlyRejectedCandidate"
+      - "docs/validation/F1.7-real-codex-demo.md"
+    note: "Odrzucenie przez gate typu diff, nie test (F1.4b, #183)."
+  - id: C
+    name: "Debugger zamiast terminali"
+    text: "Run Inspector pokazuje input, output, diff, check, attempts i human gate. Użytkownik potrafi wyjaśnić failure bez przeszukiwania surowych logów."
+    features: [F2.6, F2.7, F2.8, F2.10]
+    status: partial
+    evidence:
+      - "desktop/e2e/demo.cjs"
+    note: "Brak input/output/diff w node detail (F2.7, F2.8b)."
+  - id: D
+    name: "Produkcyjność lokalna"
+    text: "W połowie runa proces runnera zostaje zabity. Po restarcie accepted work nie jest powtarzany, niepewny side effect wymaga decyzji, a trace zachowuje historię sprzed awarii."
+    features: [F3.2, F3.3]
+    status: not_met
+    evidence:
+      - "cmd/agentplane/crash_test.go::TestKillNineAfterNodeFinishedLeavesDurablePrefix"
+    note: "Trwałość trace jest (F3.2), resume nie (F3.3)."
+  - id: E
+    name: "Cloud nie musi mieć repo"
+    text: "Web control plane startuje graph na lokalnym runnerze, obserwuje metadata i obsługuje approval; kod repo i artifacts pozostają lokalne przy wyłączonym sync."
+    features: [F4.3, F4.4, F4.6, F4.7, F4.8]
+    status: not_met
+    evidence: []
