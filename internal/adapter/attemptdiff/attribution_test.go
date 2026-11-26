@@ -1,6 +1,7 @@
 package attemptdiff
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -68,7 +69,7 @@ func TestDiffTwoSnapshotsOnlyContainTheLaterChange(t *testing.T) {
 	s2 := snap(t, r, dir)
 	write(t, dir, "a.txt", "one\ntwo\nthree\n")
 	s3 := snap(t, r, dir)
-	got, err := r.Diff(t.Context(), s2, s3, nil)
+	got, err := r.Diff(context.Background(), s2, s3, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestDiffTwoSnapshotsOnlyContainTheLaterChange(t *testing.T) {
 	if !strings.Contains(patch, "+three") || strings.Contains(patch, "+two") {
 		t.Fatalf("second diff must start from the first result: %q", patch)
 	}
-	first, _ := r.Diff(t.Context(), s1, s2, nil)
+	first, _ := r.Diff(context.Background(), s1, s2, nil)
 	if !strings.Contains(first.Files[0].Patch, "+two") {
 		t.Fatalf("first patch = %q", first.Files[0].Patch)
 	}
