@@ -46,7 +46,11 @@ package edits a graph document in memory; it does not save a file.
   `graph.Validate`.
 - `can_connect` and every `list_connections` entry must agree with
   `graph.Validate` on references, types, providers and cycles, for a graph
-  input source as for a node output (`TestConnectionAnswersAgreeWithTheValidator`). `Apply` returns text and operation results but never
+  input source as for a node output (`TestConnectionAnswersAgreeWithTheValidator`).
+  Connection verdicts compare `graph.ValidateDataflow` before and after, which
+  reports the same new errors as `graph.Validate` for an edit that changes only
+  edges or bindings (issue #192); edits that change nodes, ports or inputs keep
+  using the full `newErrors`. `Apply` returns text and operation results but never
   writes a file; granted, conflict-checked atomic saving belongs to
   `internal/api/docs.go`, not this package.
 

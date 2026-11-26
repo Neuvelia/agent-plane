@@ -334,7 +334,7 @@ func splitRef(ref string) (node, port string, ok bool) {
 // connected to. Each verdict is the validator's, judged against one baseline
 // validation of the unedited definition.
 func (s *session) listConnections(op Op) *QueryResult {
-	base := baselineOf(s.want)
+	base := connectionBaseline(s.want)
 	if op.From != "" {
 		return s.listTargets(base, op.From)
 	}
