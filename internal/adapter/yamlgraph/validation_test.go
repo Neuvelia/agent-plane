@@ -708,28 +708,3 @@ outputs: {}
 		t.Fatalf("W_EDGE_INPUT_UNUSED count = %d, want 1 (diagnostics %#v)", count, result.Diagnostics)
 	}
 }
-
-func TestValidateErrorsMatchesValidateErrors(t *testing.T) {
-	docs := []string{
-		"schema_version: 0\nid: a\ninputs: {}\nnodes:\n  p:\n    type: shell\n    outputs: {o: {type: string}}\n    config: {command: \"true\"}\n  c:\n    type: shell\n    inputs: {i: {type: number}}\n    config: {command: \"true\"}\nedges:\n  - from: p.outputs.o\n    to: c.inputs.i\n  - from: c.outputs.none\n    to: p.inputs.none\noutputs: {}\n",
-		"schema_version: 0\nid: b\ninputs: {}\nnodes:\n  p:\n    type: shell\n    inputs: {i: {type: string}}\n    outputs: {o: {type: string}}\n    config: {command: \"true\"}\nedges:\n  - from: p.outputs.o\n    to: p.inputs.i\noutputs: {}\n",
-	}
-	for i, doc := range docs {
-		def := parseDefinition(t, doc)
-		var full, only []graph.Diagnostic
-		for _, d := range graph.Validate(def).Diagnostics {
-			if d.Severity == graph.SeverityError {
-				full = append(full, d)
-			}
-		}
-		for _, d := range graph.ValidateErrors(def).Diagnostics {
-			if d.Severity != graph.SeverityError {
-				t.Fatalf("doc %d: ValidateErrors returned %s %s", i, d.Severity, d.Code)
-			}
-			only = append(only, d)
-		}
-		if len(full) == 0 || !reflect.DeepEqual(full, only) {
-			t.Fatalf("doc %d: errors differ\nValidate:       %+v\nValidateErrors: %+v", i, full, only)
-		}
-	}
-}

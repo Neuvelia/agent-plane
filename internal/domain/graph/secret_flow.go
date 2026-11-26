@@ -21,7 +21,7 @@ import (
 // free text from the graph reaches a message.
 func (v *definitionValidator) validateSecretFlowToAgent() {
 	steps := v.dataEdgeSteps()
-	for _, source := range v.sortedNodeIDs() {
+	for _, source := range sortedNodeIDs(v.definition.Nodes) {
 		if !holdsSecrets(v.definition.Nodes[source]) {
 			continue
 		}

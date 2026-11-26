@@ -59,19 +59,7 @@ func (r ValidationResult) HasErrors() bool {
 // parsed graph definition. Structural YAML decoding remains the responsibility
 // of Parse.
 func Validate(definition *Definition) ValidationResult {
-	return validate(definition, false)
-}
-
-// ValidateErrors runs every rule that can produce an error and none that only
-// warns. Its errors are exactly those of Validate; callers that discard
-// warnings (the editor's connection queries judge hundreds of candidate
-// connections) skip the cost of building them.
-func ValidateErrors(definition *Definition) ValidationResult {
-	return validate(definition, true)
-}
-
-func validate(definition *Definition, errorsOnly bool) ValidationResult {
-	validator := definitionValidator{definition: definition, usedOutputs: make(map[string]bool), errorsOnly: errorsOnly}
+	validator := definitionValidator{definition: definition, usedOutputs: make(map[string]bool)}
 	if definition == nil {
 		validator.error("E_DEFINITION_NIL", "graph definition is nil", DiagnosticLocation{}, "provide a parsed graph definition")
 		return validator.result()
@@ -89,10 +77,8 @@ func validate(definition *Definition, errorsOnly bool) ValidationResult {
 	validator.validateGraphOutputs()
 	validator.validateRequiredInputs()
 	validator.validateCycles()
-	if !errorsOnly {
-		validator.validateUnusedOutputs()
-		validator.validateUnconsumedInputs()
-	}
+	validator.validateUnusedOutputs()
+	validator.validateUnconsumedInputs()
 	return validator.result()
 }
 
@@ -102,18 +88,6 @@ type definitionValidator struct {
 	providers    map[string]int
 	dependencies []dependency
 	usedOutputs  map[string]bool
-	errorsOnly   bool // skip rules that only warn
-	nodeIDs      []string
-}
-
-// sortedNodeIDs returns the sorted node ids, computed once per validation: the
-// node set is not changed while a definition is validated, and a dozen rules
-// iterate it.
-func (v *definitionValidator) sortedNodeIDs() []string {
-	if v.nodeIDs == nil {
-		v.nodeIDs = sortedNodeIDs(v.definition.Nodes)
-	}
-	return v.nodeIDs
 }
 
 type dependency struct {
@@ -150,7 +124,7 @@ func (v *definitionValidator) validateDefinition() {
 		v.validateValueType(input.Type, fieldPath("inputs", inputID, "type"), "")
 	}
 
-	for _, nodeID := range v.sortedNodeIDs() {
+	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
 		node := v.definition.Nodes[nodeID]
 		nodePath := mapPath("nodes", nodeID)
 		v.validateIdentifier(nodeID, nodePath, "node id", nodeID)
@@ -265,7 +239,7 @@ func (v *definitionValidator) validateGraphOutputs() {
 }
 
 func (v *definitionValidator) validateRequiredInputs() {
-	for _, nodeID := range v.sortedNodeIDs() {
+	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
 		node := v.definition.Nodes[nodeID]
 		for _, inputID := range sortedPortIDs(node.Inputs) {
 			if !node.Inputs[inputID].Required || v.providers[inputKey(nodeID, inputID)] > 0 {
@@ -279,7 +253,7 @@ func (v *definitionValidator) validateRequiredInputs() {
 
 func (v *definitionValidator) validateCycles() {
 	adjacency := make(map[string][]dependency, len(v.definition.Nodes))
-	for _, nodeID := range v.sortedNodeIDs() {
+	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
 		adjacency[nodeID] = nil
 	}
 	for _, dependency := range v.dependencies {
@@ -315,7 +289,7 @@ func (v *definitionValidator) validateCycles() {
 		state[nodeID] = 2
 	}
 
-	for _, nodeID := range v.sortedNodeIDs() {
+	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
 		if state[nodeID] == 0 {
 			visit(nodeID)
 		}
@@ -323,7 +297,7 @@ func (v *definitionValidator) validateCycles() {
 }
 
 func (v *definitionValidator) validateUnusedOutputs() {
-	for _, nodeID := range v.sortedNodeIDs() {
+	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
 		for _, outputID := range sortedPortIDs(v.definition.Nodes[nodeID].Outputs) {
 			if v.usedOutputs[outputKey(nodeID, outputID)] {
 				continue

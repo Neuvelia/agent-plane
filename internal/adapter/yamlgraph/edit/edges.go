@@ -23,7 +23,7 @@ type errorBaseline map[string]int
 
 func baselineOf(before *graph.Definition) errorBaseline {
 	seen := errorBaseline{}
-	for _, d := range graph.ValidateErrors(before).Diagnostics {
+	for _, d := range graph.Validate(before).Diagnostics {
 		if d.Severity == graph.SeverityError {
 			seen[d.Code+"|"+d.Message]++
 		}
@@ -39,7 +39,7 @@ func (b errorBaseline) newErrors(after *graph.Definition) []graph.Diagnostic {
 		left[k] = v
 	}
 	var added []graph.Diagnostic
-	for _, d := range graph.ValidateErrors(after).Diagnostics {
+	for _, d := range graph.Validate(after).Diagnostics {
 		if d.Severity != graph.SeverityError {
 			continue
 		}

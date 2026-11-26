@@ -6,7 +6,7 @@ import (
 )
 
 func (v *definitionValidator) validateLoops() {
-	for _, id := range v.sortedNodeIDs() {
+	for _, id := range sortedNodeIDs(v.definition.Nodes) {
 		n := v.definition.Nodes[id]
 		l := n.Loop
 		if l == nil {
