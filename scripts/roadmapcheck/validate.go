@@ -7,13 +7,25 @@ import (
 	"regexp"
 )
 
+// Registry values the checker branches on (ADR-0038).
+const (
+	statusDone       = "done"
+	statusDiverged   = "diverged"
+	statusNotStarted = "not_started"
+	statusDeferred   = "deferred"
+	criterionMet     = "met"
+	criterionOpen    = "open"
+	kindRoadmap      = "roadmap"
+	kindDerived      = "derived"
+)
+
 // Closed vocabularies of the registry (ADR-0038).
 var (
 	featureStatuses   = set("not_started", "in_progress", "partial", "done", "diverged", "deferred")
 	criterionStatuses = set("open", "met")
 	featureKinds      = set("roadmap", "derived", "enabler", "future")
 	priorities        = set("P0", "P1", "P2")
-	exitStatuses      = set("met", "partial", "not_met")
+	exitStatuses      = set(criterionMet, "partial", "not_met")
 	ownerPackages     = set("graph-schema", "execution-core", "event-model", "adapters", "workspace-manager",
 		"local-store", "runner-daemon", "cli", "ui", "cloud-api", "release")
 	featureIDPattern   = regexp.MustCompile(`^(F\d\.\d+[a-z]?(-E\d+)?|FX\.\d+|REL\d+)$`)
@@ -91,10 +103,10 @@ func (c *checker) checkIdentity(f *feature) {
 	if f.Name == "" {
 		c.out.errorf(f.ID, "name is required")
 	}
-	if f.Kind == "roadmap" && (f.Phase == nil || *f.Phase < 0 || *f.Phase > 6) {
+	if f.Kind == kindRoadmap && (f.Phase == nil || *f.Phase < 0 || *f.Phase > 6) {
 		c.out.errorf(f.ID, "a roadmap feature needs phase 0-6")
 	}
-	if f.Kind == "derived" && c.features[f.Parent] == nil {
+	if f.Kind == kindDerived && c.features[f.Parent] == nil {
 		c.out.errorf(f.ID, "derived feature needs an existing parent, got %q", f.Parent)
 	}
 }
@@ -160,11 +172,11 @@ func (c *checker) checkCriterion(f *feature, ac *criterion) {
 	if ac.Text == "" {
 		c.out.errorf(ac.ID, "text is required")
 	}
-	if ac.Status == "met" && len(ac.Evidence) == 0 {
+	if ac.Status == criterionMet && len(ac.Evidence) == 0 {
 		c.out.errorf(ac.ID, "a met criterion needs evidence")
 	}
 	c.checkEvidence(ac.ID, ac.Evidence)
-	if ac.Status == "met" {
+	if ac.Status == criterionMet {
 		c.checkTagged(ac)
 	}
 }
@@ -176,11 +188,11 @@ func hasPrefix(value, prefix string) bool {
 // checkDone rejects done while any criterion is open or unproven, and a done
 // entry without criteria (derived, enabler) that has no evidence of its own.
 func (c *checker) checkDone(f *feature) {
-	if f.Status != "done" {
+	if f.Status != statusDone {
 		return
 	}
 	for _, ac := range f.Acceptance {
-		if ac.Status != "met" || len(ac.Evidence) == 0 {
+		if ac.Status != criterionMet || len(ac.Evidence) == 0 {
 			c.out.errorf(f.ID, "status done but %s is %s", ac.ID, describeCriterion(ac))
 		}
 	}
@@ -190,19 +202,19 @@ func (c *checker) checkDone(f *feature) {
 }
 
 func describeCriterion(ac criterion) string {
-	if ac.Status != "met" {
+	if ac.Status != criterionMet {
 		return ac.Status
 	}
 	return "met without evidence"
 }
 
 func (c *checker) checkDependenciesDone(f *feature) {
-	if f.Status != "done" {
+	if f.Status != statusDone {
 		return
 	}
 	for _, dep := range f.DependsOn {
 		target := c.features[dep]
-		if target != nil && target.Status != "done" && target.Status != "diverged" {
+		if target != nil && target.Status != statusDone && target.Status != statusDiverged {
 			c.out.warnf(f.ID, "done but dependency %s is %s", dep, target.Status)
 		}
 	}

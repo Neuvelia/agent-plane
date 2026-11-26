@@ -44,7 +44,7 @@ func (d *statusDoc) header() {
 func (d *statusDoc) phaseFeatures(id int) []feature {
 	var out []feature
 	for _, item := range d.reg.Features {
-		if item.Kind == "roadmap" && item.Phase != nil && *item.Phase == id {
+		if item.Kind == kindRoadmap && item.Phase != nil && *item.Phase == id {
 			out = append(out, item)
 		}
 	}
@@ -74,9 +74,9 @@ func progress(features []feature, priority string) string {
 		}
 		total++
 		switch item.Status {
-		case "done":
+		case statusDone:
 			done++
-		case "diverged":
+		case statusDiverged:
 			diverged++
 		}
 	}
@@ -127,7 +127,7 @@ func criteriaMet(item feature) string {
 	}
 	met := 0
 	for _, ac := range item.Acceptance {
-		if ac.Status == "met" {
+		if ac.Status == criterionMet {
 			met++
 		}
 	}
@@ -162,7 +162,7 @@ func (d *statusDoc) otherEntries() {
 	d.line("| ID | Name | Kind | Parent | Status | Note |")
 	d.line("| --- | --- | --- | --- | --- | --- |")
 	for _, item := range d.reg.Features {
-		if item.Kind != "roadmap" {
+		if item.Kind != kindRoadmap {
 			d.line("| %s | %s | %s | %s | %s | %s |", linkSpec(item), item.Name, item.Kind, item.Parent, item.Status, item.Note)
 		}
 	}
@@ -189,11 +189,11 @@ func (d *statusDoc) openGaps() {
 	d.line("| Criterion | Text | Issue | Note |")
 	d.line("| --- | --- | --- | --- |")
 	for _, item := range d.reg.Features {
-		if item.Status == "not_started" || item.Status == "deferred" {
+		if item.Status == statusNotStarted || item.Status == statusDeferred {
 			continue
 		}
 		for _, ac := range item.Acceptance {
-			if ac.Status == "open" {
+			if ac.Status == criterionOpen {
 				d.line("| %s | %s | %s | %s |", ac.ID, ac.Text, issueRef(ac.Issue), ac.Note)
 			}
 		}

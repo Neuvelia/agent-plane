@@ -98,7 +98,7 @@ func featureRows(reg registry) []featureRow {
 	for _, item := range reg.Features {
 		met := 0
 		for _, ac := range item.Acceptance {
-			if ac.Status == "met" {
+			if ac.Status == criterionMet {
 				met++
 			}
 		}
