@@ -40,6 +40,8 @@ Write docs/roadmap/audit/AUDIT-{{DATE}}.md (Polish, like the previous audits):
 - findings with path:line, separated into Doc↔Doc, Doc↔Repo and Repo-only;
 - invariant violations;
 - needs_decision items, also added to `needs_decision:` in features.yaml.
+  An issue you open for a gap gets `claude-ready` or `needs-owner` by
+  docs/roadmap/issue-triage.md; needs_decision items are always `needs-owner`.
 
 Update features.yaml only where the evidence supports it (with tags), regenerate
 STATUS.md and run `make check`. Open a PR titled `[roadmap] audit {{DATE}}`. Do not
