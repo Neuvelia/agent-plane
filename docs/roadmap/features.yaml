@@ -1810,6 +1810,87 @@ features:
     divergences: []
     tasks: []
     note: "Presentation only; the remaining screens of the Tarmind Dashboard UX canvas follow as separate steps. F2.10 is partial only for its own panel gaps (no blast radius or diff content, #187; on_reject continue limits); the Inbox uses the F2.10 decision rules and approval context that are met and inherits those gaps, it adds none. ADR-0046 awaits owner acceptance."
+  - id: F2.5c
+    name: "Profile menu, light theme, Keyboard shortcuts and About (desktop)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5c-profile-menu-and-light-theme.md
+    depends_on: ["F2.5a", "F2.5b"]
+    acceptance:
+      - id: F2.5c-AC1
+        text: "Profile row at the foot of the sidebar is a menu button (initials, name, Local); the global bar has no avatar."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC1"
+      - id: F2.5c-AC2
+        text: "The open menu shows the designed header and items in order: Settings, Keyboard shortcuts, Language, Appearance, Help (unavailable), About; no account entries."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC2"
+      - id: F2.5c-AC3
+        text: "Language submenu offers System, English, Polski with one checked; System removes the saved language."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC3"
+      - id: F2.5c-AC4
+        text: "Appearance submenu offers System, Light, Dark; a pick paints data-theme at once and persists across a reload."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC4"
+          - "desktop/e2e/demo.cjs::F2.5c-AC4"
+      - id: F2.5c-AC5
+        text: "Keyboard: arrows rove and wrap, ArrowRight/Enter open a submenu on the checked item, ArrowLeft/Escape close it, Escape closes the menu and returns focus to the button."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC5"
+          - "desktop/scripts/stories-smoke.cjs"
+        note: "The real-browser proof runs in `npm run stories:test` (make desktop-stories), which is not part of npm run check or make check."
+      - id: F2.5c-AC6
+        text: "Menu, submenu and windows animate in and out, a theme change cross-fades, and nothing animates under prefers-reduced-motion."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC6"
+          - "desktop/scripts/stories-smoke.cjs"
+        note: "The real-browser proof runs in `npm run stories:test` (make desktop-stories), which is not part of npm run check or make check."
+      - id: F2.5c-AC7
+        text: "Every colour token has a light value under :root[data-theme=light]; text reaches 4.5:1 and indicators 3:1 in both themes."
+        status: met
+        evidence:
+          - "desktop/test/tokens.test.ts::F2.5c-AC7"
+          - "desktop/test/contrast.test.ts::F2.5c-AC7"
+      - id: F2.5c-AC8
+        text: "Keyboard shortcuts lists only existing shortcuts; About shows app and engine versions and the run count, copies no path; both close with Escape, Close or the backdrop."
+        status: met
+        evidence:
+          - "desktop/test/shell-dialogs.test.tsx::F2.5c-AC8"
+          - "desktop/e2e/demo.cjs::F2.5c-AC8"
+          - "desktop/scripts/stories-smoke.cjs"
+        note: "Backdrop close, focus return and shortcuts ignored under an open window are checked in the browser by `npm run stories:test`."
+      - id: F2.5c-AC9
+        text: "Ctrl/Cmd+, opens Settings, Ctrl/Cmd+/ opens the shortcuts; Settings shows the same Appearance choice."
+        status: met
+        evidence:
+          - "desktop/test/profile-menu.test.tsx::F2.5c-AC9"
+          - "desktop/e2e/demo.cjs::F2.5c-AC9"
+      - id: F2.5c-AC10
+        text: "Every story renders in EN/PL and dark/light with zero axe violations and zero external requests."
+        status: met
+        evidence:
+          - "desktop/test/stories.test.ts::F2.5c-AC10"
+          - "desktop/scripts/stories-smoke.cjs"
+        note: "The real-browser proof runs in `npm run stories:test` (make desktop-stories), which is not part of npm run check or make check."
+    out_of_scope:
+      - "Accounts, sign-in, Log out, plans and organisations."
+      - "A Help/documentation surface (the item is unavailable)."
+      - "Run-store path in About (the renderer never receives paths)."
+    decisions: ["ADR-0047"]
+    divergences: []
+    tasks: [219, 221]
+    note: "Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

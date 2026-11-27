@@ -8,6 +8,9 @@ import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, type NavEntry } from './ui/shell'
+import { AboutDialog, ShortcutsDialog } from './ui/dialogs'
+import { isAppShortcut } from './ui/menuKeys'
+import { ProfileMenu } from './ui/profileMenu'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -48,6 +51,23 @@ function Shell({ lost }: { lost: boolean }) {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+  // F2.5c: the profile menu's two windows, and their shortcuts (Ctrl or Cmd with , and /).
+  const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const shortcut = e.defaultPrevented ? null : isAppShortcut(e, navigator.platform || navigator.userAgent)
+      if (!shortcut) return
+      e.preventDefault()
+      // A modal window (About, the shortcut list, the template picker) owns the keyboard until it
+      // closes; one already animating out does not.
+      if (document.querySelector('dialog[open]:not(.closing)')) return
+      if (shortcut === 'settings') setRoute({ name: 'settings' })
+      else setDialog('shortcuts')
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  const appVersion = typeof window.agentplane?.appVersion === 'string' ? window.agentplane.appVersion : ''
 
   // After navigating, move focus to the content so keyboard and screen-reader users start there.
   const mainRef = useRef<HTMLElement>(null)
@@ -102,6 +122,7 @@ function Shell({ lost }: { lost: boolean }) {
         recent={<RecentRuns runs={polledRuns.data} approvals={polled.status === 'error' ? [] : (polled.data ?? [])} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
         deferred={deferred}
         footer={footer}
+        profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />}
       />
       <div className="col">
         <GlobalBar lost={lost} crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
@@ -123,6 +144,8 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
+      {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'about' && <AboutDialog appVersion={appVersion} onClose={() => setDialog(null)} />}
     </div>
   )
 }

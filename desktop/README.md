@@ -92,8 +92,11 @@ real components, reducer and selectors over **recorded event streams**
 (`test/fixtures/*.json`, produced by `agentplane run --json`); a story never builds
 node or run state by hand. A decorator installs an in-memory `window.agentplane`
 (`src/storybook/bridge.tsx`), so no sidecar or network is involved. The toolbar
-switches language (EN/PL); viewport is Storybook's built-in toolbar. Storybook is
-a dev dependency and is never part of the packaged app.
+switches language (EN/PL) and theme (Dark/Light, F2.5c); a story can pin a theme
+with `parameters.theme`. Viewport is Storybook's built-in toolbar. Storybook is
+a dev dependency and is never part of the packaged app. `npm run stories:test`
+renders every story in EN/PL × dark/light (`AP_STORIES_THEMES=dark` limits it)
+and drives the profile menu with the keyboard and the pointer.
 
 ## Design system and localisation (F2.5a)
 
@@ -105,9 +108,24 @@ a dev dependency and is never part of the packaged app.
   to the files); the CSP allows no remote font.
 - UI text is localised in `src/i18n/` (`en.ts`, `pl.ts`, same keys; a test enforces
   it). Machine values (event types, node ids, paths, diagnostic codes and engine
-  messages) are never translated. The language switch is in the top bar.
-- Sidebar entries for Projects, Runners, Docs and Settings are intentionally
-  greyed out and inert until those surfaces exist.
+  messages) are never translated. Language and Appearance are in the profile
+  menu at the foot of the sidebar (F2.5c) and in Settings.
+- Sidebar entries for Projects, Runners and Docs are intentionally greyed out
+  and inert until those surfaces exist.
+
+## Profile menu and light theme (F2.5c, ADR-0047)
+
+- The profile row (initials, name, "Local") at the foot of the sidebar opens the
+  profile menu: Settings (`Ctrl ,`), Keyboard shortcuts (`Ctrl /`), Language
+  (System, English, Polski), Appearance (System, Light, Dark), Help and
+  documentation (not available yet) and About. macOS shows and uses Cmd.
+- `tokens.json` carries a `light` value for every colour token; `tokens.css`
+  puts them under `:root[data-theme="light"]`. The choice is stored in the
+  renderer's `localStorage` (`agentplane.theme`; absent = System, which follows
+  the operating system live) and painted before the first render. Re-copying the
+  upstream `tokens.json` must keep the light values.
+- About reads `GET /capabilities` and `GET /runs`; Copy diagnostics copies only
+  versions and the run count. All motion stops under reduced motion.
 
 ## Design rules
 
@@ -240,6 +258,6 @@ implemented; screenshots are in `docs/validation/F2.5a-screenshots/`.
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,
 Approvals (IA-17/18), New run with preflight (IA-12/13) and the YAML view of the
-graph (IA-07-11, read-only), plus Settings with the interface language and the opt-in "Record run values" switch. Not
+graph (IA-07-11, read-only), plus Settings with the interface language, Appearance and the opt-in "Record run values" switch, and the profile menu with Keyboard shortcuts and About (F2.5c). Not
 implemented (greyed out in the sidebar where they would live): Projects, Runners,
 Docs; also mobile approval, onboarding, attempt compare and graph editing.

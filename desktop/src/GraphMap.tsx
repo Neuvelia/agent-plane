@@ -6,6 +6,7 @@ import { useI18n } from './i18n/context'
 import { displayStatus, nodeView, type RunView } from './reducer'
 import { NodePill } from './status'
 import type { GraphSummary } from './types'
+import { GRID_DOT, useResolvedTheme } from './theme'
 
 const W = 250
 const H = 76
@@ -81,6 +82,7 @@ function FitOnResize() {
 // Layout comes from the graph definition only (dagre); node status comes from
 // the event reduction only. Neither is stored in this component.
 export function GraphMap({ graph, run, selected, onSelect, critical = NONE, dimmed = NONE }: { graph: GraphSummary; run: RunView; selected: string | null; onSelect: (id: string) => void; critical?: ReadonlySet<string>; dimmed?: ReadonlySet<string> }) {
+  const theme = useResolvedTheme()
   const positions = useMemo(() => {
     const g = new dagre.graphlib.Graph()
     g.setGraph({ rankdir: 'LR', ranksep: 70, nodesep: 28 })
@@ -132,9 +134,9 @@ export function GraphMap({ graph, run, selected, onSelect, critical = NONE, dimm
         edgesFocusable={false}
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => onSelect(node.id)}
-        colorMode="dark"
+        colorMode={theme}
       >
-        <Background gap={22} color="#242424" />
+        <Background gap={22} color={GRID_DOT[theme]} />
         <FitOnResize />
       </ReactFlow>
       </StateCtx.Provider>

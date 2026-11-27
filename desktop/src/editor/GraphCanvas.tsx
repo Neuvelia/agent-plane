@@ -31,6 +31,7 @@ import type { GraphDocument } from './useGraphDocument'
 import { EdgeInspector } from './EdgeInspector'
 import { Inspector } from './inspector/Inspector'
 import type { ValuesPicker } from '../useRunValues'
+import { GRID_DOT, useResolvedTheme } from '../theme'
 
 // The canvas draws the definition the engine returned and turns gestures into
 // ADR-0020 operations. Whether a connection is allowed is the engine's answer
@@ -165,6 +166,7 @@ export function GraphCanvas(props: { g: GraphDocument; doc: DocState; focusReq: 
 }
 
 function Inner({ g, doc, focusReq, selection, picker }: { g: GraphDocument; doc: DocState; focusReq: FocusReq | null; selection: SelectionOwner; picker: ValuesPicker }) {
+  const theme = useResolvedTheme()
   const { t } = useI18n()
   const def = doc.analysis.definition
   // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
@@ -500,9 +502,9 @@ function Inner({ g, doc, focusReq, selection, picker }: { g: GraphDocument; doc:
               onConnect={onConnect}
               onConnectEnd={onConnectEnd}
               isValidConnection={isValidConnection}
-              colorMode="dark"
+              colorMode={theme}
             >
-              <Background gap={22} color="#242424" />
+              <Background gap={22} color={GRID_DOT[theme]} />
               <FitOnResize />
             </ReactFlow>
           </Ctx.Provider>

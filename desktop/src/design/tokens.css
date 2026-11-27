@@ -125,3 +125,44 @@
   --type-micro-line: 1.4;
   --type-micro-weight: 400;
 }
+:root[data-theme="light"] {
+  --bg: #FFFFFF;
+  --surface: #F2F2F5;
+  --inset: #F5F5F7;
+  --raised: #EDEDF2;
+  --raised-hover: #E4E4EA;
+  --fg: #1D1D1F;
+  --muted: #58585D;
+  --muted-faint: rgba(88,88,93,0.5);
+  --fill-4: rgba(0,0,0,0.04);
+  --fill-6: rgba(0,0,0,0.06);
+  --fill-8: rgba(0,0,0,0.08);
+  --card-top: #FFFFFF;
+  --card-mid: #FCFCFD;
+  --card-bottom: #F8F8FA;
+  --card-line: rgba(0,0,0,0.12);
+  --hairline: rgba(0,0,0,0.08);
+  --quick-action: rgba(0,0,0,0.02);
+  --quick-action-hover: #F2F2F5;
+  --code-bg: #F7F7F9;
+  --brand: #0066CC;
+  --brand-soft: rgba(0,102,204,0.12);
+  --brand-wash: rgba(0,102,204,0.07);
+  --focus: rgba(0,102,204,0.6);
+  --ok: #17622A;
+  --ok-soft: rgba(23,98,42,0.12);
+  --bad: #B00018;
+  --bad-soft: rgba(176,0,24,0.10);
+  --warn: #8A4A00;
+  --warn-soft: rgba(138,74,0,0.12);
+  --warn-wash: rgba(138,74,0,0.07);
+  --silver-top: #3A3A3C;
+  --silver-bottom: #1D1D1F;
+  --on-silver: #FFFFFF;
+  --button-top: #F5F5F7;
+  --button-bottom: #EDEDF2;
+  --code-key: #1D1D1F;
+  --code-string: #17622A;
+  --code-number: #8A4A00;
+  --code-var: #6F42C1;
+}
