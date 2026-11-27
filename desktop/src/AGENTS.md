@@ -15,7 +15,9 @@ spec before changing a screen, API wrapper or event view. The sibling
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
 | Runs, inspector, approvals and New run screens | `views.tsx`, `preflight.ts`, `GraphMap.tsx`, `NodePanel.tsx` |
-| Dashboard and event-derived insight | `dashboard.ts`, `dashboardView.tsx`, `insight.ts` |
+| Inbox triage queue (F2.5b): queue, detail, decision in place | `inbox.ts`, `inboxRun.ts`, `inboxView.tsx`, `InboxDetail.tsx`, `ui/glyphs.tsx` |
+| Sidebar (F2.5b): New run, navigation, recent runs, Later, profile | `ui/shell.tsx`, `sidebarRecent.tsx`, `ui/icons.tsx` |
+| Event-derived run insight | `insight.ts` |
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
 | Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
@@ -50,7 +52,7 @@ spec before changing a screen, API wrapper or event view. The sibling
   is for lists, and a failed list read is an error with Retry, never an empty
   list or stale data shown as current. Preflight displays the engine's
   diagnostics rather than validating graph semantics in TypeScript.
-- Dashboard and inspector insight are pure views of reduced events or API
+- Inbox and inspector insight are pure views of reduced events or API
   lists. Preserve bounded log/event rows and timeline columns. Do not
   fabricate missing durations or token usage; show unknown where a KPI
   cannot be computed. UI state can hold selection, navigation and draft text;
@@ -91,7 +93,8 @@ as implemented merely because the full spec describes it.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.
-- Dashboard, timeline and bounded event detail: `desktop/test/dashboard.test.ts`,
+- Inbox queue and detail selectors (F2.5b): `desktop/test/inbox.test.ts`; stories `Screens/Inbox*`.
+- Timeline and bounded event detail:
   `desktop/test/insight.test.ts`.
 - Editor draft/layout and absence of local graph rules: `desktop/test/editor-doc.test.ts`,
   `desktop/test/editor-layout.test.ts`, `desktop/test/no-graph-rules.test.ts`.
