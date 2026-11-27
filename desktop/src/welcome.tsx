@@ -5,7 +5,7 @@ import type { DraftMaker } from './editor/TemplatePicker'
 import { formatDateTime } from './i18n'
 import type { MessageKey } from './i18n'
 import { useI18n } from './i18n/context'
-import { SETUP_STEPS, setupCards, setupDraft, type CheckState, type SetupStep } from './setup'
+import { BLANK, SETUP_STEPS, setupCards, setupDraft, type CheckState, type SetupStep } from './setup'
 import { CapabilityPanel } from './setupCheck'
 import { Arrow } from './setupIcons'
 import { AgentsStep, GraphStep, StepHead, WelcomeStep } from './setupSteps'
@@ -106,7 +106,7 @@ export function Welcome({ onCreate, onOpen, onSkip, lost = false, initialStep = 
         {hint && <span className="hint">{t(hint)}</span>}
         {last ? (
           <button type="button" className="su-btn pr" onClick={create} disabled={!draft.usable} data-testid="welcome-template">
-            {t('setup.create', { name: choice })}
+            {choice === BLANK ? t('setup.createBlank') : t('setup.create', { name: choice })}
             <Arrow />
           </button>
         ) : (

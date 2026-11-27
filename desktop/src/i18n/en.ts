@@ -570,6 +570,7 @@ export const en = {
   'setup.next': "Next",
   'setup.next.check': "Check this computer",
   'setup.create': "Create and open {name}",
+  'setup.createBlank': 'Create a blank graph',
   'setup.hint.continue': "You can continue without it.",
   'setup.hint.optional': "Optional",
   'setup.hint.graph': "Opens in the graph editor",

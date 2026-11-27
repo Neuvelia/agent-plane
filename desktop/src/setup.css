@@ -34,7 +34,11 @@
 .su-prog button{width:44px;height:44px;border:0;background:transparent;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:var(--radius-8)}
 .su-prog i{display:block;width:32px;height:4px;border-radius:2px;background:var(--fill-8);overflow:hidden;position:relative}
 .su-prog i b{position:absolute;inset:0;background:var(--fg);transform-origin:left;transform:scaleX(0);transition:transform .3s var(--su-ease)}
-.su-prog .done i b{transform:scaleX(1)}
+/* Current vs finished differ in shape and tone, not only in motion: the current
+   segment is taller and full white, finished ones are thinner and muted. */
+.su-prog i{transition:height .2s var(--su-ease)}
+.su-prog .done i b{transform:scaleX(1);background:var(--muted)}
+.su-prog .cur i{height:6px;border-radius:3px}
 .su-prog .cur i b{transform:scaleX(1);animation:su-fill .6s var(--su-ease) both}
 .mac .su-bar{-webkit-app-region:drag}
 .mac .su-bar :is(button,a){-webkit-app-region:no-drag}
@@ -120,6 +124,7 @@
 .su .su-tpl input{width:18px;height:18px;margin:0;padding:0;flex:none;accent-color:var(--fg)}
 .su-tpl input:focus-visible{outline:none}
 .su-tpl .nm{font:600 var(--type-body-size) var(--font-mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.su-tpl .nm.word{font-family:var(--font-sans)}
 .su-rec{margin-left:auto;display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:12px;font-size:var(--type-small-size);font-weight:500;background:var(--brand-soft);color:var(--su-brand-text);white-space:nowrap}
 .su-path{position:relative;display:flex;align-items:center;min-height:40px}
 .su-path .track{position:relative;display:inline-flex;align-items:center}

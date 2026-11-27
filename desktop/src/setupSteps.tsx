@@ -183,7 +183,8 @@ function TemplateCard({ card, on, at, onPick }: { card: SetupCard; on: boolean; 
     <label className={`su-tpl su-a${on ? ' on' : ''}`} style={delay(at)} data-testid={`setup-tpl-${card.id}`}>
       <span className="hd">
         <input type="radio" name="setup-template" value={card.id} checked={on} onChange={onPick} aria-describedby={metaId} data-testid={`setup-template-${card.id}`} />
-        <span className="nm">{card.id}</span>
+        {/* Template ids are file names and stay verbatim; Blank has no file, so it gets a translated name. */}
+        <span className={blank ? 'nm word' : 'nm'}>{blank ? t('picker.blank.title') : card.id}</span>
         {card.recommended && <span className="su-rec">{t('setup.graph.recommended')}</span>}
       </span>
       <span className="su-path" role="img" aria-label={blank ? t('setup.graph.emptyGraph') : t('setup.graph.steps', { types: card.flow.map((k) => t(`setup.kind.${k}` as MessageKey)).join(', ') })}>

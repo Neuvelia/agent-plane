@@ -568,6 +568,7 @@ export const pl: Record<MessageKey, string> = {
   'setup.next': "Dalej",
   'setup.next.check': "Sprawdź ten komputer",
   'setup.create': "Utwórz i otwórz {name}",
+  'setup.createBlank': 'Utwórz pusty graf',
   'setup.hint.continue': "Możesz kontynuować bez tego.",
   'setup.hint.optional': "Opcjonalnie",
   'setup.hint.graph': "Otworzy się w edytorze grafów",

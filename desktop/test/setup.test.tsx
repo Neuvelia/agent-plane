@@ -142,6 +142,21 @@ describe('setup screen', () => {
       expect(html(step), step).not.toContain('setup-connection-lost')
     }
   })
+  it('names the Blank card in words, while template cards keep their file ids', () => {
+    const en = html('graph')
+    expect(en).toMatch(/<span class="nm word">Blank graph<\/span>/)
+    expect(en).toContain(`<span class="nm">${SUGGESTED}</span>`)
+    expect(en).not.toMatch(/>blank</)
+    expect(html('graph', 'pl')).toMatch(/<span class="nm word">Pusty graf<\/span>/)
+  })
+  it('marks finished steps and the current step differently', () => {
+    const out = html('agents')
+    expect(out.match(/class="done"/g)).toHaveLength(2)
+    expect(out.match(/class="cur"/g)).toHaveLength(1)
+    const css = readFileSync(join(__dirname, '..', 'src', 'setup.css'), 'utf8')
+    expect(css).toContain('.su-prog .done i b{transform:scaleX(1);background:var(--muted)}')
+    expect(css).toContain('.su-prog .cur i{height:6px;border-radius:3px}')
+  })
   it('is translated into Polish', () => {
     const out = html('graph', 'pl')
     expect(out).toContain('Wybierz pierwszy graf')
