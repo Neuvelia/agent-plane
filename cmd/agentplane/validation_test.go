@@ -280,6 +280,19 @@ nodes:
       bindings:
         - {from: node.inputs.text, to: gate.inputs.seen}
         - {from: candidate.outputs.json, to: gate.inputs.candidate}
+  gated:
+    type: shell
+    config: {command: /usr/bin/true}
+    inputs: {text: {type: string, required: true}}
+    outputs: {stdout: {type: string, required: true}}
+    loop:
+      max_attempts: 2
+      gate:
+        inputs: {seen: {type: string, required: true}, candidate: {type: string, required: true}}
+        config: {check_id: g, kind: command, command: /usr/bin/diff, left_input: seen, right_input: candidate}
+      bindings:
+        - {from: node.inputs.text, to: gate.inputs.seen}
+        - {from: candidate.outputs.stdout, to: gate.inputs.candidate}
   check:
     type: gate
     config: {check_id: same, kind: command, command: /usr/bin/diff, left_input: a, right_input: b}
@@ -303,13 +316,17 @@ edges:
   - {from: src.outputs.stdout, to: ask.inputs.shown}
   - {from: src.outputs.stdout, to: agent.inputs.task}
   - {from: ask.outputs.decision, to: agent.inputs.start}
+  - {from: src.outputs.stdout, to: gated.inputs.text}
 outputs:
   out: {from: looped.outputs.json}
+  gated: {from: gated.outputs.stdout}
 `
 
-// The warning is derived from the field descriptors, never blocks, and spares
-// the approval edges: the decision edge that makes an Agent wait for approval
-// and the edges that feed an approval panel (#180, ADR-0043).
+// The warning is derived from the field descriptors and never blocks. A loop
+// that forwards an input to a Gate input its Gate never reads (looped) does not
+// read it; one whose Gate reads it (gated) does. It spares the approval edges:
+// the decision edge that makes an Agent wait for approval and the edges that
+// feed an approval panel (#180, ADR-0043).
 func TestEdgeIntoAnInputTheTargetDoesNotReadWarns(t *testing.T) {
 	result := validateGraph(parseGraph(t, inputUseGraph))
 	var warned []string
@@ -325,7 +342,7 @@ func TestEdgeIntoAnInputTheTargetDoesNotReadWarns(t *testing.T) {
 			t.Fatalf("a shell suggestion names input_env: %q", d.Suggestion)
 		}
 	}
-	if want := []string{"edges[0].to", "edges[5].to"}; strings.Join(warned, ",") != strings.Join(want, ",") {
+	if want := []string{"edges[0].to", "edges[2].to", "edges[5].to"}; strings.Join(warned, ",") != strings.Join(want, ",") {
 		t.Fatalf("warned at %v, want %v (diagnostics %+v)", warned, want, result.Diagnostics)
 	}
 }

@@ -32,17 +32,17 @@ that model rather than add control flow.
    output may expose it. The author must judge the verdict with a
    deterministic check (rule 3).
 3. Validation: `on_reject` must be `fail` or `continue` (`E_HUMAN_INVALID`).
-   `continue` requires that `<node>.outputs.decision` reaches a **deterministic
-   check**, otherwise `E_HUMAN_REJECT_UNROUTED` (an error). A deterministic
-   check is one of:
-   - a graph output;
-   - a Gate node whose configuration reads the input that receives the decision;
-   - a node whose loop forwards that input to its embedded Gate
-     (`node.inputs.<id>` binding).
+   `continue` requires that `<node>.outputs.decision` reaches **only
+   deterministic checks**, otherwise `E_HUMAN_REJECT_UNROUTED` (an error):
+   - every node bound to the decision is a Gate node whose configuration reads
+     the input that receives it; and
+   - at least one such Gate or a graph output exists.
 
-   A Shell or Agent node that merely receives the decision is not a check. It
-   runs the same on rejection, so a rejected change would go through and the
-   run would still succeed. Example: a `done` step that prints a fixed text.
+   Any other consumer is reported, even next to a Gate or a graph output: a
+   Shell or Agent node bound to the decision runs on rejection, so a rejected
+   change would go through (for example a `deploy` step). A loop node is not a
+   check either, even when its loop forwards the decision to its embedded Gate:
+   the loop's producer runs before the Gate judges anything.
    Which inputs a Gate reads comes from the field descriptors
    (`internal/fields`), supplied by the composition root. A caller without
    descriptors counts any Gate target.

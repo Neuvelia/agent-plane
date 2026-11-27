@@ -1,13 +1,17 @@
 package graph
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // InputUse reports whether the static configuration of node reads its declared
 // input inputID. The graph package does not know the configuration keys of the
 // Shell, Gate and Agent executors; the composition root derives an InputUse
 // from their field descriptors (internal/fields) and passes it to ValidateWith.
-// A loop that forwards node.inputs.<id> to its Gate is detected here, so an
-// InputUse needs to judge only the node's own configuration.
+// A loop that forwards node.inputs.<id> to an embedded Gate input is resolved
+// here by asking the InputUse about that Gate, so an InputUse needs to judge
+// only the configuration of the node it is given.
 type InputUse func(node NodeDefinition, inputID string) bool
 
 // ValidateWith is Validate plus the checks that need to know which inputs a
@@ -18,14 +22,31 @@ func ValidateWith(definition *Definition, use InputUse) ValidationResult {
 	return validate(definition, use)
 }
 
-// reads reports whether node reads inputID: through a loop binding that
-// forwards it to the embedded Gate, or through its configuration. Without an
-// InputUse, every input counts as read.
+// reads reports whether node reads inputID: through its own configuration, or
+// through a loop binding that forwards it to an embedded Gate input the Gate's
+// configuration reads. A forwarded input the Gate ignores is not read. Without
+// an InputUse, every input counts as read.
 func (v *definitionValidator) reads(node NodeDefinition, inputID string) bool {
-	if loopForwardsInput(node, inputID) {
+	if v.inputUse == nil {
 		return true
 	}
-	return v.inputUse == nil || v.inputUse(node, inputID)
+	return v.inputUse(node, inputID) || v.loopGateReads(node, inputID)
+}
+
+// loopGateReads reports whether node's loop forwards node.inputs.<inputID> to
+// a Gate input that the embedded Gate reads.
+func (v *definitionValidator) loopGateReads(node NodeDefinition, inputID string) bool {
+	if node.Loop == nil {
+		return false
+	}
+	gate := node.Loop.GateNode()
+	for _, binding := range node.Loop.Bindings {
+		gateInput, forwarded := strings.CutPrefix(binding.To, "gate.inputs.")
+		if binding.From == "node.inputs."+inputID && forwarded && v.inputUse(gate, gateInput) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateUnconsumedInputs warns when a valid edge delivers a value to a node
@@ -78,16 +99,4 @@ func unreadInputSuggestion(nodeType, inputID string) string {
 		return "an Agent reads only its task input; remove the edge or bind the value to task"
 	}
 	return "use the input in the node configuration, or remove the edge"
-}
-
-func loopForwardsInput(node NodeDefinition, inputID string) bool {
-	if node.Loop == nil {
-		return false
-	}
-	for _, binding := range node.Loop.Bindings {
-		if binding.From == "node.inputs."+inputID {
-			return true
-		}
-	}
-	return false
 }

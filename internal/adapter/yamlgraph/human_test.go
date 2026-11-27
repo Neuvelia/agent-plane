@@ -84,6 +84,24 @@ nodes:
     inputs: {verdict: {type: string, required: true}}
     outputs: {}
 `
+	// A loop's producer runs before its Gate, so forwarding the decision to
+	// the Gate does not stop a rejected change.
+	const loop = `  fix:
+    type: shell
+    config: {command: /bin/true}
+    inputs: {verdict: {type: string, required: true}}
+    outputs: {stdout: {type: string, required: true}}
+    loop:
+      max_attempts: 2
+      gate:
+        inputs: {verdict: {type: string, required: true}, candidate: {type: string, required: true}}
+        config: {check_id: approved, kind: command, command: /usr/bin/diff, left_input: verdict, right_input: candidate}
+      bindings:
+        - {from: node.inputs.verdict, to: gate.inputs.verdict}
+        - {from: candidate.outputs.stdout, to: gate.inputs.candidate}
+`
+	const toShell = "  - {from: ask.outputs.decision, to: after.inputs.verdict}\n"
+	const toGate = "  - {from: ask.outputs.decision, to: check.inputs.verdict}\n"
 	for _, tt := range []struct {
 		name, doc string
 		ok        bool
@@ -94,6 +112,12 @@ nodes:
 		{"gate consumer", head + gate + "edges: [{from: ask.outputs.decision, to: check.inputs.verdict}]\noutputs: {}\n", true},
 		{"graph output consumer", head + "edges: []\noutputs: {verdict: {from: ask.outputs.decision}}\n", true},
 		{"no consumer", head + "edges: []\noutputs: {}\n", false},
+		// Every consumer must be a check: a Shell next to a judge still runs
+		// its side effect on rejection (review of #198, finding 1).
+		{"shell beside a graph output", head + shellReads + "edges:\n" + toShell + "outputs: {verdict: {from: ask.outputs.decision}}\n", false},
+		{"shell beside a gate", head + shellReads + gate + "edges:\n" + toShell + toGate + "outputs: {}\n", false},
+		{"gate beside a graph output", head + gate + "edges:\n" + toGate + "outputs: {verdict: {from: ask.outputs.decision}}\n", true},
+		{"loop forwarding to its gate", head + loop + "edges: [{from: ask.outputs.decision, to: fix.inputs.verdict}]\noutputs: {}\n", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			d, err := yamlgraph.Parse([]byte(tt.doc))
