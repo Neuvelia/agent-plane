@@ -32,6 +32,16 @@ func cliAgentRemedy(id agent.AdapterID) string {
 	return "run with --adapter codex --codex-bin ABSOLUTE_PATH of the installed Codex CLI"
 }
 
+// registeredCodexRemedy is the remedy `run` gives once --adapter codex has
+// registered the adapter: repeating the flags the user already passed would
+// not help, so it points at the binary they named instead.
+func registeredCodexRemedy(id agent.AdapterID) string {
+	if id != "codex" {
+		return ""
+	}
+	return "check that the Codex CLI named by --codex-bin is installed and runs"
+}
+
 // serveAgentRemedy is the remedy `serve` (the desktop engine) gives: it runs no
 // Agent adapter, so an Agent node runs from the CLI.
 func serveAgentRemedy(id agent.AdapterID) string {

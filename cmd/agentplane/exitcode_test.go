@@ -153,4 +153,9 @@ func TestAgentRemedyMatchesTheEntryPoint(t *testing.T) {
 	if got := serveAgentRemedy("other"); strings.Contains(got, "--codex-bin") || !strings.Contains(got, "desktop engine") {
 		t.Fatalf("serve remedy = %q", got)
 	}
+	// Once --adapter codex registered the adapter, the remedy must not tell the
+	// user to pass the flags they already passed.
+	if got := registeredCodexRemedy("codex"); strings.Contains(got, "--adapter") || !strings.Contains(got, "installed and runs") {
+		t.Fatalf("registered codex remedy = %q", got)
+	}
 }

@@ -31,17 +31,17 @@ func (v *definitionValidator) validateSecrets() {
 		if !ok {
 			assigned = nil
 		}
-		channels = append(channels, secrets.NodeChannels{NodeID: nodeID, Assigned: assigned, Names: nodeEnvNames(node)})
+		channels = append(channels, secrets.NodeChannels{NodeID: nodeID, Section: "config", Assigned: assigned, Names: nodeEnvNames(node)})
 		if node.Loop != nil {
 			// A test_command loop Gate builds its own environment (ADR-0042) and
 			// is never assigned secrets, so every name it lists is a channel.
-			channels = append(channels, secrets.NodeChannels{NodeID: nodeID, Names: nodeEnvNames(node.Loop.GateNode())})
+			channels = append(channels, secrets.NodeChannels{NodeID: nodeID, Section: "loop.gate.config", Names: nodeEnvNames(node.Loop.GateNode())})
 		}
 	}
 	for _, b := range secrets.AmbientBypasses(refs, channels) {
 		v.error("E_SECRET_AMBIENT_BYPASS",
 			fmt.Sprintf("node %s names %s, the variable behind secret %q, but is not assigned that secret", quotedKey(b.NodeID), bypassVariable(b.Variable, "a variable"), b.Secret),
-			DiagnosticLocation{NodeID: b.NodeID, Path: mapPath("nodes", b.NodeID) + ".config"},
+			DiagnosticLocation{NodeID: b.NodeID, Path: mapPath("nodes", b.NodeID) + "." + b.Section},
 			fmt.Sprintf("assign the secret with secret_env or stop naming %s in this node; this check applies in every mode", bypassVariable(b.Variable, "that variable")))
 	}
 }

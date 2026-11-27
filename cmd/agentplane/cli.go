@@ -243,7 +243,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	executor := selectExecutor(def, cliAgentRemedy)
 	if *adapterID == "codex" {
-		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}, Remedy: cliAgentRemedy}}
+		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}, Remedy: registeredCodexRemedy}}
 	}
 	result, err := runtime.Run(runCtx, def, values, executor, opts)
 	if writer != nil {
