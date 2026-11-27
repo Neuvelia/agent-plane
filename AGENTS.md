@@ -310,8 +310,9 @@ Issues and labels (`docs/roadmap/issue-triage.md`):
 - `needs_decision`, `epic`, `spike` and `feature` are always `needs-owner`; the
   `issue-labels` workflow enforces that and the `triage` label.
 - Put the feature ID in the title (`[F2.5b] ...`). A `claude-ready` body states the
-  expected outcome and how to verify it; a `needs-owner` body ends with
-  `Owner input needed: ...`.
+  expected outcome and how to verify it; a `needs-owner` body ends with an
+  `## Owner decisions` section: one numbered decision per block, one checkbox
+  per option, recommended option first, and what follows once decided.
 - Take only `claude-ready` issues on your own. If one turns out to need a
   decision, stop, comment what is missing and swap the label to `needs-owner`.
 

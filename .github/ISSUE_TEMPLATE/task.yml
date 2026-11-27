@@ -28,8 +28,14 @@ body:
   - type: textarea
     id: owner_input
     attributes:
-      label: Owner input needed
-      description: Only for "Needs me". The decision, environment or review that is missing.
+      label: Owner decisions
+      description: Only for "Needs me". One numbered decision per block, one checkbox per option, recommended first (docs/roadmap/issue-triage.md).
+      value: |
+        **D1. ...?**
+        - [ ] A: ... (recommended)
+        - [ ] B: ...
+
+        **When decided:** ...
 
   - type: dropdown
     id: autonomy

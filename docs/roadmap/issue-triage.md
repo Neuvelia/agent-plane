@@ -49,12 +49,40 @@ These labels make an issue `needs-owner` regardless of the rest, and the
   the rule and set `claude-ready` or `needs-owner` when creating it. A
   `claude-ready` issue body states the expected outcome, the feature ID and how to
   verify it, so the agent that takes it later needs nothing else. A `needs-owner`
-  body ends with a line `Owner input needed: ...` naming what is missing.
+  body ends with an **Owner decisions** section (below).
 - **The owner** chooses in the issue form's "Autonomy" dropdown, or sets the label
   by hand. Switching the class is adding the other label: the workflow removes
   the old one.
 - **Backfill or re-check** of existing issues uses `prompts/triage.md`. It
   proposes; the owner approves before labels change.
+
+## Owner decisions section
+
+Every `needs-owner` issue lists what the owner has to decide or provide, as task
+list checkboxes the owner ticks directly in the issue. One block per decision,
+numbered `D1`, `D2`, ...; one checkbox per option; the recommended option first
+and marked. Environment or review needs (a macOS machine, an API key, a design)
+are a decision with the options the owner can choose from.
+
+```markdown
+## Owner decisions
+
+<!-- Tick one option per decision, or comment with another answer. -->
+
+**D1. What does `#` match in the command palette?**
+- [ ] A: run ID prefix only, as in the spec (recommended; no ADR)
+- [ ] B: run ID prefix or graph name (spec change, needs an ADR)
+
+**When decided:** with A the issue becomes `claude-ready`; with B an ADR comes first.
+```
+
+The last line says what follows the decision: the issue becomes `claude-ready`,
+is split, needs an ADR or a spec, or is closed. After ticking, the owner swaps
+the label (or asks an agent to). An agent that takes the issue reads the ticked
+options as the decision; an unticked decision means the issue is not ready.
+
+For issues that existed before this rule, the section is posted as the first
+comment by the triage backfill instead of rewriting the body.
 
 ## Enforcement (`.github/workflows/issue-labels.yml`)
 
