@@ -1,6 +1,6 @@
 import { FIRST_VALUE_SCHEMA, graphInputSlot, outputSlot, valueNodeStatus, type RecordedValue, type ValueNodeStatus } from '../values'
 import type { PollStatus } from '../hooks'
-import type { PickerRun, ResolvedRun } from '../valuePicker'
+import type { PickerRun, ResolvedRun } from '../valuePickerModel'
 import type { RunValuesStream } from '../useRunValues'
 import { parseRef } from './layout'
 import { isGraphInput } from './bindings'
@@ -42,7 +42,7 @@ export const EDGE_VALUE_STATES = [
 ] as const satisfies readonly EdgeValueState[]
 
 export interface EdgeValueInput {
-  /** The runs of this graph, newest first (valuePicker.ts). */
+  /** The runs of this graph, newest first (valuePickerModel.ts). */
   runs: readonly PickerRun[]
   runsStatus: PollStatus
   resolved: ResolvedRun

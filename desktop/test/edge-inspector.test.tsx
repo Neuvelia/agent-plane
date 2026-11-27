@@ -14,7 +14,7 @@ import { carriedBytes, displayText, formatJson, visibleParts } from '../src/edit
 import { I18nProvider } from '../src/i18n/context'
 import type { ApEvent, RunSummary } from '../src/types'
 import type { RunValuesStream, ValuesPicker } from '../src/useRunValues'
-import { noChoice, pickerRuns, resolveRun, choose, type RunChoice } from '../src/valuePicker'
+import { noChoice, pickerRuns, resolveRun, choose, type RunChoice } from '../src/valuePickerModel'
 import { reduceAllValues } from '../src/values'
 
 // The edge inspector's states (F2.3 requirement 17), text safety and view. Streams are the

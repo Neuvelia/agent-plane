@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import valueEvents from './fixtures/demo-approve-values.json'
 import type { ApEvent, RunSummary } from '../src/types'
-import { choose, confirmVersion, defaultRun, noChoice, pickerRuns, readableRunId, resolveRun } from '../src/valuePicker'
+import { choose, confirmVersion, defaultRun, noChoice, pickerRuns, readableRunId, resolveRun } from '../src/valuePickerModel'
 import { FIRST_VALUE_SCHEMA, MAX_VALUES_BYTES, graphInputSlot, initialValues, outputSlot, reduceAllValues, reduceValues, valueNodeStatus, type RecordedValue, type ValueSlot } from '../src/values'
 
 // demo-approve-values.json: recorded `agentplane run .agents/graphs/demo-vertical.yaml --approve approve
