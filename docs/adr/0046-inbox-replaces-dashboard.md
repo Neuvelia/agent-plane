@@ -1,6 +1,6 @@
 # ADR-0046 - The Inbox triage queue replaces the Dashboard as the landing screen
 
-**Status:** proposed
+**Status:** accepted
 **Date:** 2026-11-27
 **Amends:** F2.5a requirement 11 (Dashboard) and requirement 4 (Sidebar and global bar)
 **Feature:** F2.5b (`docs/features/F2.5b-inbox-redesign.md`)
