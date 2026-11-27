@@ -143,3 +143,33 @@ func wellFormedFindings() string {
 	end := strings.Index(wellFormedReview, "## Withdrawn Findings")
 	return wellFormedReview[start:end]
 }
+
+// Each case hides a P0 from a gate that only parsed the inside of the four
+// sections; each must fail the review.
+func TestParseReviewRejectsFindingsOutsideTheFourSections(t *testing.T) {
+	const hidden = "1. **[NEW][P0] Secret leak** - `a.go:1`\n   Evidence."
+	tests := map[string]string{
+		"entry under the verdict": strings.Replace(wellFormedReview,
+			"Two findings need a fix before merge.", "Two findings.\n\n"+hidden, 1),
+		"entry before the verdict":              hidden + "\n\n" + wellFormedReview,
+		"entry under an extra trailing heading": wellFormedReview + "\n## Notes\n\n" + hidden + "\n",
+		"extra heading after an empty Findings": strings.Replace(wellFormedReview, wellFormedFindings(),
+			"## Findings\n\nNone.\n\n## Security\n\n"+hidden+"\n\n", 1),
+		"heading with two spaces ends a section": strings.Replace(wellFormedReview, wellFormedFindings(),
+			"## Findings\n\nNone.\n\n##  Findings\n\n"+hidden+"\n\n", 1),
+		"indented heading inside an entry": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",
+			"Reuse pathscope.Match.\n    ## example\n2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
+		"workflow marker inside the review": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",
+			"Reuse pathscope.Match.\n<!-- review-warrior -->\n2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
+		"priority tag in the verdict": strings.Replace(wellFormedReview,
+			"Two findings need a fix before merge.", "One \\[P0\\] secret leak in a.go.", 1),
+	}
+	for name, review := range tests {
+		t.Run(name, func(t *testing.T) {
+			findings, err := parseReview(review)
+			if !errors.Is(err, errMalformedReview) {
+				t.Fatalf("got %d findings and %v, want errMalformedReview", len(findings), err)
+			}
+		})
+	}
+}

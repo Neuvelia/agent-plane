@@ -13,7 +13,7 @@ Your context window is the budget for the whole review.
 - The diff is under `### Diff` in the PR context when it fits. Read it there. Do not run `git diff` again for the same files.
 - `## Review scope` says whether this run reviews the whole pull request or only what changed since the last review, and lists any file whose diff you must read yourself. Follow it.
 - Read surrounding code with the Read tool and a line range, never a whole large file. Search with Grep limited to the directories in play.
-- Allowed shell commands are `git diff`, `git show`, `git log` and `git ls-files`. Run one command per call; do not chain commands.
+- Allowed shell commands are `git diff`, `git show`, `git log` and `git ls-files`, with paths relative to the repository root. Run one command per call; do not chain commands. Absolute paths, `~`, `../` and shell variables are refused.
 - Do not read an `AGENTS.md` from the checkout: the relevant ones are below.
 
 ## What to look for
@@ -64,7 +64,7 @@ P0 and P1 findings block the merge gate, so give them only with a concrete failu
 
 Keep each finding under 80 words, in plain, concise English. Each finding states the priority and a short title, the exact file and line, the evidence and impact, and the smallest fix, including code that can be removed. Avoid code blocks unless a short snippet is essential.
 
-Output exactly these four sections, in this order, and nothing else. Every numbered entry starts with its tag and priority in brackets, as shown, with no other text before it. Start each entry at the beginning of a line with its number, indent every following line of the entry, and do not use bullets or unnumbered entries: anything else makes the review malformed and fails the gate.
+Output exactly these four sections, in this order, and nothing else. Every numbered entry starts with its tag and priority in brackets, as shown, with no other text before it. Start each entry at the beginning of a line with its number, indent every following line of the entry, and do not use bullets or unnumbered entries. Write no other headings, no text before `## Verdict`, and no `[TAG]` or `[Pn]` anywhere except at the start of an entry. Anything else makes the review malformed and fails the gate.
 
 ## Verdict
 

@@ -15,7 +15,7 @@ import (
 	"os"
 )
 
-var errUsage = errors.New("usage: reviewwarrior compose|responses|check|render|render-failure [flags]")
+var errUsage = errors.New("usage: reviewwarrior compose|responses|check|render|render-failure|git-guard [flags]")
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
@@ -34,6 +34,7 @@ func run(args []string, out io.Writer) error {
 		"check":          runCheck,
 		"render":         runRender,
 		"render-failure": runRenderFailure,
+		"git-guard":      runGitGuard,
 	}
 	command, ok := commands[args[0]]
 	if !ok {

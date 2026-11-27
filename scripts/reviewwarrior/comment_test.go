@@ -19,8 +19,10 @@ func TestRenderReviewStripsForgedMarkersAndRecordsTheHead(t *testing.T) {
 	if previousReviewedSHA(body) != head || !strings.HasSuffix(body, reviewMarker+"\n") {
 		t.Fatalf("markers missing:\n%s", body)
 	}
-	if _, err := parseReview(body); err != nil {
-		t.Fatalf("rendered comment no longer parses as a review: %v", err)
+	// The next run reads the previous findings from the comment with section.
+	findings, found := section(body, headingFindings)
+	if !found || !strings.Contains(findings, "Duplicate helper") {
+		t.Fatalf("rendered comment lost its Findings section:\n%s", body)
 	}
 }
 

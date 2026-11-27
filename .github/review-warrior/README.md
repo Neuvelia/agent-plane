@@ -32,8 +32,10 @@ ReviewWarrior is therefore skipped, with a passing status.
    commits since the last review) or `/review-warrior full review` (the whole
    pull request) is honoured only from someone with `write` or `admin`
    permission. The command must open the comment, so a quote reply never
-   starts a run. Authorized runs of one pull request run one at a time; a run
-   that replaces a queued one reads its request comment as a response.
+   starts a run. Authorized runs of one pull request run one at a time.
+   GitHub keeps one queued run per pull request: a newer run that replaces a
+   queued one reads its request comment as a response, but a replaced
+   `full review` request becomes an incremental review; ask again if needed.
 3. **Compose.** The tool builds the prompt from the base-commit instructions,
    the root `AGENTS.md` and every `AGENTS.md` above a changed file, the
    matching rules, and the untrusted pull request context: title, description,
@@ -47,18 +49,29 @@ ReviewWarrior is therefore skipped, with a passing status.
    `CLAUDE.md`, hooks or plugins from the checkout), `--restricted` (no
    settings files, file tools confined to the checkout), only `Read`, `Grep`,
    `Glob` and `git diff/show/log/ls-files`, no network tools, 15-minute limit.
+   Its `git` is a shim that runs `reviewwarrior git-guard`: it refuses other
+   subcommands, `--no-index`, `--output`, external diff helpers and any path
+   that is absolute, starts with `~` or climbs with `..`, because `git diff`
+   with a path outside the repository silently reads that file. Deny patterns
+   on the command text are a second layer.
    Model, effort and CLI version are fixed in the workflow.
-5. **Check.** `reviewwarrior check` validates the four sections. A tagged
-   section is either `None.` / `No actionable findings.` alone, or numbered
-   entries at column 0 with a `[TAG][Pn]` prefix, each followed only by
-   indented text with no tag in it. Anything else, such as a bulleted finding,
-   is malformed, and a malformed review is a failure, never "no findings". A
-   review that contains the API key is a failure and is not published.
-6. **Publish.** Mentions and HTML outside code are neutralized. The new
+5. **Check.** `reviewwarrior check` accounts for every line of the review:
+   the four headings exactly, at column 0 and in order, with nothing before
+   the first and no other heading or workflow marker anywhere. The verdict
+   carries no `[TAG]` or `[Pn]`. A tagged section is either `None.` /
+   `No actionable findings.` alone, or numbered entries at column 0 with a
+   `[TAG][Pn]` prefix, each followed only by indented text with no tag in it.
+   Anything else, such as a bulleted finding or one under an extra heading, is
+   malformed, and a malformed review is a failure, never "no findings". A
+   review that contains the API key verbatim is a failure and is not
+   published; an encoded copy is not detected.
+6. **Publish.** Every `@mention` and `<` is neutralized, inside code too (a
+   `<` in code shows as `&lt;`). The new
    review replaces every earlier review comment, read fresh at publish time.
    The comment records the reviewed commit and the newest comment the run
-   read; the next run reads author responses from that point, so a reply
-   written during a run is not skipped. A failed run posts a failure notice
+   read; the next run reads author responses from that point, inclusive, so
+   a reply written during a run is not skipped (a reply from that same second
+   is read twice). An edit to an older comment is not read again. A failed run posts a failure notice
    and keeps the last review, which carries the findings and the withdrawal
    ledger.
 7. **Gate.** The `ReviewWarrior` status is `success` only when the review
@@ -95,9 +108,11 @@ explicit, repository-level opt-in made by adding the secret. Do not enable it
 for a repository whose content must not leave GitHub.
 
 The model never receives a GitHub token, cannot run code from the pull
-request, cannot follow a symbolic link out of the checkout, and cannot reach
-the network except through the review it returns. Its process does hold the
-API key; a review that quotes it is not published.
+request, cannot follow a symbolic link out of the checkout, cannot point Git
+at a path outside it, and cannot reach the network except through the review
+it returns. Its process does hold the API key; a review that quotes it
+verbatim is not published, but an encoded copy would not be caught, so the
+containment above is the defence, not the check.
 The rendered comment strips any workflow marker the model writes, so a review
 cannot forge the reviewed commit or the comment identity.
 

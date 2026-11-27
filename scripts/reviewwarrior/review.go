@@ -35,7 +35,7 @@ var numberedLine = regexp.MustCompile(`^\d+\.\s`)
 // tagPattern finds an entry tag anywhere on a line, escaped or not. A tag
 // outside an entry's own prefix means the entry is not where the gate looks
 // for it, so the review is malformed rather than silently uncounted.
-var tagPattern = regexp.MustCompile(`\\?\[(NEW|REMAINS|RESOLVED|WITHDRAWN)\\?\]`)
+var tagPattern = regexp.MustCompile(`\\?\[(NEW|REMAINS|RESOLVED|WITHDRAWN|P[0-9])\\?\]`)
 
 // sectionSpec names a section and the tags its entries may carry.
 type sectionSpec struct {
@@ -84,15 +84,19 @@ func section(text, heading string) (string, bool) {
 	return strings.TrimSpace(strings.Join(body, "\n")), inside
 }
 
-// parseReview validates the review shape and returns its findings.
+// parseReview validates the review shape and returns its findings. Every line
+// of the review is accounted for: blank lines before the first heading, the
+// four headings exactly and in order, and the body of the section they open.
+// Text the gate does not read, such as a finding under an extra heading or
+// before the first section, makes the review malformed.
 func parseReview(text string) ([]finding, error) {
-	if err := checkHeadingOrder(text); err != nil {
+	bodies, err := splitSections(text)
+	if err != nil {
 		return nil, err
 	}
 	var findings []finding
-	for _, spec := range reviewSections {
-		body, _ := section(text, spec.heading)
-		entries, err := parseEntries(spec, body)
+	for i, spec := range reviewSections {
+		entries, err := parseEntries(spec, bodies[i])
 		if err != nil {
 			return nil, err
 		}
@@ -103,26 +107,55 @@ func parseReview(text string) ([]finding, error) {
 	return findings, nil
 }
 
-func checkHeadingOrder(text string) error {
-	position := -1
-	for _, spec := range reviewSections {
-		count := 0
-		index := -1
-		for i, line := range strings.Split(text, "\n") {
-			if strings.TrimSpace(line) == spec.heading {
-				count++
-				index = i
-			}
+// headingLine matches a Markdown ATX heading at any indentation.
+var headingLine = regexp.MustCompile(`^\s*#{1,6}(\s|$)`)
+
+// splitSections returns the body of each review section, in reviewSections
+// order. A heading may only be the next expected one, written exactly and at
+// column 0; any other heading-like line, and any workflow marker, is an error.
+func splitSections(text string) ([]string, error) {
+	lines := make([][]string, len(reviewSections))
+	current := -1
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimRight(line, " \t\r")
+		next, err := nextSection(line, current)
+		if err != nil {
+			return nil, err
 		}
-		if count != 1 {
-			return fmt.Errorf("%w: %q appears %d times, want exactly once", errMalformedReview, spec.heading, count)
+		if next != current {
+			current = next
+			continue
 		}
-		if index < position {
-			return fmt.Errorf("%w: %q is out of order", errMalformedReview, spec.heading)
+		if current < 0 && line != "" {
+			return nil, fmt.Errorf("%w: text before %q: %q", errMalformedReview, headingVerdict, truncate(line, 120))
 		}
-		position = index
+		if current >= 0 {
+			lines[current] = append(lines[current], line)
+		}
 	}
-	return nil
+	if current != len(reviewSections)-1 {
+		return nil, fmt.Errorf("%w: %q is missing", errMalformedReview, reviewSections[current+1].heading)
+	}
+	bodies := make([]string, len(lines))
+	for i, body := range lines {
+		bodies[i] = strings.TrimSpace(strings.Join(body, "\n"))
+	}
+	return bodies, nil
+}
+
+// nextSection returns the section a line belongs to: current, or the next
+// one when the line is its heading.
+func nextSection(line string, current int) (int, error) {
+	if strings.Contains(line, markerPrefix) {
+		return current, fmt.Errorf("%w: workflow marker in the review", errMalformedReview)
+	}
+	if !headingLine.MatchString(line) {
+		return current, nil
+	}
+	if current+1 < len(reviewSections) && line == reviewSections[current+1].heading {
+		return current + 1, nil
+	}
+	return current, fmt.Errorf("%w: unexpected heading %q; only the four review sections, in order, are allowed", errMalformedReview, truncate(line, 80))
 }
 
 // parseEntries reads a tagged section strictly: it is either an empty-section
@@ -133,7 +166,10 @@ func parseEntries(spec sectionSpec, body string) ([]finding, error) {
 	if body == "" {
 		return nil, fmt.Errorf("%w: %q is empty", errMalformedReview, spec.heading)
 	}
-	if spec.tags == nil || emptySection[body] {
+	if spec.tags == nil {
+		return nil, rejectTags(spec, body)
+	}
+	if emptySection[body] {
 		return nil, nil
 	}
 	var entries []finding
@@ -166,6 +202,15 @@ func parseLine(spec sectionSpec, line string, afterEntry bool) (finding, bool, e
 		return finding{}, false, fmt.Errorf("%w: tag inside the text of an entry under %q: %q", errMalformedReview, spec.heading, truncate(line, 120))
 	}
 	return finding{}, false, nil
+}
+
+// rejectTags fails a section without entries, such as the verdict, that
+// carries an entry tag: a finding written there would not reach the gate.
+func rejectTags(spec sectionSpec, body string) error {
+	if match := tagPattern.FindString(body); match != "" {
+		return fmt.Errorf("%w: tag %s under %q, which takes no entries", errMalformedReview, match, spec.heading)
+	}
+	return nil
 }
 
 func startsIndented(line string) bool {

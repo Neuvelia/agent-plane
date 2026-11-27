@@ -33,9 +33,13 @@ repository's content across the same boundary, so the decision is recorded.
 4. **Containment of the reviewer.** The reviewer is read-only and gets no
    GitHub token. Instructions and the gating tool come from the base commit.
    The checkout holds no symbolic links, so the file tools cannot read outside
-   it (for example `/proc/self/environ`, which holds the API key). A review
-   that contains the API key is not published. Model text is published with
-   mentions and HTML neutralized and workflow markers stripped.
+   it (for example `/proc/self/environ`, which holds the API key). The
+   reviewer's `git` is a guard that refuses paths outside the checkout, since
+   `git diff` with such a path silently reads that file. A review that
+   contains the API key verbatim is not published; this is a last check, not
+   the defence, because an encoded copy is not detected. Model text is
+   published with every mention and `<` neutralized and workflow markers
+   stripped, and the gate rejects any review text it does not parse.
 5. **Advisory until required.** The `ReviewWarrior` status gates a merge only
    when branch protection makes it required; it fails closed when a review did
    not complete, parse or publish.

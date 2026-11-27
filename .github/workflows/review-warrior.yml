@@ -95,8 +95,10 @@ jobs:
     # snapshot, so the older review could end up last and the next run would
     # read it as the previous one, losing the newer withdrawals. Job
     # concurrency applies only after `authorize` passed, so an unauthorized
-    # comment cannot enter this group. Never cancelled: a newer run that
-    # replaces a queued one reads its request comment as an author response.
+    # comment cannot enter this group. A running review is never cancelled.
+    # GitHub keeps one queued run per group, so a newer run replaces a queued
+    # one: it still reads that run's request comment as an author response,
+    # but a replaced `full review` request becomes an incremental review.
     concurrency:
       group: ${{ github.workflow }}-review-${{ github.event.pull_request.number || github.event.issue.number }}
       cancel-in-progress: false
@@ -133,6 +135,7 @@ jobs:
             echo "BASE_TREE=${RUNNER_TEMP}/review-warrior-base"
             echo "RW=${RUNNER_TEMP}/reviewwarrior"
             echo "DATA=${RUNNER_TEMP}/review-warrior"
+            echo "GUARD_BIN=${RUNNER_TEMP}/review-warrior-bin"
           } >> "$GITHUB_ENV"
 
       - name: Check out the pull request
@@ -297,12 +300,41 @@ jobs:
             exit 1
           fi
 
+      # `git diff` with a path outside the repository silently becomes
+      # `git diff --no-index` and prints that file; a permission pattern on the
+      # command text cannot stop it. The reviewer's `git` is a shim that runs
+      # `reviewwarrior git-guard`, which checks the expanded arguments and only
+      # then runs the real Git. Fails the run if the shim is not the `git` a
+      # plain or a login shell resolves, or if it lets an outside path through.
+      - name: Install the Git guard
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          real_git=$(command -v git)
+          mkdir -p "$GUARD_BIN"
+          printf '#!/bin/sh\nexec "%s" git-guard -git "%s" -- "$@"\n' "$RW" "$real_git" > "$GUARD_BIN/git"
+          chmod 0755 "$GUARD_BIN/git"
+          for shell in "bash -c" "bash -lc"; do
+            resolved=$(cd "$WORK" && PATH="$GUARD_BIN:$PATH" $shell 'command -v git')
+            if [ "$resolved" != "$GUARD_BIN/git" ]; then
+              echo "::error title=ReviewWarrior::The Git guard is not first on PATH for ${shell} (got ${resolved})."
+              exit 1
+            fi
+          done
+          if (cd "$WORK" && PATH="$GUARD_BIN:$PATH" git diff /etc/hostname /dev/null) > /dev/null 2>&1; then
+            echo "::error title=ReviewWarrior::The Git guard let a path outside the checkout through."
+            exit 1
+          fi
+
       # The reviewer is read-only: --bare skips CLAUDE.md discovery, hooks and
       # plugins from the checkout; --restricted ignores settings files and keeps
       # the file tools inside the checkout, which holds no symbolic links; the
-      # only shell commands are Git reads, and no network tool is enabled. A
-      # review that contains the API key is never published: secret masking
-      # covers the log, not a comment. This step never fails: it reports
+      # only shell commands are Git reads through the guard above, with the
+      # deny patterns as a second layer against absolute, home, climbing and
+      # variable paths; no network tool is enabled. A review that contains the
+      # API key verbatim is never published: secret masking covers the log, not
+      # a comment. An encoded copy is not detected. This step never fails: it reports
       # status and reason, and the gate below decides.
       - name: Run the review
         id: review
@@ -318,13 +350,14 @@ jobs:
             echo "reason=$2" >> "$GITHUB_OUTPUT"
             exit 0
           }
-          timeout 900 claude --print --bare --restricted \
+          PATH="$GUARD_BIN:$PATH" timeout 900 claude --print --bare --restricted \
             --model "$MODEL" --effort "$EFFORT" \
             --output-format json --no-session-persistence --strict-mcp-config \
             --permission-mode dontAsk \
             --tools Read,Grep,Glob,Bash \
             --allowedTools Read Grep Glob 'Bash(git diff:*)' 'Bash(git show:*)' 'Bash(git log:*)' 'Bash(git ls-files:*)' \
             --disallowedTools 'Bash(*--output*)' 'Bash(*--no-index*)' 'Bash(*--ext-diff*)' 'Bash(*--textconv*)' \
+              'Bash(* /*)' "Bash(* '/*)" 'Bash(* "/*)' 'Bash(*=/*)' 'Bash(* ~*)' 'Bash(*=~*)' 'Bash(*../*)' 'Bash(*$*)' \
             < "$DATA/prompt.md" > "$DATA/result.json" 2> "$DATA/errors.txt"
           code=$?
           head -c 4000 "$DATA/errors.txt" >&2
