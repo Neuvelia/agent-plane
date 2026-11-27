@@ -30,6 +30,12 @@ operations in the child package.
   errors together, and keep warnings nonblocking. It checks graph, loop and
   human structure, but concrete Shell, Gate and Agent configuration checks
   belong to their executors and their CLI/API composition.
+- `ValidateDataflow` (`dataflow.go`) runs only the `Validate` passes that read
+  edges, graph input bindings or the providers they create, in `Validate`'s
+  order; editors judge connections with it (issue #192). A new pass that reads
+  `Edges`, `GraphInputBindings`, providers or dependencies must also run there,
+  and must not reuse a code of another pass;
+  `TestValidateDataflowMatchesValidateForConnectionEdits` checks the subset.
 - Edges are explicit data dependencies. `CompileBindings` validates first and
   derives direct producer dependencies from node-output edges only. Its
   resolution methods return typed, detached values. An absent graph input

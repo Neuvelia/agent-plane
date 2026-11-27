@@ -20,10 +20,13 @@ import (
 // human node. Node ids are echoed only after they parse as identifiers, so no
 // free text from the graph reaches a message.
 func (v *definitionValidator) validateSecretFlowToAgent() {
-	steps := v.dataEdgeSteps()
-	for _, source := range sortedNodeIDs(v.definition.Nodes) {
+	var steps map[string][]edgeStep // indexed on the first secret holder: most graphs have none
+	for _, source := range v.sortedNodes() {
 		if !holdsSecrets(v.definition.Nodes[source]) {
 			continue
+		}
+		if steps == nil {
+			steps = v.dataEdgeSteps()
 		}
 		reach := shortestPaths(source, steps)
 		agents := make([]string, 0, len(reach))
