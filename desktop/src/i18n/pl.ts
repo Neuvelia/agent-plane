@@ -787,7 +787,7 @@ export const pl: Record<MessageKey, string> = {
   'palette.none': 'Nic nie pasuje do „{q}”. Spróbuj identyfikatora uruchomienia lub nazwy grafu.',
   'palette.runsLoading': 'Wczytywanie uruchomień…',
   'palette.runsError': 'Nie udało się wczytać uruchomień. Zamknij i otwórz paletę ponownie, aby spróbować jeszcze raz.',
-  'palette.navigate': 'nawigacja',
+  'palette.navigate': 'nawiguj',
   'palette.open': 'otwórz',
   'palette.filter': 'filtruj według typu',
   'palette.type': 'Wpisz',

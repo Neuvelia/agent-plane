@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { I18nProvider } from '../src/i18n/context'
@@ -22,8 +23,7 @@ function html({ query = '', runs = 'ready' as RunsState, mac = false, locale = '
 }
 
 describe('CommandPalette', () => {
-  // roadmap: F2.5b-AC2
-  it('is a labelled dialog with a combobox that points at the first option', () => {
+  it('[F2.5b-AC2] is a labelled dialog with a combobox that points at the first option', () => {
     const out = html()
     expect(out).toMatch(/<dialog[^>]*aria-label="Command palette"/)
     const input = /<input[^>]*role="combobox"[^>]*>/.exec(out)![0]
@@ -43,16 +43,14 @@ describe('CommandPalette', () => {
     expect(html()).toContain('2 waiting<kbd>Ctrl Shift A</kbd>')
     expect(html({ mac: true })).toContain('2 waiting<kbd>⌘ ⇧ A</kbd>')
   })
-  // roadmap: F2.5b-AC4
-  it('says nothing matches, without an empty listbox', () => {
+  it('[F2.5b-AC4] says nothing matches, without an empty listbox', () => {
     const out = html({ query: 'zzz' })
     expect(out).toContain('Nothing matches “zzz”. Try a run id or a graph name.')
     expect(out).not.toContain('role="listbox"')
     expect(out).toContain('aria-expanded="false"')
     expect(out).not.toContain('aria-activedescendant')
   })
-  // roadmap: F2.5b-AC4
-  it('reports runs that are loading or could not be read, but not for the actions scope', () => {
+  it('[F2.5b-AC4] reports runs that are loading or could not be read, but not for the actions scope', () => {
     expect(html({ runs: 'loading' })).toContain('Loading runs…')
     expect(html({ runs: 'error' })).toMatch(/class="cmdk-note bad"[^>]*>Runs could not be loaded/)
     expect(html({ runs: 'error', query: '>' })).not.toContain('Runs could not be loaded')
@@ -66,8 +64,7 @@ describe('CommandPalette', () => {
 })
 
 describe('GlobalBar search', () => {
-  // roadmap: F2.5b-AC1
-  it('offers the palette as a button that names its shortcut', () => {
+  it('[F2.5b-AC1] offers the palette as a button that names its shortcut', () => {
     const out = renderToStaticMarkup(
       <I18nProvider locale="en">
         <GlobalBar lost={false} search={{ onOpen: noop, keys: 'Ctrl K', ariaKeys: 'Control+K' }} />
@@ -86,5 +83,14 @@ describe('GlobalBar search', () => {
       </I18nProvider>,
     )
     expect(out).not.toContain('palette-open')
+  })
+})
+
+describe('palette motion', () => {
+  const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
+  it('animates in and out, and removes the backdrop fade under reduced motion (`*` does not match ::backdrop)', () => {
+    expect(css).toMatch(/\.cmdk\[open\]\{[^}]*animation:cmdk-in \.18s/)
+    expect(css).toMatch(/\.cmdk\.closing\{[^}]*animation:cmdk-out \.12s/)
+    expect(css).toContain('@media (prefers-reduced-motion:reduce){.cmdk::backdrop{animation:none}}')
   })
 })

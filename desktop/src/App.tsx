@@ -11,7 +11,7 @@ import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
 import { CommandPalette, isMac, usePaletteRuns, type PaletteCommand } from './ui/CommandPalette'
 import { runEntries, SHORTCUTS, shortcutText, type GlobalCommand } from './palette'
 import { useGlobalShortcuts } from './useShortcuts'
-import type { MessageKey } from './i18n'
+import { runStatusKey } from './status'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -82,7 +82,10 @@ function Shell({ lost }: { lost: boolean }) {
     dashboard: go('dashboard'),
   }
   useGlobalShortcuts(mac, (c) => (c === 'palette' ? setPalette(true) : perform[c]()))
-  const statusText = (s: string) => (RUN_STATUSES.includes(s) ? t(`status.run.${s}` as MessageKey).toLowerCase() : s)
+  const statusText = (s: string) => {
+    const key = runStatusKey(s)
+    return key ? t(key).toLowerCase() : s
+  }
   const commands: PaletteCommand[] = [
     { id: 'new-run', group: 'actions', label: t('nav.new'), hint: '', shortcut: SHORTCUTS.newRun, icon: 'runs', perform: perform.newRun },
     { id: 'open-graph', group: 'actions', label: t('palette.openGraph'), hint: '', shortcut: SHORTCUTS.openGraph, icon: 'file', perform: perform.openGraph },
@@ -152,5 +155,3 @@ function Shell({ lost }: { lost: boolean }) {
     </div>
   )
 }
-
-const RUN_STATUSES: readonly string[] = ['running', 'succeeded', 'failed', 'cancelled', 'interrupted', 'unsupported']

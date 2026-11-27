@@ -216,3 +216,4 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F3.2 | Testy Windows nie były uruchamiane; run w CLI kontynuuje po błędzie zapisu (poprawka A1 w specu). | ADR-0027 |  |  |
 | F3.4 | Brak flag --run-timeout/--cancel-grace, user_cancel z API/desktopu, Windows (F3.4a) i kryteriów trwałych (D) ze speca. |  | #190 |  |
 | F3.8 | Tylko provider env i Shell nodes; keychain i Agent secret_env odroczone. | ADR-0029 |  |  |
+| F2.5b | Prefiks # dopasowuje też nazwę grafu (wymaganie 4 speca: tylko początek id uruchomienia); decyzja w issue. |  | #218 |  |

@@ -66,6 +66,16 @@ export function filterEntries<T extends PaletteEntry>(entries: readonly T[], raw
   return out
 }
 
+/**
+ * The active row is remembered by entry id, so rows that arrive later (runs) do not
+ * move it to another entry. An unknown or missing id means the first row; -1 when empty.
+ */
+export function activeIndex(shown: readonly PaletteEntry[], activeId: string | null): number {
+  if (shown.length === 0) return -1
+  const i = activeId === null ? -1 : shown.findIndex((e) => e.id === activeId)
+  return i < 0 ? 0 : i
+}
+
 /** Arrow keys move the active row and wrap around. An empty list has no active row (-1). */
 export function moveActive(active: number, count: number, key: 'ArrowDown' | 'ArrowUp'): number {
   if (count === 0) return -1
@@ -85,6 +95,8 @@ export interface KeyPress {
   altKey: boolean
   /** The focus is in a text field: plain letter sequences do not apply there. */
   typing: boolean
+  /** Event time in milliseconds (KeyboardEvent.timeStamp); a sequence must finish within SEQUENCE_WINDOW_MS. */
+  time: number
 }
 
 export const SHORTCUTS: Record<GlobalCommand, Shortcut> = {
@@ -96,10 +108,16 @@ export const SHORTCUTS: Record<GlobalCommand, Shortcut> = {
   dashboard: { kind: 'sequence', keys: ['G', 'D'] },
 }
 
-/** Tracks the first key of a sequence between presses. */
+/** Tracks the first key of a sequence between presses, and when it was pressed. */
 export interface ShortcutState {
   pending: string | null
+  at: number
 }
+
+export const IDLE: ShortcutState = { pending: null, at: 0 }
+
+/** How long the second key of a sequence ("D" after "G") may follow the first. */
+export const SEQUENCE_WINDOW_MS = 1000
 
 /**
  * Matches a key press against SHORTCUTS. Chords use Cmd on macOS and Ctrl elsewhere.
@@ -108,12 +126,55 @@ export interface ShortcutState {
 export function matchShortcut(state: ShortcutState, k: KeyPress, mac: boolean): { state: ShortcutState; command: GlobalCommand | null } {
   const mod = mac ? k.metaKey && !k.ctrlKey : k.ctrlKey && !k.metaKey
   const key = k.key.length === 1 ? k.key.toUpperCase() : k.key
-  if (mod && !k.altKey) return { state: { pending: null }, command: findCommand((s) => s.kind === 'chord' && s.key === key && Boolean(s.shift) === k.shiftKey) }
-  if (k.typing || k.ctrlKey || k.metaKey || k.altKey || key.length !== 1) return { state: { pending: null }, command: null }
-  const done = findCommand((s) => s.kind === 'sequence' && state.pending === s.keys[0] && key === s.keys[1])
-  if (done) return { state: { pending: null }, command: done }
+  if (mod && !k.altKey) return { state: IDLE, command: findCommand((s) => s.kind === 'chord' && s.key === key && Boolean(s.shift) === k.shiftKey) }
+  if (k.typing || k.ctrlKey || k.metaKey || k.altKey || key.length !== 1) return { state: IDLE, command: null }
+  const pending = k.time - state.at <= SEQUENCE_WINDOW_MS ? state.pending : null
+  const done = findCommand((s) => s.kind === 'sequence' && pending === s.keys[0] && key === s.keys[1])
+  if (done) return { state: IDLE, command: done }
   const starts = Object.values(SHORTCUTS).some((s) => s.kind === 'sequence' && s.keys[0] === key)
-  return { state: { pending: starts ? key : null }, command: null }
+  return { state: starts ? { pending: key, at: k.time } : IDLE, command: null }
+}
+
+/** What else the shell knows about a key press when it reaches the window. */
+export interface PressContext {
+  /** Another handler already acted on it (defaultPrevented). */
+  handled: boolean
+  /** Auto-repeat of a held key. */
+  repeat: boolean
+  /** A modal dialog is open and owns the keyboard. */
+  dialogOpen: boolean
+}
+
+/**
+ * The shell's decision for one window key press: handled presses and auto-repeat change
+ * nothing; while a modal dialog is open no command fires and a started sequence is dropped.
+ */
+export function globalShortcut(state: ShortcutState, k: KeyPress, ctx: PressContext, mac: boolean): { state: ShortcutState; command: GlobalCommand | null } {
+  if (ctx.handled || ctx.repeat) return { state, command: null }
+  if (ctx.dialogOpen) return { state: IDLE, command: null }
+  return matchShortcut(state, k, mac)
+}
+
+/** What a key press inside the open palette does. */
+export type PaletteKeyAction = 'next' | 'previous' | 'choose' | 'scopeNext' | 'scopePrevious' | 'close'
+
+/** A key press inside the palette, with the flags that make it inert. */
+export interface PalettePress extends Omit<KeyPress, 'typing' | 'time'> {
+  repeat: boolean
+  /** An input method is composing text: Enter confirms the composition, not a command. */
+  composing: boolean
+}
+
+/** Maps a key press inside the palette to its action, or null when the palette leaves it alone. */
+export function paletteKey(k: PalettePress, mac: boolean): PaletteKeyAction | null {
+  if (k.composing) return null
+  if (k.key === 'ArrowDown') return 'next'
+  if (k.key === 'ArrowUp') return 'previous'
+  if (k.key === 'Enter') return k.repeat ? null : 'choose'
+  if (k.key === 'Tab') return k.shiftKey ? 'scopePrevious' : 'scopeNext'
+  // A held chord auto-repeats: only its first press closes the palette it just opened.
+  if (k.repeat) return null
+  return matchShortcut(IDLE, { ...k, typing: true, time: 0 }, mac).command === 'palette' ? 'close' : null
 }
 
 function findCommand(test: (s: Shortcut) => boolean): GlobalCommand | null {
@@ -125,6 +186,45 @@ function findCommand(test: (s: Shortcut) => boolean): GlobalCommand | null {
 export function shortcutText(s: Shortcut, mac: boolean): string {
   if (s.kind === 'sequence') return s.keys.join(' ')
   return [mac ? '⌘' : 'Ctrl', ...(s.shift ? [mac ? '⇧' : 'Shift'] : []), s.key].join(' ')
+}
+
+/**
+ * Closing the palette: the exit animation (when there is one) plays first, then the
+ * dialog closes, the shell is told, and only then does the chosen command run, once.
+ * Everything after the first dismissal is ignored.
+ */
+export function createCloser() {
+  let phase: 'open' | 'closing' | 'closed' = 'open'
+  let next: (() => void) | undefined
+  return {
+    /** Starts closing; "animate" means wait for the exit animation, then call finish. */
+    dismiss(then: (() => void) | undefined, animated: boolean): 'animate' | 'finish' | 'ignore' {
+      if (phase !== 'open') return 'ignore'
+      phase = 'closing'
+      next = then
+      return animated ? 'animate' : 'finish'
+    },
+    /** Closes the dialog, tells the shell, then runs the command. Returns false when already closed. */
+    finish(effects: { close: () => void; onClose: () => void }): boolean {
+      if (phase === 'closed') return false
+      phase = 'closed'
+      effects.close()
+      effects.onClose()
+      next?.()
+      return true
+    },
+  }
+}
+
+export type RunsState = 'loading' | 'ready' | 'error'
+
+/** One read of the run list for the palette. A failed read is an error, never an empty list. */
+export async function readPaletteRuns(read: () => Promise<PaletteRun[]>): Promise<{ status: Exclude<RunsState, 'loading'>; runs: PaletteRun[] }> {
+  try {
+    return { status: 'ready', runs: await read() }
+  } catch {
+    return { status: 'error', runs: [] }
+  }
 }
 
 /** The fields of a run summary the palette lists. */

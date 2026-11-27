@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cycleScope, filterEntries, matchShortcut, MAX_RUNS, moveActive, parseQuery, RECENT_RUNS, runEntries, SHORTCUTS, shortcutText, type KeyPress, type PaletteEntry, type PaletteGroup } from '../src/palette'
+import { activeIndex, createCloser, cycleScope, filterEntries, globalShortcut, IDLE, matchShortcut, MAX_RUNS, moveActive, paletteKey, parseQuery, readPaletteRuns, RECENT_RUNS, runEntries, SEQUENCE_WINDOW_MS, SHORTCUTS, shortcutText, type KeyPress, type PalettePress, type PaletteEntry, type PaletteGroup } from '../src/palette'
 
 const label = (g: PaletteGroup) => ({ actions: 'Actions', runs: 'Runs', goto: 'Go to' })[g]
 const runs = (n: number) => runEntries(Array.from({ length: n }, (_, i) => ({ run_id: `${String(i).padStart(2, '0')}c1f40a2-0000`, graph_id: `graph-${i}`, started_at: `2026-11-${String(10 + (i % 20)).padStart(2, '0')}T10:00:${String(i).padStart(2, '0')}Z`, status: 'failed' })), (s) => s)
@@ -19,8 +19,7 @@ const entries: PaletteEntry[] = [
 const ids = (q: string, list = entries) => filterEntries(list, q, label).map((e) => e.id)
 
 describe('palette filtering', () => {
-  // roadmap: F2.5b-AC2
-  it('shows every group in order with an empty query', () => {
+  it('[F2.5b-AC2] shows every group in order with an empty query', () => {
     expect(ids('')).toEqual(['new-run', 'approvals', 'run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa', 'go-dashboard', 'go-settings'])
   })
   it('matches label, hint and group name, ignoring case', () => {
@@ -29,8 +28,7 @@ describe('palette filtering', () => {
     expect(ids('go to')).toEqual(['go-dashboard', 'go-settings'])
     expect(ids('51b8')).toEqual(['run:51b8c6f0-aaaa'])
   })
-  // roadmap: F2.5b-AC3
-  it('narrows to actions with ">" and to runs by id prefix with "#"', () => {
+  it('[F2.5b-AC3] narrows to actions with ">" and to runs by id prefix with "#"', () => {
     expect(ids('>')).toEqual(['new-run', 'approvals'])
     expect(ids('> review')).toEqual(['approvals'])
     expect(ids('#')).toEqual(['run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa'])
@@ -55,8 +53,7 @@ describe('palette scope', () => {
     expect(parseQuery('#8C1F')).toEqual({ scope: 'runs', text: '8c1f' })
     expect(parseQuery('runs')).toEqual({ scope: 'all', text: 'runs' })
   })
-  // roadmap: F2.5b-AC3
-  it('Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
+  it('[F2.5b-AC3] Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
     expect(cycleScope('fix', 1)).toBe('>fix')
     expect(cycleScope('>fix', 1)).toBe('#fix')
     expect(cycleScope('#fix', 1)).toBe('fix')
@@ -66,8 +63,7 @@ describe('palette scope', () => {
 })
 
 describe('palette active row', () => {
-  // roadmap: F2.5b-AC2
-  it('moves with the arrows and wraps around', () => {
+  it('[F2.5b-AC2] moves with the arrows and wraps around', () => {
     expect(moveActive(0, 3, 'ArrowDown')).toBe(1)
     expect(moveActive(2, 3, 'ArrowDown')).toBe(0)
     expect(moveActive(0, 3, 'ArrowUp')).toBe(2)
@@ -92,12 +88,11 @@ describe('run entries', () => {
   })
 })
 
-const press = (key: string, o: Partial<KeyPress> = {}): KeyPress => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, typing: false, ...o })
+const press = (key: string, o: Partial<KeyPress> = {}): KeyPress => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, typing: false, time: 1000, ...o })
 
 describe('global shortcuts', () => {
-  const idle = { pending: null }
-  // roadmap: F2.5b-AC1
-  it('Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
+  const idle = IDLE
+  it('[F2.5b-AC1] Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
     expect(matchShortcut(idle, press('k', { ctrlKey: true, typing: true }), false).command).toBe('palette')
     expect(matchShortcut(idle, press('k', { metaKey: true }), true).command).toBe('palette')
     expect(matchShortcut(idle, press('k', { metaKey: true }), false).command).toBeNull()
@@ -114,9 +109,9 @@ describe('global shortcuts', () => {
   })
   it('G then D goes to the dashboard, but never while typing', () => {
     const g = matchShortcut(idle, press('g'), false)
-    expect(g).toEqual({ state: { pending: 'G' }, command: null })
+    expect(g).toEqual({ state: { pending: 'G', at: 1000 }, command: null })
     expect(matchShortcut(g.state, press('d'), false).command).toBe('dashboard')
-    expect(matchShortcut(g.state, press('x'), false)).toEqual({ state: { pending: null }, command: null })
+    expect(matchShortcut(g.state, press('x'), false)).toEqual({ state: IDLE, command: null })
     expect(matchShortcut(idle, press('g', { typing: true }), false).state.pending).toBeNull()
     expect(matchShortcut(g.state, press('d', { typing: true }), false).command).toBeNull()
   })
@@ -125,5 +120,110 @@ describe('global shortcuts', () => {
     expect(shortcutText(SHORTCUTS.approvals, true)).toBe('⌘ ⇧ A')
     expect(shortcutText(SHORTCUTS.settings, false)).toBe('Ctrl ,')
     expect(shortcutText(SHORTCUTS.dashboard, true)).toBe('G D')
+  })
+})
+
+describe('global shortcut decision', () => {
+  it('drops a G that was pressed too long ago', () => {
+    const g = matchShortcut(IDLE, press('g', { time: 1000 }), false).state
+    expect(matchShortcut(g, press('d', { time: 1000 + SEQUENCE_WINDOW_MS }), false).command).toBe('dashboard')
+    expect(matchShortcut(g, press('d', { time: 1001 + SEQUENCE_WINDOW_MS }), false).command).toBeNull()
+  })
+  it('ignores presses another handler took, and auto-repeat, keeping the started sequence', () => {
+    const g = matchShortcut(IDLE, press('g'), false).state
+    expect(globalShortcut(g, press('k', { ctrlKey: true }), { handled: true, repeat: false, dialogOpen: false }, false)).toEqual({ state: g, command: null })
+    expect(globalShortcut(g, press('k', { ctrlKey: true }), { handled: false, repeat: true, dialogOpen: false }, false)).toEqual({ state: g, command: null })
+  })
+  it('fires nothing while a modal dialog is open and forgets a started sequence', () => {
+    const g = matchShortcut(IDLE, press('g'), false).state
+    expect(globalShortcut(g, press('n', { ctrlKey: true }), { handled: false, repeat: false, dialogOpen: true }, false)).toEqual({ state: IDLE, command: null })
+    // G pressed in a dialog, D after it closed: no navigation.
+    const afterDialog = globalShortcut(g, press('x'), { handled: false, repeat: false, dialogOpen: true }, false).state
+    expect(globalShortcut(afterDialog, press('d'), { handled: false, repeat: false, dialogOpen: false }, false).command).toBeNull()
+  })
+  it('passes every other press to the matcher', () => {
+    expect(globalShortcut(IDLE, press('k', { ctrlKey: true }), { handled: false, repeat: false, dialogOpen: false }, false).command).toBe('palette')
+  })
+})
+
+const inPalette = (key: string, o: Partial<PalettePress> = {}): PalettePress => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, composing: false, ...o })
+
+describe('keys inside the palette', () => {
+  it('[F2.5b-AC2] arrows move, Enter chooses', () => {
+    expect(paletteKey(inPalette('ArrowDown'), false)).toBe('next')
+    expect(paletteKey(inPalette('ArrowUp'), false)).toBe('previous')
+    expect(paletteKey(inPalette('Enter'), false)).toBe('choose')
+    // A held arrow keeps moving; a held Enter does not choose again.
+    expect(paletteKey(inPalette('ArrowDown', { repeat: true }), false)).toBe('next')
+    expect(paletteKey(inPalette('Enter', { repeat: true }), false)).toBeNull()
+  })
+  it('[F2.5b-AC3] Tab and Shift+Tab change the scope', () => {
+    expect(paletteKey(inPalette('Tab'), false)).toBe('scopeNext')
+    expect(paletteKey(inPalette('Tab', { shiftKey: true }), false)).toBe('scopePrevious')
+  })
+  it('[F2.5b-AC1] the palette chord closes it, but not its auto-repeat', () => {
+    expect(paletteKey(inPalette('k', { ctrlKey: true }), false)).toBe('close')
+    expect(paletteKey(inPalette('k', { metaKey: true }), true)).toBe('close')
+    expect(paletteKey(inPalette('k', { ctrlKey: true, repeat: true }), false)).toBeNull()
+  })
+  it('leaves keys alone while an input method composes text', () => {
+    expect(paletteKey(inPalette('Enter', { composing: true }), false)).toBeNull()
+    expect(paletteKey(inPalette('ArrowDown', { composing: true }), false)).toBeNull()
+  })
+  it('leaves typing and other chords to the field', () => {
+    expect(paletteKey(inPalette('a'), false)).toBeNull()
+    expect(paletteKey(inPalette('n', { ctrlKey: true }), false)).toBeNull()
+  })
+})
+
+describe('active entry by id', () => {
+  const shown = entries.slice(0, 3)
+  it('[F2.5b-AC2] follows its entry when rows are inserted before it', () => {
+    const later = [...shown.slice(0, 2), ...runs(5), shown[2]!]
+    expect(activeIndex(shown, shown[2]!.id)).toBe(2)
+    expect(activeIndex(later, shown[2]!.id)).toBe(7)
+  })
+  it('falls back to the first row when its entry is gone or none was chosen', () => {
+    expect(activeIndex(shown, 'gone')).toBe(0)
+    expect(activeIndex(shown, null)).toBe(0)
+    expect(activeIndex([], null)).toBe(-1)
+  })
+})
+
+describe('closing the palette', () => {
+  const effects = () => {
+    const log: string[] = []
+    return { log, fx: { close: () => log.push('close'), onClose: () => log.push('onClose') }, cmd: () => log.push('command') }
+  }
+  it('closes the dialog, tells the shell, then runs the command once', () => {
+    const { log, fx, cmd } = effects()
+    const c = createCloser()
+    expect(c.dismiss(cmd, true)).toBe('animate')
+    expect(log).toEqual([])
+    expect(c.finish(fx)).toBe(true)
+    // animationend and the fallback timer may both arrive: the second finish does nothing.
+    expect(c.finish(fx)).toBe(false)
+    expect(log).toEqual(['close', 'onClose', 'command'])
+  })
+  it('finishes at once without an exit animation (reduced motion)', () => {
+    expect(createCloser().dismiss(undefined, false)).toBe('finish')
+  })
+  it('ignores a second dismissal: Escape then Enter never runs a command', () => {
+    const { log, fx, cmd } = effects()
+    const c = createCloser()
+    c.dismiss(undefined, true)
+    expect(c.dismiss(cmd, true)).toBe('ignore')
+    c.finish(fx)
+    expect(log).toEqual(['close', 'onClose'])
+  })
+})
+
+describe('reading runs for the palette', () => {
+  it('[F2.5b-AC4] reports a failed read as an error, never as an empty list', async () => {
+    expect(await readPaletteRuns(() => Promise.reject(new Error('sidecar down')))).toEqual({ status: 'error', runs: [] })
+  })
+  it('returns the runs that were read', async () => {
+    const list = [{ run_id: 'a', graph_id: 'g', started_at: '2026-11-01T00:00:00Z', status: 'running' }]
+    expect(await readPaletteRuns(() => Promise.resolve(list))).toEqual({ status: 'ready', runs: list })
   })
 })

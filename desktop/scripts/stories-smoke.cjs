@@ -106,9 +106,18 @@ async function checkStory(page, origin, id, locale, fail) {
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
   // Check the state a story ends in: wait for its play function, then for finite
   // animations (a dialog's entrance, a fade) so axe never measures a half-faded frame.
-  await page
-    .waitForFunction(() => ['played', 'completing', 'completed', 'finished', 'errored', 'aborted'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase), null, { timeout: 15000 })
-    .catch(() => fail('story play did not finish'))
+  // The phase is Storybook's own (preview currentRender); a play that throws ends as "errored"
+  // and fails the story, so a broken interaction is never checked as if it had passed.
+  if (!(await page.evaluate(() => typeof window.__STORYBOOK_PREVIEW__?.currentRender?.phase === 'string'))) return fail('cannot read the story phase: Storybook preview API changed, update stories-smoke.cjs')
+  const phase = await page
+    .waitForFunction(() => {
+      const p = window.__STORYBOOK_PREVIEW__?.currentRender?.phase
+      return ['played', 'completing', 'completed', 'finished', 'errored', 'aborted'].includes(p) && p
+    }, null, { timeout: 15000 })
+    .then((h) => h.jsonValue())
+    .catch(() => 'timeout')
+  if (phase === 'timeout') fail('story play did not finish')
+  if (phase === 'errored' || phase === 'aborted') return fail(`story play ${phase}: ${await page.evaluate(() => document.querySelector('#error-message')?.textContent?.slice(0, 300) ?? '')}`)
   await page
     .waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity), null, { timeout: 5000 })
     .catch(() => fail('animations did not settle'))

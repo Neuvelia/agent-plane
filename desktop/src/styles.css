@@ -377,12 +377,15 @@ main:focus{outline:none}
 /* F2.5b command palette (design board "Command palette"). A modal <dialog> in the
    top layer; the page behind is dimmed and slightly blurred by its backdrop.
    Enter: fade + 8px drop + scale from .98 on a decelerating curve; exit is shorter
-   and accelerating. The global reduced-motion rule above removes both. */
+   and accelerating. The global reduced-motion rule above removes both (and the
+   rule below the backdrop's, which `*` does not reach). */
 .cmdk{width:min(640px,calc(100% - 32px));max-width:none;max-height:calc(100vh - 140px);margin:110px auto auto;padding:0;border:1px solid var(--card-line);border-radius:18px;background:var(--bg);color:var(--fg);box-shadow:0 30px 80px rgba(0,0,0,.7);overflow:hidden;font-size:13px;line-height:1.45}
 .cmdk[open]{display:flex;flex-direction:column;animation:cmdk-in .18s cubic-bezier(.23,1,.32,1)}
 .cmdk::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(1.5px);animation:cmdk-fade .18s ease-out}
 .cmdk.closing{animation:cmdk-out .12s cubic-bezier(.4,0,1,1) forwards;pointer-events:none}
 .cmdk.closing::backdrop{animation:cmdk-fade-out .12s ease-in forwards}
+/* The global reduced-motion rule uses `*`, which never matches ::backdrop. */
+@media (prefers-reduced-motion:reduce){.cmdk::backdrop{animation:none}}
 @keyframes cmdk-in{from{opacity:0;transform:translateY(-8px) scale(.98)}}
 @keyframes cmdk-out{to{opacity:0;transform:translateY(-4px) scale(.98)}}
 @keyframes cmdk-fade{from{opacity:0}}

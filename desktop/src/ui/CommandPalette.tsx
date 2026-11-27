@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type AnimationEvent, type KeyboardEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type AnimationEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { listRuns } from '../api'
 import { useI18n } from '../i18n/context'
 import type { MessageKey } from '../i18n'
-import { cycleScope, filterEntries, matchShortcut, moveActive, parseQuery, shortcutText, type PaletteEntry, type PaletteGroup, type PaletteRun } from '../palette'
+import { activeIndex, createCloser, cycleScope, filterEntries, moveActive, paletteKey, parseQuery, readPaletteRuns, shortcutText, type PaletteEntry, type PaletteGroup, type PaletteKeyAction, type PaletteRun, type RunsState } from '../palette'
 import { Icon, type IconName } from './icons'
 
 // F2.5b command palette (design board "Command palette"). A modal <dialog>:
@@ -10,14 +10,15 @@ import { Icon, type IconName } from './icons'
 // aria-activedescendant, Escape, a click outside or the palette shortcut close
 // it, and closing returns focus to where it was. Entries only navigate or open
 // what the shell already offers; the palette decides nothing about runs.
+// Key and close decisions live in palette.ts (paletteKey, createCloser) and are unit-tested.
+
+export type { RunsState }
 
 /** An entry the palette can perform. */
 export interface PaletteCommand extends PaletteEntry {
   icon: IconName
   perform: () => void
 }
-
-export type RunsState = 'loading' | 'ready' | 'error'
 
 /** Longer than the 120 ms exit animation in styles.css (.cmdk.closing). */
 const EXIT_FALLBACK_MS = 300
@@ -29,17 +30,17 @@ export function isMac(): boolean {
   return typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent)
 }
 
-/** Reads the run list each time the palette opens. A failed read is reported, never shown as "no runs". */
+/**
+ * Reads the run list each time the palette opens. Runs from an earlier opening are not
+ * shown while it loads (their status may be stale); a failed read is an error, never "no runs".
+ */
 export function usePaletteRuns(open: boolean): { status: RunsState; runs: PaletteRun[] } {
   const [state, setState] = useState<{ status: RunsState; runs: PaletteRun[] }>({ status: 'loading', runs: [] })
   useEffect(() => {
     if (!open) return
     let alive = true
-    setState((p) => ({ status: 'loading', runs: p.runs }))
-    listRuns().then(
-      (runs) => alive && setState({ status: 'ready', runs }),
-      () => alive && setState({ status: 'error', runs: [] }),
-    )
+    setState({ status: 'loading', runs: [] })
+    void readPaletteRuns(listRuns).then((r) => alive && setState(r))
     return () => {
       alive = false
     }
@@ -60,12 +61,15 @@ export interface CommandPaletteProps {
 export function CommandPalette({ commands, runs, mac, onClose, initialQuery = '' }: CommandPaletteProps) {
   const { t } = useI18n()
   const ref = useRef<HTMLDialogElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const [query, setQuery] = useState(initialQuery)
-  const [active, setActive] = useState(0)
+  // The active entry by id: runs that arrive while the palette is open do not move it.
+  const [activeId, setActiveId] = useState<string | null>(null)
   const [closing, setClosing] = useState(false)
-  const then = useRef<(() => void) | undefined>(undefined)
+  const closer = useRef(createCloser()).current
+  const pressedBackdrop = useRef(false)
   const shown = useMemo(() => filterEntries(commands, query, (g) => t(GROUP_KEY[g])), [commands, query, t])
-  const current = clampActive(active, shown.length)
+  const current = activeIndex(shown, activeId)
   const base = useId()
   const optionId = (i: number) => `${base}-opt-${i}`
 
@@ -79,22 +83,14 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current])
 
-  const finished = useRef(false)
-  const finish = () => {
-    if (finished.current) return
-    finished.current = true
-    // Closing the dialog first returns focus to the element that had it; the command may then move it.
-    ref.current?.close()
-    onClose()
-    then.current?.()
-  }
+  const finish = () => closer.finish({ close: () => ref.current?.close(), onClose })
   const dismiss = (next?: () => void) => {
-    if (closing) return
-    then.current = next
     const d = ref.current
     // With reduced motion (or no layout) there is no exit animation to wait for.
-    if (!d || typeof getComputedStyle !== 'function' || getComputedStyle(d).animationName === 'none') return finish()
-    setClosing(true)
+    const animated = !!d && typeof getComputedStyle === 'function' && getComputedStyle(d).animationName !== 'none'
+    const step = closer.dismiss(next, animated)
+    if (step === 'finish') finish()
+    if (step === 'animate') setClosing(true)
   }
   // A hidden window may never deliver animationend: close anyway shortly after the exit should have ended.
   useEffect(() => {
@@ -112,29 +108,30 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
   }
   const edit = (q: string) => {
     setQuery(q)
-    setActive(0)
+    setActiveId(null)
   }
-
-  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      // From the latest state: presses that arrive before a re-render each still move one row.
-      const key = e.key
-      return setActive((a) => moveActive(clampActive(a, shown.length), shown.length, key))
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      return choose(current)
-    }
-    if (e.key === 'Tab') {
-      e.preventDefault()
-      return edit(cycleScope(query, e.shiftKey ? -1 : 1))
-    }
-    const k = { key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, typing: true }
-    if (matchShortcut({ pending: null }, k, mac).command === 'palette') {
-      e.preventDefault()
-      dismiss()
-    }
+  const act: Record<PaletteKeyAction, () => void> = {
+    // From the latest state: presses that arrive before a re-render each still move one row.
+    next: () => setActiveId((id) => shown[moveActive(activeIndex(shown, id), shown.length, 'ArrowDown')]?.id ?? null),
+    previous: () => setActiveId((id) => shown[moveActive(activeIndex(shown, id), shown.length, 'ArrowUp')]?.id ?? null),
+    choose: () => choose(current),
+    scopeNext: () => edit(cycleScope(query, 1)),
+    scopePrevious: () => edit(cycleScope(query, -1)),
+    close: () => dismiss(),
+  }
+  // Keys are handled for the whole dialog, so they work wherever focus sits inside it.
+  const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
+    const action = paletteKey({ key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, repeat: e.repeat, composing: e.nativeEvent.isComposing }, mac)
+    if (!action) return
+    e.preventDefault()
+    act[action]()
+  }
+  // Pressing anywhere but the field or the list keeps focus in the field; a press that
+  // starts on the backdrop is remembered so only a full click there closes the palette.
+  const onMouseDown = (e: MouseEvent<HTMLDialogElement>) => {
+    const target = e.target as Node
+    pressedBackdrop.current = target === ref.current
+    if (target !== inputRef.current && !(target instanceof Element && target.closest('[role="listbox"]'))) e.preventDefault()
   }
 
   const listId = `${base}-list`
@@ -149,7 +146,9 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
         e.preventDefault()
         dismiss()
       }}
-      onClick={(e) => e.target === ref.current && dismiss()}
+      onKeyDown={onKeyDown}
+      onMouseDown={onMouseDown}
+      onClick={(e) => e.target === ref.current && pressedBackdrop.current && dismiss()}
       onAnimationEnd={onAnimationEnd}
     >
       <div className="cmdk-q">
@@ -158,6 +157,7 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
           <path d="m20 20-4-4" />
         </svg>
         <input
+          ref={inputRef}
           type="text"
           role="combobox"
           aria-label={t('palette.search')}
@@ -170,7 +170,6 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
           placeholder={t('palette.placeholder')}
           value={query}
           onChange={(e) => edit(e.target.value)}
-          onKeyDown={onKeyDown}
           data-testid="palette-input"
         />
         <kbd>esc</kbd>
@@ -181,7 +180,7 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
             {t('palette.none', { q: query.trim() })}
           </div>
         ) : (
-          <Results id={listId} shown={shown} current={current} optionId={optionId} mac={mac} onHover={setActive} onChoose={choose} onKeyDown={onKeyDown} />
+          <Results id={listId} shown={shown} current={current} optionId={optionId} mac={mac} onHover={(i) => setActiveId(shown[i]?.id ?? null)} onChoose={choose} />
         )}
         {searching && runs !== 'ready' && (
           <div className={runs === 'error' ? 'cmdk-note bad' : 'cmdk-note'} role="status" data-testid="palette-runs-state">
@@ -202,15 +201,14 @@ interface ResultsProps {
   mac: boolean
   onHover: (i: number) => void
   onChoose: (i: number) => void
-  onKeyDown: (e: KeyboardEvent<HTMLElement>) => void
 }
 
-function Results({ id, shown, current, optionId, mac, onHover, onChoose, onKeyDown }: ResultsProps) {
+function Results({ id, shown, current, optionId, mac, onHover, onChoose }: ResultsProps) {
   const { t } = useI18n()
   const groups = groupRuns(shown)
   return (
-    // The listbox scrolls. Focus normally stays in the search field; if the listbox takes it, the same keys work there.
-    <div className="cmdk-list" role="listbox" id={id} aria-label={t('palette.results')} aria-activedescendant={current >= 0 ? optionId(current) : undefined} tabIndex={0} onKeyDown={onKeyDown}>
+    // The listbox scrolls. Focus normally stays in the search field; if the listbox takes it, the dialog's keys still work.
+    <div className="cmdk-list" role="listbox" id={id} aria-label={t('palette.results')} aria-activedescendant={current >= 0 ? optionId(current) : undefined} tabIndex={0}>
       {groups.map(({ group, start, items }) => (
         <div key={group} role="group" aria-labelledby={`${id}-${group}`}>
           <div className="cmdk-g" id={`${id}-${group}`} role="presentation">
@@ -245,11 +243,6 @@ function Results({ id, shown, current, optionId, mac, onHover, onChoose, onKeyDo
       ))}
     </div>
   )
-}
-
-/** The active row kept inside the list; -1 when the list is empty. */
-function clampActive(active: number, count: number): number {
-  return count === 0 ? -1 : Math.min(Math.max(active, 0), count - 1)
 }
 
 /** Splits the (already grouped) entries into runs of one group, keeping each entry's overall index. */

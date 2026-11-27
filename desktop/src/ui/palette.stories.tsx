@@ -36,22 +36,39 @@ function type(input: HTMLInputElement, text: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
-/** Goes to the dashboard (G then D), opens the palette from Search, then runs the step. */
+/** Waits until a condition holds; a story whose interaction does not reach its state fails (the smoke reports it). */
+async function expectState(what: string, ok: () => boolean, ms = 4000) {
+  const end = Date.now() + ms
+  while (!ok()) {
+    if (Date.now() > end) throw new Error(`palette story: expected ${what}`)
+    await wait(25)
+  }
+}
+const selected = (root: ParentNode) => root.querySelector('[role="option"][aria-selected="true"]')?.getAttribute('data-testid')
+const options = (root: ParentNode) => [...root.querySelectorAll('[role="option"]')].map((o) => o.getAttribute('data-testid'))
+
+const RUN_ROW = '[data-testid^="palette-item-run:"]'
+const RUNS_STATE = '[data-testid="palette-runs-state"]'
+
+/**
+ * Goes to the dashboard (G then D), opens the palette from Search, waits for `ready`
+ * (the run rows, or the runs state line), then runs the step and checks where it ended.
+ */
 const open =
-  (step?: (input: HTMLInputElement) => Promise<void> | void): S['play'] =>
+  (ready: string, step?: (input: HTMLInputElement, root: HTMLElement) => Promise<void> | void): S['play'] =>
   async ({ canvasElement }) => {
     await until(canvasElement, '[data-testid="palette-open"]')
-    // Let the shell's effects (its keyboard listener) run after the first render.
-    await wait(100)
-    press(window, 'g')
-    press(window, 'd')
-    await wait(150)
+    // The shell's keyboard listener is attached by an effect after the first render: repeat until it answers.
+    await expectState('G D to reach the dashboard', () => {
+      if (canvasElement.querySelector('[data-testid="dashboard"]')) return true
+      press(window, 'g')
+      press(window, 'd')
+      return false
+    })
     ;(await until<HTMLButtonElement>(canvasElement, '[data-testid="palette-open"]')).click()
     const input = await until<HTMLInputElement>(canvasElement, '[data-testid="palette-input"]')
-    // Runs arrive after the palette opens.
-    await wait(200)
-    await step?.(input)
-    await wait(250)
+    await until(canvasElement, ready)
+    await step?.(input, canvasElement)
   }
 
 const story = (bridge: BridgeData, play: S['play']): S => ({
@@ -64,32 +81,52 @@ const story = (bridge: BridgeData, play: S['play']): S => ({
   play,
 })
 
-export const Open: S = story(busy, open())
+export const Open: S = story(
+  busy,
+  open(RUN_ROW, (_, root) => expectState('New run active', () => selected(root) === 'palette-item-new-run')),
+)
 export const KeyboardNavigation: S = story(
   busy,
-  open((input) => {
+  open(RUN_ROW, async (input, root) => {
     press(input, 'ArrowDown')
     press(input, 'ArrowDown')
     press(input, 'ArrowDown')
+    await expectState('the fourth row active', () => selected(root) === options(root)[3])
   }),
 )
 export const Filtered: S = story(
   busy,
-  open((input) => type(input, 'set')),
+  open(RUN_ROW, async (input, root) => {
+    // A graph name: the same in every language.
+    type(input, 'exhausted')
+    const id = exhaustedRetries[0]!.run_id
+    await expectState('only the exhausted-retries run', () => options(root).join() === `palette-item-run:${id}`)
+  }),
 )
 export const ActionsOnly: S = story(
   busy,
-  open((input) => {
+  open(RUN_ROW, async (input, root) => {
     press(input, 'Tab')
+    await expectState('">" and actions only', () => input.value === '>' && options(root).every((id) => ['palette-item-new-run', 'palette-item-open-graph', 'palette-item-approvals'].includes(id ?? '')))
   }),
 )
 export const RunIds: S = story(
   busy,
-  open((input) => type(input, `#${waitingForHuman[0]!.run_id.slice(0, 4)}`)),
+  open(RUN_ROW, async (input, root) => {
+    const id = waitingForHuman[0]!.run_id
+    type(input, `#${id.slice(0, 4)}`)
+    await expectState('one run row', () => options(root).join() === `palette-item-run:${id}`)
+  }),
 )
 export const NothingMatches: S = story(
   busy,
-  open((input) => type(input, 'zzz')),
+  open(RUN_ROW, async (input, root) => {
+    type(input, 'zzz')
+    await until(root, '[data-testid="palette-none"]')
+  }),
 )
-export const RunsLoading: S = story({ runs: [], hang: true }, open())
-export const RunsUnavailable: S = story({ runs: [], unreachable: true }, open())
+export const RunsLoading: S = story({ runs: [], hang: true }, open(RUNS_STATE))
+export const RunsUnavailable: S = story(
+  { runs: [], unreachable: true },
+  open(RUNS_STATE, (_, root) => expectState('the error line', () => root.querySelector(RUNS_STATE)?.classList.contains('bad') === true)),
+)

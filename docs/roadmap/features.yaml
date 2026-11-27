@@ -1797,7 +1797,9 @@ features:
       - "Wyszukiwanie w plikach grafów, YAML i zdarzeniach; uruchamianie lub decyzje z palety."
       - "Jasny motyw, arkusz skrótów (Ctrl /), okno About."
     decisions: []
-    divergences: []
+    divergences:
+      - text: "Prefiks # dopasowuje też nazwę grafu (wymaganie 4 speca: tylko początek id uruchomienia); decyzja w issue."
+        issue: 218
     tasks: []
   - id: F2.8a
     name: "Attempt compare (desktop)"
