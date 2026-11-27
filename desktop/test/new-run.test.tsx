@@ -85,13 +85,15 @@ describe('preflight rows and headline', () => {
     const f = facts({})
     expect(tones(f)).toEqual(['graph:ok', 'agent:ok', 'inputs:ok', 'workspace:warn'])
     const counts = tally(preflightChecks(f), [])
-    expect(counts).toEqual({ passed: 4, warnings: 1, failed: 0 })
+    expect(counts).toEqual({ passed: 3, warnings: 1, failed: 0 })
     expect(headline(preflightState(f.validation), f, counts.warnings, 0)).toEqual({ key: 'newrun.head.warnings', params: { count: 1 } })
   })
 
-  it('every Agent node in its own worktree: ready to run', () => {
+  // Validation does not check isolation (the engine does at start, F3.1), so the request is neutral, not passed.
+  it('every Agent node asks for its own worktree: neutral row, ready to run', () => {
     const f = facts({ def: isolated(fixIssue) })
-    expect(tones(f)).toEqual(['graph:ok', 'agent:ok', 'inputs:ok', 'workspace:ok'])
+    expect(tones(f)).toEqual(['graph:ok', 'agent:ok', 'inputs:ok', 'workspace:idle'])
+    expect(tally(preflightChecks(f), [])).toEqual({ passed: 3, warnings: 0, failed: 0 })
     expect(headline(preflightState(f.validation), f, tally(preflightChecks(f), []).warnings, 0)).toEqual({ key: 'newrun.head.ready' })
   })
 

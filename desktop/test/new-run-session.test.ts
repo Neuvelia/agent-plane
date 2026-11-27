@@ -293,3 +293,11 @@ describe('New run lifetime (attachSession)', () => {
     expect(checks).toBe(1)
   })
 })
+
+describe('New run session: first frame', () => {
+  it('a graph passed in (Inbox "Open graph") is shown as being checked before the check starts', () => {
+    const s = new NewRunSession(new FakeBridge(), { grant: 'A', label: 'a.yaml' }).snapshot()
+    expect(s).toMatchObject({ validating: true, validation: null, validationError: null })
+    expect(preflightChecks({ chosen: true, validating: s.validating, validation: s.validation, validationError: s.validationError, def: s.def, capabilities: s.capabilities, values: s.values })[0]).toMatchObject({ tone: 'pending' })
+  })
+})

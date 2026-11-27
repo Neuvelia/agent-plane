@@ -113,12 +113,14 @@ function inputsCheck(def: Definition, values: PreflightFacts['values']): Check |
   return { id: 'inputs', tone: 'warn', title: 'newrun.check.inputs.missing', titleParams: { count: required.length - filled }, detail }
 }
 
-// Shown only once the engine accepts the graph: whether `isolation: worktree` applies to a
-// node (F3.1) is the engine's rule, so before that the row would claim more than is known.
+// Shown once the engine accepts the graph. Validation does not check isolation: whether
+// `isolation: worktree` applies (a loop Agent node listed in `units`, no uncommitted changes to tracked files; F3.1 requirements 2 and 6) is decided only
+// when the run starts. So a worktree request is shown as asked for (neutral), never as a
+// passed check; the renderer does not judge it.
 function workspaceCheck(def: Definition, valid: boolean): Check | null {
   const { agents, isolated } = agentWorkspace(def)
   if (agents === 0 || !valid) return null
-  if (isolated === agents) return { id: 'workspace', tone: 'ok', title: 'newrun.check.ws.worktree', detail: { key: 'newrun.check.ws.worktreeDetail' } }
+  if (isolated === agents) return { id: 'workspace', tone: 'idle', title: 'newrun.check.ws.worktree', detail: { key: 'newrun.check.ws.worktreeDetail' } }
   return { id: 'workspace', tone: 'warn', title: 'newrun.check.ws.shared', detail: { key: 'newrun.check.ws.sharedDetail' } }
 }
 
@@ -132,10 +134,10 @@ export function preflightChecks(f: PreflightFacts): Check[] {
   return [graph, agents ? agentCheck(f.capabilities) : null, inputsCheck(f.def, f.values), workspaceCheck(f.def, f.validation?.status === 'valid')].filter((c): c is Check => c !== null)
 }
 
-/** Checks that did not fail count as passed; warnings are counted on their own, engine warnings included. */
+/** Three separate groups: rows that passed, warnings (rows and engine warnings) and rows that failed. Neutral and pending rows count in none. */
 export function tally(checks: Check[], diagnostics: Diagnostic[]): { passed: number; warnings: number; failed: number } {
   return {
-    passed: checks.filter((c) => c.tone === 'ok' || c.tone === 'warn').length,
+    passed: checks.filter((c) => c.tone === 'ok').length,
     warnings: checks.filter((c) => c.tone === 'warn').length + count(diagnostics, 'warning'),
     failed: checks.filter((c) => c.tone === 'bad').length,
   }

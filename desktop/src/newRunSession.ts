@@ -61,7 +61,8 @@ export class NewRunSession {
     private readonly ports: NewRunPorts,
     private readonly initial?: ChosenGraph,
   ) {
-    this.state = { graph: initial ?? null, source: initial ? { kind: 'file' } : null, recent: [], def: null, values: {}, validation: null, validationError: null, validating: false, pickError: null, startError: null, busy: false, capabilities: null }
+    // A graph passed in is checked as soon as the screen starts: its first frame already says so.
+    this.state = { graph: initial ?? null, source: initial ? { kind: 'file' } : null, recent: [], def: null, values: {}, validation: null, validationError: null, validating: initial !== undefined, pickError: null, startError: null, busy: false, capabilities: null }
   }
 
   readonly snapshot = (): NewRunState => this.state
