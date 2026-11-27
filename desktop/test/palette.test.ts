@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { activeIndex, createCloser, cycleScope, filterEntries, globalShortcut, IDLE, matchShortcut, MAX_RUNS, moveActive, paletteKey, parseQuery, readPaletteRuns, RECENT_RUNS, runEntries, SEQUENCE_WINDOW_MS, SHORTCUTS, shortcutText, type KeyPress, type PalettePress, type PaletteEntry, type PaletteGroup } from '../src/palette'
+import { activeIndex, createCloser, outside, cycleScope, filterEntries, globalShortcut, IDLE, matchShortcut, MAX_RUNS, moveActive, paletteKey, parseQuery, readPaletteRuns, RECENT_RUNS, runEntries, SEQUENCE_WINDOW_MS, SHORTCUTS, shortcutText, type KeyPress, type PalettePress, type PaletteEntry, type PaletteGroup } from '../src/palette'
 
 const label = (g: PaletteGroup) => ({ actions: 'Actions', runs: 'Runs', goto: 'Go to' })[g]
 const runs = (n: number) => runEntries(Array.from({ length: n }, (_, i) => ({ run_id: `${String(i).padStart(2, '0')}c1f40a2-0000`, graph_id: `graph-${i}`, started_at: `2026-11-${String(10 + (i % 20)).padStart(2, '0')}T10:00:${String(i).padStart(2, '0')}Z`, status: 'failed' })), (s) => s)
@@ -193,7 +193,7 @@ describe('active entry by id', () => {
 describe('closing the palette', () => {
   const effects = () => {
     const log: string[] = []
-    return { log, fx: { close: () => log.push('close'), onClose: () => log.push('onClose') }, cmd: () => log.push('command') }
+    return { log, fx: { close: () => log.push('close'), onClose: (reopen: boolean) => log.push(`onClose:${reopen}`) }, cmd: () => log.push('command') }
   }
   it('closes the dialog, tells the shell, then runs the command once', () => {
     const { log, fx, cmd } = effects()
@@ -203,7 +203,7 @@ describe('closing the palette', () => {
     expect(c.finish(fx)).toBe(true)
     // animationend and the fallback timer may both arrive: the second finish does nothing.
     expect(c.finish(fx)).toBe(false)
-    expect(log).toEqual(['close', 'onClose', 'command'])
+    expect(log).toEqual(['close', 'onClose:false', 'command'])
   })
   it('finishes at once without an exit animation (reduced motion)', () => {
     expect(createCloser().dismiss(undefined, false)).toBe('finish')
@@ -214,7 +214,31 @@ describe('closing the palette', () => {
     c.dismiss(undefined, true)
     expect(c.dismiss(cmd, true)).toBe('ignore')
     c.finish(fx)
-    expect(log).toEqual(['close', 'onClose'])
+    expect(log).toEqual(['close', 'onClose:false'])
+  })
+})
+
+describe('reopening during the exit', () => {
+  it('asks the shell for a fresh palette when the chord comes while closing', () => {
+    const log: string[] = []
+    const c = createCloser()
+    expect(c.requestReopen()).toBe(false)
+    c.dismiss(undefined, true)
+    expect(c.requestReopen()).toBe(true)
+    c.finish({ close: () => undefined, onClose: (reopen) => log.push(String(reopen)) })
+    expect(log).toEqual(['true'])
+    expect(c.requestReopen()).toBe(false)
+  })
+})
+
+describe('backdrop by position', () => {
+  const box = { left: 100, top: 110, right: 740, bottom: 600 }
+  it('is outside the palette box only', () => {
+    expect(outside(box, 20, 300)).toBe(true)
+    expect(outside(box, 300, 700)).toBe(true)
+    expect(outside(box, 300, 300)).toBe(false)
+    // The border counts as the palette.
+    expect(outside(box, 100, 110)).toBe(false)
   })
 })
 

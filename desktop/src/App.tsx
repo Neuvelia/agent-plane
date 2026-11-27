@@ -69,7 +69,13 @@ function Shell({ lost }: { lost: boolean }) {
 
   // F2.5b command palette and global shortcuts: they only navigate or open what the shell offers.
   const mac = useMemo(isMac, [])
-  const [palette, setPalette] = useState(false)
+  // The open palette's session: a new number for every opening (it keys the component and the
+  // run read), or null when closed.
+  const [palette, setPalette] = useState<number | null>(null)
+  const sessions = useRef(0)
+  const openPalette = () => {
+    if (palette === null) setPalette(++sessions.current)
+  }
   const paletteRuns = usePaletteRuns(palette)
   const perform: Record<Exclude<GlobalCommand, 'palette'>, () => void> = {
     newRun: go('new'),
@@ -81,7 +87,7 @@ function Shell({ lost }: { lost: boolean }) {
     settings: go('settings'),
     dashboard: go('dashboard'),
   }
-  useGlobalShortcuts(mac, (c) => (c === 'palette' ? setPalette(true) : perform[c]()))
+  useGlobalShortcuts(mac, (c) => (c === 'palette' ? openPalette() : perform[c]()))
   const statusText = (s: string) => {
     const key = runStatusKey(s)
     return key ? t(key).toLowerCase() : s
@@ -131,7 +137,7 @@ function Shell({ lost }: { lost: boolean }) {
       </a>
       <Sidebar entries={main} deferred={deferred} footer={footer} />
       <div className="col">
-        <GlobalBar lost={lost} search={{ onOpen: () => setPalette(true), keys: shortcutText(SHORTCUTS.palette, mac), ariaKeys: mac ? 'Meta+K' : 'Control+K' }} />
+        <GlobalBar lost={lost} search={{ onOpen: openPalette, keys: shortcutText(SHORTCUTS.palette, mac), ariaKeys: mac ? 'Meta+K' : 'Control+K' }} />
         <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
         <main id="content" ref={mainRef} tabIndex={-1}>
           {route.name === 'dashboard' && (
@@ -151,7 +157,16 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
-      {palette && <CommandPalette commands={commands} runs={paletteRuns.status} mac={mac} onClose={() => setPalette(false)} />}
+      {palette !== null && (
+        <CommandPalette
+          key={palette}
+          commands={commands}
+          runs={paletteRuns.status}
+          mac={mac}
+          // Ctrl/Cmd+K during the exit animation: a fresh palette (new key) opens once this one has closed.
+          onClose={(reopen) => setPalette(reopen ? ++sessions.current : null)}
+        />
+      )}
     </div>
   )
 }

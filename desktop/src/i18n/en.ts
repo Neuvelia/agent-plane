@@ -794,6 +794,9 @@ export const en = {
   'palette.type': 'Type',
   'palette.forActions': 'for actions',
   'palette.forRuns': 'for run ids',
+  'palette.resultsCount': '{count, plural, one {# result} other {# results}}',
+  'palette.scope.actions': 'Actions only.',
+  'palette.scope.runs': 'Runs by id.',
 } as const
 
 export type MessageKey = keyof typeof en

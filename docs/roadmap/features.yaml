@@ -1801,6 +1801,7 @@ features:
       - text: "Prefiks # dopasowuje też nazwę grafu (wymaganie 4 speca: tylko początek id uruchomienia); decyzja w issue."
         issue: 218
     tasks: []
+    note: "Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

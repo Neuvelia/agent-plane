@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type AnimationEvent, type KeyboardEvent, type MouseEvent } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type AnimationEvent, type KeyboardEvent, type MouseEvent, type RefObject } from 'react'
 import { listRuns } from '../api'
 import { useI18n } from '../i18n/context'
 import type { MessageKey } from '../i18n'
-import { activeIndex, createCloser, cycleScope, filterEntries, moveActive, paletteKey, parseQuery, readPaletteRuns, shortcutText, type PaletteEntry, type PaletteGroup, type PaletteKeyAction, type PaletteRun, type RunsState } from '../palette'
+import { activeIndex, createCloser, cycleScope, filterEntries, moveActive, outside, paletteKey, parseQuery, readPaletteRuns, shortcutText, type PaletteEntry, type PaletteGroup, type PaletteKeyAction, type PaletteRun, type RunsState } from '../palette'
 import { Icon, type IconName } from './icons'
 
 // F2.5b command palette (design board "Command palette"). A modal <dialog>:
@@ -31,29 +31,32 @@ export function isMac(): boolean {
 }
 
 /**
- * Reads the run list each time the palette opens. Runs from an earlier opening are not
- * shown while it loads (their status may be stale); a failed read is an error, never "no runs".
+ * Reads the run list each time a palette opens. `session` identifies the open palette (null
+ * when closed); an answer belongs to the session that asked, so runs from an earlier opening are
+ * never shown (their status may be stale). A failed read is an error, never "no runs".
  */
-export function usePaletteRuns(open: boolean): { status: RunsState; runs: PaletteRun[] } {
-  const [state, setState] = useState<{ status: RunsState; runs: PaletteRun[] }>({ status: 'loading', runs: [] })
+export function usePaletteRuns(session: number | null, read: () => Promise<PaletteRun[]> = listRuns): { status: RunsState; runs: PaletteRun[] } {
+  const [state, setState] = useState<{ session: number | null; status: RunsState; runs: PaletteRun[] }>({ session: null, ...NOT_READ })
   useEffect(() => {
-    if (!open) return
+    if (session === null) return
     let alive = true
-    setState({ status: 'loading', runs: [] })
-    void readPaletteRuns(listRuns).then((r) => alive && setState(r))
+    void readPaletteRuns(read).then((r) => alive && setState({ session, ...r }))
     return () => {
       alive = false
     }
-  }, [open])
-  return state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+  return state.session === session && session !== null ? { status: state.status, runs: state.runs } : NOT_READ
 }
+
+const NOT_READ: { status: RunsState; runs: PaletteRun[] } = { status: 'loading', runs: [] }
 
 export interface CommandPaletteProps {
   commands: PaletteCommand[]
   runs: RunsState
   mac: boolean
-  /** Called once the palette has finished closing (after its exit animation). */
-  onClose: () => void
+  /** Called once the palette has finished closing (after its exit animation); reopen asks for a fresh palette. */
+  onClose: (reopen: boolean) => void
   /** Initial query, for stories and tests. */
   initialQuery?: string
 }
@@ -68,6 +71,7 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
   const [closing, setClosing] = useState(false)
   const closer = useRef(createCloser()).current
   const pressedBackdrop = useRef(false)
+  const listRef = useRef<HTMLDivElement>(null)
   const shown = useMemo(() => filterEntries(commands, query, (g) => t(GROUP_KEY[g])), [commands, query, t])
   const current = activeIndex(shown, activeId)
   const base = useId()
@@ -78,10 +82,12 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
     if (d && !d.open && typeof d.showModal === 'function') d.showModal()
     return () => d?.close()
   }, [])
+  // Keep the active row in view when it moves and after every edit of the query (the list may have
+  // been scrolled away with the wheel). Not on other re-renders, so a wheel scroll is not undone.
   useEffect(() => {
     if (current >= 0) document.getElementById(optionId(current))?.scrollIntoView?.({ block: 'nearest' })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current])
+  }, [current, query])
 
   const finish = () => closer.finish({ close: () => ref.current?.close(), onClose })
   const dismiss = (next?: () => void) => {
@@ -117,7 +123,10 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
     choose: () => choose(current),
     scopeNext: () => edit(cycleScope(query, 1)),
     scopePrevious: () => edit(cycleScope(query, -1)),
-    close: () => dismiss(),
+    // While the exit plays, the chord asks for the palette again once this one has closed.
+    close: () => {
+      if (!closer.requestReopen()) dismiss()
+    },
   }
   // Keys are handled for the whole dialog, so they work wherever focus sits inside it.
   const onKeyDown = (e: KeyboardEvent<HTMLDialogElement>) => {
@@ -126,12 +135,13 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
     e.preventDefault()
     act[action]()
   }
-  // Pressing anywhere but the field or the list keeps focus in the field; a press that
-  // starts on the backdrop is remembered so only a full click there closes the palette.
+  // The backdrop is judged by pointer position (see outside). A press anywhere but the field keeps
+  // focus in the field; on the listbox itself (its scrollbar) the browser keeps the press, and the
+  // listbox hands focus back to the field.
+  const onBackdrop = (e: MouseEvent<HTMLDialogElement>) => !!ref.current && outside(ref.current.getBoundingClientRect(), e.clientX, e.clientY)
   const onMouseDown = (e: MouseEvent<HTMLDialogElement>) => {
-    const target = e.target as Node
-    pressedBackdrop.current = target === ref.current
-    if (target !== inputRef.current && !(target instanceof Element && target.closest('[role="listbox"]'))) e.preventDefault()
+    pressedBackdrop.current = onBackdrop(e)
+    if (e.target !== inputRef.current && e.target !== listRef.current) e.preventDefault()
   }
 
   const listId = `${base}-list`
@@ -148,7 +158,7 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
       }}
       onKeyDown={onKeyDown}
       onMouseDown={onMouseDown}
-      onClick={(e) => e.target === ref.current && pressedBackdrop.current && dismiss()}
+      onClick={(e) => pressedBackdrop.current && onBackdrop(e) && dismiss()}
       onAnimationEnd={onAnimationEnd}
     >
       <div className="cmdk-q">
@@ -176,24 +186,40 @@ export function CommandPalette({ commands, runs, mac, onClose, initialQuery = ''
       </div>
       <div className="cmdk-res">
         {shown.length === 0 ? (
-          <div className="cmdk-none" role="status" data-testid="palette-none">
+          <div className="cmdk-none" data-testid="palette-none">
             {t('palette.none', { q: query.trim() })}
           </div>
         ) : (
-          <Results id={listId} shown={shown} current={current} optionId={optionId} mac={mac} onHover={(i) => setActiveId(shown[i]?.id ?? null)} onChoose={choose} />
+          <Results listRef={listRef} onListFocus={() => inputRef.current?.focus()} id={listId} shown={shown} current={current} optionId={optionId} mac={mac} onHover={(i) => setActiveId(shown[i]?.id ?? null)} onChoose={choose} />
         )}
         {searching && runs !== 'ready' && (
-          <div className={runs === 'error' ? 'cmdk-note bad' : 'cmdk-note'} role="status" data-testid="palette-runs-state">
+          <div className={runs === 'error' ? 'cmdk-note bad' : 'cmdk-note'} data-testid="palette-runs-state">
             {t(runs === 'error' ? 'palette.runsError' : 'palette.runsLoading')}
           </div>
         )}
+      </div>
+      {/* One live region that stays mounted: screen readers announce changes to it, not regions inserted with text. */}
+      <div className="sr-only" role="status" data-testid="palette-status">
+        {announcement({ t, query, count: shown.length, runs, searching })}
       </div>
       <Footer />
     </dialog>
   )
 }
 
+/** What the live region says: no match, the run list's state, or the scope and number of results. */
+function announcement({ t, query, count, runs, searching }: { t: (k: MessageKey, p?: Record<string, string | number>) => string; query: string; count: number; runs: RunsState; searching: boolean }): string {
+  if (count === 0) return t('palette.none', { q: query.trim() })
+  if (searching && runs === 'error') return t('palette.runsError')
+  if (searching && runs === 'loading') return t('palette.runsLoading')
+  const scope = parseQuery(query).scope
+  const results = t('palette.resultsCount', { count })
+  return scope === 'all' ? results : `${t(scope === 'actions' ? 'palette.scope.actions' : 'palette.scope.runs')} ${results}`
+}
+
 interface ResultsProps {
+  listRef: RefObject<HTMLDivElement | null>
+  onListFocus: () => void
   id: string
   shown: PaletteCommand[]
   current: number
@@ -203,12 +229,12 @@ interface ResultsProps {
   onChoose: (i: number) => void
 }
 
-function Results({ id, shown, current, optionId, mac, onHover, onChoose }: ResultsProps) {
+function Results({ listRef, onListFocus, id, shown, current, optionId, mac, onHover, onChoose }: ResultsProps) {
   const { t } = useI18n()
   const groups = groupRuns(shown)
   return (
-    // The listbox scrolls. Focus normally stays in the search field; if the listbox takes it, the dialog's keys still work.
-    <div className="cmdk-list" role="listbox" id={id} aria-label={t('palette.results')} aria-activedescendant={current >= 0 ? optionId(current) : undefined} tabIndex={0}>
+    // The listbox scrolls; it is focusable so its scroll region is reachable (axe), and gives focus straight back to the field.
+    <div ref={listRef} className="cmdk-list" role="listbox" id={id} aria-label={t('palette.results')} tabIndex={0} onFocus={onListFocus}>
       {groups.map(({ group, start, items }) => (
         <div key={group} role="group" aria-labelledby={`${id}-${group}`}>
           <div className="cmdk-g" id={`${id}-${group}`} role="presentation">

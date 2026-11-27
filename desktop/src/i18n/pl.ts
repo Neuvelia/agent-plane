@@ -793,4 +793,7 @@ export const pl: Record<MessageKey, string> = {
   'palette.type': 'Wpisz',
   'palette.forActions': 'dla akcji',
   'palette.forRuns': 'dla identyfikatorów uruchomień',
+  'palette.resultsCount': '{count, plural, one {# wynik} few {# wyniki} many {# wyników} other {# wyniku}}',
+  'palette.scope.actions': 'Tylko akcje.',
+  'palette.scope.runs': 'Uruchomienia według identyfikatora.',
 }

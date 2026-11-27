@@ -90,7 +90,7 @@ as implemented merely because the full spec describes it.
 - Welcome screen, capability text and first-run flag: `desktop/test/capabilities.test.tsx`.
 - Template picker, draft (only the `id` line changes), notices and EN/PL keys: `desktop/test/templates.test.tsx`; no YAML parsing or graph rule in the picker: `desktop/test/no-graph-rules.test.ts`.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
-- Command palette (F2.5b: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, stories `ui/palette.stories.tsx`.
+- Command palette (F2.5b: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, DOM behaviour under jsdom in `desktop/test/palette-dom.test.tsx` (the file opts in with `// @vitest-environment jsdom`; jsdom has no `<dialog>` methods, so the test stubs them), stories `ui/palette.stories.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.
 - Dashboard, timeline and bounded event detail: `desktop/test/dashboard.test.ts`,

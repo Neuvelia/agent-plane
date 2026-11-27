@@ -96,9 +96,13 @@ switches language (EN/PL); viewport is Storybook's built-in toolbar. Storybook i
 a dev dependency and is never part of the packaged app.
 
 `make desktop-stories` (or `npm run stories:test` after a build) renders every
-story in EN and PL. It waits for each story's play function and for finite
+story in EN and PL. It waits for Storybook's `storyFinished` event and for finite
 animations (a dialog's entrance, a fade) before running axe, so the checked frame
-is the state the story ends in.
+is the state the story ends in. A render or play function that throws fails the
+story: the script records Storybook's `playFunctionThrewException` /
+`storyThrewException` / `storyErrored` events and the `errored` render phase from
+the preview channel (in Storybook 10 `storyFinished` still reports "success" after
+a thrown play), independently of the console-error check.
 
 ## Command palette (F2.5b)
 

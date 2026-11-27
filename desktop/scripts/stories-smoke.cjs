@@ -68,6 +68,28 @@ const server = http.createServer((req, res) => {
   const workers = Math.max(1, Number(process.env.AP_STORIES_WORKERS) || Math.min(4, os.cpus().length))
   for (const locale of ['en', 'pl']) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    // Records the preview channel's events for checkStory: storyFinished marks the end of the
+    // render and play, and a thrown render or play is reported by its own events and an "errored"
+    // phase (storyFinished itself still says "success" after a thrown play in Storybook 10).
+    await context.addInitScript(() => {
+      let channel
+      window.__apStoryErrors = []
+      const error = (what) => (e) => window.__apStoryErrors.push(`${what}: ${e?.message ?? e?.title ?? JSON.stringify(e)}`)
+      Object.defineProperty(window, '__STORYBOOK_ADDONS_CHANNEL__', {
+        configurable: true,
+        get: () => channel,
+        set: (next) => {
+          channel = next
+          next.on('storyFinished', (e) => {
+            window.__apStoryFinished = e
+          })
+          next.on('playFunctionThrewException', error('play threw'))
+          next.on('storyThrewException', error('render threw'))
+          next.on('storyErrored', error('story errored'))
+          next.on('storyRenderPhaseChanged', (e) => e?.newPhase === 'errored' && window.__apStoryErrors.push(`phase ${e.newPhase}`))
+        },
+      })
+    })
     const queue = [...ids]
     // Each page takes the next story from the shared queue; failures name the
     // story that page was rendering, so the report matches a sequential run.
@@ -106,18 +128,16 @@ async function checkStory(page, origin, id, locale, fail) {
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
   // Check the state a story ends in: wait for its play function, then for finite
   // animations (a dialog's entrance, a fade) so axe never measures a half-faded frame.
-  // The phase is Storybook's own (preview currentRender); a play that throws ends as "errored"
-  // and fails the story, so a broken interaction is never checked as if it had passed.
-  if (!(await page.evaluate(() => typeof window.__STORYBOOK_PREVIEW__?.currentRender?.phase === 'string'))) return fail('cannot read the story phase: Storybook preview API changed, update stories-smoke.cjs')
-  const phase = await page
-    .waitForFunction(() => {
-      const p = window.__STORYBOOK_PREVIEW__?.currentRender?.phase
-      return ['played', 'completing', 'completed', 'finished', 'errored', 'aborted'].includes(p) && p
-    }, null, { timeout: 15000 })
+  // The play's end is Storybook's own "storyFinished" event for this story; errors come from
+  // the channel events recorded by the context's init script. A thrown render or play fails
+  // the story even if nothing reaches the console.
+  const finished = await page
+    .waitForFunction((sid) => window.__apStoryFinished?.storyId === sid && window.__apStoryFinished, id, { timeout: 15000 })
     .then((h) => h.jsonValue())
-    .catch(() => 'timeout')
-  if (phase === 'timeout') fail('story play did not finish')
-  if (phase === 'errored' || phase === 'aborted') return fail(`story play ${phase}: ${await page.evaluate(() => document.querySelector('#error-message')?.textContent?.slice(0, 300) ?? '')}`)
+    .catch(() => null)
+  if (!finished) return fail('story did not finish (no storyFinished event within 15 s; did the Storybook preview channel change?)')
+  const errors = await page.evaluate(() => window.__apStoryErrors)
+  if (finished.status !== 'success' || errors.length) return fail(`story failed (${finished.status}): ${errors.join('; ')}`)
   await page
     .waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity), null, { timeout: 5000 })
     .catch(() => fail('animations did not settle'))

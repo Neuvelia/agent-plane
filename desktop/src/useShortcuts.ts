@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { globalShortcut, IDLE, type GlobalCommand, type ShortcutState } from './palette'
 
 // F2.5b global shortcuts (Ctrl/Cmd+K, +N, +O, +Shift+A, +comma, then G D).
@@ -23,7 +23,10 @@ export function modalOpen(): boolean {
  */
 export function useGlobalShortcuts(mac: boolean, onCommand: (command: GlobalCommand) => void): void {
   const handler = useRef(onCommand)
-  handler.current = onCommand
+  // Updated after render, not during it; the listener always calls the latest handler.
+  useLayoutEffect(() => {
+    handler.current = onCommand
+  })
   useEffect(() => {
     let state: ShortcutState = IDLE
     const onKey = (e: KeyboardEvent) => {

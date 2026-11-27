@@ -83,6 +83,23 @@ export function moveActive(active: number, count: number, key: 'ArrowDown' | 'Ar
   return (from + (key === 'ArrowDown' ? 1 : -1) + count) % count
 }
 
+/** A rectangle in viewport coordinates (DOMRect's fields). */
+export interface Box {
+  left: number
+  top: number
+  right: number
+  bottom: number
+}
+
+/**
+ * True when a pointer position lies outside the palette's box, i.e. on the backdrop.
+ * Judged by position, not by event target: a press and release on different elements
+ * deliver the click to their common ancestor, which is the dialog itself.
+ */
+export function outside(box: Box, x: number, y: number): boolean {
+  return x < box.left || x > box.right || y < box.top || y > box.bottom
+}
+
 /** Global commands the shell answers outside the palette. */
 export type GlobalCommand = 'palette' | 'newRun' | 'openGraph' | 'approvals' | 'settings' | 'dashboard'
 
@@ -196,7 +213,14 @@ export function shortcutText(s: Shortcut, mac: boolean): string {
 export function createCloser() {
   let phase: 'open' | 'closing' | 'closed' = 'open'
   let next: (() => void) | undefined
+  let reopen = false
   return {
+    /** The palette chord while the exit plays: the shell opens a fresh palette once this one has closed. */
+    requestReopen(): boolean {
+      if (phase !== 'closing') return false
+      reopen = true
+      return true
+    },
     /** Starts closing; "animate" means wait for the exit animation, then call finish. */
     dismiss(then: (() => void) | undefined, animated: boolean): 'animate' | 'finish' | 'ignore' {
       if (phase !== 'open') return 'ignore'
@@ -204,12 +228,12 @@ export function createCloser() {
       next = then
       return animated ? 'animate' : 'finish'
     },
-    /** Closes the dialog, tells the shell, then runs the command. Returns false when already closed. */
-    finish(effects: { close: () => void; onClose: () => void }): boolean {
+    /** Closes the dialog, tells the shell (and whether to open the palette again), then runs the command. Returns false when already closed. */
+    finish(effects: { close: () => void; onClose: (reopen: boolean) => void }): boolean {
       if (phase === 'closed') return false
       phase = 'closed'
       effects.close()
-      effects.onClose()
+      effects.onClose(reopen)
       next?.()
       return true
     },
