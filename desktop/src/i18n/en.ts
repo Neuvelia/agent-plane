@@ -323,6 +323,7 @@ export const en = {
   'node.attempt': 'Attempt {n}/{max}',
   'node.attemptCount': '{count, plural, one {# attempt} other {# attempts}}',
   'node.decision': 'Decision',
+  'node.abandoned': 'The executor ignored the cancellation ({reason}) and was abandoned; it may still be running.',
   'compare.tab': 'Compare',
   'compare.title': 'Compare attempts',
   'compare.from': 'From',

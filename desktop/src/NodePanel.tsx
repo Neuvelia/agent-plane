@@ -155,6 +155,11 @@ export function NodePanel({
           {n.diagnosticCodes.length > 0 && ` · ${n.diagnosticCodes.join(', ')}`}
         </div>
       )}
+      {n.abandoned !== undefined && (
+        <div className="err" data-testid="abandoned">
+          {t('node.abandoned', { reason: n.abandoned })}
+        </div>
+      )}
       {status === 'waiting_human' && n.approval && run.runId && n.nodeRunId && (
         <ApprovalBox runId={run.runId} nodeRunId={n.nodeRunId} prompt={n.approval.prompt} context={n.approval.context} disabled={lost} upstream={approvalContext(run, upstream ?? [])} onOpenNode={onOpenNode} />
       )}

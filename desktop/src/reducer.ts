@@ -83,6 +83,8 @@ export interface NodeView {
   log: string
   approval?: ApprovalView
   failureKind?: string
+  /** The ignored cancel reason of an abandoned executor (executor_abandoned, ADR-0044): it may still be running. */
+  abandoned?: string
   diagnosticCodes: string[]
   durationMs?: number
   startedSeq?: number
@@ -299,6 +301,9 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
         if (a && event.attempt_id) a.log = bounded(a.log + text)
       }
       break
+    case 'executor_abandoned':
+      if (id) node(state, id).abandoned = str(p.reason)
+      break
     case 'approval_requested':
       if (id) {
         const n = node(state, id)
@@ -357,6 +362,10 @@ function summarize(event: ApEvent): EventSummary | null {
     case 'run_finished':
       row.detail = str(p.status) || undefined
       if (p.status === 'failed') row.kind = 'failed'
+      break
+    case 'executor_abandoned':
+      row.detail = str(p.reason) || undefined
+      row.kind = 'failed'
       break
     case 'approval_requested':
       row.kind = 'human'

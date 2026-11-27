@@ -323,6 +323,7 @@ export const pl: Record<MessageKey, string> = {
   'node.attempt': 'Próba {n}/{max}',
   'node.attemptCount': '{count, plural, one {# próba} few {# próby} many {# prób} other {# próby}}',
   'node.decision': 'Decyzja',
+  'node.abandoned': 'Wykonawca zignorował anulowanie ({reason}) i został porzucony; może nadal działać.',
   'compare.tab': 'Porównaj',
   'compare.title': 'Porównanie prób',
   'compare.from': 'Od',

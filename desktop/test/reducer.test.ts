@@ -78,6 +78,15 @@ describe('demo run reduced from events', () => {
     expect(state.nodes.flaky!.attempts.map((a) => a.changedFiles)).toEqual([undefined, ['a.go', 'b.go']])
   })
 
+  it('records an abandoned executor on its node and as a failed EventLog row (ADR-0044)', () => {
+    const base = approve.find((e) => e.type === 'node_started' && e.node_id === 'fast')!
+    const abandoned: ApEvent = { ...base, sequence: 1000, type: 'executor_abandoned', payload: { reason: 'node_timeout', bound_ms: 7000 } }
+    const state = reduce(reduceAll(approve), abandoned)
+    expect(state.nodes.fast!.abandoned).toBe('node_timeout')
+    expect(state.nodes.flaky!.abandoned).toBeUndefined()
+    expect(state.tail[state.tail.length - 1]).toMatchObject({ type: 'executor_abandoned', detail: 'node_timeout', kind: 'failed', node: 'fast' })
+  })
+
   it('derives "retrying" from the second attempt, not from stored state', () => {
     const i = firstIndex(approve, (e) => e.type === 'attempt_started' && e.payload.number === 2)
     const state = reduceAll(approve.slice(0, i + 1))
