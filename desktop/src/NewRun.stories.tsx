@@ -54,7 +54,7 @@ const opened = (o: unknown) => o as OpenResponse
 export const NoGraph = story({ runs: [] })
 /** Recently opened graphs to pick from. */
 export const RecentGraphs = story({ runs: [], graph: { opened: opened(demoOpen), recent: [{ id: 'r1', label: 'demo-vertical.yaml' }, { id: 'r2', label: 'release-notes.yaml' }, { id: 'r3', label: 'docs-refresh.yaml' }] } })
-/** The artboard: an Agent graph in the shared working tree, Codex available, the issue filled. */
+/** The artboard: an Agent graph writing directly into its workspace folder, Codex available, the issue filled. */
 export const AgentGraphReady = story({ runs: [], graph: { opened: opened(fixIssueOpen) }, validate: fixIssueValidate, capabilities: { report: allAvailable } }, chooseAndType('#142 Range parser drops an open upper bound'))
 /** The same graph before its required input is filled, on an engine without a configured Codex. */
 export const AgentGraphCodexNotConfigured = story({ runs: [], graph: { opened: opened(fixIssueOpen) }, validate: fixIssueValidate, capabilities: { report: linux } }, choose)

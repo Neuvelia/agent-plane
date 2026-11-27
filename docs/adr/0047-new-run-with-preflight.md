@@ -10,7 +10,7 @@
 F2.5a requirement 17 made New run a stepped form: choose a file, press Validate, type inputs as
 `key=value` lines, read a diagnostics card, press Start run. The Tarmind canvas artboard "New run
 with preflight" replaces it with a two-column screen whose preflight reacts to every choice and
-also covers Agent-specific risks (Codex availability, the agent writing into the working tree).
+also covers Agent-specific risks (Codex availability, the agent writing directly into the folder the graph names).
 The artboard also shows per-run options that the engine does not accept yet.
 
 ## Decision
