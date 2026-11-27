@@ -94,6 +94,32 @@ func TestOversizedRecordAfterResultIsRejected(t *testing.T) {
 	}
 }
 
+func TestUnparseableRecordAfterResultIsRejected(t *testing.T) {
+	for name, record := range map[string]string{
+		"broken json":   `{broken`,
+		"duplicate key": `{"type":"assistant","type":"evil"}`,
+		"not an object": `[1,2]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			p, _ := newCollected()
+			feed(p, recResult, record)
+			err := p.finish()
+			var typed *agent.ExecutionError
+			if err == nil || !asExecution(err, &typed) || typed.Kind != "claude_result" {
+				t.Fatalf("ambiguous record after result accepted: %v", err)
+			}
+		})
+	}
+}
+
+func TestBlankLineAfterResultIsHarmless(t *testing.T) {
+	p, _ := newCollected()
+	feed(p, recResult, "", "  ")
+	if err := p.finish(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestOversizedResultFailsClosed(t *testing.T) {
 	p, _ := newCollected()
 	feed(p, `{"type":"result","subtype":"success","structured_output":{"summary":"`+strings.Repeat("x", maxRecord)+`","artifacts":[]}}`)

@@ -3,6 +3,7 @@ package claudecode
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 
 	"agentplane/internal/agent"
@@ -15,11 +16,11 @@ import (
 // stay absent (plan D9).
 func parseOutput(raw json.RawMessage) (agent.AgentExecutionOutput, error) {
 	var out agent.AgentExecutionOutput
-	if len(raw) == 0 || len(raw) > maxRecord || cliproc.UniqueJSON(raw) != nil {
-		return out, fail("result", "final structured output is missing or not unambiguous JSON", nil)
+	fields, err := strictObject(raw, "final structured output is missing or not unambiguous JSON")
+	if err != nil {
+		return out, err
 	}
-	var fields map[string]json.RawMessage
-	if json.Unmarshal(raw, &fields) != nil || len(fields) != 2 || fields["summary"] == nil || fields["artifacts"] == nil {
+	if !onlyKeys(fields, "summary", "artifacts") || fields["summary"] == nil || fields["artifacts"] == nil {
 		return out, fail("result", "final structured output requires exact summary and artifacts fields", nil)
 	}
 	summary, err := parseString(fields["summary"])
@@ -31,6 +32,29 @@ func parseOutput(raw json.RawMessage) (agent.AgentExecutionOutput, error) {
 		return out, err
 	}
 	return agent.AgentExecutionOutput{Summary: summary, Artifacts: artifacts}, nil
+}
+
+// strictObject decodes one bounded, unambiguous JSON object (no duplicate keys,
+// valid UTF-8, not null). A failure carries message as a claude_result error.
+func strictObject(raw json.RawMessage, message string) (map[string]json.RawMessage, error) {
+	if len(raw) == 0 || len(raw) > maxRecord || cliproc.UniqueJSON(raw) != nil {
+		return nil, fail("result", message, nil)
+	}
+	var object map[string]json.RawMessage
+	if json.Unmarshal(raw, &object) != nil || object == nil {
+		return nil, fail("result", message, nil)
+	}
+	return object, nil
+}
+
+// onlyKeys reports whether every key of object is one of allowed.
+func onlyKeys(object map[string]json.RawMessage, allowed ...string) bool {
+	for key := range object {
+		if !slices.Contains(allowed, key) {
+			return false
+		}
+	}
+	return true
 }
 
 func parseArtifacts(raw json.RawMessage) ([]agent.ArtifactReference, error) {
@@ -50,14 +74,12 @@ func parseArtifacts(raw json.RawMessage) ([]agent.ArtifactReference, error) {
 }
 
 func parseArtifact(raw json.RawMessage) (agent.ArtifactReference, error) {
-	var record map[string]json.RawMessage
-	if json.Unmarshal(raw, &record) != nil || len(record) < 1 || len(record) > 2 || record["ref"] == nil {
-		return agent.ArtifactReference{}, fail("result", "artifact requires ref and optional name", nil)
+	record, err := strictObject(raw, "artifact requires ref and optional name")
+	if err != nil {
+		return agent.ArtifactReference{}, err
 	}
-	for key := range record {
-		if key != "ref" && key != "name" {
-			return agent.ArtifactReference{}, fail("result", "unknown artifact field", nil)
-		}
+	if !onlyKeys(record, "ref", "name") || record["ref"] == nil {
+		return agent.ArtifactReference{}, fail("result", "artifact requires ref and optional name", nil)
 	}
 	ref, err := parseString(record["ref"])
 	if err != nil || strings.TrimSpace(ref) == "" {

@@ -65,7 +65,7 @@ packages only):
 | `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `domain/secrets`, `gitlocate`, `gitstate` |
 | `agent` | `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime` |
 | `agent/codex` | `agent`, `domain/events`, `gitstate` |
-| `agent/claudecode` | `agent`, `agent/cliproc`, `domain/events`, `domain/graph`, `domain/run`, `gitstate`, `proctree` |
+| `agent/claudecode` | `agent`, `agent/cliproc`, `domain/events`, `proctree` (production imports only; tests also import `domain/graph`, `domain/run` and `gitstate`) |
 | `agent/cliproc` | `proctree` |
 | `shell` | `domain/graph`, `domain/secrets`, `fields` |
 | `gate` | `domain/events`, `domain/graph`, `fields`, `gitstate`, `runtime` |

@@ -49,7 +49,7 @@ type toolUse struct{ name, path string }
 // A record larger than maxRecord is skipped without being buffered. Because a
 // skipped record can never become the result, an oversized `result` leaves no
 // result and fails closed in finish; an oversized record after a valid result
-// is rejected as ambiguous.
+// is rejected as ambiguous, as is an unparseable or duplicate-key record.
 type progress struct {
 	workspaces Workspaces
 	root       string
@@ -107,6 +107,14 @@ func (p *progress) skipOversized() {
 	}
 }
 
+// unparseable skips a record that is not one unambiguous JSON object. After a
+// valid result it is as ambiguous as an oversized record and is rejected.
+func (p *progress) unparseable() {
+	if p.result != nil {
+		p.reject(fail("result", "unparseable record after the final result is ambiguous", nil))
+	}
+}
+
 func (p *progress) reject(err error) {
 	if p.err != nil {
 		return
@@ -133,11 +141,12 @@ func (p *progress) finish() error {
 }
 
 func (p *progress) record(line []byte) {
-	if cliproc.UniqueJSON(line) != nil {
+	if len(bytes.TrimSpace(line)) == 0 {
 		return
 	}
 	var record map[string]json.RawMessage
-	if json.Unmarshal(line, &record) != nil || record == nil {
+	if cliproc.UniqueJSON(line) != nil || json.Unmarshal(line, &record) != nil || record == nil {
+		p.unparseable()
 		return
 	}
 	switch text(record["type"]) {

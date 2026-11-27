@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
 
 	"agentplane/internal/agent/claudecode"
 	"agentplane/internal/gitstate"
@@ -26,6 +28,16 @@ func (claudeWorkspaces) Begin(ctx context.Context, root string) (claudecode.Obse
 		return nil, err
 	}
 	return claudeObservation{root: root, before: before, ignored: ignored}, nil
+}
+
+// GitDir resolves the shared Git directory (config, hooks, info) of root,
+// including for a linked worktree whose .git is a file.
+func (claudeWorkspaces) GitDir(ctx context.Context, root string) (string, error) {
+	result, err := gitstate.Run(ctx, root, gitstate.RunOptions{}, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	return filepath.EvalSymlinks(strings.TrimSuffix(string(result.Stdout), "\n"))
 }
 
 func (claudeWorkspaces) Confined(root, rel string) bool {

@@ -218,10 +218,10 @@ func TestDetectMissingAndUnsupported(t *testing.T) {
 		t.Fatal("relative binary accepted")
 	}
 	cases := map[string]string{
-		"unexpected version": "echo unexpected",
-		"old version":        "case \"$*\" in *--version*) echo '0.1.0 (Other)';; esac",
-		"missing flags":      "case \"$*\" in *--version*) echo '2.1.332 (Claude Code)';; *) echo '--print --bare';; esac",
-		"hang":               "exec /bin/sleep 30",
+		"unexpected version":  "echo unexpected",
+		"unparseable version": "case \"$*\" in *--version*) echo '0.1.0 (Other)';; esac",
+		"missing flags":       "case \"$*\" in *--version*) echo '2.1.332 (Claude Code)';; *) echo '--print --bare';; esac",
+		"hang":                "exec /bin/sleep 30",
 	}
 	for name, script := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -322,26 +322,34 @@ func TestArgvAndEnvironment(t *testing.T) {
 	assertEnvironment(t, filepath.Join(records, "env"))
 }
 
+// assertEnvironment checks the names and values the adapter must provide and
+// the ambient names it must not forward. It deliberately avoids an exact
+// allowlist: shells add their own variables (PWD, SHLVL, _, ...) differently on
+// Linux and macOS.
 func assertEnvironment(t *testing.T, path string) {
 	t.Helper()
 	data, _ := os.ReadFile(path)
-	allowed := map[string]bool{"RECORD_DIR": true, "EXPLICIT_VALUE": true, "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": true, "DISABLE_AUTOUPDATER": true, "HOME": true, "CLAUDE_CONFIG_DIR": true,
-		// Variables a POSIX shell adds itself.
-		"PWD": true, "OLDPWD": true, "SHLVL": true, "_": true}
-	seen := map[string]bool{}
+	got := map[string]string{}
 	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
-		name, _, ok := strings.Cut(line, "=")
-		if !ok {
-			continue // continuation of a multi-line value
+		if name, value, ok := strings.Cut(line, "="); ok {
+			got[name] = value
 		}
-		if !allowed[name] {
-			t.Fatalf("unexpected environment variable %q", name)
-		}
-		seen[name] = true
 	}
-	for _, name := range []string{"RECORD_DIR", "EXPLICIT_VALUE", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_AUTOUPDATER", "HOME", "CLAUDE_CONFIG_DIR"} {
-		if !seen[name] {
-			t.Fatalf("missing environment variable %q", name)
+	for name, want := range map[string]string{
+		"EXPLICIT_VALUE": "literal ; $(x) a=b",
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+		"DISABLE_AUTOUPDATER":                      "1",
+	} {
+		if value, ok := got[name]; !ok || value != want {
+			t.Fatalf("%s=%q (present=%v), want %q", name, value, ok, want)
+		}
+	}
+	if got["RECORD_DIR"] == "" || got["HOME"] == "" || got["CLAUDE_CONFIG_DIR"] != filepath.Join(got["HOME"], "config") {
+		t.Fatalf("RECORD_DIR/HOME/CLAUDE_CONFIG_DIR are wrong: %q %q %q", got["RECORD_DIR"], got["HOME"], got["CLAUDE_CONFIG_DIR"])
+	}
+	for _, name := range []string{"SECRET_AMBIENT", "PATH", "USER"} {
+		if _, ok := got[name]; ok {
+			t.Fatalf("ambient variable %s was forwarded", name)
 		}
 	}
 }

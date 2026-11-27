@@ -353,7 +353,7 @@ NOT RUN. See [examples/claude-agent.yaml](examples/claude-agent.yaml) and ADR-00
     config:
       adapter: claude
       workspace: /absolute/path/to/repository
-      environment_refs: ["ANTHROPIC_API_KEY", "HOME", "PATH"]
+      environment_refs: ["ANTHROPIC_API_KEY", "PATH"]
 ```
 
 ### Limits (F3.4, ADR-0028)

@@ -74,14 +74,15 @@ func adapterEnvironment(home string) []string {
 }
 
 // newPrivateHome creates a private temporary HOME outside the workspace. The
-// caller removes it after the run.
+// caller removes it after the run. An empty workspace skips the containment
+// check (capability probes have no workspace).
 func newPrivateHome(workspace string) (string, error) {
 	dir, err := os.MkdirTemp("", "agentplane-claude-")
 	if err != nil {
 		return "", fail("start", "cannot create private home directory", err)
 	}
 	resolved, err := filepath.EvalSymlinks(dir)
-	if err != nil || within(workspace, resolved) {
+	if err != nil || (workspace != "" && within(workspace, resolved)) {
 		_ = os.RemoveAll(dir)
 		return "", fail("environment", "private home directory must be outside the workspace", err)
 	}
@@ -90,6 +91,15 @@ func newPrivateHome(workspace string) (string, error) {
 		return "", fail("start", "cannot create private config directory", err)
 	}
 	return resolved, nil
+}
+
+// removePrivate deletes a private home created by newPrivateHome. The message
+// never carries the path or the underlying error text.
+func removePrivate(home string) error {
+	if err := os.RemoveAll(home); err != nil {
+		return fail("environment", "cannot remove private home directory", err)
+	}
+	return nil
 }
 
 // within reports whether path equals root or lies below it, lexically.

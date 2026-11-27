@@ -339,3 +339,19 @@ func TestRootOnlyPackagesExist(t *testing.T) {
 		}
 	}
 }
+
+// TestClaudeAndCodexAdaptersAreIndependent forbids production imports between
+// the two CLI adapters in either direction. Shared code belongs in
+// internal/agent/cliproc. It is checked separately from the baseline-driven
+// layer rules, which allow imports inside one family.
+func TestClaudeAndCodexAdaptersAreIndependent(t *testing.T) {
+	const claude, codex = "internal/agent/claudecode", "internal/agent/codex"
+	imports := productionImports(t, repoRoot(t))
+	for _, pair := range [][2]string{{claude, codex}, {codex, claude}} {
+		for _, imported := range imports[pair[0]] {
+			if imported == modulePath+"/"+pair[1] || strings.HasPrefix(imported, modulePath+"/"+pair[1]+"/") {
+				t.Errorf("%s must not import %s; move shared code to internal/agent/cliproc", pair[0], pair[1])
+			}
+		}
+	}
+}

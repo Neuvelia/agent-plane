@@ -4,16 +4,18 @@
 # repository root, then run
 #   agentplane run FILE --adapter claude --claude-bin /absolute/path/to/claude
 # Authentication is ANTHROPIC_API_KEY, named in environment_refs (ADR-0046 D6).
+# HOME is reserved by the adapter (a private HOME is always supplied) and must not be listed.
 # Bash is disabled in v1; only file tools (Read, Edit, Write, Glob, Grep) are enabled.
 schema_version: 0
 id: claude-agent-example
+inputs: {}
 nodes:
   edit:
     type: agent
     config:
       adapter: claude
       workspace: "__WORKSPACE__"
-      environment_refs: [ANTHROPIC_API_KEY, HOME, PATH]
+      environment_refs: [ANTHROPIC_API_KEY, PATH]
       allowed_paths: [hello.txt]
       task: >-
         Write exactly after followed by one newline to hello.txt. Do not modify

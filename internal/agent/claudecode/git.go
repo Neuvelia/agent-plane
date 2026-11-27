@@ -15,6 +15,10 @@ type Workspaces interface {
 	// Begin records the baseline (snapshot and initially ignored paths) before
 	// the child starts.
 	Begin(ctx context.Context, root string) (Observation, error)
+	// GitDir returns the absolute path of the real, shared Git directory (the
+	// one holding config and hooks), resolving a `.git` file of a linked
+	// worktree.
+	GitDir(ctx context.Context, root string) (string, error)
 	// Confined reports whether rel, a slash-separated path under root, is a safe
 	// Git path that stays inside the workspace.
 	Confined(root, rel string) bool

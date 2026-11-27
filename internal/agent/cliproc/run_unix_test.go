@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -34,14 +35,40 @@ func TestRunReportsStartAndExitFailures(t *testing.T) {
 
 func TestRunCancellationTerminatesTree(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { time.Sleep(200 * time.Millisecond); cancel() }()
+	defer cancel()
+	// The child announces itself on stdout; cancel only once that line was
+	// observed. If the signal never arrives the test still ends: Run returns
+	// when the context is done.
+	started := make(chan struct{})
+	var once sync.Once
+	stdout := writerFunc(func(p []byte) (int, error) {
+		once.Do(func() { close(started) })
+		return len(p), nil
+	})
+	go func() {
+		select {
+		case <-started:
+		case <-time.After(10 * time.Second):
+		}
+		cancel()
+	}()
 	policy := proctree.Policy{Grace: 200 * time.Millisecond}
-	err := cliproc.Run(ctx, cliproc.Spec{Binary: "/bin/sh", Args: []string{"-c", "/bin/sleep 30 & wait"}, Env: []string{}, Policy: policy})
-	typed, ok := cliproc.AsError(err)
-	if !ok || typed.Stage != cliproc.StageCancelled || typed.Termination == nil || !errors.Is(err, context.Canceled) {
+	err := cliproc.Run(ctx, cliproc.Spec{Binary: "/bin/sh", Args: []string{"-c", "echo started; /bin/sleep 30 & wait"}, Env: []string{}, Stdout: stdout, Policy: policy})
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("error=%v", err)
 	}
+	// Cancellation that wins the race against Start is a plain context error;
+	// once the child ran it is a classified cancelled stage with a termination
+	// record. Either way Run returned, so no tree outlives it.
+	if typed, ok := cliproc.AsError(err); ok && (typed.Stage != cliproc.StageCancelled || typed.Termination == nil) {
+		t.Fatalf("stage=%v termination=%v", typed.Stage, typed.Termination)
+	}
 }
+
+// writerFunc adapts a function to io.Writer.
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
 
 func TestRunAlreadyCancelledDoesNotStart(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())

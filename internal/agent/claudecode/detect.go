@@ -40,20 +40,19 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 	if err != nil || !present {
 		return r, err
 	}
-	out, err := a.probe(ctx, "--version")
+	// Probes run exactly like Execute: a private HOME outside any workspace is
+	// both the working directory and HOME, so nothing a probe writes can reach
+	// the caller's directory or the real user configuration.
+	home, err := newPrivateHome("")
 	if err != nil {
 		return r, err
 	}
-	match := versionPattern.FindStringSubmatch(out)
-	if match == nil {
-		return r, fail("detection", "Claude Code version response is unsupported", nil)
-	}
-	help, err := a.probe(ctx, "--help")
+	match, err := a.probeCapabilities(ctx, home)
+	// The probe environment carries no credentials, so a failed removal leaves
+	// nothing sensitive behind and must not make detection fail.
+	_ = removePrivate(home)
 	if err != nil {
 		return r, err
-	}
-	if !hasFlags(help, requiredFlags) {
-		return r, fail("unsupported_capability", "Claude Code lacks required flags", nil)
 	}
 	yes, no := true, false
 	r.Available = true
@@ -63,6 +62,27 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 	r.Workspace = &yes
 	r.UsageReporting = &no
 	return r, nil
+}
+
+// probeCapabilities runs the version and help probes in home and returns the
+// version match.
+func (a Adapter) probeCapabilities(ctx context.Context, home string) ([]string, error) {
+	out, err := a.probe(ctx, home, "--version")
+	if err != nil {
+		return nil, err
+	}
+	match := versionPattern.FindStringSubmatch(out)
+	if match == nil {
+		return nil, fail("detection", "Claude Code version response is unsupported", nil)
+	}
+	help, err := a.probe(ctx, home, "--help")
+	if err != nil {
+		return nil, err
+	}
+	if !hasFlags(help, requiredFlags) {
+		return nil, fail("unsupported_capability", "Claude Code lacks required flags", nil)
+	}
+	return match, nil
 }
 
 // binaryState reports whether the configured binary exists. It fails closed on
@@ -84,14 +104,15 @@ func (a Adapter) binaryState() (bool, error) {
 	return true, nil
 }
 
-// probe runs one bounded capability call with an empty environment.
-func (a Adapter) probe(ctx context.Context, args ...string) (string, error) {
+// probe runs one bounded capability call in the private home with only the
+// fixed adapter environment (no PATH, no ambient variables).
+func (a Adapter) probe(ctx context.Context, home string, args ...string) (string, error) {
 	pctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	b := cliproc.NewLimitedBuffer(maxRecord)
-	err := runProcess(pctx, a.Binary, args, []string{}, "", nil, b, a.Termination)
+	err := runProcess(pctx, a.Binary, args, adapterEnvironment(home), home, nil, b, a.Termination)
 	if err != nil || b.Overflow() {
-		return "", fail("detection", "Claude Code capability probe failed or exceeded bounds", err)
+		return "", fail("detection", "Claude Code capability probe failed or exceeded bounds; script-based installs (for example npm shims using #!/usr/bin/env node) cannot run with the minimal adapter environment, so configure a standalone binary", err)
 	}
 	return b.String(), nil
 }

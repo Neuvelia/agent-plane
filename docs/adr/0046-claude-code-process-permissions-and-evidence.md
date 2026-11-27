@@ -68,8 +68,10 @@ the spike. No ambient `HOME`, `PATH` or credentials are copied.
 
 Detection follows Codex: an absolute executable `Binary`, `--version` (regex
 `^([0-9]+\.[0-9]+\.[0-9]+\S*) \(Claude Code\)\s*$`) and `--help` probes for the required flags, 10 seconds each,
-empty environment, Darwin and Linux only (other platforms fail closed, deferred with F3.4a). The **minimum CLI
-version is set by the spike**; until then 2.1.332 is the only version the plan was written against.
+each probe in a fresh private `HOME` with the same fixed adapter environment as `Execute` (D5) and no `environment_refs`, Darwin and Linux only (other platforms fail closed, deferred with F3.4a). The **minimum CLI
+version is set by the spike**; until then 2.1.332 is the only version the plan was written against and **no minimum is enforced** (the "old
+version" test case is an unparseable version string). Because probes see only the adapter environment (no `PATH`), an
+npm or script-based `claude` (`#!/usr/bin/env node`) cannot pass `Detect`; the remedy is to install the native binary.
 
 ### Result, progress and evidence
 
@@ -87,7 +89,7 @@ version is set by the spike**; until then 2.1.332 is the only version the plan w
 - `node_evidence` records `adapter_id = "claude"`. New diagnostic codes: `claude_detection`,
   `claude_unsupported_platform`, `claude_unsupported_capability`, `claude_environment`, `claude_workspace`,
   `claude_git`, `claude_start`, `claude_shutdown`, `claude_cancelled`, `claude_process_exit`, `claude_result`,
-  `claude_progress`. Both are additive values of existing fields.
+  `claude_progress` (reserved, not produced yet). Both are additive values of existing fields.
 - Cancellation uses `internal/proctree` as for Codex: TERM to the process group, bounded reap and drain.
   Descendants (including background tools) are in the group; deliberately escaped groups are out of contract.
 
@@ -96,7 +98,7 @@ version is set by the spike**; until then 2.1.332 is the only version the plan w
 `agentplane run --adapter claude --claude-bin ABSOLUTE_PATH`. `--adapter` may be repeated (D7), for example
 `--adapter codex --codex-bin ... --adapter claude --claude-bin ...`. `serve --claude-bin` is used for detection
 only, as `--codex-bin` is. A missing or unregistered adapter error names the adapter and the flags to pass; the
-remedy text becomes a per-adapter map in `cmd/agentplane/executors.go`. Graph schema is unchanged:
+remedy text becomes a per-adapter map in `cmd/agentplane/executors.go`. `--adapter ""` is a usage error and a bare `--codex-bin` fails with `--codex-bin requires --adapter codex`. Graph schema is unchanged:
 `adapter: claude` is a value of the existing field. A per-node tool list (`config.tools`) would change the graph
 schema and needs its own ADR; it is not part of v1.
 
@@ -115,7 +117,14 @@ Consequences recorded as decisions:
 2. Enabling Bash is a later amendment of this ADR and requires the spike to show that the CLI sandbox
    (bubblewrap on Linux) is available, enabled through `--settings`, and **fails closed** when unavailable.
 3. Never `bypassPermissions` or any `--dangerously-*` flag; the tests assert their absence from argv.
-4. Network: model traffic is remote by definition (as with Codex); WebFetch, WebSearch, MCP, plugins, telemetry
+4. **Git control files.** In `acceptEdits`, `Edit` and `Write` can write `<workspace>/.git/config`,
+   `.git/hooks/*` and `.git/info/attributes`. `internal/gitstate` snapshots exclude these, so a write there is
+   invisible as evidence, yet the user's next plain `git` command can execute it. With Bash off this is a file
+   write leading to code execution outside any sandbox. Mitigation: the adapter hashes `.git/config`,
+   `.git/hooks/**` and `.git/info/attributes` (resolved real git directory for linked worktrees) before and after
+   the run and returns `claude_git` on any change. A deny rule such as `Edit(.git/**)`/`Write(.git/**)` is
+   ASSUMED and listed as a spike item for defense in depth.
+5. Network: model traffic is remote by definition (as with Codex); WebFetch, WebSearch, MCP, plugins, telemetry
    and the autoupdater are disabled.
 
 ## Alternatives considered
@@ -168,6 +177,14 @@ Cons:
 - Config files cannot pollute the workspace or the Git evidence (D5).
 - The weaker boundary is explicit and the risky tool is off.
 
+### Notes
+
+- The plan's `.agents/graphs/` Claude template was replaced by `docs/examples/claude-agent.yaml`:
+  `cmd/agentplane/templates_test.go` (S7 rule and `allowedRequires`) allows only Codex, and a template would need
+  that rule changed by an owner decision.
+- The desktop keys `cap.meaning.claude.notConfigured` and `foundOnPath` are unreachable from `serve` (without
+  `--claude-bin` the row stays `agent_cli`); they are dead until the desktop can configure adapters (F2.14).
+
 ### Negative / trade-offs
 
 - v1 agents cannot run commands. Project `CLAUDE.md` is not read (D3).
@@ -186,5 +203,5 @@ unchanged, including the Codex tests after the helper move. The `claude` capabil
 - Deterministic: fake CLI tests (argv and env, evidence, dirty baseline, private config dir, cancellation with
   a child, oversized records, correction feedback on stdin) mapped in `docs/features/F1.2b-claude-code-adapter.md`.
 - Pending spike: `docs/validation/F1.2b-claude-code-spike.md` (NOT RUN) closes D3-D6 and the record shapes.
-- Pending real smoke: AC10 (`docs/validation/F1.2b-claude-code-smoke.md`, not yet written). Without it F1.2b
-  stays `partial`, as F1.2 did.
+- Pending real smoke: AC10 (`docs/validation/F1.2b-claude-code-smoke.md`, NOT RUN template). Without it F1.2b
+  stays `in_progress` in the roadmap registry (the registry has no `partial` status).

@@ -9,7 +9,6 @@ package claudecode
 import (
 	"context"
 	"errors"
-	"os"
 	"strings"
 
 	"agentplane/internal/agent"
@@ -52,7 +51,9 @@ func (e *Error) Error() string { return "claude " + e.Code + ": " + e.Message }
 // Unwrap exposes the retained cause to errors.Is and errors.As.
 func (e *Error) Unwrap() error { return e.cause }
 
-// DiagnosticCode maps the error to the finite claude_* vocabulary.
+// DiagnosticCode maps the error to the finite claude_* vocabulary. The
+// "progress" code is reserved: it is part of the vocabulary but no code path
+// produces it today (progress parsing rejects through claude_result).
 func (e *Error) DiagnosticCode() string {
 	switch e.Code {
 	case "detection", "unsupported_platform", "unsupported_capability", "environment", "workspace", "git", "start", "shutdown", "cancelled", "process_exit", "result", "progress":
@@ -84,23 +85,38 @@ type invocation struct {
 	env       []string
 	private   string
 	observed  Observation
+	guard     *gitGuard
 }
 
 func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, normalized func(events.Type, events.Payload)) (agent.AgentExecutionOutput, error) {
-	var out agent.AgentExecutionOutput
 	inv, err := a.prepare(ctx, in)
 	if err != nil {
-		return out, err
+		return agent.AgentExecutionOutput{}, err
 	}
-	defer os.RemoveAll(inv.private)
+	out, err := a.run(ctx, inv, normalized)
+	// A private HOME may hold CLI config or credential caches: a failed removal
+	// fails an otherwise successful run, but never masks an earlier error.
+	if cleanup := removePrivate(inv.private); cleanup != nil && err == nil {
+		return agent.AgentExecutionOutput{}, cleanup
+	}
+	return out, err
+}
+
+// run starts the child and turns its evidence into the output. Git control
+// files are verified before any output is accepted.
+func (a Adapter) run(ctx context.Context, inv invocation, normalized func(events.Type, events.Payload)) (agent.AgentExecutionOutput, error) {
+	var out agent.AgentExecutionOutput
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream := newProgress(a.Workspaces, inv.workspace, normalized, cancel)
-	err = runProcess(pctx, a.Binary, arguments(), inv.env, inv.workspace, strings.NewReader(inv.prompt), stream, a.Termination)
+	err := runProcess(pctx, a.Binary, arguments(), inv.env, inv.workspace, strings.NewReader(inv.prompt), stream, a.Termination)
 	if err = processFailure(ctx, stream, err); err != nil {
 		return out, err
 	}
 	if err = stream.finish(); err != nil {
+		return out, err
+	}
+	if err = inv.guard.verify(); err != nil {
 		return out, err
 	}
 	files, err := changed(ctx, inv.observed)
@@ -132,11 +148,15 @@ func (a Adapter) prepare(ctx context.Context, in agent.AgentExecutionInput) (inv
 	if err != nil {
 		return inv, err
 	}
+	guard, err := a.newGitGuard(ctx, workspace)
+	if err != nil {
+		return inv, err
+	}
 	home, err := newPrivateHome(workspace)
 	if err != nil {
 		return inv, err
 	}
-	return invocation{workspace: workspace, prompt: prompt, env: append(env, adapterEnvironment(home)...), private: home, observed: observed}, nil
+	return invocation{workspace: workspace, prompt: prompt, env: append(env, adapterEnvironment(home)...), private: home, observed: observed, guard: guard}, nil
 }
 
 // processFailure maps a stream rejection or a process failure to a safe error.
