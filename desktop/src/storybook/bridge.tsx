@@ -44,6 +44,8 @@ export interface BridgeData {
   graph?: GraphStory
   runs: BridgeRun[]
   approvals?: PendingApproval[]
+  /** After the first answer to GET /approvals, the list becomes this one (a new approval arriving). */
+  laterApprovals?: PendingApproval[]
   validate?: { status: string; diagnostics: unknown[] }
   /** File name the "Choose…" dialog picks on New run (answered as a grant). */
   pickedGraph?: string | null
@@ -61,7 +63,16 @@ export interface BridgeData {
   capabilities?: { report?: unknown; status?: number; checkHangs?: boolean; getHangs?: boolean }
 }
 
-export function createBridge(data: BridgeData): Window['agentplane'] {
+export function createBridge(input: BridgeData): Window['agentplane'] {
+  // A decision or a saved setting changes this copy, never the story's own parameters, so a story
+  // looks the same each time it is rendered. Functions in `graph` are shared, data is copied.
+  const data: BridgeData = {
+    ...input,
+    runs: input.runs.map((r) => ({ ...r, events: [...r.events] })),
+    approvals: input.approvals && [...input.approvals],
+    recording: input.recording && structuredClone(input.recording),
+  }
+  let approvalReads = 0
   // Live subscribers per run, so a decision can append the recorded events that follow it.
   const listeners = new Map<string, Set<(e: ApEvent) => void>>()
   const decided = (runId: string, nodeRunId: string) => {
@@ -117,7 +128,14 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
         const r = data.runs.find((x) => x.summary.run_id === decodeURIComponent(run[1]!))
         return (r && !r.unreadable ? respond(200, { run: r.summary, graph: r.yaml, graph_summary: r.graph }) : respond(404, null)) as ApiResponse<T>
       }
-      if (method === 'GET' && path === '/approvals') return respond(200, { approvals: data.approvals ?? [] }) as ApiResponse<T>
+      if (method === 'GET' && path === '/approvals') {
+        approvalReads += 1
+        if (approvalReads > 1 && data.laterApprovals) {
+          data.approvals = data.laterApprovals
+          data.laterApprovals = undefined
+        }
+        return respond(200, { approvals: data.approvals ?? [] }) as ApiResponse<T>
+      }
       if (method === 'POST' && path === '/graphs/validate') return respond(200, data.validate ?? { status: 'valid', diagnostics: [] }) as ApiResponse<T>
       if (method === 'POST' && path === '/runs') return respond(202, { run_id: data.runs[0]?.summary.run_id ?? 'story' }) as ApiResponse<T>
       if (method === 'POST' && path.startsWith('/runs/') && data.decisionFailure) return respond(data.decisionFailure.status, { error: { message: data.decisionFailure.message } }) as ApiResponse<T>

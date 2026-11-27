@@ -59,14 +59,14 @@ function Filters({ value, counts, onChange }: { value: InboxFilter; counts: Reco
   )
 }
 
-function QueueRow({ item, selected, age, decision, onPick }: { item: InboxItem; selected: boolean; age: string; decision?: string; onPick: () => void }) {
+function QueueRow({ item, selected, age, decision, held, onPick }: { item: InboxItem; selected: boolean; age: string; decision?: string; held: boolean; onPick: () => void }) {
   const { t } = useI18n()
   const run = item.runId.slice(0, 8)
   const sub = item.kind === 'approval' ? t('inbox.sub.approval', { node: item.approval?.node_id ?? '', run }) : t(`inbox.sub.${item.kind}` as MessageKey, { run })
   const cls = ['inbox-row', selected ? 'sel' : '', decision ? 'done' : ''].filter(Boolean).join(' ')
   return (
     <li>
-      <button type="button" className={cls} aria-current={selected ? 'true' : undefined} onClick={onPick} data-testid="inbox-item" data-kind={item.kind}>
+      <button type="button" className={cls} aria-current={selected ? 'true' : undefined} onClick={onPick} data-testid="inbox-item" data-kind={item.kind} data-held={held ? 'true' : undefined}>
         <span className="inbox-row-glyph"><Glyph kind={KIND_GLYPH[item.kind]} /></span>
         <span className="inbox-row-text">
           <span className="inbox-row-name">{item.graphId}</span>
@@ -126,8 +126,8 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
   const [filter, setFilter] = useState<InboxFilter>('all')
   const [picked, setPicked] = useState<string | null>(null)
   const [decisions, setDecisions] = useState<Decisions>(noDecisions)
-  // After Next, the new item takes focus so keyboard and screen-reader users land on it.
-  const [focusNext, setFocusNext] = useState(false)
+  // After Next, the item Next went to takes focus once (a one-shot token, cleared when used).
+  const [focusKey, setFocusKey] = useState<string | null>(null)
   const now = nowOverride ?? new Date()
   const age = useAge(now)
   const date = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' }).format(now)
@@ -138,9 +138,10 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
   const visible = filterQueue(queue, filter)
   const current = currentItem(visible, queue, picked, decisions, filter)
   // What is shown stays shown: a newer item arriving never swaps the detail under the person's cursor.
+  // Not while the lists cannot be read: the queue is incomplete then and must not move the selection.
   useEffect(() => {
-    if (current && picked !== current.key) setPicked(current.key)
-  }, [current?.key, picked])
+    if (ready && current && picked !== current.key) setPicked(current.key)
+  }, [ready, current?.key, picked])
 
   if (!ready)
     return (
@@ -150,17 +151,15 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
       </section>
     )
   const counts = queueCounts(queue)
-  const pick = (key: string) => {
-    setFocusNext(false)
-    setPicked(key)
-  }
   const after = current ? nextKey(visible, current.key, decisions) : undefined
   const next = after
     ? () => {
-        setFocusNext(true)
+        setFocusKey(after)
         setPicked(after)
       }
     : undefined
+  // Rows the list no longer holds, kept because their decision was taken here and recorded.
+  const liveKeys = new Set(live.map((i) => i.key))
   return (
     <section className="inbox" data-testid="inbox" aria-labelledby="inbox-title">
       <div className="inbox-queue" role="region" aria-label={t('inbox.queue')}>
@@ -181,7 +180,7 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
               <div key={g} className="inbox-group">
                 <h2 className="inbox-label" id={`inbox-group-${g}`}>{t(`inbox.group.${g}`)}</h2>
                 <ul aria-labelledby={`inbox-group-${g}`}>
-                  {rows.map((i) => <QueueRow key={i.key} item={i} selected={i.key === current?.key} age={age(i.at)} decision={shownDecision(decisions, i.key)} onPick={() => pick(i.key)} />)}
+                  {rows.map((i) => <QueueRow key={i.key} item={i} selected={i.key === current?.key} age={age(i.at)} decision={shownDecision(decisions, i.key)} held={!liveKeys.has(i.key)} onPick={() => setPicked(i.key)} />)}
                 </ul>
               </div>
             )
@@ -194,7 +193,9 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
             key={current.key}
             item={current}
             age={age(current.at)}
-            focusOnMount={focusNext}
+            focusOnMount={focusKey === current.key}
+            onFocused={() => setFocusKey(null)}
+            decidedHere={decisions.here[current.key] !== undefined}
             onOpenRun={onOpenRun}
             onDecided={() => setDecisions((d) => markDecidedHere(d, current))}
             onSettled={(decision) => setDecisions((d) => recordDecision(d, current.key, decision))}

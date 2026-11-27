@@ -1770,11 +1770,40 @@ features:
     owner_package: ui
     spec: docs/features/F2.5b-inbox-redesign.md
     depends_on: ["F2.5", "F2.5a", "F2.9", "F2.10"]
-    evidence:
-      - "docs/features/F2.5b-inbox-redesign.md"
-      - "desktop/test/inbox.test.ts"
-      - "desktop/test/shell.test.tsx"
-      - "desktop/e2e/demo.cjs"
+    acceptance:
+      - id: F2.5b-AC1
+        text: "The queue groups pending approvals, failed or interrupted runs and running runs (newest first), shows a running run that waits for a listed approval once, and filters with counts."
+        status: met
+        evidence:
+          - "desktop/test/inbox.test.ts::F2.5b-AC1"
+      - id: F2.5b-AC2
+        text: "The detail of each kind is read from the run's events: the node a failed run stopped at with its attempts and last failure, what an interrupted run kept and where it stopped, a running run's nodes."
+        status: met
+        evidence:
+          - "desktop/test/inbox.test.ts::F2.5b-AC2"
+      - id: F2.5b-AC3
+        text: "Every Inbox and Sidebar state has a story; the story smoke renders each in EN and PL, waits for its play function (which asserts the state it drives) and fails on a play error or an axe violation."
+        status: met
+        evidence:
+          - "desktop/test/stories.test.ts::F2.5b-AC3"
+          - "desktop/scripts/stories-smoke.cjs"
+          - "desktop/src/screens.stories.tsx"
+      - id: F2.5b-AC4
+        text: "The Sidebar shows the brand, New run, the entries with a plain approvals count, recent runs, the Later group and the footer with the profile, in that order."
+        status: met
+        evidence:
+          - "desktop/test/shell.test.tsx::F2.5b-AC4"
+      - id: F2.5b-AC5
+        text: "In the real app, Open graph on the empty Inbox lands on New run with the file chosen, the pending approval is queued exactly once, it is decided in the Inbox with a reason, and the decided row stays after the list drops it."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs"
+      - id: F2.5b-AC6
+        text: "A decision is shown only from approval_decided; the item shown stays shown when newer items arrive; an approval decided here stays selected and, once recorded, queued; a decision taken elsewhere is not held; focus moves only after the person's own decision."
+        status: met
+        evidence:
+          - "desktop/test/inbox.test.ts::F2.5b-AC6"
+          - "desktop/src/screens.stories.tsx"
     out_of_scope:
       - "Light theme, global search (no command palette), resume of interrupted runs, per-file diff counts, account names."
     decisions: ["ADR-0046"]

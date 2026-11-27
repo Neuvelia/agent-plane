@@ -35,7 +35,7 @@ describe('Sidebar deferred entries', () => {
     expect(out).toContain('Projekty')
     expect(out).not.toContain('>Soon<')
   })
-  it('puts the Tarmind name at the very top, then New run, the entries, recent runs, later surfaces and the footer', () => {
+  it('puts the Tarmind name at the very top, then New run, the entries, recent runs, later surfaces and the footer [F2.5b-AC4]', () => {
     const out = html('en')
     expect(out).toMatch(/class="side-brand">Tarmind</)
     expect(out).not.toContain('<img')
@@ -43,7 +43,7 @@ describe('Sidebar deferred entries', () => {
     expect(order.every((i) => i > -1)).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
   })
-  it('renders New run as a real button and the approvals count as plain text', () => {
+  it('renders New run as a real button and the approvals count as plain text [F2.5b-AC4]', () => {
     const out = html('en')
     expect(out).toMatch(/<button[^>]*class="side-new"[^>]*data-testid="nav-new"/)
     expect(out).toMatch(/class="nav-count" data-testid="approvals-badge">2</)

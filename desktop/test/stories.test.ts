@@ -26,3 +26,20 @@ describe('stories', () => {
     }
   })
 })
+
+describe('Inbox stories (F2.5b)', () => {
+  // The smoke renders each required story in EN and PL, waits for its play function (which
+  // asserts the state it drives: decided rows, pinning, focus) and fails on a play error or axe.
+  it('the story smoke requires every Inbox and Sidebar state [F2.5b-AC3]', () => {
+    const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+    const required = [
+      'needs-attention', 'failed-selected', 'retries-used-up', 'interrupted-selected', 'running-selected', 'filter-stopped', 'filter-empty',
+      'decided', 'decided-here', 'run-not-found', 'decision-error', 'connection-lost', 'stays-on-shown-item', 'keyboard-focus',
+      'empty', 'no-runs', 'loading', 'error',
+    ].map((s) => `screens--inbox-${s}`)
+    for (const id of [...required, 'ui-shell--sidebar-recent-runs', 'ui-shell--sidebar-recent-unavailable', 'ui-shell--sidebar-no-runs']) expect(smoke, id).toContain(`'${id}'`)
+    expect(smoke).toMatch(/playFunctionThrewException/)
+    expect(smoke).toMatch(/currentRender\?\.phase/)
+  })
+})
+

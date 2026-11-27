@@ -237,6 +237,66 @@ export const InboxDecidedHere: S = inbox(
   },
   clickSelector('[data-testid="inbox-approve"]', '[data-testid="inbox-item"].done'),
 )
+/** Fails the story (and so the story smoke) when a rendered behaviour does not hold. */
+function check(ok: boolean, message: string): void {
+  if (!ok) throw new Error(`story: ${message}`)
+}
+async function until(test: () => boolean, message: string, timeoutMs = 4000): Promise<void> {
+  const end = Date.now() + timeoutMs
+  while (!test()) {
+    if (Date.now() > end) throw new Error(`story: ${message}`)
+    await new Promise((r) => setTimeout(r, 25))
+  }
+}
+/** Types as a person would, so React's onChange sees it. */
+function typeInto(input: HTMLInputElement, value: string): void {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+// roadmap: F2.5b-AC6 (rendered): a newer approval arriving while one is shown never swaps the detail.
+const otherRun = asRun(waitingForHuman, 'b9d3f1e2-7a6c-4d58-9e21-0c4b8a7f6d13')
+const otherApproval = approvalsOf(otherRun).map((a) => ({ ...a, node_run_id: `${a.node_run_id}-other` }))
+export const InboxStaysOnShownItem: S = inbox(
+  { runs: [run(waitingForHuman, 'running', 'open'), run(otherRun, 'running', 'open')], approvals: pending, laterApprovals: [...otherApproval, ...pending] },
+  async ({ canvasElement }) => {
+    const input = (await waitFor(canvasElement, '[data-testid="inbox-decide"] input')) as HTMLInputElement
+    typeInto(input, 'ship it')
+    const rows = () => [...canvasElement.querySelectorAll<HTMLElement>('[data-testid="inbox-item"][data-kind="approval"]')]
+    await until(() => rows().length === 2, 'the second approval never arrived')
+    check(rows()[0]!.textContent!.includes(otherRun[0]!.run_id.slice(0, 8)), 'the newer approval sorts first')
+    const shown = canvasElement.querySelector('[data-testid="inbox-item"][aria-current="true"]')
+    check(!!shown?.textContent?.includes(rid(waitingForHuman).slice(0, 8)), 'the approval being read stays selected')
+    check(canvasElement.querySelector<HTMLInputElement>('[data-testid="inbox-decide"] input')?.value === 'ship it', 'the typed reason is kept')
+  },
+)
+// roadmap: F2.5b-AC6 (rendered): focus follows the person's own decision only, and is used once.
+export const InboxKeyboardFocus: S = inbox(
+  { runs: [{ ...run(waitingForHuman, 'running', 'open'), afterDecision: demoApprove.slice(waitingForHuman.length) }, run(demoReject, 'failed', 'end')], approvals: pending },
+  async ({ canvasElement }) => {
+    ;(await waitFor(canvasElement, '[data-testid="inbox-approve"]')).click()
+    const next = await waitFor(canvasElement, '[data-testid="inbox-next"]')
+    await until(() => document.activeElement === next, 'focus moves to Next after the decision')
+    await until(() => canvasElement.querySelector('[data-testid="inbox-announce"]')!.textContent !== '', 'the decision is announced')
+    next.click()
+    await waitFor(canvasElement, '[data-testid="inbox-detail"][data-kind="failed"]')
+    await until(() => document.activeElement?.tagName === 'H2', 'after Next the new headline takes focus')
+    const filter = await waitFor(canvasElement, '[data-testid="inbox-filter-stopped"]')
+    filter.focus()
+    filter.click()
+    await waitFor(canvasElement, '[data-testid="inbox-filter-stopped"][aria-pressed="true"]')
+    await new Promise((r) => setTimeout(r, 100))
+    check(document.activeElement === filter, 'changing the filter keeps focus on the filter')
+    const all = await waitFor(canvasElement, '[data-testid="inbox-filter-all"]')
+    all.click()
+    const held = await waitFor(canvasElement, '[data-testid="inbox-item"][data-held="true"]')
+    held.focus()
+    held.click()
+    await waitFor(canvasElement, '[data-testid="inbox-decided"]')
+    await new Promise((r) => setTimeout(r, 100))
+    check(document.activeElement === held, 'opening an item decided earlier keeps focus on its row')
+    check(canvasElement.querySelector('[data-testid="inbox-announce"]')!.textContent === '', 'opening it announces nothing')
+  },
+)
 // The listed run cannot be read: the detail says so and deciding is off with the reason.
 export const InboxRunNotFound: S = inbox({ runs: [{ ...run(waitingForHuman, 'running', 'open'), unreadable: true }], approvals: pending }, async ({ canvasElement }) => {
   await waitFor(canvasElement, '[data-testid="inbox-run-not-found"]')

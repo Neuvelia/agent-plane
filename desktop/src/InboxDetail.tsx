@@ -207,7 +207,7 @@ function RunningBody({ run, graph }: { run: RunView; graph: GraphSummary | null 
 }
 
 /** `blocked` is why deciding is off: the stream is lost, or the run cannot be read. */
-function DecisionBar({ item, decision, blocked, onDecided, onNext }: { item: InboxItem; decision?: string; blocked?: MessageKey; onDecided: () => void; onNext?: () => void }) {
+function DecisionBar({ item, decision, blocked, focusNext, onDecided, onNext }: { item: InboxItem; decision?: string; blocked?: MessageKey; focusNext: boolean; onDecided: () => void; onNext?: () => void }) {
   const { t } = useI18n()
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
@@ -223,7 +223,7 @@ function DecisionBar({ item, decision, blocked, onDecided, onNext }: { item: Inb
     if (failure) setError(failure.message)
     else onDecided()
   }
-  if (decision) return <DecidedBar decision={decision} onNext={onNext} />
+  if (decision) return <DecidedBar decision={decision} focusNext={focusNext} onNext={onNext} />
   return (
     <div className="inbox-bar" data-testid="inbox-decide">
       <input type="text" aria-label={t('inbox.reason')} placeholder={t('inbox.reasonPlaceholder')} value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
@@ -235,14 +235,20 @@ function DecisionBar({ item, decision, blocked, onDecided, onNext }: { item: Inb
   )
 }
 
-/** The recorded decision, announced to assistive technology; focus moves to Next so the keyboard is not lost. */
-function DecidedBar({ decision, onNext }: { decision: string; onNext?: () => void }) {
+/**
+ * The recorded decision. When the person decided in this detail, focus moves to Next so the
+ * keyboard is not lost (the focused button was replaced); merely opening a decided item moves nothing.
+ */
+function DecidedBar({ decision, focusNext, onNext }: { decision: string; focusNext: boolean; onNext?: () => void }) {
   const { t } = useI18n()
   const nextRef = useRef<HTMLButtonElement>(null)
-  useEffect(() => nextRef.current?.focus(), [])
+  // Also when the event beat the request's answer: focus moves once the request is known to be ours.
+  useEffect(() => {
+    if (focusNext) nextRef.current?.focus()
+  }, [focusNext])
   return (
     <div className="inbox-bar" data-testid="inbox-decided">
-      <span className="inbox-decided" role="status">
+      <span className="inbox-decided">
         <ApprovalPill decision={decision} />
         <span className="mu inbox-small">{t('inbox.decided')}</span>
       </span>
@@ -292,11 +298,14 @@ export interface InboxDetailProps {
   onSettled: (decision: string) => void
   /** Absent when no other item is left to move to. */
   onNext?: () => void
-  /** Move focus to the headline when this item opens (after Next). */
+  /** Move focus to the headline when this item opens (after Next); `onFocused` then clears the request. */
   focusOnMount?: boolean
+  onFocused?: () => void
+  /** The person decided this approval on this screen (the request was accepted). */
+  decidedHere?: boolean
 }
 
-export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext, focusOnMount = false }: InboxDetailProps) {
+export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext, focusOnMount = false, onFocused, decidedHere = false }: InboxDetailProps) {
   const { t } = useI18n()
   const { run, graph, lost, notFound, unsupported } = useRunStream(item.runId)
   const unreadable = notFound || unsupported
@@ -310,9 +319,15 @@ export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext
   }, [decision])
   const headingRef = useRef<HTMLHeadingElement>(null)
   useEffect(() => {
-    if (focusOnMount) headingRef.current?.focus()
+    if (!focusOnMount) return
+    headingRef.current?.focus()
+    onFocused?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  // Decided in this detail instance: only then does the recorded decision move focus and get announced.
+  const [submitted, setSubmitted] = useState(false)
+  const decidedNow = submitted && decidedHere
+  const announcement = decidedNow && decision ? `${t(decision === 'approved' ? 'status.approval.approved' : 'status.approval.rejected')}. ${t('inbox.decided')}` : ''
   return (
     <article className="inbox-item" data-testid="inbox-detail" data-kind={item.kind}>
       <div className="inbox-body">
@@ -335,8 +350,20 @@ export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext
           </>
         )}
       </div>
+      {/* Always mounted, so screen readers announce the decision when it is filled in. */}
+      <span className="sr-only" role="status" data-testid="inbox-announce">{announcement}</span>
       {item.kind === 'approval' ? (
-        <DecisionBar item={item} decision={decision} blocked={unreadable ? 'inbox.cannotDecide' : lost !== null ? 'approval.disabledLost' : undefined} onDecided={onDecided} onNext={onNext} />
+        <DecisionBar
+          item={item}
+          decision={decision}
+          blocked={unreadable ? 'inbox.cannotDecide' : lost !== null ? 'approval.disabledLost' : undefined}
+          focusNext={decidedNow}
+          onDecided={() => {
+            setSubmitted(true)
+            onDecided()
+          }}
+          onNext={onNext}
+        />
       ) : (
         <OpenBar summary={`${kind}: ${title}\n${lede}\n${item.graphId} · ${item.runId}`} onOpen={() => onOpenRun(item.runId)} />
       )}
