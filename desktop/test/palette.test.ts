@@ -19,7 +19,7 @@ const entries: PaletteEntry[] = [
 const ids = (q: string, list = entries) => filterEntries(list, q, label).map((e) => e.id)
 
 describe('palette filtering', () => {
-  it('[F2.5c-AC2] shows every group in order with an empty query', () => {
+  it('[F2.5d-AC2] shows every group in order with an empty query', () => {
     expect(ids('')).toEqual(['new-run', 'approvals', 'run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa', 'go-inbox', 'go-settings'])
   })
   it('matches label, hint and group name, ignoring case', () => {
@@ -28,7 +28,7 @@ describe('palette filtering', () => {
     expect(ids('go to')).toEqual(['go-inbox', 'go-settings'])
     expect(ids('51b8')).toEqual(['run:51b8c6f0-aaaa'])
   })
-  it('[F2.5c-AC3] narrows to actions with ">" and to runs by id prefix with "#"', () => {
+  it('[F2.5d-AC3] narrows to actions with ">" and to runs by id prefix with "#"', () => {
     expect(ids('>')).toEqual(['new-run', 'approvals'])
     expect(ids('> review')).toEqual(['approvals'])
     expect(ids('#')).toEqual(['run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa'])
@@ -53,7 +53,7 @@ describe('palette scope', () => {
     expect(parseQuery('#8C1F')).toEqual({ scope: 'runs', text: '8c1f' })
     expect(parseQuery('runs')).toEqual({ scope: 'all', text: 'runs' })
   })
-  it('[F2.5c-AC3] Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
+  it('[F2.5d-AC3] Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
     expect(cycleScope('fix', 1)).toBe('>fix')
     expect(cycleScope('>fix', 1)).toBe('#fix')
     expect(cycleScope('#fix', 1)).toBe('fix')
@@ -63,7 +63,7 @@ describe('palette scope', () => {
 })
 
 describe('palette active row', () => {
-  it('[F2.5c-AC2] moves with the arrows and wraps around', () => {
+  it('[F2.5d-AC2] moves with the arrows and wraps around', () => {
     expect(moveActive(0, 3, 'ArrowDown')).toBe(1)
     expect(moveActive(2, 3, 'ArrowDown')).toBe(0)
     expect(moveActive(0, 3, 'ArrowUp')).toBe(2)
@@ -92,7 +92,7 @@ const press = (key: string, o: Partial<KeyPress> = {}): KeyPress => ({ key, ctrl
 
 describe('global shortcuts', () => {
   const idle = IDLE
-  it('[F2.5c-AC1] Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
+  it('[F2.5d-AC1] Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
     expect(matchShortcut(idle, press('k', { ctrlKey: true, typing: true }), false).command).toBe('palette')
     expect(matchShortcut(idle, press('k', { metaKey: true }), true).command).toBe('palette')
     expect(matchShortcut(idle, press('k', { metaKey: true }), false).command).toBeNull()
@@ -149,7 +149,7 @@ describe('global shortcut decision', () => {
 const inPalette = (key: string, o: Partial<PalettePress> = {}): PalettePress => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, composing: false, ...o })
 
 describe('keys inside the palette', () => {
-  it('[F2.5c-AC2] arrows move, Enter chooses', () => {
+  it('[F2.5d-AC2] arrows move, Enter chooses', () => {
     expect(paletteKey(inPalette('ArrowDown'), false)).toBe('next')
     expect(paletteKey(inPalette('ArrowUp'), false)).toBe('previous')
     expect(paletteKey(inPalette('Enter'), false)).toBe('choose')
@@ -157,11 +157,11 @@ describe('keys inside the palette', () => {
     expect(paletteKey(inPalette('ArrowDown', { repeat: true }), false)).toBe('next')
     expect(paletteKey(inPalette('Enter', { repeat: true }), false)).toBeNull()
   })
-  it('[F2.5c-AC3] Tab and Shift+Tab change the scope', () => {
+  it('[F2.5d-AC3] Tab and Shift+Tab change the scope', () => {
     expect(paletteKey(inPalette('Tab'), false)).toBe('scopeNext')
     expect(paletteKey(inPalette('Tab', { shiftKey: true }), false)).toBe('scopePrevious')
   })
-  it('[F2.5c-AC1] the palette chord closes it, but not its auto-repeat', () => {
+  it('[F2.5d-AC1] the palette chord closes it, but not its auto-repeat', () => {
     expect(paletteKey(inPalette('k', { ctrlKey: true }), false)).toBe('close')
     expect(paletteKey(inPalette('k', { metaKey: true }), true)).toBe('close')
     expect(paletteKey(inPalette('k', { ctrlKey: true, repeat: true }), false)).toBeNull()
@@ -178,7 +178,7 @@ describe('keys inside the palette', () => {
 
 describe('active entry by id', () => {
   const shown = entries.slice(0, 3)
-  it('[F2.5c-AC2] follows its entry when rows are inserted before it', () => {
+  it('[F2.5d-AC2] follows its entry when rows are inserted before it', () => {
     const later = [...shown.slice(0, 2), ...runs(5), shown[2]!]
     expect(activeIndex(shown, shown[2]!.id)).toBe(2)
     expect(activeIndex(later, shown[2]!.id)).toBe(7)
@@ -243,7 +243,7 @@ describe('backdrop by position', () => {
 })
 
 describe('reading runs for the palette', () => {
-  it('[F2.5c-AC4] reports a failed read as an error, never as an empty list', async () => {
+  it('[F2.5d-AC4] reports a failed read as an error, never as an empty list', async () => {
     expect(await readPaletteRuns(() => Promise.reject(new Error('sidecar down')))).toEqual({ status: 'error', runs: [] })
   })
   it('returns the runs that were read', async () => {

@@ -4,7 +4,7 @@ import type { BridgeData, BridgeRun, StreamEnding } from '../storybook/bridge'
 import { approvalsOf, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, summaryOf, waitingForHuman } from '../storybook/fixtures'
 import type { ApEvent } from '../types'
 
-// F2.5c command palette over the real app shell. Runs are recorded event streams
+// F2.5d command palette over the real app shell. Runs are recorded event streams
 // (storybook/fixtures); every step goes through the real components: the Search
 // button opens the palette, typing and arrow keys drive it.
 const meta: Meta = { title: 'Screens/Command palette' }

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { globalShortcut, IDLE, type GlobalCommand, type ShortcutState } from './palette'
 
-// F2.5c global shortcuts (Ctrl/Cmd+K, +N, +O, +Shift+A, +comma, then G I).
+// F2.5d global shortcuts (Ctrl/Cmd+K, +N, +O, +Shift+A, +comma, then G I).
 // One window listener owned by the shell; the shell decides what each command does.
 
 /** True when the key press lands in a field that takes text. */
@@ -11,9 +11,9 @@ export function isTypingTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'].includes(target.type)
 }
 
-/** True while a modal dialog (the palette, the template picker) owns the keyboard. */
+/** True while a modal dialog (the palette, the template picker, About, the shortcut list) owns the keyboard; one already animating out does not (F2.5c). */
 export function modalOpen(): boolean {
-  return document.querySelector('dialog[open]') !== null
+  return document.querySelector('dialog[open]:not(.closing)') !== null
 }
 
 /**

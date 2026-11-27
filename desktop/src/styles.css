@@ -3,6 +3,9 @@
 @import './design/overrides.css';
 
 *{box-sizing:border-box}
+/* Native controls, scrollbars and the canvas follow the chosen theme (F2.5c). */
+:root{color-scheme:dark;--scrim:rgba(0,0,0,.6);--shadow-pop:0 18px 50px rgba(0,0,0,.45)}
+:root[data-theme=light]{color-scheme:light;--scrim:rgba(0,0,0,.32);--shadow-pop:0 12px 32px rgba(0,0,0,.14)}
 html,body,#root{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font:var(--type-body-weight) var(--type-body-size)/1.4 var(--font-sans);-webkit-font-smoothing:antialiased}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
@@ -83,6 +86,7 @@ main{overflow:auto;min-width:0;min-height:0;flex:1;padding:var(--space-18) 24px 
 .btn{font:inherit;font-weight:500;color:var(--fg);height:var(--size-control);padding:0 14px;border:0;border-radius:var(--radius-pill);background:linear-gradient(180deg,var(--button-top),var(--button-bottom));cursor:pointer;transition:filter .15s,transform .1s}
 .btn.sm{height:var(--size-control-sm);padding:0 12px;font-size:12px}
 .btn:hover:not(:disabled){filter:brightness(1.2)}
+[data-theme=light] .btn:hover:not(:disabled){filter:brightness(.95)}
 .btn:active:not(:disabled){transform:scale(.97)}
 .btn:disabled{opacity:.4;cursor:default}
 .btn.primary{background:linear-gradient(0deg,var(--silver-top),var(--silver-bottom));color:var(--on-silver);box-shadow:var(--shadow-silver)}
@@ -356,7 +360,7 @@ main:focus{outline:none}
 .cap-state{display:flex;justify-content:space-between;align-items:center;gap:var(--space-12);margin:0 var(--space-12);padding:10px 14px;border-radius:var(--radius-12);background:var(--bad-soft)}
 /* F2.12 New graph picker */
 .picker{max-width:640px;width:calc(100% - 32px);max-height:calc(100vh - 64px);overflow:auto;padding:var(--space-14) var(--space-14) var(--space-12);border:1px solid var(--card-line);border-radius:var(--radius-20);background:var(--surface);color:var(--fg)}
-.picker::backdrop{background:rgba(0,0,0,.6)}
+.picker::backdrop{background:var(--scrim)}
 .picker h2{margin:0 0 var(--space-4);font-size:18px}
 .picker-list{border:0;margin:var(--space-8) 0;padding:0;display:flex;flex-direction:column;gap:var(--space-4)}
 .picker-entry{display:flex;gap:var(--space-10);align-items:flex-start;padding:var(--space-8) var(--space-10);border-radius:var(--radius-12);background:var(--fill-4);cursor:pointer}
@@ -393,14 +397,16 @@ main:focus{outline:none}
 .runs-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-12);margin-bottom:var(--space-12)}
 .runs .run-group-head th{padding-top:var(--space-12);text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)}
 
-/* F2.5c command palette (design board "Command palette"). A modal <dialog> in the
+/* F2.5d command palette (design board "Command palette"). A modal <dialog> in the
    top layer; the page behind is dimmed and slightly blurred by its backdrop.
    Enter: fade + 8px drop + scale from .98 on a decelerating curve; exit is shorter
    and accelerating. The global reduced-motion rule above removes both (and the
    rule below the backdrop's, which `*` does not reach). */
 .cmdk{width:min(640px,calc(100% - 32px));max-width:none;max-height:calc(100vh - 140px);margin:110px auto auto;padding:0;border:1px solid var(--card-line);border-radius:18px;background:var(--bg);color:var(--fg);box-shadow:0 30px 80px rgba(0,0,0,.7);overflow:hidden;font-size:13px;line-height:1.45}
 .cmdk[open]{display:flex;flex-direction:column;animation:cmdk-in .18s cubic-bezier(.23,1,.32,1)}
-.cmdk::backdrop{background:rgba(0,0,0,.6);backdrop-filter:blur(1.5px);animation:cmdk-fade .18s ease-out}
+.cmdk::backdrop{background:var(--scrim);backdrop-filter:blur(1.5px);animation:cmdk-fade .18s ease-out}
+/* Light theme (F2.5c, design "Command palette · light"): the same layout; colours come from the theme tokens, the shadow is lighter. */
+[data-theme=light] .cmdk{box-shadow:0 30px 80px rgba(0,0,0,.18)}
 .cmdk.closing{animation:cmdk-out .12s cubic-bezier(.4,0,1,1) forwards;pointer-events:none}
 .cmdk.closing::backdrop{animation:cmdk-fade-out .12s ease-in forwards}
 /* The global reduced-motion rule uses `*`, which never matches ::backdrop. */
@@ -504,7 +510,7 @@ main:has(>.inbox){padding:0}
 .ib-btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
 .ib-btn.ghost:hover:not(:disabled){background:var(--fill-6);color:var(--fg)}
 .ib-btn:disabled{opacity:.4;cursor:not-allowed}
-/* Small quiet button (the global bar's Search, F2.5c; design `.btn.sm`). */
+/* Small quiet button (the global bar's Search, F2.5d; design `.btn.sm`). */
 .ib-btn.sm{height:var(--size-control-sm);padding:0 10px;font-size:12px}
 .inbox-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-10);padding:40px;text-align:center}
 .inbox-empty .glyph{width:20px;height:20px}
@@ -513,3 +519,78 @@ main:has(>.inbox){padding:0}
 .inbox-empty-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-8)}
 @media (max-width:1100px){.inbox{grid-template-columns:minmax(280px,340px) minmax(0,1fr)}.inbox-body,.inbox-bar{padding-left:24px;padding-right:24px}}
 @media (max-width:900px){.inbox{grid-template-columns:minmax(0,1fr);height:auto}.inbox-queue{border-right:0;border-bottom:1px solid var(--hairline)}.inbox-list{max-height:40vh}.inbox-body,.inbox-bar{padding-left:24px;padding-right:24px}}
+
+/* F2.5c Profile menu (design: "Profile menu" artboard, 1:1). The trigger is the
+   profile row in the sidebar foot (.side-foot); the menu opens above it and each
+   submenu opens to its right, its last item level with its trigger. Both are
+   position:fixed, placed by profileMenu.tsx, so the scrolling sidebar cannot clip them. */
+.profile{position:relative}
+.me{display:flex;align-items:center;gap:var(--space-10);width:100%;padding:var(--space-6) var(--space-10);border:0;border-radius:var(--radius-10);background:transparent;color:var(--fg);font:inherit;text-align:left;cursor:pointer;transition:background-color .15s}
+.me:hover{background:var(--fill-4)}
+.me[aria-expanded=true]{background:var(--fill-6)}
+.me .av{width:24px;height:24px;border-radius:50%;background:var(--raised-hover);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex:none}
+.me-name{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.me-local{margin-left:auto;font-size:11px;color:var(--muted)}
+.pm,.pm-sub{position:fixed;border-radius:var(--radius-12);border:1px solid var(--card-line);background:var(--inset);box-shadow:var(--shadow-pop);padding:6px;color:var(--fg)}
+.pm{width:248px;z-index:50;transform-origin:0 100%;animation:pm-in .16s cubic-bezier(.2,.9,.3,1)}
+.pm.closing{animation:pm-out .12s ease-in forwards;pointer-events:none}
+.pm-sub{width:200px;z-index:51;transform-origin:0 100%;animation:pm-sub-in .14s cubic-bezier(.2,.9,.3,1)}
+.pm-sub.closing{animation:pm-sub-out .1s ease-in forwards;pointer-events:none}
+@keyframes pm-in{from{opacity:0;transform:translateY(6px) scale(.97)}}
+@keyframes pm-out{to{opacity:0;transform:translateY(4px) scale(.98)}}
+@keyframes pm-sub-in{from{opacity:0;transform:translateX(-6px)}}
+@keyframes pm-sub-out{to{opacity:0;transform:translateX(-4px)}}
+.pm-who{display:flex;flex-direction:column;gap:2px;padding:8px 10px 10px}
+.pm-who b{font-weight:600}
+.pm-who span{font-size:11px;color:var(--muted)}
+.pm hr{border:0;border-top:1px solid var(--hairline);margin:6px 0}
+.mi{appearance:none;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;height:32px;padding:0 10px;border:0;border-radius:var(--radius-6);background:transparent;color:var(--fg);font:inherit;font-size:13px;text-align:left;cursor:pointer;transition:background-color .12s}
+.mi:hover,.mi[aria-expanded=true]{background:var(--fill-6)}
+.mi:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;background:var(--fill-6)}
+.mi svg{flex:none;color:var(--muted)}
+.mi .r{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.mi .kb{margin-left:auto;font:400 11px/1 var(--font-mono);color:var(--muted)}
+.mi .chev{transition:transform .16s cubic-bezier(.2,.9,.3,1)}
+.mi[aria-expanded=true] .chev{transform:translateX(2px)}
+.mi[aria-disabled=true]{cursor:default;color:var(--muted)}
+.mi[aria-disabled=true]:hover{background:transparent}
+.pm-sub .mi .ck{margin-left:auto;color:var(--fg);opacity:0;transform:scale(.6);transition:opacity .14s,transform .14s cubic-bezier(.2,.9,.3,1)}
+.pm-sub .mi[aria-checked=true] .ck{opacity:1;transform:none}
+.btn.ghost{background:transparent;color:var(--muted)}
+.btn.ghost:hover:not(:disabled){background:var(--fill-6);color:var(--fg);filter:none}
+
+/* F2.5c Keyboard shortcuts and About (design: "Shortcuts, About and Soon"). */
+.modal{width:min(440px,calc(100% - 32px));max-height:calc(100vh - 64px);overflow:auto;padding:0;border:1px solid var(--card-line);border-radius:var(--radius-12);background:var(--inset);color:var(--fg);box-shadow:var(--shadow-pop)}
+.modal.wide{width:min(640px,calc(100% - 32px))}
+.modal::backdrop{background:var(--scrim)}
+.modal[open]{animation:modal-in .16s cubic-bezier(.2,.9,.3,1)}
+.modal[open]::backdrop{animation:fade-in .16s ease-out}
+.modal.closing{animation:modal-out .14s ease-in forwards}
+.modal.closing::backdrop{animation:fade-out .14s ease-in forwards}
+@keyframes modal-in{from{opacity:0;transform:translateY(8px) scale(.98)}}
+@keyframes modal-out{to{opacity:0;transform:translateY(4px) scale(.98)}}
+@keyframes fade-in{from{opacity:0}}
+@keyframes fade-out{to{opacity:0}}
+.modal-body{display:flex;flex-direction:column;gap:12px;padding:24px}
+.modal h2{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em}
+.modal-note{margin:0;color:var(--muted);font-size:12px;line-height:1.55}
+.modal-status{margin:0;font-size:12px;min-height:1em}
+.modal-status:empty{display:none}
+.modal-actions{display:flex;gap:var(--space-8);justify-content:flex-end;flex-wrap:wrap}
+.sc-cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px}
+.sc-col{display:flex;flex-direction:column;gap:16px;min-width:0}
+.sc-grp h3{margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+.sc{display:flex;align-items:center;gap:12px;min-height:32px;border-top:1px solid var(--hairline);font-size:12px}
+.sc .t{flex:1;min-width:0;padding:6px 0}
+.sc-note{display:block;margin-top:2px;font-size:11px;color:var(--muted)}
+.ks{display:inline-flex;gap:4px;align-items:center}
+.ks kbd{font:500 11px/1 var(--font-mono);padding:4px 6px;border-radius:5px;border:1px solid var(--card-line);background:var(--fill-6);color:var(--fg);white-space:nowrap}
+.about-kv{margin:0}
+.about-kv>div{display:flex;align-items:center;gap:12px;min-height:34px;border-top:1px solid var(--hairline);font-size:12px}
+.about-kv dt{width:120px;flex:none;color:var(--muted)}
+.about-kv dd{margin:0;flex:1;min-width:0;overflow-wrap:anywhere}
+@media (max-width:560px){.sc-cols{grid-template-columns:minmax(0,1fr)}}
+
+/* Changing the theme cross-fades colours for THEME_FADE_MS (theme.tsx) instead of snapping. */
+.theme-switching,.theme-switching *,.theme-switching *::before,.theme-switching *::after{transition:background-color .24s ease,color .24s ease,border-color .24s ease,fill .24s ease,stroke .24s ease,box-shadow .24s ease,opacity .24s ease,transform .24s ease!important}
+/* Reduced motion: the global rule above turns every animation and transition off. */

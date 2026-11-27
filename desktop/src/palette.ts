@@ -1,4 +1,4 @@
-// F2.5c command palette: the pure model. Which entries a query shows, in
+// F2.5d command palette: the pure model. Which entries a query shows, in
 // which order, which one is active, and which global key press means what.
 // No DOM, no React, no engine calls: the view (ui/CommandPalette.tsx) and the
 // shell (App.tsx) feed it plain data and act on what it returns.
@@ -101,7 +101,7 @@ export function outside(box: Box, x: number, y: number): boolean {
 }
 
 /** Global commands the shell answers outside the palette. */
-export type GlobalCommand = 'palette' | 'newRun' | 'openGraph' | 'approvals' | 'settings' | 'inbox'
+export type GlobalCommand = 'palette' | 'newRun' | 'openGraph' | 'approvals' | 'settings' | 'shortcuts' | 'inbox'
 
 /** One key press, as much of a KeyboardEvent as the matcher needs. */
 export interface KeyPress {
@@ -122,6 +122,8 @@ export const SHORTCUTS: Record<GlobalCommand, Shortcut> = {
   openGraph: { kind: 'chord', key: 'O' },
   approvals: { kind: 'chord', key: 'A', shift: true },
   settings: { kind: 'chord', key: ',' },
+  // The Keyboard shortcuts window (F2.5c); in the YAML editor CodeMirror takes Ctrl/Cmd+/ first.
+  shortcuts: { kind: 'chord', key: '/' },
   inbox: { kind: 'sequence', keys: ['G', 'I'] },
 }
 

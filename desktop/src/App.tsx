@@ -12,6 +12,8 @@ import { CommandPalette, isMac, usePaletteRuns, type PaletteCommand } from './ui
 import { runEntries, SHORTCUTS, shortcutText, type GlobalCommand } from './palette'
 import { useGlobalShortcuts } from './useShortcuts'
 import { runStatusKey } from './status'
+import { AboutDialog, ShortcutsDialog } from './ui/dialogs'
+import { ProfileMenu } from './ui/profileMenu'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -52,6 +54,10 @@ function Shell({ lost }: { lost: boolean }) {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+  // F2.5c: the profile menu's two windows. Their shortcuts (Ctrl or Cmd with , and /) go through
+  // the shell's one shortcut listener below (F2.5d useGlobalShortcuts).
+  const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null)
+  const appVersion = typeof window.agentplane?.appVersion === 'string' ? window.agentplane.appVersion : ''
 
   // After navigating, move focus to the content so keyboard and screen-reader users start there.
   const mainRef = useRef<HTMLElement>(null)
@@ -69,7 +75,7 @@ function Shell({ lost }: { lost: boolean }) {
 
   const go = (name: Route['name']) => () => setRoute({ name } as Route)
 
-  // F2.5c command palette and global shortcuts: they only navigate or open what the shell offers.
+  // F2.5d command palette and global shortcuts: they only navigate or open what the shell offers.
   const mac = useMemo(isMac, [])
   // The open palette's session: a new number for every opening (it keys the component and the
   // run read), or null when closed.
@@ -87,6 +93,7 @@ function Shell({ lost }: { lost: boolean }) {
     },
     approvals: go('approvals'),
     settings: go('settings'),
+    shortcuts: () => setDialog('shortcuts'),
     inbox: go('inbox'),
   }
   useGlobalShortcuts(mac, (c) => (c === 'palette' ? openPalette() : perform[c]()))
@@ -143,6 +150,7 @@ function Shell({ lost }: { lost: boolean }) {
         recent={<RecentRuns runs={polledRuns.data} approvals={polled.status === 'error' ? [] : (polled.data ?? [])} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
         deferred={deferred}
         footer={footer}
+        profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />}
       />
       <div className="col">
         <GlobalBar
@@ -178,6 +186,8 @@ function Shell({ lost }: { lost: boolean }) {
           onClose={(reopen) => setPalette(reopen ? ++sessions.current : null)}
         />
       )}
+      {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'about' && <AboutDialog appVersion={appVersion} onClose={() => setDialog(null)} />}
     </div>
   )
 }

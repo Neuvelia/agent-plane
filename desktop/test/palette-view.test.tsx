@@ -23,7 +23,7 @@ function html({ query = '', runs = 'ready' as RunsState, mac = false, locale = '
 }
 
 describe('CommandPalette', () => {
-  it('[F2.5c-AC2] is a labelled dialog with a combobox that points at the first option', () => {
+  it('[F2.5d-AC2] is a labelled dialog with a combobox that points at the first option', () => {
     const out = html()
     expect(out).toMatch(/<dialog[^>]*aria-label="Command palette"/)
     const input = /<input[^>]*role="combobox"[^>]*>/.exec(out)![0]
@@ -43,14 +43,14 @@ describe('CommandPalette', () => {
     expect(html()).toContain('2 waiting<kbd>Ctrl Shift A</kbd>')
     expect(html({ mac: true })).toContain('2 waiting<kbd>⌘ ⇧ A</kbd>')
   })
-  it('[F2.5c-AC4] says nothing matches, without an empty listbox', () => {
+  it('[F2.5d-AC4] says nothing matches, without an empty listbox', () => {
     const out = html({ query: 'zzz' })
     expect(out).toContain('Nothing matches “zzz”. Try a run id or a graph name.')
     expect(out).not.toContain('role="listbox"')
     expect(out).toContain('aria-expanded="false"')
     expect(out).not.toContain('aria-activedescendant')
   })
-  it('[F2.5c-AC4] reports runs that are loading or could not be read, but not for the actions scope', () => {
+  it('[F2.5d-AC4] reports runs that are loading or could not be read, but not for the actions scope', () => {
     expect(html({ runs: 'loading' })).toContain('Loading runs…')
     expect(html({ runs: 'error' })).toMatch(/class="cmdk-note bad"[^>]*>Runs could not be loaded/)
     expect(html({ runs: 'error', query: '>' })).not.toContain('Runs could not be loaded')
@@ -64,7 +64,7 @@ describe('CommandPalette', () => {
 })
 
 describe('GlobalBar search', () => {
-  it('[F2.5c-AC1] offers the palette as a button that names its shortcut', () => {
+  it('[F2.5d-AC1] offers the palette as a button that names its shortcut', () => {
     const out = renderToStaticMarkup(
       <I18nProvider locale="en">
         <GlobalBar lost={false} search={{ onOpen: noop, keys: 'Ctrl K', ariaKeys: 'Control+K' }} />
