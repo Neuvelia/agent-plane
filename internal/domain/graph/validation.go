@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -59,7 +60,7 @@ func (r ValidationResult) HasErrors() bool {
 // parsed graph definition. Structural YAML decoding remains the responsibility
 // of Parse.
 func Validate(definition *Definition) ValidationResult {
-	validator := definitionValidator{definition: definition, usedOutputs: make(map[string]bool)}
+	validator := definitionValidator{definition: definition, usedOutputs: make(map[portKey]bool)}
 	if definition == nil {
 		validator.error("E_DEFINITION_NIL", "graph definition is nil", DiagnosticLocation{}, "provide a parsed graph definition")
 		return validator.result()
@@ -84,9 +85,10 @@ func Validate(definition *Definition) ValidationResult {
 type definitionValidator struct {
 	definition   *Definition
 	diagnostics  []Diagnostic
-	providers    map[string]int
+	providers    map[portKey]int
 	dependencies []dependency
-	usedOutputs  map[string]bool
+	usedOutputs  map[portKey]bool
+	nodeIDs      []string
 }
 
 type dependency struct {
@@ -123,7 +125,7 @@ func (v *definitionValidator) validateDefinition() {
 		v.validateValueType(input.Type, fieldPath("inputs", inputID, "type"), "")
 	}
 
-	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
+	for _, nodeID := range v.sortedNodes() {
 		node := v.definition.Nodes[nodeID]
 		nodePath := mapPath("nodes", nodeID)
 		v.validateIdentifier(nodeID, nodePath, "node id", nodeID)
@@ -169,6 +171,9 @@ func (v *definitionValidator) validateValueType(valueType ValueType, path, nodeI
 
 func (v *definitionValidator) validateEdges() {
 	for edgeIndex, edge := range v.definition.Edges {
+		if v.validateSoundEdge(edgeIndex, edge) {
+			continue
+		}
 		fromPath := fmt.Sprintf("edges[%d].from", edgeIndex)
 		toPath := fmt.Sprintf("edges[%d].to", edgeIndex)
 		from, fromValid := v.parseNodeOutputReference(string(edge.From), fromPath, edgeIndex, "E_EDGE_SOURCE_REFERENCE_INVALID")
@@ -177,13 +182,7 @@ func (v *definitionValidator) validateEdges() {
 		fromPort, sourceValid := v.resolveNodeOutput(from, fromValid, edgeIndex, fromPath, "E_EDGE_SOURCE")
 		toPort, targetValid := v.resolveNodeInput(to, toValid, edgeIndex, toPath, "E_EDGE_TARGET")
 		if sourceValid && targetValid {
-			v.dependencies = append(v.dependencies, dependency{from: from.nodeID, to: to.nodeID, edgeIndex: edgeIndex})
-			if supportedValueType(fromPort.Type) && supportedValueType(toPort.Type) && fromPort.Type != toPort.Type {
-				v.error("E_BINDING_TYPE_MISMATCH", fmt.Sprintf("edge binds %q (%s) to %q (%s)", edge.From, fromPort.Type, edge.To, toPort.Type), edgeLocation(edgeIndex, fmt.Sprintf("edges[%d]", edgeIndex)), "bind ports with the same declared type")
-			} else if supportedValueType(fromPort.Type) && supportedValueType(toPort.Type) {
-				v.addProvider(to.nodeID, to.portID, edgeLocation(edgeIndex, toPath))
-				v.usedOutputs[outputKey(from.nodeID, from.portID)] = true
-			}
+			v.acceptEdge(edgeIndex, edge, resolvedEdge{from: from, to: to, fromPort: fromPort, toPort: toPort})
 		}
 	}
 }
@@ -236,7 +235,7 @@ func (v *definitionValidator) validateGraphOutputs() {
 }
 
 func (v *definitionValidator) validateRequiredInputs() {
-	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
+	for _, nodeID := range v.sortedNodes() {
 		node := v.definition.Nodes[nodeID]
 		for _, inputID := range sortedPortIDs(node.Inputs) {
 			if !node.Inputs[inputID].Required || v.providers[inputKey(nodeID, inputID)] > 0 {
@@ -250,16 +249,14 @@ func (v *definitionValidator) validateRequiredInputs() {
 
 func (v *definitionValidator) validateCycles() {
 	adjacency := make(map[string][]dependency, len(v.definition.Nodes))
-	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
+	for _, nodeID := range v.sortedNodes() {
 		adjacency[nodeID] = nil
 	}
 	for _, dependency := range v.dependencies {
 		adjacency[dependency.from] = append(adjacency[dependency.from], dependency)
 	}
 	for nodeID := range adjacency {
-		sort.Slice(adjacency[nodeID], func(i, j int) bool {
-			return adjacency[nodeID][i].edgeIndex < adjacency[nodeID][j].edgeIndex
-		})
+		slices.SortFunc(adjacency[nodeID], func(a, b dependency) int { return a.edgeIndex - b.edgeIndex })
 	}
 
 	state := make(map[string]uint8, len(adjacency))
@@ -286,7 +283,7 @@ func (v *definitionValidator) validateCycles() {
 		state[nodeID] = 2
 	}
 
-	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
+	for _, nodeID := range v.sortedNodes() {
 		if state[nodeID] == 0 {
 			visit(nodeID)
 		}
@@ -294,7 +291,7 @@ func (v *definitionValidator) validateCycles() {
 }
 
 func (v *definitionValidator) validateUnusedOutputs() {
-	for _, nodeID := range sortedNodeIDs(v.definition.Nodes) {
+	for _, nodeID := range v.sortedNodes() {
 		for _, outputID := range sortedPortIDs(v.definition.Nodes[nodeID].Outputs) {
 			if v.usedOutputs[outputKey(nodeID, outputID)] {
 				continue
@@ -390,17 +387,28 @@ func (v *definitionValidator) resolveNodeInputForBinding(reference nodeInputRefe
 }
 
 func (v *definitionValidator) addProvider(nodeID, inputID string, location DiagnosticLocation) {
+	if v.countProvider(nodeID, inputID) {
+		v.reportMultipleProviders(nodeID, inputID, location)
+	}
+}
+
+// countProvider records one more provider of the input and reports whether it
+// now has more than one.
+func (v *definitionValidator) countProvider(nodeID, inputID string) bool {
 	if v.providers == nil {
-		v.providers = make(map[string]int)
+		v.providers = make(map[portKey]int)
 	}
 	key := inputKey(nodeID, inputID)
 	v.providers[key]++
-	if v.providers[key] > 1 {
-		path := mapPath(mapPath("nodes", nodeID)+".inputs", inputID)
-		location.NodeID = nodeID
-		location.Path = path
-		v.error("E_INPUT_MULTIPLE_PROVIDERS", fmt.Sprintf("input %s on node %s has multiple providers", quotedKey(inputID), quotedKey(nodeID)), location, "bind exactly one source to this input")
-	}
+	return v.providers[key] > 1
+}
+
+// reportMultipleProviders keeps only the index fields of location: the path is
+// always the input's own.
+func (v *definitionValidator) reportMultipleProviders(nodeID, inputID string, location DiagnosticLocation) {
+	location.NodeID = nodeID
+	location.Path = mapPath(mapPath("nodes", nodeID)+".inputs", inputID)
+	v.error("E_INPUT_MULTIPLE_PROVIDERS", fmt.Sprintf("input %s on node %s has multiple providers", quotedKey(inputID), quotedKey(nodeID)), location, "bind exactly one source to this input")
 }
 
 func (v *definitionValidator) error(code, message string, location DiagnosticLocation, suggestion string) {
@@ -437,19 +445,19 @@ func sortedValidationResult(diagnostics []Diagnostic) ValidationResult {
 }
 
 func parseNodeOutputReference(reference string) (nodeOutputReference, bool) {
-	parts := strings.Split(reference, ".")
-	if len(parts) != 3 || parts[1] != "outputs" || !validIdentifier(parts[0]) || !validIdentifier(parts[2]) {
+	node, kind, port, ok := splitReference(reference)
+	if !ok || kind != "outputs" || !validIdentifier(node) || !validIdentifier(port) {
 		return nodeOutputReference{}, false
 	}
-	return nodeOutputReference{nodeID: parts[0], portID: parts[2]}, true
+	return nodeOutputReference{nodeID: node, portID: port}, true
 }
 
 func parseNodeInputReference(reference string) (nodeInputReference, bool) {
-	parts := strings.Split(reference, ".")
-	if len(parts) != 3 || parts[1] != "inputs" || !validIdentifier(parts[0]) || !validIdentifier(parts[2]) {
+	node, kind, port, ok := splitReference(reference)
+	if !ok || kind != "inputs" || !validIdentifier(node) || !validIdentifier(port) {
 		return nodeInputReference{}, false
 	}
-	return nodeInputReference{nodeID: parts[0], portID: parts[2]}, true
+	return nodeInputReference{nodeID: node, portID: port}, true
 }
 
 func parseGraphInputReference(reference string) (string, bool) {
@@ -511,12 +519,12 @@ func sortedKeys[T any](values map[string]T) []string {
 	return keys
 }
 
-func inputKey(nodeID, inputID string) string {
-	return nodeID + "\x00" + inputID
+func inputKey(nodeID, inputID string) portKey {
+	return portKey{nodeID: nodeID, portID: inputID}
 }
 
-func outputKey(nodeID, outputID string) string {
-	return nodeID + "\x00" + outputID
+func outputKey(nodeID, outputID string) portKey {
+	return portKey{nodeID: nodeID, portID: outputID}
 }
 
 func edgeLocation(edgeIndex int, path string) DiagnosticLocation {

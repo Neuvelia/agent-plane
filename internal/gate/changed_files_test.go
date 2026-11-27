@@ -69,6 +69,8 @@ func pathsOf(p events.CheckResult) []string {
 	}
 	return paths
 }
+
+// roadmap: F1.8-AC2
 func TestChangedFilesScopeGitClassesAndMatching(t *testing.T) {
 	dir := gitScopeRepo(t)
 	if p := checkScope(t, captureScope(t, dir), []string{"src/**"}, "deny"); p.Verdict != events.CheckGreen || len(pathsOf(p)) != 0 {

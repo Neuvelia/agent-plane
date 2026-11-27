@@ -91,6 +91,7 @@ func TestNormalizedProgressOrderAndCorrelation(t *testing.T) {
 	}
 }
 
+// roadmap: F1.3-AC2
 func TestRun100MiBAbsentReaderAndFullQueueCancellation(t *testing.T) {
 	for _, cancelRun := range []bool{false, true} {
 		t.Run(map[bool]string{false: "complete", true: "cancel"}[cancelRun], func(t *testing.T) {

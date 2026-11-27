@@ -113,6 +113,7 @@ func TestPermissionsAreOwnerOnly(t *testing.T) {
 	}
 }
 
+// roadmap: F0.6-AC3
 func TestRunWithoutTerminalEventIsInterruptedAndEarlierEventsRead(t *testing.T) {
 	s := Store{Dir: t.TempDir()}
 	write(t, s, runA, started(runA, time.Now().UTC()))

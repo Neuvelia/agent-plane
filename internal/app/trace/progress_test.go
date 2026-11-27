@@ -46,6 +46,7 @@ func TestProgressSchemaCompatibility(t *testing.T) {
 	}
 }
 
+// roadmap: F1.3-AC3
 func TestBoundedProgressAbsentReader100MiB(t *testing.T) {
 	live := make(chan events.Event)
 	c := NewCollectorWithLiveEvents(context.Background(), system.Clock{}, "run", "graph", "version", live)

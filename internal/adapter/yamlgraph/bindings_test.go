@@ -410,6 +410,7 @@ func TestNilBindingPlanReturnsStructuredErrors(t *testing.T) {
 	assertDiagnostic(t, result, "E_BINDING_PLAN_NIL", "")
 }
 
+// roadmap: F0.3-AC1
 func TestUnboundNodesHaveNoDependencies(t *testing.T) {
 	definition := &graph.Definition{
 		SchemaVersion: graph.SchemaVersionV0,

@@ -73,6 +73,9 @@
 ## E_NODE_TYPE_REQUIRED exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_NODE_TYPE_REQUIRED","message":"node \"a\" is missing required type","graph_id":"g","location":{"node_id":"a","path":"nodes.a.type"},"suggestion":"set the node type"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"x\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.x"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
 
+## E_NODE_TYPE_UNKNOWN exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_NODE_TYPE_UNKNOWN","message":"node \"a\" has unsupported type \"foo\"","graph_id":"g","location":{"node_id":"a","path":"nodes.a.type"},"suggestion":"use one of the node types: agent, gate, human, shell"}],"failure":null,"error":null}
+
 ## E_REQUIRED_INPUT_UNBOUND exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_REQUIRED_INPUT_UNBOUND","message":"required input \"i\" on node \"b\" has no valid binding","graph_id":"g","location":{"node_id":"b","path":"nodes.b.inputs.i"},"suggestion":"add one compatible edge or graph input binding"}],"failure":null,"error":null}
 

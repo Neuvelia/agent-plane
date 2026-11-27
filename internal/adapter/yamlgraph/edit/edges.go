@@ -17,29 +17,45 @@ func parseRef(ref, kind string) bool {
 
 func edgeLabel(from, to string) string { return from + " -> " + to }
 
+// validation is a graph validator: graph.Validate, or graph.ValidateDataflow
+// when the compared definitions differ only in edges and graph input bindings.
+type validation func(*graph.Definition) graph.ValidationResult
+
 // errorBaseline holds the blocking diagnostics of a definition, so many
 // candidate edits can each be judged against one validation of the original.
-type errorBaseline map[string]int
+type errorBaseline struct {
+	validate validation
+	seen     map[string]int
+}
 
-func baselineOf(before *graph.Definition) errorBaseline {
-	seen := errorBaseline{}
-	for _, d := range graph.Validate(before).Diagnostics {
+func baselineWith(validate validation, before *graph.Definition) errorBaseline {
+	seen := map[string]int{}
+	for _, d := range validate(before).Diagnostics {
 		if d.Severity == graph.SeverityError {
 			seen[d.Code+"|"+d.Message]++
 		}
 	}
-	return seen
+	return errorBaseline{validate: validate, seen: seen}
+}
+
+// connectionBaseline is the baseline for judging connections. A connection
+// changes only edges or graph input bindings, so only graph.ValidateDataflow's
+// passes can report a new error for it; every other pass reports the same
+// diagnostics before and after, under other codes. Skipping them keeps each
+// verdict the validator's while list_connections stays fast (issue #192).
+func connectionBaseline(before *graph.Definition) errorBaseline {
+	return baselineWith(graph.ValidateDataflow, before)
 }
 
 // newErrors returns the blocking diagnostics of after that the baseline does
-// not have.
+// not have, by the baseline's own validator.
 func (b errorBaseline) newErrors(after *graph.Definition) []graph.Diagnostic {
-	left := make(errorBaseline, len(b))
-	for k, v := range b {
+	left := make(map[string]int, len(b.seen))
+	for k, v := range b.seen {
 		left[k] = v
 	}
 	var added []graph.Diagnostic
-	for _, d := range graph.Validate(after).Diagnostics {
+	for _, d := range b.validate(after).Diagnostics {
 		if d.Severity != graph.SeverityError {
 			continue
 		}
@@ -54,9 +70,10 @@ func (b errorBaseline) newErrors(after *graph.Definition) []graph.Diagnostic {
 }
 
 // newErrors returns the blocking diagnostics present after an edit that were not
-// present before. can_connect has no rules of its own: it asks the validator.
+// present before, by the full validator: the edit may change any part of the
+// definition. can_connect has no rules of its own: it asks the validator.
 func newErrors(before, after *graph.Definition) []graph.Diagnostic {
-	return baselineOf(before).newErrors(after)
+	return baselineWith(graph.Validate, before).newErrors(after)
 }
 
 // parseGraphInputRef reports whether ref is inputs.NAME.
@@ -91,7 +108,7 @@ func (s *session) canConnect(from, to string) *QueryResult {
 	if !parseRef(to, "inputs") {
 		return &QueryResult{Code: CodeInvalidOp, Message: fmt.Sprintf("%q is not a node input reference (NODE.inputs.PORT)", to)}
 	}
-	return connectionVerdict(baselineOf(s.want), s.connectionAfter(from, to))
+	return connectionVerdict(connectionBaseline(s.want), s.connectionAfter(from, to))
 }
 
 func (s *session) addEdge(op Op) *Error {

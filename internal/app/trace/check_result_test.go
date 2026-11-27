@@ -11,6 +11,7 @@ import (
 	"testing"
 )
 
+// roadmap: F1.5-AC2
 func TestCheckResultReferenceRoundTrips(t *testing.T) {
 	line := 7
 	refs := []*events.EvidenceReference{nil}
@@ -51,6 +52,7 @@ func TestCheckResultReferenceRoundTrips(t *testing.T) {
 	}
 }
 
+// roadmap: F1.5-AC1
 func TestCheckResultRejectsMalformedBeforeTrace(t *testing.T) {
 	good, _ := json.Marshal(gateFact())
 	cases := []string{}
@@ -146,6 +148,7 @@ func TestCheckResultsFilterOrderAndDetach(t *testing.T) {
 	}
 }
 
+// roadmap: F1.5-AC1
 func TestGreenMayOmitEvidenceAndRedCannot(t *testing.T) {
 	p := gateFact()
 	p.Verdict = events.CheckGreen

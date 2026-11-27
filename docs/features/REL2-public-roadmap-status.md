@@ -29,6 +29,11 @@ landing repository, with no manual copying.
 
 ## Source of truth
 
+> **Amended by ADR-0038 (2026-11-26):** phase, ID, title, priority and status come from
+> `docs/roadmap/features.yaml`; the generator below must read the registry instead of
+> `docs/roadmap.md` and the spec status lines. The rest of this section is the original
+> draft and must be rewritten before implementation.
+
 `docs/roadmap.md` supplies phase, ID, title and priority. Each spec under
 `docs/features/` supplies status through its existing `**Status:**` line, using a
 closed vocabulary: `draft`, `accepted`, `in progress`, `implemented`. A roadmap ID

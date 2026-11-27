@@ -1,7 +1,7 @@
-.PHONY: fmt test vet check verify-changes lint metrics build clean desktop-check desktop-e2e desktop-stories
+.PHONY: fmt test vet check roadmap verify-changes lint metrics build clean desktop-check desktop-e2e desktop-stories
 
 fmt:
-	gofmt -w ./cmd ./internal ./scripts/verifychanges ./scripts/reviewwarrior
+	gofmt -w ./cmd ./internal ./scripts/verifychanges ./scripts/roadmapcheck ./scripts/reviewwarrior
 
 test:
 	go test ./...
@@ -11,6 +11,11 @@ vet:
 
 check:
 	./scripts/check.sh
+
+# Validates docs/roadmap/features.yaml and phases.yaml and regenerates
+# docs/roadmap/STATUS.md (ADR-0038). `make check` verifies it is up to date.
+roadmap:
+	go run ./scripts/roadmapcheck -write
 
 # Inventories staged, unstaged and untracked paths; does not run checks.
 verify-changes:

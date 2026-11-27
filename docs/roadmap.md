@@ -1,5 +1,9 @@
 # Product roadmap - compact repository version
 
+**Feature status is tracked in [`docs/roadmap/features.yaml`](roadmap/features.yaml) and shown in the
+generated [`docs/roadmap/STATUS.md`](roadmap/STATUS.md) (ADR-0038).** Status notes in the tables below are
+informative; where they disagree with the registry, the registry wins.
+
 This is the repository's engineering index. IDs, titles, priorities and phase
 exit criteria follow `docs/reference/full-roadmap-features.md` and the supplied
 product roadmap PDF. The **dependency column is proposed implementation

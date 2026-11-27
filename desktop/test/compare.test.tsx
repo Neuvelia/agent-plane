@@ -36,7 +36,7 @@ function html(run: RunView, node: string, kind: string, from?: string, to?: stri
 }
 
 describe('entry point', () => {
-  it('a node with two attempts can be compared; nodes with fewer cannot', () => {
+  it('a node with two attempts can be compared; nodes with fewer cannot [F2.8-AC1]', () => {
     const run = reduceAll(shell)
     expect(canCompare(nodeView(run, 'flaky'))).toBe(true)
     expect(canCompare(nodeView(run, 'fast'))).toBe(false)

@@ -195,6 +195,7 @@ func editAdapter(t *testing.T, edit func(t *testing.T, in agent.AgentExecutionIn
 	}
 }
 
+// roadmap: F3.1-AC1
 func TestIsolationParallelSameFileHasNoRace(t *testing.T) {
 	src := isoRepo(t)
 	before := sourceFingerprint(t, src)
@@ -249,6 +250,7 @@ func TestIsolationParallelSameFileHasNoRace(t *testing.T) {
 	}
 }
 
+// roadmap: F3.1-AC2
 func TestIsolationSourceCheckoutIsUntouchedAndRefsHoldTheResult(t *testing.T) {
 	src := isoRepo(t)
 	isoWrite(t, src, "scratch.log", "untracked user file\n")

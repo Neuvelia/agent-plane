@@ -19,6 +19,7 @@ import (
 	"agentplane/internal/proctree"
 )
 
+// roadmap: F1.2-AC3
 func TestOwnedChildCancellationAndOrdinaryExit(t *testing.T) {
 	for _, cancelRun := range []bool{true, false} {
 		t.Run(strconv.FormatBool(cancelRun), func(t *testing.T) {

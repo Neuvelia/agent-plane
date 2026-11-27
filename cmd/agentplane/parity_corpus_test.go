@@ -28,6 +28,7 @@ var corpus = map[string]string{
 	"E_GRAPH_ID_INVALID":                     "schema_version: 0\nid: Bad_ID\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n",
 	"E_GRAPH_FIELD_REQUIRED":                 corpusHead + "inputs: {}\nnodes: {}\noutputs: {}\n",
 	"E_NODE_TYPE_REQUIRED":                   corpusHead + "inputs: {}\nnodes:\n  a: {outputs: {x: {type: string}}}\nedges: []\noutputs: {}\n",
+	"E_NODE_TYPE_UNKNOWN":                    corpusHead + "inputs: {}\nnodes:\n  a: {type: foo}\nedges: []\noutputs: {}\n",
 	"E_IDENTIFIER_INVALID":                   corpusHead + "inputs: {}\nnodes:\n" + nodeShell("Bad Node", "") + "edges: []\noutputs: {}\n",
 	"E_VALUE_TYPE_INVALID":                   corpusHead + "inputs: {}\nnodes:\n" + nodeShell("a", "    outputs:\n      x: {type: banana}\n") + "edges: []\noutputs: {}\n",
 	"E_EDGE_SOURCE_REFERENCE_INVALID":        corpusHead + "inputs: {}\nnodes:\n" + nodeShell("a", "    inputs:\n      i: {type: string}\n") + "edges:\n  - {from: nope, to: a.inputs.i}\noutputs: {}\n",

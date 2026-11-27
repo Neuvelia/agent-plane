@@ -93,6 +93,8 @@ func newLoopAdapter() *loopAdapter {
 func compose(a *loopAdapter) composition {
 	return composition{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"fake": a}}}
 }
+
+// roadmap: F1.6-AC1, F1.6-AC2
 func TestLoopBudgetsAndTrace(t *testing.T) {
 	for _, b := range []int{0, 1, 2, 10} {
 		t.Run(string(rune('a'+b)), func(t *testing.T) {
@@ -142,6 +144,8 @@ func TestLoopBudgetsAndTrace(t *testing.T) {
 		})
 	}
 }
+
+// roadmap: F1.6-AC3
 func TestLoopRedGreenPublicationAndFeedback(t *testing.T) {
 	a := newLoopAdapter()
 	a.produce = func(_ context.Context, in agent.AgentExecutionInput, n int) (agent.AgentExecutionOutput, error) {
@@ -581,6 +585,8 @@ func TestLoopAttemptInputBoundsAndReferenceOmission(t *testing.T) {
 		t.Fatal("trace bound changed original provider scope")
 	}
 }
+
+// roadmap: F1.4-AC3
 func TestLoopInitialGreenAcceptsOnce(t *testing.T) {
 	a := newLoopAdapter()
 	a.produce = func(context.Context, agent.AgentExecutionInput, int) (agent.AgentExecutionOutput, error) {

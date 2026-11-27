@@ -158,6 +158,7 @@ func TestLateLogCallbackDoesNotChangeFinishedRun(t *testing.T) {
 	}
 }
 
+// roadmap: F0.6-AC1
 func TestRunEmitsCorrelatedLifecycleAndUniqueIDs(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
@@ -264,6 +265,7 @@ func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
 	}
 }
 
+// roadmap: F0.6-AC2
 func TestConcurrentRunEventsHaveUniqueMonotonicSequence(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
 	started := make(chan struct{}, 2)

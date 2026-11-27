@@ -273,7 +273,7 @@ describe('timeline segments', () => {
   const tl = timeline(run)!
   const start = ts(approve[0]!)
 
-  it('has two attempt segments for flaky whose offsets equal the attempt events\' timestamps', () => {
+  it('has two attempt segments for flaky whose offsets equal the attempt events\' timestamps [F2.6-AC2]', () => {
     const row = tl.rows.find((r) => r.name === 'flaky')!
     const attempts = row.segments.filter((s) => s.kind === 'attempt')
     const started = approve.filter((e) => e.type === 'attempt_started' && e.node_id === 'flaky')

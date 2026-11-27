@@ -13,6 +13,7 @@ import (
 	"agentplane/internal/domain/secrets"
 )
 
+// roadmap: F3.8-AC2
 func TestPreflightSecretUnresolved(t *testing.T) {
 	exec := newReceiver()
 	diagnostics := requireSecretPreflightFailure(t, ghDefinition(), exec, &fakeResolver{}, "secret_unresolved")

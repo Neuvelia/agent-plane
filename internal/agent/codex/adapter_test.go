@@ -50,6 +50,8 @@ func fake(t *testing.T, body string) string {
 	}
 	return p
 }
+
+// roadmap: F1.2-AC1
 func TestFakeExecutionGitEvidenceAndSafeProgress(t *testing.T) {
 	d := repo(t)
 	os.WriteFile(filepath.Join(d, "dirty"), []byte("unchanged"), 0600)
