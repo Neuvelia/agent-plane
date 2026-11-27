@@ -47,6 +47,13 @@ func TestParseReviewCountsBlockingFindingsOnlyUnderFindings(t *testing.T) {
 	}
 }
 
+func TestParseReviewAcceptsWindowsLineEndings(t *testing.T) {
+	findings, err := parseReview(strings.ReplaceAll(wellFormedReview, "\n", "\r\n"))
+	if err != nil || len(findings) != 3 {
+		t.Fatalf("got %d findings and %v; want 3 and no error", len(findings), err)
+	}
+}
+
 func TestParseReviewAcceptsNoFindings(t *testing.T) {
 	review := "## Verdict\n\nNo actionable findings.\n\n## Resolved Since Previous Review\n\nNone.\n\n" +
 		"## Findings\n\nNo actionable findings.\n\n## Withdrawn Findings\n\nNone.\n"
@@ -161,6 +168,8 @@ func TestParseReviewRejectsFindingsOutsideTheFourSections(t *testing.T) {
 			"Reuse pathscope.Match.\n    ## example\n2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
 		"workflow marker inside the review": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",
 			"Reuse pathscope.Match.\n<!-- review-warrior -->\n2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
+		"entry after a lone carriage return": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",
+			"Reuse pathscope.Match.\r2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
 		"priority tag in the verdict": strings.Replace(wellFormedReview,
 			"Two findings need a fix before merge.", "One \\[P0\\] secret leak in a.go.", 1),
 	}

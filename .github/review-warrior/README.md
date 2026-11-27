@@ -50,8 +50,9 @@ ReviewWarrior is therefore skipped, with a passing status.
    settings files, file tools confined to the checkout), only `Read`, `Grep`,
    `Glob` and `git diff/show/log/ls-files`, no network tools, 15-minute limit.
    Its `git` is a shim that runs `reviewwarrior git-guard`: it refuses other
-   subcommands, `--no-index`, `--output`, external diff helpers and any path
-   that is absolute, starts with `~` or climbs with `..`, because `git diff`
+   subcommands, `--no-index`, `--output`, `-O` (also inside a bundle such as
+   `-pO`), external diff helpers and any path or option value that is
+   absolute, starts with `~` or climbs with `..`, because `git diff`
    with a path outside the repository silently reads that file. Deny patterns
    on the command text are a second layer.
    Model, effort and CLI version are fixed in the workflow.
@@ -62,7 +63,9 @@ ReviewWarrior is therefore skipped, with a passing status.
    `No actionable findings.` alone, or numbered entries at column 0 with a
    `[TAG][Pn]` prefix, each followed only by indented text with no tag in it.
    Anything else, such as a bulleted finding or one under an extra heading, is
-   malformed, and a malformed review is a failure, never "no findings". A
+   malformed, and so is a carriage return without a line feed, which GitHub
+   reads as a line break. A malformed review is a failure, never
+   "no findings". A
    review that contains the API key verbatim is a failure and is not
    published; an encoded copy is not detected.
 6. **Publish.** Every `@mention` and `<` is neutralized, inside code too (a

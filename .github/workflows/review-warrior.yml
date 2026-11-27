@@ -322,7 +322,11 @@ jobs:
               exit 1
             fi
           done
-          if (cd "$WORK" && PATH="$GUARD_BIN:$PATH" git diff /etc/hostname /dev/null) > /dev/null 2>&1; then
+          # The same file twice: real Git, reached through a broken guard,
+          # exits 0 on it (two different files would exit 1, like a refusal).
+          # The guard's own message must also be there.
+          if probe=$(cd "$WORK" && PATH="$GUARD_BIN:$PATH" git diff /etc/hostname /etc/hostname 2>&1) ||
+            [[ "$probe" != *"refused by the review guard"* ]]; then
             echo "::error title=ReviewWarrior::The Git guard let a path outside the checkout through."
             exit 1
           fi

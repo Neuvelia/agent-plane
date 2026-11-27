@@ -29,10 +29,15 @@ var allowedGitCommands = map[string]bool{"diff": true, "show": true, "log": true
 var refusedGitOptions = []string{"--no-index", "--output", "--ext-diff", "--textconv", "--open-files-in-pager", "-O"}
 
 // escapingPath matches an argument, or an option's value, that names a path
-// outside the checkout: absolute, home-relative or climbing with `..`.
+// outside the checkout: absolute, home-relative or climbing with `..`. A
+// short option takes its value from the rest of a bundle (`-pO/etc/x`,
+// `-cX/etc/x`), so any run of letters after one dash counts as the option.
 // Revision ranges (`a..b`, `a...b`) do not match: their dots are not a
 // whole path segment.
-var escapingPath = regexp.MustCompile(`^(-[A-Za-z]|[^=]*=)?(/|~)|(^|[/=])\.\.(/|$)|^-[A-Za-z]\.\.(/|$)`)
+var escapingPath = regexp.MustCompile(`^(-[A-Za-z]+|[^=]*=)?(/|~)|(^|[/=])\.\.(/|$)|^-[A-Za-z]+\.\.(/|$)`)
+
+// shortOptionBundle matches one-dash options, alone or bundled (`-p`, `-pO`).
+var shortOptionBundle = regexp.MustCompile(`^-[A-Za-z]`)
 
 // checkGitArgs accepts args (without the leading "git") only when they run an
 // allowed subcommand on paths inside the checkout.
@@ -50,9 +55,16 @@ func checkGitArgs(args []string) error {
 
 func checkGitArg(arg string) error {
 	for _, option := range refusedGitOptions {
-		if arg == option || strings.HasPrefix(arg, option+"=") || (option == "-O" && strings.HasPrefix(arg, option)) {
+		if arg == option || strings.HasPrefix(arg, option+"=") {
 			return fmt.Errorf("%w: option %q", errGitRefused, truncate(arg, 60))
 		}
+	}
+	// Git reads -O from anywhere in a bundle, and which letters of a bundle
+	// are options and which a value depends on each option, so any `O` in a
+	// one-dash argument is refused. A pickaxe string with an `O` can be
+	// passed as a separate argument (`-S Open`).
+	if shortOptionBundle.MatchString(arg) && strings.Contains(arg, "O") {
+		return fmt.Errorf("%w: option -O in %q (pass a -S/-G value with an O as a separate argument)", errGitRefused, truncate(arg, 60))
 	}
 	if escapingPath.MatchString(arg) {
 		return fmt.Errorf("%w: %q leaves the checkout; use a path relative to the repository root", errGitRefused, truncate(arg, 60))

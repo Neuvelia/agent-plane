@@ -90,6 +90,12 @@ func section(text, heading string) (string, bool) {
 // Text the gate does not read, such as a finding under an extra heading or
 // before the first section, makes the review malformed.
 func parseReview(text string) ([]finding, error) {
+	// CommonMark ends a line at a lone carriage return too. The gate splits on
+	// line feeds, so a lone one would hide the entry after it from the count
+	// while GitHub shows it.
+	if strings.Contains(strings.ReplaceAll(text, "\r\n", "\n"), "\r") {
+		return nil, fmt.Errorf("%w: carriage return without a line feed", errMalformedReview)
+	}
 	bodies, err := splitSections(text)
 	if err != nil {
 		return nil, err

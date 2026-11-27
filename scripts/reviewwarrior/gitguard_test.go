@@ -17,6 +17,10 @@ func TestCheckGitArgsRefusesPathsOutsideTheCheckout(t *testing.T) {
 		"option value":           {"diff", "--relative=/etc"},
 		"short option value":     {"diff", "-O/etc/passwd"},
 		"short option climbing":  {"diff", "-O../x"},
+		"bundled order file":     {"diff", "-pO/etc/hostname", "HEAD"},
+		"bundled order file in":  {"diff", "-pOorder.txt"},
+		"bundled exclude file":   {"ls-files", "-cX/etc/hostname"},
+		"bundled climbing value": {"ls-files", "-cX../x"},
 		"explicit no-index":      {"diff", "--no-index", "a", "b"},
 		"output file":            {"log", "--output=x"},
 		"external diff":          {"diff", "--ext-diff"},
@@ -43,6 +47,8 @@ func TestCheckGitArgsAllowsReviewCommands(t *testing.T) {
 		{"show", sha + ":internal/runtime/run.go"},
 		{"log", "--oneline", "-n", "20", sha},
 		{"ls-files", "internal/"},
+		{"log", "-p", "-S", "Open", sha},
+		{"log", "-pSfoo", sha},
 	}
 	for _, args := range tests {
 		if err := checkGitArgs(args); err != nil {
