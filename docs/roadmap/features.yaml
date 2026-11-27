@@ -1933,9 +1933,7 @@ features:
       - "Wyszukiwanie w plikach grafów, YAML i zdarzeniach; uruchamianie lub decyzje z palety."
       - "Jasny motyw, arkusz skrótów (Ctrl /), okno About."
     decisions: []
-    divergences:
-      - text: "Prefiks # dopasowuje też nazwę grafu (wymaganie 4 speca: tylko początek id uruchomienia); decyzja w issue."
-        issue: 218
+    divergences: []
     tasks: []
     note: "Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety."
   - id: F2.5e

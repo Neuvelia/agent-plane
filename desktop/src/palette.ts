@@ -49,7 +49,7 @@ export function cycleScope(raw: string, step: 1 | -1): string {
 
 function matches(e: PaletteEntry, scope: Scope, text: string, groupLabel: string): boolean {
   if (scope === 'actions' && e.group !== 'actions') return false
-  if (scope === 'runs') return e.group === 'runs' && (!text || (e.runId ?? '').toLowerCase().startsWith(text) || e.label.toLowerCase().includes(text))
+  if (scope === 'runs') return e.group === 'runs' && (!text || (e.runId ?? '').toLowerCase().startsWith(text))
   if (!text) return true
   return `${e.label} ${e.hint} ${groupLabel} ${e.terms ?? ''}`.toLowerCase().includes(text)
 }
