@@ -212,6 +212,17 @@ The reviewer should focus on:
 - unnecessary abstractions;
 - accidental coupling to future cloud/UI concerns.
 
+## Automated review (ReviewWarrior)
+
+Every non-draft pull request from a branch of this repository gets an automated
+review comment from ReviewWarrior and a `ReviewWarrior` commit status that fails on
+unresolved P0 or P1 findings. Fix a valid finding; dispute a wrong one with a comment
+that starts with `/review-warrior review` and gives the concrete, checkable reason.
+The automated review complements the review session above and the human review
+below; it does not replace them. Setup, the trust boundary and how to change the
+reviewer are in `.github/review-warrior/README.md`; the decision to send pull
+request content to the Anthropic API is ADR-0039.
+
 ## Human review
 
 Review in this order:

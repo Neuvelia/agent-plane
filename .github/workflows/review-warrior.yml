@@ -1,0 +1,473 @@
+name: ReviewWarrior
+
+# Automated pull request review with a deterministic merge gate. A model
+# reviews the diff; `scripts/reviewwarrior` composes its prompt, checks the
+# shape of its answer and renders the comment; the gate counts unresolved P0
+# and P1 findings and sets the `ReviewWarrior` commit status. See
+# .github/review-warrior/README.md.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  # A comment that starts with `/review-warrior review` re-runs the review,
+  # and is how an author gets a rebuttal weighed: without it, the only way past a wrong P0 would be to change
+  # code to satisfy it. No `pull_request_target`: it runs with a write token and
+  # secrets, and this job checks out pull request code.
+  issue_comment:
+    types: [created]
+
+# A comment must never cancel a review. Workflow concurrency is resolved before
+# any job condition, so a shared group here would let any commenter cancel the
+# review in progress or evict the queued rebuttal run. Each comment run gets its
+# own group; push runs share one, where cancelling a review of superseded code
+# is what we want. Written as a negation because `cond && '' || x` always picks
+# x. The `review` job then serializes the authorized runs of one pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event_name != 'pull_request' && github.run_id || '' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
+jobs:
+  # Runs before anything reads pull request content. `author_association` is
+  # only a cheap pre-filter: MEMBER is any organization member and COLLABORATOR
+  # includes read and triage, so the step below checks the real permission.
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # The push path skips drafts and forks: a fork's `pull_request` run gets a
+    # read-only token and no secrets, so it could neither review nor publish.
+    # The comment path is an explicit request from someone who can merge.
+    if: >
+      (github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.pull_request.draft == false) ||
+      (github.event_name == 'issue_comment' &&
+        github.event.issue.pull_request != null &&
+        github.event.comment.user.type != 'Bot' &&
+        (startsWith(github.event.comment.body, '/review-warrior review') ||
+          startsWith(github.event.comment.body, '/review-warrior full review')) &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    permissions:
+      contents: read
+    outputs:
+      configured: ${{ steps.configured.outputs.configured }}
+    steps:
+      - name: Verify the requester can merge
+        if: github.event_name == 'issue_comment'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTER: ${{ github.event.comment.user.login }}
+        run: |
+          set -euo pipefail
+          # Fails closed: a lookup error refuses the request. `maintain` reads
+          # as `write` here and `triage` as `read`.
+          if ! permission=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${REQUESTER}/permission" --jq '.permission'); then
+            echo "::error title=ReviewWarrior could not authorize the request::Could not read the repository permission of the requester."
+            exit 1
+          fi
+          case "$permission" in
+            admin | write) echo "Requester has ${permission} access." ;;
+            *)
+              echo "::error title=ReviewWarrior ignored the request::Only someone who can merge the pull request can request a review."
+              exit 1
+              ;;
+          esac
+
+      - name: Check configuration
+        id: configured
+        shell: bash
+        env:
+          HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+        run: |
+          if [ "$HAS_API_KEY" = "true" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=ReviewWarrior is not configured::Add the ANTHROPIC_API_KEY repository secret to enable reviews."
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  review:
+    needs: authorize
+    if: needs.authorize.outputs.configured == 'true'
+    # One review of a pull request at a time. Two overlapping runs would each
+    # read the same previous review and delete only the comments of their own
+    # snapshot, so the older review could end up last and the next run would
+    # read it as the previous one, losing the newer withdrawals. Job
+    # concurrency applies only after `authorize` passed, so an unauthorized
+    # comment cannot enter this group. A running review is never cancelled.
+    # GitHub keeps one queued run per group, so a newer run replaces a queued
+    # one: it still reads that run's request comment as an author response,
+    # but a replaced `full review` request becomes an incremental review.
+    concurrency:
+      group: ${{ github.workflow }}-review-${{ github.event.pull_request.number || github.event.issue.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    # 15 minutes for the model, and the steps around it.
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write
+      # A comment-triggered run's check run attaches to the default branch, so
+      # the gate is a commit status on the head SHA, which both paths can set.
+      statuses: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+      # Empty on a comment run, which resolves the pair from the API.
+      EVENT_BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}
+      EVENT_HEAD_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || '' }}
+      TRIGGER_COMMENT_ID: ${{ github.event.comment.id }}
+      FULL_REVIEW: ${{ github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/review-warrior full review') }}
+      STATUS_CONTEXT: ReviewWarrior
+      # One reviewer, by an explicit decision: nothing in a pull request can
+      # choose another model, effort or CLI version.
+      MODEL: claude-opus-5-5
+      EFFORT: high
+      CLAUDE_CODE_VERSION: 2.1.332
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      WORK: ${{ github.workspace }}/pr
+    steps:
+      # The `runner` context is not available in job-level `env`.
+      - name: Set working paths
+        shell: bash
+        run: |
+          {
+            echo "BASE_TREE=${RUNNER_TEMP}/review-warrior-base"
+            echo "RW=${RUNNER_TEMP}/reviewwarrior"
+            echo "DATA=${RUNNER_TEMP}/review-warrior"
+            echo "GUARD_BIN=${RUNNER_TEMP}/review-warrior-bin"
+          } >> "$GITHUB_ENV"
+
+      - name: Check out the pull request
+        uses: actions/checkout@v4
+        with:
+          # A comment run would otherwise land on the default branch. The merge
+          # ref reaches both the base and the head commit; the next step checks
+          # out the head, which is what the diff and the status are about.
+          ref: ${{ github.event_name != 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number || github.event.issue.number) || '' }}
+          path: pr
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Resolve the pull request
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$DATA"
+          api="repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}"
+          base_sha=${EVENT_BASE_SHA:-}
+          head_sha=${EVENT_HEAD_SHA:-}
+          # The push path keeps the payload's SHAs: they name the commit this
+          # checkout is for, while the API may already answer with a newer head.
+          if [ -z "$head_sha" ]; then
+            IFS=$'\t' read -r base_sha head_sha < <(gh api "$api" --jq '[.base.sha, .head.sha] | @tsv')
+          fi
+          for sha in "$base_sha" "$head_sha"; do
+            if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || ! git -C "$WORK" cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "::error title=ReviewWarrior could not reach the PR commits::Push the branch again, or resolve the merge conflict that stops GitHub from computing the merge ref."
+              exit 1
+            fi
+          done
+          # The reviewer reads files from the commit whose diff it reviews and
+          # whose status the gate sets, not from GitHub's merge commit.
+          git -C "$WORK" checkout --quiet --detach "$head_sha"
+          # Title and body are untrusted free text: files, never step outputs.
+          gh api "$api" --jq '.title' > "$DATA/title.txt"
+          gh api "$api" --jq '.body // ""' > "$DATA/body.txt"
+          echo "base_sha=$base_sha" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Mark the review as pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state=pending -f context="$STATUS_CONTEXT" \
+            -f description="Review in progress" -f target_url="$RUN_URL" > /dev/null
+
+      # The prompt, the rules and the tool that composes them come from the base
+      # commit, so a pull request cannot rewrite the instructions of its own
+      # review. Nothing from the pull request's tree is executed.
+      - name: Check out the review instructions at the base commit
+        id: base
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+        run: |
+          set -euo pipefail
+          git -C "$WORK" worktree add --detach "$BASE_TREE" "$BASE_SHA"
+          if [ -f "$BASE_TREE/.github/review-warrior/prompt.md" ] && [ -f "$BASE_TREE/scripts/reviewwarrior/main.go" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=ReviewWarrior skipped::The base commit has no ReviewWarrior instructions yet; the pull request that adds them is not reviewed by them."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Go
+        if: steps.base.outputs.ready == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ runner.temp }}/review-warrior-base/go.mod
+          # No cache: a cache written by another run must not reach the tool
+          # that guards the merge.
+          cache: false
+
+      - name: Build the review tool from the base commit
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        working-directory: ${{ runner.temp }}/review-warrior-base
+        run: go build -mod=readonly -o "$RW" ./scripts/reviewwarrior
+
+      - name: Load the previous review and author responses
+        id: previous
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" > "$DATA/comments.json"
+          own='.user.login == "github-actions[bot]"'
+          jq -r "[.[][] | select($own) | select(.body | contains(\"<!-- review-warrior -->\"))] | last | .body // \"\"" \
+            "$DATA/comments.json" > "$DATA/previous.md"
+          # Fallback for a previous review without a responses-through marker.
+          since=$(jq -r "[.[][] | select($own) | select(.body | contains(\"<!-- review-warrior -->\"))] | last | .created_at // \"\"" "$DATA/comments.json")
+          # The newest comment this run reads, by GitHub's clock. The review
+          # records it, and the next run reads responses from there, so a reply
+          # written while this run works is not skipped.
+          through=$(jq -r '[.[][] | .created_at] | max // ""' "$DATA/comments.json")
+          echo "through=$through" >> "$GITHUB_OUTPUT"
+
+          # Only people who can merge write rebuttals; author_association bounds
+          # the permission lookups. An unreadable permission drops the commenter.
+          : > "$DATA/logins.txt"
+          for login in $(jq -r '[.[][] | select(.user.type != "Bot")
+              | select(.author_association == "OWNER" or .author_association == "MEMBER" or .author_association == "COLLABORATOR")
+              | .user.login] | unique | .[]' "$DATA/comments.json"); do
+            [[ "$login" =~ ^[A-Za-z0-9-]+$ ]] || continue
+            permission=$(gh api "repos/${GITHUB_REPOSITORY}/collaborators/${login}/permission" --jq '.permission' 2>/dev/null) || permission=""
+            case "$permission" in
+              admin | write) echo "$login" >> "$DATA/logins.txt" ;;
+              *) echo "::notice title=ReviewWarrior ignored comments::A commenter without merge access is not read as a rebuttal." ;;
+            esac
+          done
+
+          "$RW" responses -comments "$DATA/comments.json" -logins "$DATA/logins.txt" \
+            -previous "$DATA/previous.md" -since "$since" -trigger "${TRIGGER_COMMENT_ID:-}" > "$DATA/responses.md"
+
+      - name: Compose the prompt
+        id: compose
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        env:
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          full=()
+          if [ "$FULL_REVIEW" = "true" ]; then full=(-full); fi
+          "$RW" compose -repo "$WORK" -instructions "$BASE_TREE" \
+            -base "$BASE_SHA" -head "$HEAD_SHA" "${full[@]}" \
+            -title "$DATA/title.txt" -body "$DATA/body.txt" \
+            -previous "$DATA/previous.md" -responses "$DATA/responses.md" \
+            -out "$DATA/prompt.md" >> "$GITHUB_OUTPUT"
+          echo "Prompt: $(wc -c < "$DATA/prompt.md") bytes"
+
+      - name: Install Claude Code
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        run: npm install --global "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}"
+
+      # A pull request can commit a symbolic link to any path, such as
+      # /proc/self/environ, and ask in its description for the file to be
+      # quoted. The reviewer's file tools must only ever reach blobs of the
+      # pull request, so every link is removed from the working tree. The diff
+      # and `git show` read link targets from Git objects, as text, and are
+      # unaffected. Fails the run if a link survives.
+      - name: Remove symbolic links from the checkout
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          find "$WORK" -path "$WORK/.git" -prune -o -type l -print0 | xargs -0 -r rm -f --
+          if [ -n "$(find "$WORK" -path "$WORK/.git" -prune -o -type l -print -quit)" ]; then
+            echo "::error title=ReviewWarrior::A symbolic link is still in the checkout."
+            exit 1
+          fi
+
+      # `git diff` with a path outside the repository silently becomes
+      # `git diff --no-index` and prints that file; a permission pattern on the
+      # command text cannot stop it. The reviewer's `git` is a shim that runs
+      # `reviewwarrior git-guard`, which checks the expanded arguments and only
+      # then runs the real Git. Fails the run if the shim is not the `git` a
+      # plain or a login shell resolves, or if it lets an outside path through.
+      - name: Install the Git guard
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          real_git=$(command -v git)
+          mkdir -p "$GUARD_BIN"
+          printf '#!/bin/sh\nexec "%s" git-guard -git "%s" -- "$@"\n' "$RW" "$real_git" > "$GUARD_BIN/git"
+          chmod 0755 "$GUARD_BIN/git"
+          for shell in "bash -c" "bash -lc"; do
+            resolved=$(cd "$WORK" && PATH="$GUARD_BIN:$PATH" $shell 'command -v git')
+            if [ "$resolved" != "$GUARD_BIN/git" ]; then
+              echo "::error title=ReviewWarrior::The Git guard is not first on PATH for ${shell} (got ${resolved})."
+              exit 1
+            fi
+          done
+          # The same file twice: real Git, reached through a broken guard,
+          # exits 0 on it (two different files would exit 1, like a refusal).
+          # The guard's own message must also be there.
+          if probe=$(cd "$WORK" && PATH="$GUARD_BIN:$PATH" git diff /etc/hostname /etc/hostname 2>&1) ||
+            [[ "$probe" != *"refused by the review guard"* ]]; then
+            echo "::error title=ReviewWarrior::The Git guard let a path outside the checkout through."
+            exit 1
+          fi
+
+      # The reviewer is read-only: --bare skips CLAUDE.md discovery, hooks and
+      # plugins from the checkout; --restricted ignores settings files and keeps
+      # the file tools inside the checkout, which holds no symbolic links; the
+      # only shell commands are Git reads through the guard above, with the
+      # deny patterns as a second layer against absolute, home, climbing and
+      # variable paths; no network tool is enabled. A review that contains the
+      # API key verbatim is never published: secret masking covers the log, not
+      # a comment. An encoded copy is not detected. This step never fails: it reports
+      # status and reason, and the gate below decides.
+      - name: Run the review
+        id: review
+        if: steps.base.outputs.ready == 'true'
+        shell: bash
+        working-directory: ${{ github.workspace }}/pr
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -uo pipefail
+          finish() {
+            echo "status=$1" >> "$GITHUB_OUTPUT"
+            echo "reason=$2" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+          PATH="$GUARD_BIN:$PATH" timeout 900 claude --print --bare --restricted \
+            --model "$MODEL" --effort "$EFFORT" \
+            --output-format json --no-session-persistence --strict-mcp-config \
+            --permission-mode dontAsk \
+            --tools Read,Grep,Glob,Bash \
+            --allowedTools Read Grep Glob 'Bash(git diff:*)' 'Bash(git show:*)' 'Bash(git log:*)' 'Bash(git ls-files:*)' \
+            --disallowedTools 'Bash(*--output*)' 'Bash(*--no-index*)' 'Bash(*--ext-diff*)' 'Bash(*--textconv*)' \
+              'Bash(* /*)' "Bash(* '/*)" 'Bash(* "/*)' 'Bash(*=/*)' 'Bash(* ~*)' 'Bash(*=~*)' 'Bash(*../*)' 'Bash(*$*)' \
+            < "$DATA/prompt.md" > "$DATA/result.json" 2> "$DATA/errors.txt"
+          code=$?
+          head -c 4000 "$DATA/errors.txt" >&2
+          if [ "$code" -eq 124 ]; then finish failure "the reviewer timed out after 15 minutes"; fi
+          if [ "$code" -ne 0 ] || [ "$(jq -r '.is_error | tostring' "$DATA/result.json" 2>/dev/null)" != "false" ]; then
+            finish failure "the reviewer exited with code ${code}"
+          fi
+          jq -r '.result // ""' "$DATA/result.json" > "$DATA/review.md"
+          if [ -n "$ANTHROPIC_API_KEY" ] && grep -qF -f <(printf '%s\n' "$ANTHROPIC_API_KEY") "$DATA/review.md"; then
+            : > "$DATA/review.md"
+            finish failure "the review contained a secret and was not published"
+          fi
+          echo "Turns: $(jq -r '.num_turns // "unknown"' "$DATA/result.json")"
+          if ! counts=$("$RW" check -review "$DATA/review.md" 2> "$DATA/check.txt"); then
+            cat "$DATA/check.txt" >&2
+            finish failure "the review did not have the required shape"
+          fi
+          echo "$counts" >> "$GITHUB_OUTPUT"
+          finish success ""
+
+      - name: Publish the review comment
+        id: publish
+        if: steps.review.outputs.status != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          SINCE: ${{ steps.compose.outputs.since }}
+          THROUGH: ${{ steps.previous.outputs.through }}
+          STATUS: ${{ steps.review.outputs.status }}
+          REASON: ${{ steps.review.outputs.reason }}
+        run: |
+          set -euo pipefail
+          if [ "$STATUS" = "success" ]; then
+            "$RW" render -review "$DATA/review.md" -head "$HEAD_SHA" -since "$SINCE" \
+              -responses-through "$THROUGH" -model "$MODEL" > "$DATA/comment.md"
+            replace='"<!-- review-warrior -->", "<!-- review-warrior-failure -->"'
+          else
+            "$RW" render-failure -head "$HEAD_SHA" -reason "$REASON" -run-url "$RUN_URL" > "$DATA/comment.md"
+            # The last successful review stays: it carries the findings and the
+            # withdrawal ledger the next run reads.
+            replace='"<!-- review-warrior-failure -->"'
+          fi
+          new_id=$(gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -F body=@"$DATA/comment.md" --jq .id)
+          # A fresh list, not the snapshot the review read: every older review
+          # goes, so this one is the only previous review the next run can find.
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" > "$DATA/comments-now.json"
+          for id in $(jq -r --arg new "$new_id" "[.[][] | select(.user.login == \"github-actions[bot]\")
+              | select(.body as \$b | [$replace] | any(. as \$m | \$b | contains(\$m)))
+              | select((.id | tostring) != \$new) | .id] | .[]" "$DATA/comments-now.json"); do
+            gh api --method DELETE "repos/${GITHUB_REPOSITORY}/issues/comments/${id}" > /dev/null ||
+              echo "::warning title=ReviewWarrior::Could not delete an older review comment."
+          done
+
+      # Fails closed: a review that did not complete, did not parse or was not
+      # published is a failure, never "no findings". Branch protection decides
+      # whether the status is required.
+      - name: Gate on unresolved P0 and P1 findings
+        if: always() && steps.pr.outputs.head_sha != '' && steps.base.outputs.ready == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          STATUS: ${{ steps.review.outputs.status }}
+          REASON: ${{ steps.review.outputs.reason }}
+          PUBLISHED: ${{ steps.publish.outcome }}
+          BLOCKING: ${{ steps.review.outputs.blocking }}
+        run: |
+          set -euo pipefail
+          state=failure
+          if [ "$STATUS" != "success" ]; then
+            description="Review did not complete: ${REASON:-a step failed}"
+          elif [ "$PUBLISHED" != "success" ]; then
+            description="Review was not published"
+          elif [ "${BLOCKING:-}" != "0" ]; then
+            description="${BLOCKING} unresolved P0/P1 finding(s)"
+          else
+            state=success
+            description="No unresolved P0 or P1 findings"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state="$state" -f context="$STATUS_CONTEXT" \
+            -f description="${description:0:140}" -f target_url="$RUN_URL" > /dev/null
+          if [ "$state" != "success" ]; then
+            echo "::error title=ReviewWarrior::${description}. Fix the findings, or reply with a comment that starts with /review-warrior review and gives the concrete reason a finding is wrong."
+            exit 1
+          fi
+          echo "$description"
+
+      - name: Clear the pending status when the review is skipped
+        if: always() && steps.pr.outputs.head_sha != '' && steps.base.outputs.ready != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          READY: ${{ steps.base.outputs.ready }}
+        run: |
+          # Skipped (bootstrap) passes; a failure before the instructions were
+          # read fails closed.
+          state=failure
+          description="Review could not start"
+          if [ "$READY" = "false" ]; then
+            state=success
+            description="Skipped: no ReviewWarrior instructions at the base commit"
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${HEAD_SHA}" \
+            -f state="$state" -f context="$STATUS_CONTEXT" \
+            -f description="$description" -f target_url="$RUN_URL" > /dev/null

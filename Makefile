@@ -1,7 +1,7 @@
 .PHONY: fmt test vet check roadmap verify-changes lint metrics build clean desktop-check desktop-e2e desktop-stories
 
 fmt:
-	gofmt -w ./cmd ./internal ./scripts/verifychanges ./scripts/roadmapcheck
+	gofmt -w ./cmd ./internal ./scripts/verifychanges ./scripts/roadmapcheck ./scripts/reviewwarrior
 
 test:
 	go test ./...
