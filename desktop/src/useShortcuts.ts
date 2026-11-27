@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef } from 'react'
 import { globalShortcut, IDLE, type GlobalCommand, type ShortcutState } from './palette'
 
-// F2.5b global shortcuts (Ctrl/Cmd+K, +N, +O, +Shift+A, +comma, then G D).
+// F2.5c global shortcuts (Ctrl/Cmd+K, +N, +O, +Shift+A, +comma, then G I).
 // One window listener owned by the shell; the shell decides what each command does.
 
 /** True when the key press lands in a field that takes text. */

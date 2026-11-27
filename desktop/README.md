@@ -96,23 +96,20 @@ switches language (EN/PL); viewport is Storybook's built-in toolbar. Storybook i
 a dev dependency and is never part of the packaged app.
 
 `make desktop-stories` (or `npm run stories:test` after a build) renders every
-story in EN and PL. It waits for Storybook's `storyFinished` event and for finite
-animations (a dialog's entrance, a fade) before running axe, so the checked frame
-is the state the story ends in. A render or play function that throws fails the
-story: the script records Storybook's `playFunctionThrewException` /
-`storyThrewException` / `storyErrored` events and the `errored` render phase from
-the preview channel (in Storybook 10 `storyFinished` still reports "success" after
-a thrown play), independently of the console-error check.
+story in EN and PL. It waits for the story's render phase to reach `finished`, fails
+a story whose play function threw (Storybook's `playFunctionThrewException`, read from
+the preview channel), and waits for finite animations (a dialog's entrance, a fade)
+before running axe, so the checked frame is the state the story ends in.
 
-## Command palette (F2.5b)
+## Command palette (F2.5c)
 
 Ctrl K (Cmd K on macOS) or the global bar's Search button opens the palette:
 actions (New run Ctrl N, Open graph… Ctrl O, Review approvals Ctrl Shift A),
-recent runs read from `GET /runs` when it opens, and screens (Dashboard G D,
+recent runs read from `GET /runs` when it opens, and screens (Inbox G I,
 Settings Ctrl ,). Type `>` for actions only, `#` for runs by ID prefix; Tab cycles
 those scopes, arrows move, Enter opens, Escape closes. The shortcuts also work
-outside the palette (G D only when no text field has focus). Spec:
-`docs/features/F2.5b-command-palette.md`; stories: `Screens/Command palette`.
+outside the palette (G I only when no text field has focus). Spec:
+`docs/features/F2.5c-command-palette.md`; stories: `Screens/Command palette`.
 
 ## Design system and localisation (F2.5a)
 
@@ -246,8 +243,11 @@ and New run (graph, inputs, preflight steps). R2 adds the Dashboard (needs atten
 active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 (wall clock, node time, saved, retries, tokens always unknown), a per-second
 timeline and a filterable event log. Those numbers are computed in the app from
-the event stream (`src/insight.ts`, `src/dashboard.ts`) and carry no authority
-over run state.
+the event stream (`src/insight.ts`) and carry no authority
+over run state. F2.5b (ADR-0046) replaces the Dashboard with the **Inbox**, a triage
+queue (approvals waiting for you, stopped runs, running runs) beside the selected item's
+evidence read from its event stream; an approval is decided in place
+(`src/inbox.ts`, `src/inboxRun.ts`, `src/inboxView.tsx`, `src/InboxDetail.tsx`).
 R3 adds loading and error states for every engine-backed screen (a failed read is
 an error with Retry, never an empty list), a skip link and focus-to-content on
 navigation, contrast-checked colours and reduced-motion support. F2.5a is

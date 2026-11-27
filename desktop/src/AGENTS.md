@@ -15,7 +15,9 @@ spec before changing a screen, API wrapper or event view. The sibling
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
 | Runs, inspector, approvals and New run screens | `views.tsx`, `preflight.ts`, `GraphMap.tsx`, `NodePanel.tsx` |
-| Dashboard and event-derived insight | `dashboard.ts`, `dashboardView.tsx`, `insight.ts` |
+| Inbox triage queue (F2.5b): queue, detail, decision in place | `inbox.ts`, `inboxRun.ts`, `inboxView.tsx`, `InboxDetail.tsx`, `ui/glyphs.tsx` |
+| Sidebar (F2.5b): New run, navigation, recent runs, Later, profile | `ui/shell.tsx`, `sidebarRecent.tsx`, `ui/icons.tsx` |
+| Event-derived run insight | `insight.ts` |
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
 | Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
@@ -23,7 +25,7 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Edge inspector: states, safe value text, Copy, session recording hint (F2.3 E5b.2) | `editor/edgeValue.ts`, `editor/EdgeInspector.tsx`, `editor/EdgeValueBox.tsx`, `editor/valueText.ts`, `useSessionRecording.ts` |
 | Welcome screen, capability rows and first-run flag (F2.11) | `welcome.tsx`, `capabilities.ts` |
 | New graph picker, bundled templates, draft and notices (F2.12) | `editor/TemplatePicker.tsx`, `templates.ts` |
-| Command palette and global shortcuts (F2.5b) | `palette.ts` (pure model), `ui/CommandPalette.tsx`, `useShortcuts.ts`, wiring in `App.tsx` |
+| Command palette and global shortcuts (F2.5c) | `palette.ts` (pure model), `ui/CommandPalette.tsx`, `useShortcuts.ts`, wiring in `App.tsx` |
 | Story fixtures and bridge substitute | `screens.stories.tsx`, `storybook/bridge.tsx`, `storybook/fixtures.ts` |
 
 ## Preserve these contracts
@@ -51,7 +53,7 @@ spec before changing a screen, API wrapper or event view. The sibling
   is for lists, and a failed list read is an error with Retry, never an empty
   list or stale data shown as current. Preflight displays the engine's
   diagnostics rather than validating graph semantics in TypeScript.
-- Dashboard and inspector insight are pure views of reduced events or API
+- Inbox and inspector insight are pure views of reduced events or API
   lists. Preserve bounded log/event rows and timeline columns. Do not
   fabricate missing durations or token usage; show unknown where a KPI
   cannot be computed. UI state can hold selection, navigation and draft text;
@@ -90,10 +92,11 @@ as implemented merely because the full spec describes it.
 - Welcome screen, capability text and first-run flag: `desktop/test/capabilities.test.tsx`.
 - Template picker, draft (only the `id` line changes), notices and EN/PL keys: `desktop/test/templates.test.tsx`; no YAML parsing or graph rule in the picker: `desktop/test/no-graph-rules.test.ts`.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
-- Command palette (F2.5b: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, DOM behaviour under jsdom in `desktop/test/palette-dom.test.tsx` (the file opts in with `// @vitest-environment jsdom`; jsdom has no `<dialog>` methods, so the test stubs them), stories `ui/palette.stories.tsx`.
+- Command palette (F2.5c: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, DOM behaviour under jsdom in `desktop/test/palette-dom.test.tsx` (the file opts in with `// @vitest-environment jsdom`; jsdom has no `<dialog>` methods, so the test stubs them), stories `ui/palette.stories.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.
-- Dashboard, timeline and bounded event detail: `desktop/test/dashboard.test.ts`,
+- Inbox queue and detail selectors (F2.5b): `desktop/test/inbox.test.ts`; stories `Screens/Inbox*`.
+- Timeline and bounded event detail:
   `desktop/test/insight.test.ts`.
 - Editor draft/layout and absence of local graph rules: `desktop/test/editor-doc.test.ts`,
   `desktop/test/editor-layout.test.ts`, `desktop/test/no-graph-rules.test.ts`.

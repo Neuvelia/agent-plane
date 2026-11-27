@@ -7,7 +7,7 @@ import { SHORTCUTS, type GlobalCommand, type PaletteRun } from '../src/palette'
 import { CommandPalette, usePaletteRuns, type PaletteCommand, type RunsState } from '../src/ui/CommandPalette'
 import { useGlobalShortcuts } from '../src/useShortcuts'
 
-// F2.5b: the palette component and the shortcut hook in a DOM (jsdom). jsdom has no
+// F2.5c: the palette component and the shortcut hook in a DOM (jsdom). jsdom has no
 // <dialog> methods, so a minimal stand-in opens/closes it and restores focus as browsers do.
 // Animations do not run in jsdom: tests fire animationend, advance the fallback timer, or
 // report no animation (reduced motion) through getComputedStyle.
@@ -59,7 +59,7 @@ beforeEach(() => {
 })
 const command = (id: string, group: PaletteCommand['group'], label: string, extra: Partial<PaletteCommand> = {}): PaletteCommand => ({ id, group, label, hint: '', icon: 'runs', perform: () => log.push(`perform:${id}`), ...extra })
 const actions = [command('new-run', 'actions', 'New run', { shortcut: SHORTCUTS.newRun }), command('approvals', 'actions', 'Review approvals')]
-const gotos = [command('go-dashboard', 'goto', 'Dashboard'), command('go-settings', 'goto', 'Settings')]
+const gotos = [command('go-inbox', 'goto', 'Inbox'), command('go-settings', 'goto', 'Settings')]
 const runRows = [command('run:aaaa1111', 'runs', 'release-notes', { runId: 'aaaa1111' }), command('run:bbbb2222', 'runs', 'fix-issue', { runId: 'bbbb2222' })]
 
 function mount(commands: PaletteCommand[] = [...actions, ...gotos], runs: RunsState = 'ready') {
@@ -114,7 +114,7 @@ function mouse(type: 'mousedown' | 'click', target: Element, x: number, y: numbe
 }
 
 describe('choosing and closing', () => {
-  it('[F2.5b-AC2] Enter closes the dialog, tells the shell, then runs the active command exactly once', () => {
+  it('[F2.5c-AC2] Enter closes the dialog, tells the shell, then runs the active command exactly once', () => {
     withAnimation()
     vi.useFakeTimers()
     mount()
@@ -173,7 +173,7 @@ describe('choosing and closing', () => {
     expect(document.activeElement).toBe(trigger)
     trigger.remove()
   })
-  it('[F2.5b-AC1] the palette chord closes it; pressed again during the exit it asks for a fresh palette', () => {
+  it('[F2.5c-AC1] the palette chord closes it; pressed again during the exit it asks for a fresh palette', () => {
     withAnimation()
     mount()
     key('k', { ctrlKey: true })
@@ -192,18 +192,18 @@ describe('choosing and closing', () => {
 })
 
 describe('keyboard and active entry', () => {
-  it('[F2.5b-AC2] keeps the active entry when runs arrive above it', () => {
+  it('[F2.5c-AC2] keeps the active entry when runs arrive above it', () => {
     noAnimation()
     const { render } = mount([...actions, ...gotos], 'loading')
     key('ArrowDown')
     key('ArrowDown')
-    expect(selected()).toBe('palette-item-go-dashboard')
+    expect(selected()).toBe('palette-item-go-inbox')
     render([...actions, ...runRows, ...gotos], 'ready')
-    expect(selected()).toBe('palette-item-go-dashboard')
+    expect(selected()).toBe('palette-item-go-inbox')
     key('Enter')
-    expect(log).toEqual(['onClose:false', 'perform:go-dashboard'])
+    expect(log).toEqual(['onClose:false', 'perform:go-inbox'])
   })
-  it('[F2.5b-AC3] Tab rewrites the prefix and the first entry becomes active', () => {
+  it('[F2.5c-AC3] Tab rewrites the prefix and the first entry becomes active', () => {
     mount([...actions, ...runRows, ...gotos])
     key('ArrowDown')
     key('Tab')
@@ -217,7 +217,7 @@ describe('keyboard and active entry', () => {
     spy.mockClear()
     render([...actions, ...gotos])
     expect(spy).not.toHaveBeenCalled()
-    type('dash')
+    type('inb')
     expect(spy).toHaveBeenCalled()
   })
 })
@@ -281,7 +281,7 @@ describe('live region', () => {
     // Visible messages are not live regions of their own.
     expect($('[data-testid="palette-none"]').getAttribute('role')).toBeNull()
   })
-  it('[F2.5b-AC4] says when runs are loading or could not be read', () => {
+  it('[F2.5c-AC4] says when runs are loading or could not be read', () => {
     const { render } = mount([...actions, ...gotos], 'loading')
     expect(status().textContent).toBe('Loading runs…')
     render([...actions, ...gotos], 'error')
@@ -296,7 +296,7 @@ function RunsProbe({ session, read, out }: { session: number | null; read: () =>
 
 describe('usePaletteRuns', () => {
   const run: PaletteRun = { run_id: 'a', graph_id: 'g', started_at: '2026-11-01T00:00:00Z', status: 'running' }
-  it('[F2.5b-AC4] reports a failed read as an error', async () => {
+  it('[F2.5c-AC4] reports a failed read as an error', async () => {
     const out: { status: string; runs: PaletteRun[] }[] = []
     await act(async () => root.render(<RunsProbe session={1} read={() => Promise.reject(new Error('down'))} out={out} />))
     expect(out.at(-1)).toEqual({ status: 'error', runs: [] })
@@ -336,13 +336,13 @@ describe('useGlobalShortcuts', () => {
     act(() => {
       target.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init }))
     })
-  it('[F2.5b-AC1] answers the chords and G then D outside text fields', () => {
+  it('[F2.5c-AC1] answers the chords and G then I outside text fields', () => {
     const out: GlobalCommand[] = []
     act(() => root.render(<ShortcutProbe out={out} />))
     press('k', { ctrlKey: true })
     press('g')
-    press('d')
-    expect(out).toEqual(['palette', 'dashboard'])
+    press('i')
+    expect(out).toEqual(['palette', 'inbox'])
   })
   it('ignores auto-repeat, presses another handler took, sequences typed in a field, and everything under a modal dialog', () => {
     const out: GlobalCommand[] = []
@@ -355,7 +355,7 @@ describe('useGlobalShortcuts', () => {
     })
     const field = $('[data-testid="field"]')
     press('g', {}, field)
-    press('d', {}, field)
+    press('i', {}, field)
     const modal = document.createElement('dialog')
     document.body.append(modal)
     modal.showModal()

@@ -4,7 +4,7 @@ import type { BridgeData, BridgeRun, StreamEnding } from '../storybook/bridge'
 import { approvalsOf, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, summaryOf, waitingForHuman } from '../storybook/fixtures'
 import type { ApEvent } from '../types'
 
-// F2.5b command palette over the real app shell. Runs are recorded event streams
+// F2.5c command palette over the real app shell. Runs are recorded event streams
 // (storybook/fixtures); every step goes through the real components: the Search
 // button opens the palette, typing and arrow keys drive it.
 const meta: Meta = { title: 'Screens/Command palette' }
@@ -51,7 +51,7 @@ const RUN_ROW = '[data-testid^="palette-item-run:"]'
 const RUNS_STATE = '[data-testid="palette-runs-state"]'
 
 /**
- * Goes to the dashboard (G then D), opens the palette from Search, waits for `ready`
+ * Goes to the Inbox (G then I), opens the palette from Search, waits for `ready`
  * (the run rows, or the runs state line), then runs the step and checks where it ended.
  */
 const open =
@@ -59,10 +59,10 @@ const open =
   async ({ canvasElement }) => {
     await until(canvasElement, '[data-testid="palette-open"]')
     // The shell's keyboard listener is attached by an effect after the first render: repeat until it answers.
-    await expectState('G D to reach the dashboard', () => {
-      if (canvasElement.querySelector('[data-testid="dashboard"]')) return true
+    await expectState('G I to reach the Inbox', () => {
+      if (canvasElement.querySelector('[data-testid="inbox"]')) return true
       press(window, 'g')
-      press(window, 'd')
+      press(window, 'i')
       return false
     })
     ;(await until<HTMLButtonElement>(canvasElement, '[data-testid="palette-open"]')).click()

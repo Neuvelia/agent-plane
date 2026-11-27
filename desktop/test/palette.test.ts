@@ -13,22 +13,22 @@ const entries: PaletteEntry[] = [
     ],
     (s) => s,
   ),
-  { id: 'go-dashboard', group: 'goto', label: 'Dashboard', hint: '' },
+  { id: 'go-inbox', group: 'goto', label: 'Inbox', hint: '' },
   { id: 'go-settings', group: 'goto', label: 'Settings', hint: '' },
 ]
 const ids = (q: string, list = entries) => filterEntries(list, q, label).map((e) => e.id)
 
 describe('palette filtering', () => {
-  it('[F2.5b-AC2] shows every group in order with an empty query', () => {
-    expect(ids('')).toEqual(['new-run', 'approvals', 'run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa', 'go-dashboard', 'go-settings'])
+  it('[F2.5c-AC2] shows every group in order with an empty query', () => {
+    expect(ids('')).toEqual(['new-run', 'approvals', 'run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa', 'go-inbox', 'go-settings'])
   })
   it('matches label, hint and group name, ignoring case', () => {
     expect(ids('SETT')).toEqual(['go-settings'])
     expect(ids('waiting')).toEqual(['approvals'])
-    expect(ids('go to')).toEqual(['go-dashboard', 'go-settings'])
+    expect(ids('go to')).toEqual(['go-inbox', 'go-settings'])
     expect(ids('51b8')).toEqual(['run:51b8c6f0-aaaa'])
   })
-  it('[F2.5b-AC3] narrows to actions with ">" and to runs by id prefix with "#"', () => {
+  it('[F2.5c-AC3] narrows to actions with ">" and to runs by id prefix with "#"', () => {
     expect(ids('>')).toEqual(['new-run', 'approvals'])
     expect(ids('> review')).toEqual(['approvals'])
     expect(ids('#')).toEqual(['run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa'])
@@ -53,7 +53,7 @@ describe('palette scope', () => {
     expect(parseQuery('#8C1F')).toEqual({ scope: 'runs', text: '8c1f' })
     expect(parseQuery('runs')).toEqual({ scope: 'all', text: 'runs' })
   })
-  it('[F2.5b-AC3] Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
+  it('[F2.5c-AC3] Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
     expect(cycleScope('fix', 1)).toBe('>fix')
     expect(cycleScope('>fix', 1)).toBe('#fix')
     expect(cycleScope('#fix', 1)).toBe('fix')
@@ -63,7 +63,7 @@ describe('palette scope', () => {
 })
 
 describe('palette active row', () => {
-  it('[F2.5b-AC2] moves with the arrows and wraps around', () => {
+  it('[F2.5c-AC2] moves with the arrows and wraps around', () => {
     expect(moveActive(0, 3, 'ArrowDown')).toBe(1)
     expect(moveActive(2, 3, 'ArrowDown')).toBe(0)
     expect(moveActive(0, 3, 'ArrowUp')).toBe(2)
@@ -92,7 +92,7 @@ const press = (key: string, o: Partial<KeyPress> = {}): KeyPress => ({ key, ctrl
 
 describe('global shortcuts', () => {
   const idle = IDLE
-  it('[F2.5b-AC1] Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
+  it('[F2.5c-AC1] Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
     expect(matchShortcut(idle, press('k', { ctrlKey: true, typing: true }), false).command).toBe('palette')
     expect(matchShortcut(idle, press('k', { metaKey: true }), true).command).toBe('palette')
     expect(matchShortcut(idle, press('k', { metaKey: true }), false).command).toBeNull()
@@ -107,27 +107,27 @@ describe('global shortcuts', () => {
     expect(matchShortcut(idle, press('a', { ctrlKey: true }), false).command).toBeNull()
     expect(matchShortcut(idle, press('k', { ctrlKey: true, altKey: true }), false).command).toBeNull()
   })
-  it('G then D goes to the dashboard, but never while typing', () => {
+  it('G then I goes to the Inbox, but never while typing', () => {
     const g = matchShortcut(idle, press('g'), false)
     expect(g).toEqual({ state: { pending: 'G', at: 1000 }, command: null })
-    expect(matchShortcut(g.state, press('d'), false).command).toBe('dashboard')
+    expect(matchShortcut(g.state, press('i'), false).command).toBe('inbox')
     expect(matchShortcut(g.state, press('x'), false)).toEqual({ state: IDLE, command: null })
     expect(matchShortcut(idle, press('g', { typing: true }), false).state.pending).toBeNull()
-    expect(matchShortcut(g.state, press('d', { typing: true }), false).command).toBeNull()
+    expect(matchShortcut(g.state, press('i', { typing: true }), false).command).toBeNull()
   })
   it('writes shortcuts the way the operating system names them', () => {
     expect(shortcutText(SHORTCUTS.approvals, false)).toBe('Ctrl Shift A')
     expect(shortcutText(SHORTCUTS.approvals, true)).toBe('⌘ ⇧ A')
     expect(shortcutText(SHORTCUTS.settings, false)).toBe('Ctrl ,')
-    expect(shortcutText(SHORTCUTS.dashboard, true)).toBe('G D')
+    expect(shortcutText(SHORTCUTS.inbox, true)).toBe('G I')
   })
 })
 
 describe('global shortcut decision', () => {
   it('drops a G that was pressed too long ago', () => {
     const g = matchShortcut(IDLE, press('g', { time: 1000 }), false).state
-    expect(matchShortcut(g, press('d', { time: 1000 + SEQUENCE_WINDOW_MS }), false).command).toBe('dashboard')
-    expect(matchShortcut(g, press('d', { time: 1001 + SEQUENCE_WINDOW_MS }), false).command).toBeNull()
+    expect(matchShortcut(g, press('i', { time: 1000 + SEQUENCE_WINDOW_MS }), false).command).toBe('inbox')
+    expect(matchShortcut(g, press('i', { time: 1001 + SEQUENCE_WINDOW_MS }), false).command).toBeNull()
   })
   it('ignores presses another handler took, and auto-repeat, keeping the started sequence', () => {
     const g = matchShortcut(IDLE, press('g'), false).state
@@ -137,9 +137,9 @@ describe('global shortcut decision', () => {
   it('fires nothing while a modal dialog is open and forgets a started sequence', () => {
     const g = matchShortcut(IDLE, press('g'), false).state
     expect(globalShortcut(g, press('n', { ctrlKey: true }), { handled: false, repeat: false, dialogOpen: true }, false)).toEqual({ state: IDLE, command: null })
-    // G pressed in a dialog, D after it closed: no navigation.
+    // G pressed in a dialog, I after it closed: no navigation.
     const afterDialog = globalShortcut(g, press('x'), { handled: false, repeat: false, dialogOpen: true }, false).state
-    expect(globalShortcut(afterDialog, press('d'), { handled: false, repeat: false, dialogOpen: false }, false).command).toBeNull()
+    expect(globalShortcut(afterDialog, press('i'), { handled: false, repeat: false, dialogOpen: false }, false).command).toBeNull()
   })
   it('passes every other press to the matcher', () => {
     expect(globalShortcut(IDLE, press('k', { ctrlKey: true }), { handled: false, repeat: false, dialogOpen: false }, false).command).toBe('palette')
@@ -149,7 +149,7 @@ describe('global shortcut decision', () => {
 const inPalette = (key: string, o: Partial<PalettePress> = {}): PalettePress => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, repeat: false, composing: false, ...o })
 
 describe('keys inside the palette', () => {
-  it('[F2.5b-AC2] arrows move, Enter chooses', () => {
+  it('[F2.5c-AC2] arrows move, Enter chooses', () => {
     expect(paletteKey(inPalette('ArrowDown'), false)).toBe('next')
     expect(paletteKey(inPalette('ArrowUp'), false)).toBe('previous')
     expect(paletteKey(inPalette('Enter'), false)).toBe('choose')
@@ -157,11 +157,11 @@ describe('keys inside the palette', () => {
     expect(paletteKey(inPalette('ArrowDown', { repeat: true }), false)).toBe('next')
     expect(paletteKey(inPalette('Enter', { repeat: true }), false)).toBeNull()
   })
-  it('[F2.5b-AC3] Tab and Shift+Tab change the scope', () => {
+  it('[F2.5c-AC3] Tab and Shift+Tab change the scope', () => {
     expect(paletteKey(inPalette('Tab'), false)).toBe('scopeNext')
     expect(paletteKey(inPalette('Tab', { shiftKey: true }), false)).toBe('scopePrevious')
   })
-  it('[F2.5b-AC1] the palette chord closes it, but not its auto-repeat', () => {
+  it('[F2.5c-AC1] the palette chord closes it, but not its auto-repeat', () => {
     expect(paletteKey(inPalette('k', { ctrlKey: true }), false)).toBe('close')
     expect(paletteKey(inPalette('k', { metaKey: true }), true)).toBe('close')
     expect(paletteKey(inPalette('k', { ctrlKey: true, repeat: true }), false)).toBeNull()
@@ -178,7 +178,7 @@ describe('keys inside the palette', () => {
 
 describe('active entry by id', () => {
   const shown = entries.slice(0, 3)
-  it('[F2.5b-AC2] follows its entry when rows are inserted before it', () => {
+  it('[F2.5c-AC2] follows its entry when rows are inserted before it', () => {
     const later = [...shown.slice(0, 2), ...runs(5), shown[2]!]
     expect(activeIndex(shown, shown[2]!.id)).toBe(2)
     expect(activeIndex(later, shown[2]!.id)).toBe(7)
@@ -243,7 +243,7 @@ describe('backdrop by position', () => {
 })
 
 describe('reading runs for the palette', () => {
-  it('[F2.5b-AC4] reports a failed read as an error, never as an empty list', async () => {
+  it('[F2.5c-AC4] reports a failed read as an error, never as an empty list', async () => {
     expect(await readPaletteRuns(() => Promise.reject(new Error('sidecar down')))).toEqual({ status: 'error', runs: [] })
   })
   it('returns the runs that were read', async () => {

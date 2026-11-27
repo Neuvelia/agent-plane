@@ -5,7 +5,7 @@ import type { MessageKey } from '../i18n'
 import { activeIndex, createCloser, cycleScope, filterEntries, moveActive, outside, paletteKey, parseQuery, readPaletteRuns, shortcutText, type PaletteEntry, type PaletteGroup, type PaletteKeyAction, type PaletteRun, type RunsState } from '../palette'
 import { Icon, type IconName } from './icons'
 
-// F2.5b command palette (design board "Command palette"). A modal <dialog>:
+// F2.5c command palette (design board "Command palette"). A modal <dialog>:
 // focus stays in the search field, the results are a listbox driven through
 // aria-activedescendant, Escape, a click outside or the palette shortcut close
 // it, and closing returns focus to where it was. Entries only navigate or open

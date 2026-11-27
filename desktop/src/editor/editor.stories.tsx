@@ -184,8 +184,8 @@ export const CanvasYamlBroken: S = story(base, async (root) => {
   await until(root, '[data-testid="canvas-readonly"]')
 })
 export const CanvasEmptyGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
+  // Since F2.12, New opens the template picker; the blank graph is its default choice.
   await click(root, 'editor-new')
-  // Since F2.12 "New graph" first offers Blank or a template; Blank is preselected.
   await click(root, 'picker-create')
   await until(root, '[data-testid="editor-canvas"]')
   await wait(400)

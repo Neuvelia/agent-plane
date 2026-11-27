@@ -1,4 +1,4 @@
-// F2.5b command palette: the pure model. Which entries a query shows, in
+// F2.5c command palette: the pure model. Which entries a query shows, in
 // which order, which one is active, and which global key press means what.
 // No DOM, no React, no engine calls: the view (ui/CommandPalette.tsx) and the
 // shell (App.tsx) feed it plain data and act on what it returns.
@@ -101,7 +101,7 @@ export function outside(box: Box, x: number, y: number): boolean {
 }
 
 /** Global commands the shell answers outside the palette. */
-export type GlobalCommand = 'palette' | 'newRun' | 'openGraph' | 'approvals' | 'settings' | 'dashboard'
+export type GlobalCommand = 'palette' | 'newRun' | 'openGraph' | 'approvals' | 'settings' | 'inbox'
 
 /** One key press, as much of a KeyboardEvent as the matcher needs. */
 export interface KeyPress {
@@ -122,7 +122,7 @@ export const SHORTCUTS: Record<GlobalCommand, Shortcut> = {
   openGraph: { kind: 'chord', key: 'O' },
   approvals: { kind: 'chord', key: 'A', shift: true },
   settings: { kind: 'chord', key: ',' },
-  dashboard: { kind: 'sequence', keys: ['G', 'D'] },
+  inbox: { kind: 'sequence', keys: ['G', 'I'] },
 }
 
 /** Tracks the first key of a sequence between presses, and when it was pressed. */
@@ -133,12 +133,12 @@ export interface ShortcutState {
 
 export const IDLE: ShortcutState = { pending: null, at: 0 }
 
-/** How long the second key of a sequence ("D" after "G") may follow the first. */
+/** How long the second key of a sequence ("I" after "G") may follow the first. */
 export const SEQUENCE_WINDOW_MS = 1000
 
 /**
  * Matches a key press against SHORTCUTS. Chords use Cmd on macOS and Ctrl elsewhere.
- * A sequence ("G" then "D") only counts while no text field has focus, so typing never navigates.
+ * A sequence ("G" then "I") only counts while no text field has focus, so typing never navigates.
  */
 export function matchShortcut(state: ShortcutState, k: KeyPress, mac: boolean): { state: ShortcutState; command: GlobalCommand | null } {
   const mod = mac ? k.metaKey && !k.ctrlKey : k.ctrlKey && !k.metaKey
@@ -199,7 +199,7 @@ function findCommand(test: (s: Shortcut) => boolean): GlobalCommand | null {
   return hit ? hit[0] : null
 }
 
-/** Shortcut as written on screen: "Ctrl Shift A" on Windows and Linux, "⌘ ⇧ A" on macOS, "G D" for a sequence. */
+/** Shortcut as written on screen: "Ctrl Shift A" on Windows and Linux, "⌘ ⇧ A" on macOS, "G I" for a sequence. */
 export function shortcutText(s: Shortcut, mac: boolean): string {
   if (s.kind === 'sequence') return s.keys.join(' ')
   return [mac ? '⌘' : 'Ctrl', ...(s.shift ? [mac ? '⇧' : 'Shift'] : []), s.key].join(' ')

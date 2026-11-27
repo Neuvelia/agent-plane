@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { listApprovals } from './api'
+import { listApprovals, listRuns } from './api'
 import { ConnectionProvider, useConnectionReport } from './connection'
-import { Dashboard } from './dashboardView'
+import { Inbox } from './inboxView'
 import { usePoll } from './hooks'
 import { useI18n } from './i18n/context'
 import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
-import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
+import { GlobalBar, Sidebar, type NavEntry } from './ui/shell'
 import { CommandPalette, isMac, usePaletteRuns, type PaletteCommand } from './ui/CommandPalette'
 import { runEntries, SHORTCUTS, shortcutText, type GlobalCommand } from './palette'
 import { useGlobalShortcuts } from './useShortcuts'
@@ -16,8 +16,9 @@ import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
 import { Welcome } from './welcome'
+import { RecentRuns } from './sidebarRecent'
 
-type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor'; picker?: boolean } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
+type Route = { name: 'inbox' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor'; picker?: boolean } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
 
 export default function App() {
   // Every screen that cannot reach the engine reports here; the global bar says so while any does.
@@ -41,8 +42,9 @@ export default function App() {
 function Shell({ lost }: { lost: boolean }) {
   const { t, locale } = useI18n()
   // First run (F2.11 requirement 10): the welcome screen until one of its actions is chosen.
-  const [route, setRoute] = useState<Route>(() => (welcomeDone() ? { name: 'dashboard' } : { name: 'welcome' }))
+  const [route, setRoute] = useState<Route>(() => (welcomeDone() ? { name: 'inbox' } : { name: 'welcome' }))
   const polled = usePoll(listApprovals, 1500)
+  const polledRuns = usePoll(listRuns, 3000)
   const pending = polled.data?.length ?? 0
   // The open graph lives here so it survives moving to another screen and back.
   const editor = useGraphDocument()
@@ -67,7 +69,7 @@ function Shell({ lost }: { lost: boolean }) {
 
   const go = (name: Route['name']) => () => setRoute({ name } as Route)
 
-  // F2.5b command palette and global shortcuts: they only navigate or open what the shell offers.
+  // F2.5c command palette and global shortcuts: they only navigate or open what the shell offers.
   const mac = useMemo(isMac, [])
   // The open palette's session: a new number for every opening (it keys the component and the
   // run read), or null when closed.
@@ -85,7 +87,7 @@ function Shell({ lost }: { lost: boolean }) {
     },
     approvals: go('approvals'),
     settings: go('settings'),
-    dashboard: go('dashboard'),
+    inbox: go('inbox'),
   }
   useGlobalShortcuts(mac, (c) => (c === 'palette' ? openPalette() : perform[c]()))
   const statusText = (s: string) => {
@@ -93,23 +95,23 @@ function Shell({ lost }: { lost: boolean }) {
     return key ? t(key).toLowerCase() : s
   }
   const commands: PaletteCommand[] = [
-    { id: 'new-run', group: 'actions', label: t('nav.new'), hint: '', shortcut: SHORTCUTS.newRun, icon: 'runs', perform: perform.newRun },
+    { id: 'new-run', group: 'actions', label: t('nav.new'), hint: '', shortcut: SHORTCUTS.newRun, icon: 'play', perform: perform.newRun },
     { id: 'open-graph', group: 'actions', label: t('palette.openGraph'), hint: '', shortcut: SHORTCUTS.openGraph, icon: 'file', perform: perform.openGraph },
-    { id: 'approvals', group: 'actions', label: t('palette.reviewApprovals'), hint: pending ? t('palette.waiting', { count: pending }) : '', shortcut: SHORTCUTS.approvals, icon: 'approvals', perform: perform.approvals },
-    ...runEntries(paletteRuns.runs, statusText).map((e) => ({ ...e, icon: 'runs' as const, perform: () => setRoute({ name: 'run', id: e.runId! }) })),
-    { id: 'go-dashboard', group: 'goto', label: t('nav.dashboard'), hint: '', shortcut: SHORTCUTS.dashboard, icon: 'dashboard', perform: perform.dashboard },
+    { id: 'approvals', group: 'actions', label: t('palette.reviewApprovals'), hint: pending ? t('palette.waiting', { count: pending }) : '', shortcut: SHORTCUTS.approvals, icon: 'shield', perform: perform.approvals },
+    ...runEntries(paletteRuns.runs, statusText).map((e) => ({ ...e, icon: 'play' as const, perform: () => setRoute({ name: 'run', id: e.runId! }) })),
+    { id: 'go-inbox', group: 'goto', label: t('nav.inbox'), hint: '', shortcut: SHORTCUTS.inbox, icon: 'inbox', perform: perform.inbox },
     { id: 'go-runs', group: 'goto', label: t('nav.runs'), hint: '', icon: 'runs', perform: go('runs') },
     { id: 'go-editor', group: 'goto', label: t('nav.editor'), hint: '', icon: 'editor', perform: go('editor') },
     { id: 'go-welcome', group: 'goto', label: t('nav.welcome'), hint: '', icon: 'welcome', perform: go('welcome') },
     { id: 'go-settings', group: 'goto', label: t('nav.settings'), hint: '', shortcut: SHORTCUTS.settings, icon: 'settings', perform: perform.settings },
   ]
   const main: NavEntry[] = [
-    { id: 'dashboard', icon: 'dashboard', label: 'nav.dashboard', active: route.name === 'dashboard', onSelect: go('dashboard') },
+    { id: 'inbox', icon: 'inbox', label: 'nav.inbox', active: route.name === 'inbox', onSelect: go('inbox') },
     { id: 'runs', icon: 'runs', label: 'nav.runs', active: route.name === 'runs' || route.name === 'run', onSelect: go('runs') },
     { id: 'approvals', icon: 'approvals', label: 'nav.approvals', badge: pending, active: route.name === 'approvals', onSelect: go('approvals') },
-    { id: 'new', icon: 'new', label: 'nav.new', active: route.name === 'new', onSelect: go('new') },
     { id: 'editor', icon: 'editor', label: 'nav.editor', active: route.name === 'editor', onSelect: go('editor') },
   ]
+  const newRun: NavEntry = { id: 'new', icon: 'new', label: 'nav.new', active: route.name === 'new', onSelect: go('new') }
   const footer: NavEntry[] = [{ id: 'welcome', icon: 'welcome', label: 'nav.welcome', active: route.name === 'welcome', onSelect: go('welcome') }, { id: 'settings', icon: 'settings', label: 'nav.settings', active: route.name === 'settings', onSelect: go('settings') }]
   // Surfaces deferred by F2.5a: greyed out, never navigable.
   const deferred: NavEntry[] = [
@@ -122,7 +124,7 @@ function Shell({ lost }: { lost: boolean }) {
     setRoute(next)
     then?.()
   }
-  const crumb = route.name === 'welcome' ? t('nav.welcome') : route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
+  const crumb = route.name === 'welcome' ? t('nav.welcome') : route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'inbox' ? t('nav.inbox') : t('nav.runs')
   return (
     <div className="app">
       <a
@@ -135,13 +137,22 @@ function Shell({ lost }: { lost: boolean }) {
       >
         {t('a11y.skip')}
       </a>
-      <Sidebar entries={main} deferred={deferred} footer={footer} />
+      <Sidebar
+        primary={newRun}
+        entries={main}
+        recent={<RecentRuns runs={polledRuns.data} approvals={polled.status === 'error' ? [] : (polled.data ?? [])} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
+        deferred={deferred}
+        footer={footer}
+      />
       <div className="col">
-        <GlobalBar lost={lost} search={{ onOpen: openPalette, keys: shortcutText(SHORTCUTS.palette, mac), ariaKeys: mac ? 'Meta+K' : 'Control+K' }} />
-        <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
+        <GlobalBar
+          lost={lost}
+          crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]}
+          search={{ onOpen: openPalette, keys: shortcutText(SHORTCUTS.palette, mac), ariaKeys: mac ? 'Meta+K' : 'Control+K' }}
+        />
         <main id="content" ref={mainRef} tabIndex={-1}>
-          {route.name === 'dashboard' && (
-            <Dashboard
+          {route.name === 'inbox' && (
+            <Inbox
               onOpenRun={(id) => setRoute({ name: 'run', id })}
               onNewRun={() => setRoute({ name: 'new' })}
               onOpenGraph={(graph) => setRoute({ name: 'new', graph })}
@@ -153,7 +164,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
+          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'inbox' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
