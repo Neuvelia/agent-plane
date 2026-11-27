@@ -1,4 +1,4 @@
-# ADR-0046 - Welcome and setup as a four-step setup
+# ADR-0047 - Welcome and setup as a four-step setup
 
 **Status:** proposed (2026-11-27)
 **Date:** 2026-11-27

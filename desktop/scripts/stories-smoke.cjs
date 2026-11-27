@@ -5,7 +5,7 @@
 // Opens every story in a real browser, in English and Polish, and fails on:
 //   - a missing required story (screen states of F2.5a 6c, every primitive),
 //   - any request that is not served by the static Storybook itself,
-//   - a page error or console error,
+//   - a page error or console error, or a play function that fails or never finishes,
 //   - an axe-core accessibility violation.
 const { chromium } = require('playwright')
 const axeSource = require('node:fs').readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')
@@ -21,8 +21,8 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
 const REQUIRED = [
   'ui-primitives--pills', 'ui-primitives--buttons', 'ui-primitives--card-with-header', 'ui-primitives--segmented', 'ui-primitives--kpis', 'ui-primitives--fields',
   'ui-data--outcomes', 'ui-data--events', 'ui-data--timeline', 'ui-data--yaml',
-  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--breadcrumbs',
-  'screens--runs-list-empty', 'screens--runs-list-busy', 'screens--dashboard-empty', 'screens--dashboard-busy', 'screens--dashboard-needs-attention',
+  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--sidebar-recent-runs', 'ui-shell--sidebar-recent-unavailable', 'ui-shell--sidebar-no-runs', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--breadcrumbs',
+  'screens--runs-list-empty', 'screens--runs-list-busy', 'screens--inbox-empty', 'screens--inbox-no-runs', 'screens--inbox-busy', 'screens--inbox-needs-attention', 'screens--inbox-failed-selected', 'screens--inbox-retries-used-up', 'screens--inbox-interrupted-selected', 'screens--inbox-running-selected', 'screens--inbox-filter-stopped', 'screens--inbox-filter-empty', 'screens--inbox-decided', 'screens--inbox-decided-here', 'screens--inbox-run-not-found', 'screens--inbox-stays-on-shown-item', 'screens--inbox-keyboard-focus', 'screens--inbox-decision-error', 'screens--inbox-connection-lost',
   'screens--inspector-running', 'screens--inspector-waiting-for-human', 'screens--inspector-failed-after-retries', 'screens--inspector-succeeded', 'screens--inspector-yaml-view', 'screens--inspector-split-view', 'screens--inspector-first-attempt', 'screens--inspector-compare-shell-attempts', 'screens--inspector-compare-agent-scope', 'screens--inspector-compare-scope-indeterminate','screens--inspector-connection-lost', 'screens--inspector-run-not-found',
   'screens--approvals-empty', 'screens--approvals-one-pending', 'screens--approvals-many-pending', 'screens--approvals-decision-error',
   'screens--settings-language',
@@ -34,7 +34,7 @@ const REQUIRED = [
   'screens-editor--issues-none', 'screens-editor--issues-warnings-only', 'screens-editor--issues-errors-and-warnings', 'screens-editor--issues-filtered', 'screens-editor--issues-focused-edge', 'screens-editor--issues-focused-node', 'screens-editor--issues-focused-port', 'screens-editor--issues-parse-error', 'screens-editor--issues-parse-error-column', 'screens-editor--issues-validating', 'screens-editor--issues-engine-unreachable',
   'screens-inspector--nothing-selected', 'screens-inspector--shell-with-json-predicate-loop', 'screens-inspector--advanced-section', 'screens-inspector--loop-command-gate', 'screens-inspector--loop-json-predicate-gate', 'screens-inspector--loop-reported-file-scope-gate', 'screens-inspector--agent-loop-changed-files-scope', 'screens-inspector--agent-task-from-input', 'screens-inspector--standalone-gate', 'screens-inspector--human-node', 'screens-inspector--unknown-node-type', 'screens-inspector--field-with-diagnostic', 'screens-inspector--loop-needs-an-output', 'screens-inspector--port-removal-preview', 'screens-inspector--read-only-while-yaml-is-broken', 'screens-inspector--checking', 'screens-inspector--engine-unreachable',
   'screens-inspector--loop-edits-are-targeted', 'screens-inspector--refused-rename-restores-name', 'screens-inspector--cancelled-rename-restores-name', 'screens-inspector--invalid-max-attempts', 'screens-inspector--map-key-collision', 'screens-inspector--gate-input-and-port-diagnostics', 'screens-inspector--output-rename-carries-type',
-  'screens--runs-list-loading', 'screens--runs-list-error', 'screens--dashboard-loading', 'screens--dashboard-error', 'screens--approvals-loading', 'screens--approvals-error', 'screens--new-run-validating', 'screens--full-app-shell-engine-down',
+  'screens--runs-list-loading', 'screens--runs-list-error', 'screens--inbox-loading', 'screens--inbox-error', 'screens--approvals-loading', 'screens--approvals-error', 'screens--new-run-validating', 'screens--full-app-shell-engine-down',
   'screens--new-run-no-file', 'screens--new-run-ready', 'screens--new-run-warnings', 'screens--new-run-blocked',
   'screens-welcome--all-available', 'screens-welcome--git-missing', 'screens-welcome--codex-not-configured', 'screens-welcome--codex-found-on-path', 'screens-welcome--agent-clis-found', 'screens-welcome--codex-unsupported-version', 'screens-welcome--windows', 'screens-welcome--detection-error', 'screens-welcome--checking', 'screens-welcome--rechecking', 'screens-welcome--request-failed', 'screens-welcome--engine-disconnected',
   'screens-welcome--step-welcome', 'screens-welcome--step-agents', 'screens-welcome--step-first-graph', 'screens-welcome--step-first-graph-blank-picked', 'screens-welcome--step-first-graph-windows', 'screens-welcome--shell-missing', 'screens-welcome--in-app-first-launch', 'screens-welcome--in-app-engine-disconnected',
@@ -79,6 +79,18 @@ const server = http.createServer((req, res) => {
       page.on('request', (r) => {
         if (!r.url().startsWith(origin) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) fail(`external request ${r.url()}`)
       })
+      // Storybook ends a story whose play function threw as "finished" and reports the error on its
+      // channel; record it from the first moment the channel exists.
+      await page.addInitScript(() => {
+        const hook = setInterval(() => {
+          const channel = window.__STORYBOOK_ADDONS_CHANNEL__
+          if (!channel) return
+          clearInterval(hook)
+          channel.on('playFunctionThrewException', (e) => {
+            window.__apPlayError = String((e && e.message) || e)
+          })
+        }, 5)
+      })
       page.on('pageerror', (e) => fail(`page error ${e.message}`))
       page.on('console', (m) => m.type() === 'error' && fail(`console error ${m.text()}`))
       while (queue.length) {
@@ -105,6 +117,18 @@ const server = http.createServer((req, res) => {
 async function checkStory(page, origin, id, locale, fail) {
   await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale}`)
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
+  // Wait for the story to finish, play function included, so a failing play fails the smoke and
+  // axe checks the state the play function reached, not the first render.
+  const phase = await page
+    .waitForFunction(() => {
+      const p = window.__STORYBOOK_PREVIEW__?.currentRender?.phase
+      return ['finished', 'errored', 'aborted'].includes(p) && p
+    }, null, { timeout: 15000, polling: 50 })
+    .then((h) => h.jsonValue())
+    .catch(() => 'timeout')
+  if (phase !== 'finished') return fail(`story did not finish (${phase}): its play function failed or never ended`)
+  const playError = await page.evaluate(() => window.__apPlayError)
+  if (playError) return fail(`play function failed: ${playError}`)
   // Only React Flow views fade in after fit-view; other stories are ready once rendered.
   if (await page.$('#storybook-root .react-flow')) await page.waitForTimeout(900)
   await page.addScriptTag({ content: axeSource })

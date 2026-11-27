@@ -143,7 +143,7 @@ a dev dependency and is never part of the packaged app.
   reported by `GET /capabilities`; "Check again" calls `POST /capabilities/check`.
   The CLIs are only looked up on the engine's `PATH`, never run. Main passes
   `--codex-bin` only when `AGENTPLANE_CODEX_BIN` is an absolute path
-  (`electron/capabilities.cjs`). The screen is a four-step setup (ADR-0046):
+  (`electron/capabilities.cjs`). The screen is a four-step setup (ADR-0047):
   Welcome, Check this computer (the list above), Agent nodes (the CLI command)
   and First graph, whose primary action creates the picked template directly;
   "Skip setup" is always in its header.
@@ -229,8 +229,11 @@ and New run (graph, inputs, preflight steps). R2 adds the Dashboard (needs atten
 active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 (wall clock, node time, saved, retries, tokens always unknown), a per-second
 timeline and a filterable event log. Those numbers are computed in the app from
-the event stream (`src/insight.ts`, `src/dashboard.ts`) and carry no authority
-over run state.
+the event stream (`src/insight.ts`) and carry no authority
+over run state. F2.5b (ADR-0046) replaces the Dashboard with the **Inbox**, a triage
+queue (approvals waiting for you, stopped runs, running runs) beside the selected item's
+evidence read from its event stream; an approval is decided in place
+(`src/inbox.ts`, `src/inboxRun.ts`, `src/inboxView.tsx`, `src/InboxDetail.tsx`).
 R3 adds loading and error states for every engine-backed screen (a failed read is
 an error with Retry, never an empty list), a skip link and focus-to-content on
 navigation, contrast-checked colours and reduced-motion support. F2.5a is

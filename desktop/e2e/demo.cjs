@@ -158,8 +158,15 @@ async function startDemo(app, page) {
     assert.equal(await page.isChecked('[data-testid="setup-template-parallel-shell"]'), true)
     await page.focus('[data-testid="welcome-skip"]')
     await page.keyboard.press('Enter')
-    await page.waitForSelector('[data-testid="dashboard"]')
+    await page.waitForSelector('[data-testid="inbox"]')
     assert.equal(await page.evaluate(() => localStorage.getItem('agentplane.welcome.v1')), 'done')
+    // roadmap: F2.5b-AC5
+    // F2.5b: with nothing queued, the Inbox offers Open graph; it lands on New run with the file chosen.
+    await page.waitForSelector('[data-testid="inbox-empty"]')
+    await stubOpenDialog(app, graph)
+    await page.click('[data-testid="quick-open"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    assert.equal(await page.textContent('[data-testid="graph-label"]'), path.basename(graph), 'Open graph on the Inbox lands on New run with the file chosen')
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
     const refused = await page.evaluate(async (never) => ({
@@ -220,7 +227,8 @@ async function startDemo(app, page) {
     assert.equal(again.ok, false)
     assert.equal(again.code, 'exists')
     const recent = await page.evaluate(() => window.agentplane.recentGraphs())
-    assert.deepEqual(recent.map((r) => r.label), ['fresh.yaml', 'demo.yaml'])
+    // demo-vertical.yaml was opened first, from the empty Inbox's Open graph.
+    assert.deepEqual(recent.map((r) => r.label), ['fresh.yaml', 'demo.yaml', 'demo-vertical.yaml'])
     assert.equal(JSON.stringify(recent).includes(work), false)
     const viaRecent = await page.evaluate((id) => window.agentplane.openRecentGraph(id), recent[0].id)
     assert.equal(viaRecent.ok, true)
@@ -280,7 +288,7 @@ async function startDemo(app, page) {
     assert.match(fs.readFileSync(path.join(graphDir, 'brand-new.yaml'), 'utf8'), /schema_version: 0/)
     await shot(page, '8-editor')
     await page.click('[data-testid="editor-close"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // E2.2: the canvas. Layout is not semantics; every action works from the keyboard.
     const key = async (testId, k = 'Enter') => {
@@ -381,7 +389,7 @@ async function startDemo(app, page) {
     assert.ok((await page.locator('[data-testid="yaml-content"]').textContent()).includes('a.outputs.stdout'), 'the YAML shows the new edge')
     await page.click('[data-testid="editor-close"]')
     await page.click('[data-testid="leave-discard"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // F2.3 E5a.2: the Bindings panel. Add, replace and remove with the keyboard only; a refused target shows the engine's reason.
     const bound = path.join(graphDir, 'bindings.yaml')
@@ -443,7 +451,7 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="bindings-empty"]')
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'bindings-heading')
     await page.click('[data-testid="editor-close"]') // the edit was undone by the removal: nothing unsaved
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // F2.3 E5a.3: hints. An unused output binds to a compatible unbound required input in two actions.
     const hinted = path.join(graphDir, 'hints.yaml')
@@ -481,7 +489,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="editor-undo"]')
     await page.click('[data-testid="editor-close"]')
     await page.click('[data-testid="leave-discard"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // E2.3: window focus finds outside changes; Save and run runs the SAVED file.
     const focusIt = () => page.evaluate(() => window.dispatchEvent(new Event('focus')))
@@ -537,9 +545,9 @@ async function startDemo(app, page) {
     exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
     await page.click('[data-testid="nav-editor"]')
     await page.click('[data-testid="editor-close"]').catch(() => {})
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
-    // ADR-0046: the last setup step creates the picked template directly.
+    // ADR-0047: the last setup step creates the picked template directly.
     await page.click('[data-testid="nav-welcome"]')
     await page.click('[data-testid="setup-progress-graph"]')
     await page.click('[data-testid="setup-template-dependency-update"]')
@@ -568,7 +576,7 @@ async function startDemo(app, page) {
     assert.equal(fs.readFileSync(path.join(graphDir, 'from-setup.yaml'), 'utf8'), dependencyUpdate.replace(/^id: dependency-update$/m, 'id: from-setup'))
     await page.click('[data-testid="editor-close"]')
     await page.waitForSelector('[data-testid="editor-empty"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // F2.12: New graph offers templates.
     const readTemplate = (id) => fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', `${id}.yaml`), 'utf8')
@@ -631,7 +639,7 @@ async function startDemo(app, page) {
     assert.equal(await page.locator('[data-testid="canvas-readonly"]').count(), 0, 'a template opens with an editable canvas')
     await page.click('[data-testid="editor-close"]')
     await page.click('[data-testid="leave-discard"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // F2.4: the Issues panel. Config errors show before any run; issues take you to their element and line.
     const activeId = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid'))
@@ -716,7 +724,7 @@ async function startDemo(app, page) {
     await page.keyboard.press('Enter')
     await page.waitForFunction(() => ['selected-heading', 'graph-heading'].includes(document.activeElement?.getAttribute('data-testid') || ''))
     await page.click('[data-testid="editor-close"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // F2.2: the node inspector, keyboard only. Every change is an operation on the file.
     const inspected = path.join(graphDir, 'inspect.yaml')
@@ -785,7 +793,7 @@ async function startDemo(app, page) {
     assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
     await shot(page, '10-inspector')
     await page.click('[data-testid="editor-close"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // F2.2: every gate kind the inspector offers is configured through the inspector, on a loop and on a standalone Gate,
     // and the saved file is accepted by `graph validate`. The kinds are read from the kind selector, not listed here.
@@ -889,12 +897,12 @@ async function startDemo(app, page) {
       assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${gateKinds[i]}`))
       await page.click('[data-testid="editor-close"]')
     }
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // R0 shell: deferred surfaces are inert, language switches without restart.
     assert.equal(await page.getAttribute('[data-testid="nav-projects"]', 'aria-disabled'), 'true')
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
-    assert.equal(await page.isVisible('[data-testid="dashboard"]'), true, 'a disabled entry must not navigate')
+    assert.equal(await page.isVisible('[data-testid="inbox"]'), true, 'a disabled entry must not navigate')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
     assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
     assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
@@ -973,19 +981,35 @@ async function startDemo(app, page) {
     assert.doesNotMatch(await page.textContent('[data-testid="event-log"]'), /node_started/)
     await page.click('[data-testid="events-all"]')
 
-    // The Dashboard lists the pending approval and the active run.
-    await page.click('[data-testid="nav-dashboard"]')
-    await page.waitForSelector('[data-testid="attention-item"]')
-    assert.match(await page.textContent('[data-testid="needs-attention"]'), /Approval/)
-    assert.equal(await page.locator('[data-testid="active-run"]').count(), 1)
-    assert.equal(await page.locator('[data-testid="outcomes"] .dot.d-b').count() >= 1, true)
-
-    // 3. The graph stops at the human gate until Approve is clicked.
+    // roadmap: F2.5b-AC5
+    // The Approvals screen lists the pending gate too; the decision is taken in the Inbox.
     await page.click('[data-testid="nav-approvals"]')
     await page.waitForSelector('[data-testid="approval-card"]')
-    await page.fill('[data-testid="approval-card"] textarea', 'ship it')
     await shot(page, '3-approvals-inbox')
-    await page.click('[data-testid="approval-card"] button.primary')
+    // The Inbox queues the pending approval and offers the decision in place.
+    await page.click('[data-testid="nav-inbox"]')
+    await page.waitForSelector('[data-testid="inbox-item"][data-kind="approval"]')
+    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count(), 1)
+    // The run is running, but it waits for that approval, so it is queued once: as the approval.
+    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="running"]').count(), 0)
+    assert.equal(await page.locator('[data-testid="inbox-recent"] .s-b').count() >= 1, true)
+    assert.equal(await page.isVisible('[data-testid="inbox-detail"][data-kind="approval"] >> [data-testid="inbox-approve"]'), true)
+
+    // 3. The graph stops at the human gate until Approve is clicked (here, in the Inbox).
+    await page.fill('[data-testid="inbox-decide"] input', 'ship it')
+    await page.click('[data-testid="inbox-approve"]')
+    // The decision shows once approval_decided arrives; the item stays open and queued, dimmed.
+    await page.waitForSelector('[data-testid="inbox-decided"]')
+    assert.match(await page.textContent('[data-testid="inbox-decided"]'), /Approved/)
+    await page.waitForSelector('[data-testid="inbox-item"].done')
+    // The row survives the poll that drops the approval from GET /approvals (the badge goes with it).
+    await page.waitForFunction(async () => (await window.agentplane.request('GET', '/approvals')).body.approvals.length === 0)
+    // Held: the Inbox's own list no longer has it, the row stays because its decision was taken and recorded here.
+    await page.waitForSelector('[data-testid="inbox-item"].done[data-held="true"]', { timeout: 10000 })
+    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count(), 1)
+    assert.match(await page.textContent('[data-testid="inbox-item"][data-held="true"]'), /Approved/)
+    await shot(page, '3b-inbox-decided')
+    await page.click('[data-testid="nav-approvals"]')
     await page.waitForSelector('[data-testid="no-approvals"]')
     await page.click('[data-testid="nav-runs"]')
     await page.click('[data-testid="run-row"]')
@@ -1002,8 +1026,8 @@ async function startDemo(app, page) {
     // roadmap: F2.9-AC1, F2.5-AC2
     // 4. History survives an application restart and the map is rebuilt from events.
     ;({ app, page } = await launch())
-    // After Skip, a relaunch opens the dashboard, not the welcome screen.
-    await page.waitForSelector('[data-testid="dashboard"]')
+    // After Skip, a relaunch opens the Inbox, not the welcome screen.
+    await page.waitForSelector('[data-testid="inbox"]')
     assert.equal(await page.isVisible('[data-testid="welcome"]'), false)
     // R3 keyboard: the first Tab stop is the skip link; Enter moves focus into the content.
     await page.keyboard.press('Tab')
@@ -1104,11 +1128,11 @@ async function startDemo(app, page) {
     assert.equal(await textNow(), 'fast branch done')
     assert.match(await page.textContent('[data-testid="edge-value-heading"]'), /different version/)
     await page.click('[data-testid="editor-close"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
     // Restart: the same values come back from the run store.
     await app.close()
     ;({ app, page } = await launch())
-    await page.waitForSelector('[data-testid="dashboard"]')
+    await page.waitForSelector('[data-testid="inbox"]')
     await openForValues(valuesGraph)
     await edgeKey('fast.outputs.stdout')
     await stateOf('value')
@@ -1127,7 +1151,7 @@ async function startDemo(app, page) {
     )
     await page.keyboard.press('PageDown')
     await page.click('[data-testid="editor-close"]')
-    await page.click('[data-testid="nav-dashboard"]')
+    await page.click('[data-testid="nav-inbox"]')
 
     // #56: New run chooses the graph in the native dialog and holds only a grant. It starts the run
     // from the file as saved when the run starts, and the renderer cannot send a path at all.
@@ -1135,10 +1159,6 @@ async function startDemo(app, page) {
     const chosen = path.join(graphDir, 'new-run.yaml')
     fs.writeFileSync(chosen, say('first'))
     await stubOpenDialog(app, chosen)
-    await page.click('[data-testid="nav-dashboard"]')
-    await page.click('[data-testid="quick-open"]')
-    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
-    assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml', 'Open graph on the Dashboard lands on New run with the file chosen')
     await page.click('[data-testid="nav-new"]')
     assert.equal(await page.locator('[data-testid="graph-path"]').count(), 0, 'New run has no field for a path')
     await page.click('[data-testid="choose"]')
