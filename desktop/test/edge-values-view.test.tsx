@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import valueEvents from './fixtures/demo-approve-values.json'
 import { I18nProvider } from '../src/i18n/context'
 import type { ApEvent, RunSummary } from '../src/types'
-import { ValuePicker } from '../src/ValuePicker'
+import { ValuePicker } from '../src/ValuePickerView'
 import type { ValuesPicker } from '../src/useRunValues'
 import { choose, confirmVersion, noChoice, pickerRuns, resolveRun } from '../src/valuePicker'
 import { outputSlot, reduceAllValues } from '../src/values'
@@ -45,7 +45,7 @@ describe('privacy', () => {
   })
 
   it('the values modules contain no storage, console or network use', () => {
-    for (const file of ['values.ts', 'valuePicker.ts', 'useRunValues.ts', 'ValuePicker.tsx']) {
+    for (const file of ['values.ts', 'valuePicker.ts', 'useRunValues.ts', 'ValuePickerView.tsx']) {
       const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8')
       expect(source, file).not.toMatch(/localStorage|sessionStorage|indexedDB|console\.|fetch\(|XMLHttpRequest/)
     }
