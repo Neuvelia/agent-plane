@@ -1,6 +1,6 @@
 # ADR-0045 - Bounded Shell capture and complete declared outputs
 
-**Status:** proposed
+**Status:** accepted (owner, 2026-11-27)
 **Date:** 2026-11-27
 **Features:** F0.5 (#181); full log as an artifact stays F3.5
 **Amends:** ADR-0005 ("captured output is currently unbounded in memory")

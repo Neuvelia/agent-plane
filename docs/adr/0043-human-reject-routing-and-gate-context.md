@@ -1,6 +1,6 @@
 # ADR-0043 - Human reject routing and approval context
 
-**Status:** proposed
+**Status:** accepted (owner, 2026-11-27)
 **Date:** 2026-11-26
 
 ## Context
@@ -109,5 +109,4 @@ unknown key with `E_HUMAN_INVALID`). Event schema unchanged.
   `"rejected"` on the decision; the default still fails.
 - desktop `approval-context.test.tsx`.
 
-**Owner action:** this ADR stays `proposed` until the owner accepts it. The
-code ships under it, following the ADR-0028/ADR-0029 precedent.
+**Owner action:** accepted by the owner on 2026-11-27 (PR #198).

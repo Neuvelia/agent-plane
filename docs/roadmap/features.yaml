@@ -185,7 +185,7 @@ features:
         adr: ADR-0045
         deferred_to: F3.5
     tasks: [181]
-    note: "#181: przechwycony stdout/stderr ograniczony do 1 MiB ze znacznikiem; zadeklarowany port stdout/stderr/json z uciętym strumieniem kończy node błędem output (ADR-0045, proposed)."
+    note: "#181: przechwycony stdout/stderr ograniczony do 1 MiB ze znacznikiem; zadeklarowany port stdout/stderr/json z uciętym strumieniem kończy node błędem output (ADR-0045)."
   - id: F0.6
     name: "Event Model i Run/Node IDs"
     kind: roadmap
@@ -758,7 +758,7 @@ features:
       - text: "Panel bez blast radius i bez treści diffu (checki i changed files są)."
         issue: 187
         deferred_to: F3.9
-      - text: "on_reject: continue (ADR-0043, proposed) tylko gdy decyzja trafia wyłącznie do outputów grafu (żaden rodzaj Gate nie porównuje wartości tekstowej)."
+      - text: "on_reject: continue (ADR-0043) tylko gdy decyzja trafia wyłącznie do outputów grafu (żaden rodzaj Gate nie porównuje wartości tekstowej)."
         adr: ADR-0043
     tasks: [187]
   - id: F2.11
@@ -1709,7 +1709,7 @@ features:
     decisions: ["ADR-0037", "ADR-0042", "ADR-0044"]
     divergences: []
     tasks: [183]
-    note: "ADR-0042 (proposed) czeka na akceptację właściciela; nowy rodzaj check od schema 15 (ADR-0044)."
+    note: "ADR-0042 zaakceptowany przez właściciela 2026-11-27; nowy rodzaj check od schema 15 (ADR-0044)."
   - id: F1.6a
     name: "Shell node correction loop"
     kind: derived

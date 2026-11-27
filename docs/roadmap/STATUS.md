@@ -154,7 +154,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 
 | ID | Name | Kind | Parent | Status | Note |
 | --- | --- | --- | --- | --- | --- |
-| [F1.4b](../../docs/features/F1.4b-test-command-loop-check.md) | Test command as a loop check | derived | F1.4 | done | ADR-0042 (proposed) czeka na akceptację właściciela; nowy rodzaj check od schema 15 (ADR-0044). |
+| [F1.4b](../../docs/features/F1.4b-test-command-loop-check.md) | Test command as a loop check | derived | F1.4 | done | ADR-0042 zaakceptowany przez właściciela 2026-11-27; nowy rodzaj check od schema 15 (ADR-0044). |
 | [F1.6a](../../docs/features/F1.6a-shell-loop.md) | Shell node correction loop | derived | F1.6 | done |  |
 | [F2.3-E6](../../docs/features/F2.3-E6-recorded-run-values.md) | Recorded run values (value_recorded) | derived | F2.3 | done |  |
 | [F2.5a](../../docs/features/F2.5a-desktop-redesign.md) | Desktop redesign (Tarmind design system, PL/EN) | derived | F2.5 | done | Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2. |
@@ -207,7 +207,7 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F2.8 | Diff między próbami nie jest renderowany w desktopie (silnik F2.8b gotowy). |  |  | F2.8b |
 | F2.9 | JSONL zamiast SQLite. | ADR-0027 |  |  |
 | F2.10 | Panel bez blast radius i bez treści diffu (checki i changed files są). |  | #187 | F3.9 |
-| F2.10 | on_reject: continue (ADR-0043, proposed) tylko gdy decyzja trafia wyłącznie do outputów grafu (żaden rodzaj Gate nie porównuje wartości tekstowej). | ADR-0043 |  |  |
+| F2.10 | on_reject: continue (ADR-0043) tylko gdy decyzja trafia wyłącznie do outputów grafu (żaden rodzaj Gate nie porównuje wartości tekstowej). | ADR-0043 |  |  |
 | F2.11 | Brak listy repozytoriów i agentów w silniku desktopu; starter agentowy wymaga ręcznego workspace. |  | #188 | F2.13 |
 | F2.11 | Self-check runnera tylko w CLI (agentplane self-check); brak w desktopie. |  |  | F2.15 |
 | F3.1 | Izolacja tylko dla Agent unitów w pętli (opt-in); wynik na refie integracyjnym, bez merge do brancha. | ADR-0024 |  |  |

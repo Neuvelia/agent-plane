@@ -1,6 +1,6 @@
 # ADR-0042 - Test command as a loop check
 
-**Status:** proposed
+**Status:** accepted (owner, 2026-11-27)
 **Date:** 2026-11-26
 **Feature:** F1.4b (registry entry decided by ADR-0037)
 **Follows:** ADR-0037 (accepted direction: close the gap with a loop check)

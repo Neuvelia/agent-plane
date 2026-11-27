@@ -41,7 +41,7 @@ feature contract.
 | `F1.6-correction-loop.md` | Implemented; ADR-0014 |
 | `F1.7-return-envelope-scoped-retry.md` | Implemented; ADR-0015 |
 | `F1.8-changed-files-scope-check.md` | Implemented; ADR-0016 |
-| `F1.4b-test-command-loop-check.md` | Implemented; ADR-0042 (proposed) |
+| `F1.4b-test-command-loop-check.md` | Implemented; ADR-0042 (accepted) |
 
 ## Phase 2 - Local IDE and vertical slice
 

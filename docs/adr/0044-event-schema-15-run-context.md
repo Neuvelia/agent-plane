@@ -1,6 +1,6 @@
 # ADR-0044 - Event schema 15: run provenance, test_command checks and abandoned executors
 
-**Status:** proposed
+**Status:** accepted (owner, 2026-11-27)
 **Date:** 2026-11-27
 **Features:** F2.9, F3.6 (#186), F1.4b (#183), F3.4 (#190)
 **Amends:** ADR-0006 (event model) additively; follows ADR-0028 and ADR-0042

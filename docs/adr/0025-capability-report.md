@@ -171,7 +171,7 @@ uses `exec.LookPath("git")`. The trust boundary moves from a fixed path to the u
 
 ## Amendment: shell and optional Docker rows (issue #188, owner decision Q17, 2026-11-26)
 
-Status: proposed (owner decision Q17 recorded 2026-11-26; awaiting owner acceptance of this text), additive within version 1. `tools` gains two trailing `tool` rows after the agent CLIs:
+Status: accepted (owner decision Q17 recorded 2026-11-26; text accepted by the owner 2026-11-27), additive within version 1. `tools` gains two trailing `tool` rows after the agent CLIs:
 `shell` (a stat of `/bin/sh` on Linux and macOS, `unsupported_platform` elsewhere) and `docker` (the same
 stat-only `PATH` lookup as decision 4a; found is `available` with no version, otherwise `missing`). Neither is
 ever executed, no daemon is contacted and no path is reported. Docker is informational and optional; nothing

@@ -26,7 +26,7 @@ F1.7: [ADR-0015 - Static units, Return Envelopes and immutable acceptance](0015-
 
 F1.8: [ADR-0016 - Git-observed changed-files scope checking](0016-changed-files-scope-check.md).
 
-F1.4b: [ADR-0042 - Test command as a loop check](0042-test-command-loop-check.md) (proposed).
+F1.4b: [ADR-0042 - Test command as a loop check](0042-test-command-loop-check.md) (accepted 2026-11-27).
 
 Phase 2 vertical slice (accepted):
 [ADR-0017 - Human node and local approval](0017-human-node-and-local-approval.md),
@@ -64,7 +64,7 @@ Owner-decision gaps (Q17, 2026-11-26; all proposed, none implemented):
 [ADR-0040 - JSON field selection in data bindings](0040-json-field-selection-in-bindings.md) (F2.3b),
 [ADR-0041 - Workspace isolation for Shell nodes](0041-shell-node-workspace-isolation.md) (F3.1c).
 
-F2.10: [ADR-0043 - Human reject routing and approval context](0043-human-reject-routing-and-gate-context.md) (proposed).
+F2.10: [ADR-0043 - Human reject routing and approval context](0043-human-reject-routing-and-gate-context.md) (accepted 2026-11-27).
 
 Release engineering (proposed):
 [ADR-0030 - Distribution channels, desktop shell and release tooling](0030-distribution-and-release-channels.md),
@@ -80,6 +80,6 @@ Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
 [ADR-0037 - Direction: a test command as a loop check](0037-test-command-check-direction.md),
 [ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md).
 
-Follow-ups to the audit (proposed, implemented; awaiting owner acceptance; ADR-0042 is listed above):
+Follow-ups to the audit (accepted 2026-11-27, implemented; ADR-0042 is listed above):
 [ADR-0044 - Event schema 15: run provenance, test_command checks and abandoned executors](0044-event-schema-15-run-context.md) (F2.9, F3.6, F1.4b, F3.4),
 [ADR-0045 - Bounded Shell capture and complete declared outputs](0045-shell-declared-output-completeness.md) (F0.5, amends ADR-0005).

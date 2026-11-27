@@ -17,10 +17,10 @@ tracking process. Their combined result is `docs/roadmap/canonical-spec.md`.
 | D12 | Test command as a loop check (gap to close) | [ADR-0037](../../adr/0037-test-command-check-direction.md) |
 | Q2-Q10, Q17 | Tracking harness, status vocabulary, traceability | [ADR-0038](../../adr/0038-roadmap-tracking-harness.md) |
 | Q13 | ADR-0027 and ADR-0029 accepted; ADR-0028 stays proposed until F3.4 closes | ADR-0027, ADR-0029 |
-| D12 follow-up (#183) | Test command Gate kind, loop only (F1.4b) | [ADR-0042](../../adr/0042-test-command-loop-check.md) (proposed) |
-| Q17 (#187) | Human `on_reject: continue` only into a deterministic check | [ADR-0043](../../adr/0043-human-reject-routing-and-gate-context.md) (proposed) |
-| #186, #183, #190 | Event schema 15: run provenance, `test_command`, `executor_abandoned`; canonical-spec §3 | [ADR-0044](../../adr/0044-event-schema-15-run-context.md) (proposed) |
-| #181 | Shell capture bound; declared outputs complete or failed | [ADR-0045](../../adr/0045-shell-declared-output-completeness.md) (proposed) |
+| D12 follow-up (#183) | Test command Gate kind, loop only (F1.4b) | [ADR-0042](../../adr/0042-test-command-loop-check.md) (accepted 2026-11-27) |
+| Q17 (#187) | Human `on_reject: continue` only into graph outputs; approval context | [ADR-0043](../../adr/0043-human-reject-routing-and-gate-context.md) (accepted 2026-11-27) |
+| #186, #183, #190 | Event schema 15: run provenance, `test_command`, `executor_abandoned`; canonical-spec §3 | [ADR-0044](../../adr/0044-event-schema-15-run-context.md) (accepted 2026-11-27) |
+| #181 | Shell capture bound; declared outputs complete or failed | [ADR-0045](../../adr/0045-shell-declared-output-completeness.md) (accepted 2026-11-27) |
 | Q17 (#184, #185, #189) | Requested permissions UI, JSON field selection, Shell isolation (specs only) | [ADR-0039](../../adr/0039-requested-permissions-in-desktop.md), [ADR-0040](../../adr/0040-json-field-selection-in-bindings.md), [ADR-0041](../../adr/0041-shell-node-workspace-isolation.md) (proposed) |
 
 New roadmap decisions: create an ADR with `scripts/new-adr.sh <slug>`, then add a
