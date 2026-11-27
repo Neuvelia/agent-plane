@@ -207,7 +207,7 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F2.8 | Diff między próbami nie jest renderowany w desktopie (silnik F2.8b gotowy). |  |  | F2.8b |
 | F2.9 | JSONL zamiast SQLite. | ADR-0027 |  |  |
 | F2.10 | Panel bez blast radius i bez treści diffu (checki i changed files są). |  | #187 | F3.9 |
-| F2.10 | on_reject: continue (ADR-0043, proposed) tylko gdy decyzję czyta Gate albo output grafu. | ADR-0043 |  |  |
+| F2.10 | on_reject: continue (ADR-0043, proposed) tylko gdy decyzję dostają wyłącznie Gate'y, które ją czytają, i outputy grafu (węzeł z pętlą się nie liczy). | ADR-0043 |  |  |
 | F2.11 | Brak listy repozytoriów i agentów w silniku desktopu; starter agentowy wymaga ręcznego workspace. |  | #188 | F2.13 |
 | F2.11 | Self-check runnera tylko w CLI (agentplane self-check); brak w desktopie. |  |  | F2.15 |
 | F3.1 | Izolacja tylko dla Agent unitów w pętli (opt-in); wynik na refie integracyjnym, bez merge do brancha. | ADR-0024 |  |  |

@@ -431,6 +431,12 @@ func (m *runMachine) record(id, from, to string) {
 			event.Type, event.Payload = events.NodeStarted, events.NodeStartedPayload{}
 		default:
 			failureKind, codes := eventFailure(node.Failure)
+			if to == string(run.NodeCancelled) {
+				// A node cancelled by the run cause follows the run-scoped
+				// cancel_requested. The context.AfterFunc goroutine may not have
+				// emitted it yet, so emit it here (once) before the terminal fact.
+				m.requestRunCancel()
+			}
 			if to == string(run.NodeCancelled) && node.Reason == "" {
 				node.Reason = m.cancelledNodeReason()
 			}
