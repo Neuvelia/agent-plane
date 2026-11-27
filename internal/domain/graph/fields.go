@@ -9,6 +9,7 @@ func HumanConfigFields() []fields.Field {
 		{ID: "human.config.prompt", Key: "prompt", Kind: fields.Text, MaxBytes: humanPromptLimit},
 		{ID: "human.config.context_inputs", Key: "context_inputs", Kind: fields.List, MaxItems: humanContextLimit,
 			Item: &fields.Field{ID: "human.config.context_inputs.item", Kind: fields.InputName, InputTypes: []string{string(ValueTypeString)}}},
+		{ID: "human.config.on_reject", Key: "on_reject", Kind: fields.Enum, Enum: []string{HumanRejectFail, HumanRejectContinue}, Default: HumanRejectFail},
 	}
 }
 
@@ -41,9 +42,9 @@ func LoopProducer(nodeType string) bool { return nodeType == "agent" || nodeType
 func LoopGateKinds(nodeType string) []string {
 	switch nodeType {
 	case "shell":
-		return []string{"command", "json_predicate", "reported_file_scope"}
+		return []string{"command", "json_predicate", "reported_file_scope", gateKindTestCommand}
 	case "agent":
-		return []string{"command", "json_predicate", "reported_file_scope", "changed_files_scope"}
+		return []string{"command", "json_predicate", "reported_file_scope", "changed_files_scope", gateKindTestCommand}
 	}
 	return nil
 }

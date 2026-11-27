@@ -83,7 +83,7 @@ func unusedEdgeInputDiagnostics(def *graph.Definition, reported []graph.Diagnost
 		if !exists || !known || !declared {
 			continue
 		}
-		if nodeReadsInput(n, descriptors, inputID) || isApprovalDependency(def, edge, n) {
+		if nodeReadsInput(n, configFields, inputID) || isApprovalDependency(def, edge, n) {
 			continue
 		}
 		suggestion := unusedEdgeInputSuggestion(inputID, fields.InputKeys(descriptors, string(port.Type)), alwaysReadInputs(descriptors))
@@ -163,17 +163,24 @@ func edgeTarget(edge graph.EdgeDefinition) (string, string, bool) {
 	return parts[0], parts[2], true
 }
 
-// nodeReadsInput reports whether n's configuration or loop bindings read the
-// named input.
-func nodeReadsInput(n graph.NodeDefinition, descriptors []fields.Field, inputID string) bool {
-	if fields.NamedInputs(descriptors, n.Config)[inputID] {
+// nodeReadsInput reports whether n's configuration reads the named input, or
+// whether its loop forwards it (from: node.inputs.<id>) to an embedded Gate
+// input that the Gate's configuration reads. A forwarded input the Gate
+// ignores is not read.
+func nodeReadsInput(n graph.NodeDefinition, configFields map[string][]fields.Field, inputID string) bool {
+	if fields.NamedInputs(configFields[n.Type], n.Config)[inputID] {
 		return true
 	}
 	if n.Loop == nil {
 		return false
 	}
+	// The embedded Gate offers the loop-only kinds (test_command,
+	// changed_files_scope) that the standalone catalogue entry drops.
+	gate := n.Loop.GateNode()
+	gateReads := fields.NamedInputs(gateFields(graph.LoopGateKinds(n.Type)), gate.Config)
 	for _, binding := range n.Loop.Bindings {
-		if binding.From == "node.inputs."+inputID {
+		gateInput, forwarded := strings.CutPrefix(binding.To, "gate.inputs.")
+		if binding.From == "node.inputs."+inputID && forwarded && gateReads[gateInput] {
 			return true
 		}
 	}
@@ -202,11 +209,13 @@ func unusedEdgeInputDiagnostic(graphID string, edge edgeInput, suggestion string
 }
 
 // validateForRun is the gate before a run starts, for the CLI and `serve`: the
-// graph rules and the node types. Node configuration is left to the executors,
-// which report it as a run failure.
+// graph rules and the node types, then the non-blocking unused-edge-input
+// warnings. Node configuration is left to the executors, which report it as a
+// run failure.
 func validateForRun(def *graph.Definition) graph.ValidationResult {
 	result := graph.Validate(def)
 	result.Diagnostics = append(result.Diagnostics, nodeTypeDiagnostics(def, sortedNodeIDs(def))...)
+	result.Diagnostics = append(result.Diagnostics, unusedEdgeInputDiagnostics(def, result.Diagnostics)...)
 	return result
 }
 

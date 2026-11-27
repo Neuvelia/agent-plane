@@ -22,6 +22,7 @@ type cliNode struct {
 	NodeRunID         events.NodeRunID `json:"node_run_id"`
 	Status            run.NodeState    `json:"status"`
 	FailureKind       run.FailureKind  `json:"failure_kind,omitempty"`
+	Reason            run.CancelReason `json:"reason,omitempty"`
 }
 
 // cliOutput is one graph output. Redacted is set when Value is a masked copy;
@@ -67,6 +68,7 @@ type cliDocument struct {
 	SchemaVersion int                `json:"cli_schema_version"`
 	Command       string             `json:"command"`
 	Status        string             `json:"status"`
+	Reason        run.CancelReason   `json:"reason,omitempty"`
 	GraphID       string             `json:"graph_id,omitempty"`
 	GraphVersion  string             `json:"graph_version,omitempty"`
 	RunID         events.RunID       `json:"run_id,omitempty"`
@@ -102,9 +104,9 @@ func documentForRun(result run.Result, diagnostics []graph.Diagnostic) cliDocume
 	nodes := make([]cliNode, 0, len(result.Nodes))
 	outputs := make([]cliOutput, 0, len(result.Outputs))
 	events := result.Events
-	doc := cliDocument{Command: "run", Status: string(result.State), GraphID: result.GraphID, GraphVersion: result.GraphVersion, RunID: result.RunID, Diagnostics: nonNilDiagnostics(diagnostics), Nodes: &nodes, Outputs: &outputs, Events: &events}
+	doc := cliDocument{Command: "run", Status: string(result.State), Reason: result.Reason, GraphID: result.GraphID, GraphVersion: result.GraphVersion, RunID: result.RunID, Diagnostics: nonNilDiagnostics(diagnostics), Nodes: &nodes, Outputs: &outputs, Events: &events}
 	for _, node := range result.Nodes {
-		entry := cliNode{NodeID: node.NodeID, NodeRunID: node.NodeRunID, AcceptedAttemptID: node.AcceptedAttemptID, Status: node.State}
+		entry := cliNode{NodeID: node.NodeID, NodeRunID: node.NodeRunID, AcceptedAttemptID: node.AcceptedAttemptID, Status: node.State, Reason: node.Reason}
 		if node.Failure != nil {
 			entry.FailureKind = node.Failure.Kind
 		}

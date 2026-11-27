@@ -24,6 +24,9 @@ type Executor struct {
 	// EvidenceBound limits the whole command-evidence step; zero selects
 	// commandEvidenceBound. It is independent of the node limit.
 	EvidenceBound time.Duration
+	// TestBound limits one test_command run; zero selects testCommandBound. A
+	// timeout is an operational error, never a verdict.
+	TestBound time.Duration
 	// Termination tunes how an owned process tree is stopped on cancellation.
 	Termination proctree.Policy
 	// diffPath replaces the fixed diff binary in tests only; it never comes
@@ -109,6 +112,11 @@ func (e Executor) evaluate(ctx context.Context, c config, in map[string]graph.Va
 	switch c.Kind {
 	case KindCommand:
 		p, err = e.command(ctx, c, in, o)
+	case KindTestCommand:
+		if !o.LoopGate {
+			return p, ErrTestCommandStandalone
+		}
+		p, err = e.testCommand(ctx, c, o)
 	case KindJSONPredicate:
 		err = predicate(c, in, &p)
 	case KindReportedFileScope:

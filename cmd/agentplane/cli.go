@@ -30,6 +30,7 @@ const (
 	exitUsage       = 2
 	exitGraph       = 3
 	exitRun         = 4
+	exitRunTimeout  = 124 // run deadline, GNU timeout convention (F3.4 Q4)
 	exitInterrupted = 130
 )
 
@@ -46,6 +47,9 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if len(args) >= 1 && args[0] == "run" {
 		return executeCommand(ctx, args[1:], stdout, stderr)
 	}
+	if len(args) >= 1 && args[0] == "self-check" {
+		return selfCheckCommand(ctx, args[1:], stdout, stderr)
+	}
 	if len(args) >= 1 && args[0] == "serve" {
 		return serveCommand(ctx, args[1:], stdout, stderr)
 	}
@@ -58,7 +62,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane runs prune [--store-dir DIR] [--dry-run] [--json] | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane runs prune [--store-dir DIR] [--dry-run] [--json] | agentplane self-check | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -197,7 +201,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
-	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues, SecretResolver: secretResolver()}
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: *concurrency, LogRedactions: redactions, Decisions: decisions, RecordValues: *recordValues, SecretResolver: secretResolver(), RunMetadata: runMetadataFor(path)}
 	configureSecretScan(&opts)
 	opts.StoredMaterial = storedMaterial{graphBytes: graphBytes, def: def, flags: inputs, values: values}
 	if err := isolation.configure(def, &opts); err != nil {
@@ -237,9 +241,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 			return awaitWatchOutput(ctx, done, watchOutputGrace)
 		}
 	}
-	executor := selectExecutor(def)
+	executor := selectExecutor(def, cliAgentRemedy)
 	if *adapterID == "codex" {
-		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}}}
+		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}, Remedy: registeredCodexRemedy}}
 	}
 	result, err := runtime.Run(runCtx, def, values, executor, opts)
 	if writer != nil {
@@ -271,6 +275,9 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	}
 	if result.State == run.RunCancelled {
 		code = exitInterrupted
+		if result.Reason == run.CancelRunTimeout {
+			code = exitRunTimeout
+		}
 	}
 	if persistFailure != nil {
 		code = exitInternal

@@ -58,8 +58,8 @@ func loadTemplateIndex(t *testing.T) templateIndex {
 	if err := d.Decode(&idx); err != nil {
 		t.Fatalf("index.json: %v", err)
 	}
-	if idx.Version != 1 || len(idx.Templates) != 8 {
-		t.Fatalf("index version %d with %d templates, want version 1 with 8", idx.Version, len(idx.Templates))
+	if idx.Version != 1 || len(idx.Templates) != 9 {
+		t.Fatalf("index version %d with %d templates, want version 1 with 9", idx.Version, len(idx.Templates))
 	}
 	return idx
 }
@@ -185,6 +185,19 @@ func TestTemplateDraftsOpenEditableAndRoundTrip(t *testing.T) {
 
 type diagKey struct{ Code, Path string }
 
+// templateWants returns the entry's declared warnings (warnings true) or its
+// declared errors, sorted like diagKeys.
+func templateWants(entry templateEntry, warnings bool) []diagKey {
+	out := []diagKey{}
+	for _, d := range entry.ExpectedDiagnostics {
+		if strings.HasPrefix(d.Code, "W_") == warnings {
+			out = append(out, diagKey{d.Code, d.Path})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return fmt.Sprint(out[i]) < fmt.Sprint(out[j]) })
+	return out
+}
+
 func diagKeys(diags []graph.Diagnostic) []diagKey {
 	out := []diagKey{}
 	for _, d := range diags {
@@ -214,7 +227,8 @@ func TestTemplatesValidateWithExactlyTheDeclaredDiagnostics(t *testing.T) {
 func TestTemplateValidateCommandExitStatus(t *testing.T) {
 	for _, tpl := range loadTemplates(t) {
 		code, _, _ := invoke(t, context.Background(), "graph", "validate", filepath.Join(templateDir, tpl.entry.File))
-		if want := map[bool]int{true: 0, false: 3}[len(tpl.entry.ExpectedDiagnostics) == 0]; code != want {
+		// Warnings never block: only a declared error makes the command fail.
+		if want := map[bool]int{true: 0, false: 3}[len(templateWants(tpl.entry, false)) == 0]; code != want {
 			t.Errorf("%s: graph validate exit %d, want %d", tpl.entry.ID, code, want)
 		}
 	}
@@ -242,8 +256,9 @@ func TestTemplatePlaceholdersAreMarkedAndAreTheOnlyGap(t *testing.T) {
 			}
 			node.Config[parts[3]] = workspace
 		}
-		if diags := validateGraph(tpl.def).Diagnostics; len(diags) != 0 {
-			t.Errorf("%s: filled template still reports %v", id, diagKeys(diags))
+		// Once filled, exactly the declared warnings remain and no error.
+		if diags, want := diagKeys(validateGraph(tpl.def).Diagnostics), templateWants(tpl.entry, true); !reflect.DeepEqual(diags, want) {
+			t.Errorf("%s: filled template reports %v, want only the declared warnings %v", id, diags, want)
 		}
 	}
 }
@@ -628,6 +643,7 @@ func TestSafetyRulesRejectUnsafeFixtures(t *testing.T) {
 }
 
 // The three templates without placeholders must run unedited (Linux and macOS).
+// roadmap: F2.11-AC1
 func TestRunnableTemplatesRunUnedited(t *testing.T) {
 	if goruntime.GOOS != "linux" && goruntime.GOOS != "darwin" {
 		t.Skip("templates use POSIX commands")
@@ -653,6 +669,7 @@ func TestRunnableTemplatesRunUnedited(t *testing.T) {
 		{"parallel-shell", nil, `"left branch done + right branch done\n"`, 0},
 		{"shell-check-loop", nil, `{"ready":true}`, 2},
 		{"human-approval", []string{"--approve", "approve"}, "", 0},
+		{"modify-test-approve", []string{"--approve", "approve"}, "", 0},
 	}
 	for _, c := range cases {
 		args := append([]string{"run", filepath.Join(templateDir, c.id+".yaml"), "--store-dir", t.TempDir(), "--json"}, c.extra...)

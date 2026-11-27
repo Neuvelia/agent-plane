@@ -44,10 +44,10 @@ func hexDigest(s string) string {
 // output and an optional output it never returns.
 func valueGraph() *graph.Definition {
 	def := definition(map[string]graph.NodeDefinition{
-		"a": {Type: "test", Inputs: map[string]graph.PortDefinition{"job": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{
+		"a": {Type: "shell", Inputs: map[string]graph.PortDefinition{"job": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{
 			"text": {Type: graph.ValueTypeString, Required: true}, "doc": {Type: graph.ValueTypeJSON, Required: true}, "maybe": {Type: graph.ValueTypeString},
 		}},
-		"b": {Type: "test", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"n": {Type: graph.ValueTypeNumber, Required: true}, "ok": {Type: graph.ValueTypeBoolean, Required: true}}},
+		"b": {Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"n": {Type: graph.ValueTypeNumber, Required: true}, "ok": {Type: graph.ValueTypeBoolean, Required: true}}},
 	}, graph.EdgeDefinition{From: "a.outputs.text", To: "b.inputs.text"})
 	def.Inputs = map[string]graph.InputDefinition{"job": {Type: graph.ValueTypeString, Required: true}, "unused": {Type: graph.ValueTypeString}}
 	def.GraphInputBindings = []graph.GraphInputBindingDefinition{{From: "inputs.job", To: "a.inputs.job"}}
@@ -185,7 +185,7 @@ func TestValueRecordingRunBudgetOmitsLaterValues(t *testing.T) {
 	const nodes = 70 // 70 * 16 KiB > 1 MiB
 	defs := map[string]graph.NodeDefinition{}
 	for i := 0; i < nodes; i++ {
-		defs[string(rune('a'+i/26))+string(rune('a'+i%26))] = graph.NodeDefinition{Type: "test", Outputs: map[string]graph.PortDefinition{"out": {Type: graph.ValueTypeString, Required: true}}}
+		defs[string(rune('a'+i/26))+string(rune('a'+i%26))] = graph.NodeDefinition{Type: "shell", Outputs: map[string]graph.PortDefinition{"out": {Type: graph.ValueTypeString, Required: true}}}
 	}
 	big := strings.Repeat("v", events.MaxValueBytes+10)
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
@@ -272,7 +272,7 @@ func TestValueRecordingSkipsFailedSkippedAndCancelledNodes(t *testing.T) {
 func TestValueRecordingAcceptsLongPortNames(t *testing.T) {
 	out, in := "o"+strings.Repeat("u", 259), "i"+strings.Repeat("n", 259)
 	def := definition(map[string]graph.NodeDefinition{
-		"a": {Type: "test", Inputs: map[string]graph.PortDefinition{in: {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{out: {Type: graph.ValueTypeString, Required: true}}},
+		"a": {Type: "shell", Inputs: map[string]graph.PortDefinition{in: {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{out: {Type: graph.ValueTypeString, Required: true}}},
 	})
 	def.Inputs = map[string]graph.InputDefinition{in: {Type: graph.ValueTypeString, Required: true}}
 	def.GraphInputBindings = []graph.GraphInputBindingDefinition{{From: graph.GraphInputReference("inputs." + in), To: graph.NodeInputReference("a.inputs." + in)}}

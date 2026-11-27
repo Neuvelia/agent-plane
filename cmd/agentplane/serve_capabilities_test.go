@@ -34,10 +34,10 @@ func TestServeCapabilityCompositionReportsGitCodexThenAgentCLIs(t *testing.T) {
 	for i, tool := range r.Tools {
 		ids[i] = tool.ID
 	}
-	if strings.Join(ids, ",") != "git,codex,claude,cursor-agent,gemini" {
+	if strings.Join(ids, ",") != "git,codex,claude,cursor-agent,gemini,shell,docker" {
 		t.Fatalf("tools %+v", r.Tools)
 	}
-	for _, tool := range r.Tools[2:] {
+	for _, tool := range r.Tools[2:5] {
 		if tool.Kind != "agent_cli" || (tool.Status != capability.StatusMissing && tool.Status != capability.StatusDetectedNoAdapter) {
 			t.Fatalf("agent CLI row %+v", tool)
 		}
@@ -60,7 +60,7 @@ func TestServeExposesTheCapabilityReport(t *testing.T) {
 		t.Fatalf("GET /capabilities: %d %s", status, body)
 	}
 	var r capability.Report
-	if err := json.Unmarshal([]byte(body), &r); err != nil || len(r.Tools) != 5 || r.Engine.Version != version.String() {
+	if err := json.Unmarshal([]byte(body), &r); err != nil || len(r.Tools) != 7 || r.Engine.Version != version.String() {
 		t.Fatalf("report %s (%v)", body, err)
 	}
 	if status, _ := s.call(t, "POST", "/capabilities/check", ""); status != http.StatusOK {

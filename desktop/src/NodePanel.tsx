@@ -1,14 +1,82 @@
 import { useState } from 'react'
 import { decide } from './api'
+import { approvalContext, type UpstreamContext } from './approvalContext'
 import { AttemptCompare } from './AttemptCompare'
 import { CheckResultView } from './check'
 import { canCompare, defaultPair } from './compare'
 import { useI18n } from './i18n/context'
 import { displayStatus, nodeView, type RunView } from './reducer'
-import { ApprovalPill, NodePill, OutcomePill } from './status'
+import { ApprovalPill, NodePill, OutcomePill, VerdictPill } from './status'
 import { Button, Card, KeyValue, SegmentedControl, Tag } from './ui/primitives'
 
-export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = false }: { runId: string; nodeRunId: string; prompt: string; context: { name: string; value: string }[]; disabled?: boolean }) {
+/** Checks and changed files of the nodes the gate depends on (F2.10), so the person decides with evidence at hand. */
+export function ApprovalContext({ items, onOpenNode }: { items: UpstreamContext[]; onOpenNode?: (nodeId: string) => void }) {
+  const { t } = useI18n()
+  if (items.length === 0) return null
+  return (
+    <div className="approval-context stack" data-testid="approval-context">
+      <div className="lb">{t('approval.context.title')}</div>
+      {items.map((u) => (
+        <div className="stack" key={u.nodeId} data-testid="approval-upstream">
+          <div className="row between">
+            <b className="mono">{u.nodeId}</b>
+            {onOpenNode && (
+              <Button size="sm" onClick={() => onOpenNode(u.nodeId)}>
+                {t('approval.context.open', { node: u.nodeId })}
+              </Button>
+            )}
+          </div>
+          <div className="row" data-testid="approval-check">
+            <span className="mu">{t('approval.context.check')}:</span>
+            {u.check ? (
+              <>
+                <VerdictPill verdict={u.check.verdict} />
+                <span className="mono">{u.check.checkId}</span>
+                <span className="mu">{u.check.reason}</span>
+              </>
+            ) : (
+              <span className="mu">{t('approval.context.noCheck')}</span>
+            )}
+          </div>
+          <div data-testid="approval-files">
+            <span className="mu">{t('approval.context.files')}: </span>
+            {u.files ? (
+              <>
+                <span className="mu">{t('approval.context.filesCount', { count: u.files.length + u.moreFiles })}</span>
+                <ul className="mono">
+                  {u.files.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+                {u.moreFiles > 0 && <div className="mu">{t('approval.context.more', { count: u.moreFiles })}</div>}
+              </>
+            ) : (
+              <span className="mu">{t('approval.context.noFiles')}</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function ApprovalBox({
+  runId,
+  nodeRunId,
+  prompt,
+  context,
+  disabled = false,
+  upstream = [],
+  onOpenNode,
+}: {
+  runId: string
+  nodeRunId: string
+  prompt: string
+  context: { name: string; value: string }[]
+  disabled?: boolean
+  upstream?: UpstreamContext[]
+  onOpenNode?: (nodeId: string) => void
+}) {
   const { t } = useI18n()
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
@@ -25,7 +93,9 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
   return (
     <div className="approval" data-testid="approval-box">
       <div className="lb">{t('approval.needed')}</div>
+      <div className="mu">{t('approval.reason')}</div>
       <p>{prompt || t('approval.defaultPrompt')}</p>
+      <ApprovalContext items={upstream} onOpenNode={onOpenNode} />
       {context.length > 0 && <KeyValue rows={context.map((c) => ({ name: c.name, value: c.value }))} />}
       <textarea aria-label={t('approval.comment')} placeholder={t('approval.commentPlaceholder')} value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
       <div className="row">
@@ -43,7 +113,22 @@ export function ApprovalBox({ runId, nodeRunId, prompt, context, disabled = fals
 }
 
 /** Detail of one node. Keyed by node id by the caller, so the chosen attempt and tab reset per node. */
-export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; nodeId: string | null; lost?: boolean; kind?: string }) {
+export function NodePanel({
+  run,
+  nodeId,
+  lost = false,
+  kind,
+  upstream,
+  onOpenNode,
+}: {
+  run: RunView
+  nodeId: string | null
+  lost?: boolean
+  kind?: string
+  /** Direct dependencies of the node from the graph summary; the human gate context is built from them. */
+  upstream?: readonly string[]
+  onOpenNode?: (nodeId: string) => void
+}) {
   const { t } = useI18n()
   const [tab, setTab] = useState<'attempts' | 'compare' | 'log'>('attempts')
   const [chosen, setChosen] = useState<string | null>(null)
@@ -70,8 +155,13 @@ export function NodePanel({ run, nodeId, lost = false, kind }: { run: RunView; n
           {n.diagnosticCodes.length > 0 && ` · ${n.diagnosticCodes.join(', ')}`}
         </div>
       )}
+      {n.abandoned !== undefined && (
+        <div className="err" data-testid="abandoned">
+          {t('node.abandoned', { reason: n.abandoned })}
+        </div>
+      )}
       {status === 'waiting_human' && n.approval && run.runId && n.nodeRunId && (
-        <ApprovalBox runId={run.runId} nodeRunId={n.nodeRunId} prompt={n.approval.prompt} context={n.approval.context} disabled={lost} />
+        <ApprovalBox runId={run.runId} nodeRunId={n.nodeRunId} prompt={n.approval.prompt} context={n.approval.context} disabled={lost} upstream={approvalContext(run, upstream ?? [])} onOpenNode={onOpenNode} />
       )}
       {n.approval?.decision && (
         <div className="decision row" data-testid="decision">

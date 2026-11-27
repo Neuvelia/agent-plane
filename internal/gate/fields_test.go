@@ -27,9 +27,12 @@ func gateBases(dir string) map[string]graph.NodeDefinition {
 			map[string]graph.PortDefinition{"files": required(graph.ValueTypeJSON)}),
 		KindChangedFilesScope: node(graph.NodeConfig{"kind": KindChangedFilesScope, "input": "candidate", "allowed_paths": []any{"src/"}, "mode": "warn", "workspace": dir},
 			map[string]graph.PortDefinition{"candidate": required(graph.ValueTypeString)}),
+		KindTestCommand: node(graph.NodeConfig{"kind": KindTestCommand, "command": "pytest", "args": []any{"-q"}, "cwd": dir, "side_effects": SideEffectsWorkspace, "input": "candidate"},
+			map[string]graph.PortDefinition{"candidate": required(graph.ValueTypeString)}),
 	}
 }
 
+// roadmap: F1.4b-AC9
 func TestConfigFieldsEqualTheExecutorForEveryKind(t *testing.T) {
 	dir := t.TempDir()
 	samples := map[string]any{
@@ -49,6 +52,13 @@ func TestConfigFieldsEqualTheExecutorForEveryKind(t *testing.T) {
 		"gate.config.changed_files_scope.allowed_paths": []any{"src/", "docs/a.md"},
 		"gate.config.changed_files_scope.mode":          "deny",
 		"gate.config.changed_files_scope.workspace":     dir,
+		"gate.config.test_command.command":              "pytest",
+		"gate.config.test_command.args":                 []any{"-q", "tests/"},
+		"gate.config.test_command.cwd":                  dir,
+		"gate.config.test_command.env_allowlist":        []any{"PATH"},
+		"gate.config.test_command.env":                  map[string]any{"CI": "1"},
+		"gate.config.test_command.side_effects":         SideEffectsNone,
+		"gate.config.test_command.input":                "candidate",
 	}
 	kinds := fields.AllowedKeys(ConfigFields(), nil)
 	if !kinds["kind"] || !kinds["check_id"] {
@@ -95,5 +105,6 @@ func TestOutputPortsEqualTheExecutor(t *testing.T) {
 
 func TestConfigKeysArePinnedToTheSpec(t *testing.T) {
 	fieldstest.PinKeys(t, ConfigFields(), "check_id", "kind", "command", "cwd", "left_input", "right_input",
-		"input", "field", "operator", "expected", "expected_json", "allowed_paths", "mode", "workspace")
+		"input", "field", "operator", "expected", "expected_json", "allowed_paths", "mode", "workspace",
+		"args", "env_allowlist", "env", "side_effects")
 }

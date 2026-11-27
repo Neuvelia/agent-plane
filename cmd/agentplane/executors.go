@@ -3,6 +3,7 @@ package main
 import (
 	"reflect"
 
+	"agentplane/internal/agent"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
 	"agentplane/internal/shell"
@@ -15,11 +16,39 @@ const shellNodeType = "shell"
 // the bare Shell executor for plain Shell graphs, so their output rules stay
 // exactly as they were, and the composed node executor for everything else.
 // run and serve share it so both entry points deliver secrets alike.
-func selectExecutor(def *graph.Definition) runtime.Executor {
+func selectExecutor(def *graph.Definition, remedy func(agent.AdapterID) string) runtime.Executor {
 	if needsNodeExecutor(def) {
-		return nodeExecutor{}
+		return nodeExecutor{agents: agent.Executor{Remedy: remedy}}
 	}
 	return shell.Executor{}
+}
+
+// cliAgentRemedy is the remedy `run` gives for an unavailable adapter: the
+// flags that register it. Only the Codex adapter has such flags.
+func cliAgentRemedy(id agent.AdapterID) string {
+	if id != "codex" {
+		return ""
+	}
+	return "run with --adapter codex --codex-bin ABSOLUTE_PATH of the installed Codex CLI"
+}
+
+// registeredCodexRemedy is the remedy `run` gives once --adapter codex has
+// registered the adapter: repeating the flags the user already passed would
+// not help, so it points at the binary they named instead.
+func registeredCodexRemedy(id agent.AdapterID) string {
+	if id != "codex" {
+		return ""
+	}
+	return "check that the Codex CLI named by --codex-bin is installed and runs"
+}
+
+// serveAgentRemedy is the remedy `serve` (the desktop engine) gives: it runs no
+// Agent adapter, so an Agent node runs from the CLI.
+func serveAgentRemedy(id agent.AdapterID) string {
+	if id != "codex" {
+		return "the desktop engine runs no Agent adapter"
+	}
+	return "the desktop engine runs no Agent adapter; run this graph with `agentplane run --adapter codex --codex-bin ABSOLUTE_PATH`"
 }
 
 // needsNodeExecutor reports whether the graph needs the composed executor: a

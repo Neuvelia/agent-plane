@@ -26,6 +26,14 @@
       "expected_diagnostics": []
     },
     {
+      "id": "modify-test-approve",
+      "file": "modify-test-approve.yaml",
+      "requires": [],
+      "platforms": ["linux", "darwin"],
+      "placeholders": [],
+      "expected_diagnostics": []
+    },
+    {
       "id": "agent-scoped-approval",
       "file": "agent-scoped-approval.yaml",
       "requires": ["git", "codex"],

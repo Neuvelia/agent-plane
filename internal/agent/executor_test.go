@@ -264,3 +264,35 @@ func TestAgentExecutorRejectsNilContext(t *testing.T) {
 		t.Fatalf("nil context error = %v", err)
 	}
 }
+
+// roadmap: F1.2-AC2
+func TestAgentUnavailableAndUnregisteredErrorsNameTheEntryPointsRemedy(t *testing.T) {
+	opts := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}}
+	inputs := map[string]graph.Value{"job": graph.NewStringValue("task")}
+	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: false, DisplayName: "Test CLI"}}
+	remedy := func(id agent.AdapterID) string { return "configure " + string(id) + " in Settings" }
+	for name, tc := range map[string]struct {
+		adapters map[agent.AdapterID]agent.AgentAdapter
+		want     string
+	}{
+		"unavailable":  {map[agent.AdapterID]agent.AgentAdapter{"test-adapter": m}, "Test CLI reported that it is unavailable"},
+		"unregistered": {map[agent.AdapterID]agent.AgentAdapter{}, `adapter "test-adapter" is not registered`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			for _, withRemedy := range []bool{true, false} {
+				executor := agent.Executor{Adapters: tc.adapters}
+				if withRemedy {
+					executor.Remedy = remedy
+				}
+				result, err := runtime.Run(context.Background(), agentGraph(t.TempDir()), inputs, executor, opts)
+				if err != nil || result.Failure == nil {
+					t.Fatalf("Run = %+v, %v", result, err)
+				}
+				msg := result.Failure.Err.Error()
+				if !strings.Contains(msg, tc.want) || strings.Contains(msg, "configure test-adapter in Settings") != withRemedy || strings.Contains(msg, "--codex-bin") {
+					t.Fatalf("remedy=%v message %q", withRemedy, msg)
+				}
+			}
+		})
+	}
+}

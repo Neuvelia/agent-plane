@@ -5,7 +5,6 @@ import (
 	"agentplane/internal/domain/run"
 	"agentplane/internal/domain/secrets"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -53,6 +52,11 @@ type ExecutionObservation struct {
 	Progress           func(events.Type, events.Payload)
 	Check              func(events.GateCheckPayload)
 	NewCheckCapture    func() *CheckCapture
+	// LoopGate is set only when the executor runs a loop's embedded Gate: an
+	// attempt is open (AttemptID set) and the call is not the producer
+	// (AttemptNumber 0). Kinds that may run only there, such as test_command
+	// (ADR-0042), refuse every other call.
+	LoopGate bool
 	// SecretEnv holds the resolved secrets of this node run (F3.8). It is empty
 	// for nodes without assignment and for a loop's embedded Gate, prints only a
 	// count and refuses serialization; only the process launcher reads it.
@@ -123,6 +127,13 @@ type Options struct {
 	Clock trace.Clock
 	// IDs generates run, node-run and attempt identifiers. Required.
 	IDs IDGenerator
+	// RunMetadata describes the repository and engine for run_started (F2.9,
+	// F3.6). Optional and best effort: it must degrade to empty fields when Git
+	// or a repository is absent and can never fail or delay a run beyond ctx.
+	RunMetadata func(context.Context) RunMetadata
+	// TimeLimits tunes the authored-second unit and the abandon bound of
+	// timeouts (F3.4). The zero value is the production behaviour.
+	TimeLimits TimeLimits
 }
 
 // IDGenerator is the engine's source of identifiers; the composition root
@@ -144,6 +155,10 @@ type completedNode struct {
 	diagnostics  []graph.Diagnostic
 	diff         *attemptDiffResult
 	err          error
+	// timedOut: the node deadline ended this attempt while the run was live.
+	// shutdown: the executor ignored cancellation and was abandoned.
+	timedOut bool
+	shutdown bool
 	// scan is the node run's secret_in_workspace Check Result, set by the worker
 	// after the final attempt and emitted by the coordinator.
 	scan *events.GateCheckPayload
@@ -166,12 +181,19 @@ type runMachine struct {
 	result      run.Result
 	emitter     *trace.Collector
 	startedAt   time.Time
+	metadata    RunMetadata
 	nodeStarted map[string]time.Time
 	decisions   DecisionProvider
 	values      *valueRecorder
 	diffs       *diffRecorder
 	attemptIDs  IDGenerator
 	clock       trace.Clock
+	// ctx is the run context, including the run deadline. It is read only to
+	// derive the typed cancel cause for terminal reasons (ADR-0028).
+	ctx        context.Context
+	cancelMu   sync.Mutex
+	cancelSent bool
+	runEnded   bool
 	// grants is the in-memory secret environment per assigned node; read only by
 	// secretEnvFor.
 	grants map[string]secrets.Env
@@ -180,6 +202,8 @@ type runMachine struct {
 	scans   scanBook
 	// resultRedactor masks the copies snapshot returns; nil without redactions.
 	resultRedactor *resultRedactor
+	// limits applies the authored timeouts (Options.TimeLimits).
+	limits TimeLimits
 }
 
 // Run executes one validated graph in memory. A non-nil error means preflight
@@ -197,6 +221,20 @@ func Run(ctx context.Context, definition *graph.Definition, inputs map[string]gr
 	if err != nil {
 		return run.Result{}, err
 	}
+	// The run deadline (F3.4) cancels a derived run context with a typed cause.
+	// It starts after run_started so it measures the run, not preflight. Without
+	// a limit the caller's context is used unchanged.
+	if definition.Limits != nil && definition.Limits.RunTimeoutSeconds != nil {
+		var cancelRun context.CancelCauseFunc
+		ctx, cancelRun = context.WithCancelCause(ctx)
+		defer cancelRun(nil)
+		timer := time.AfterFunc(options.TimeLimits.seconds(*definition.Limits.RunTimeoutSeconds), func() {
+			cancelRun(run.CancelCause{Reason: run.CancelRunTimeout})
+		})
+		defer timer.Stop()
+	}
+	machine.ctx = ctx
+	defer context.AfterFunc(ctx, machine.requestRunCancel)()
 	plan := prepared.plan
 	graphInputs := prepared.graphInputs
 	redactionTemplate := prepared.redactionTemplate
@@ -321,6 +359,7 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 		attemptIDs:  options.IDs,
 		clock:       options.Clock,
 		worktrees:   map[string]*isolatedWorkspace{},
+		limits:      options.TimeLimits,
 	}
 	for _, id := range ids {
 		nodeRunID, err := options.IDs.NewNodeRunID()
@@ -331,6 +370,9 @@ func newRunMachine(ctx context.Context, definition *graph.Definition, options Op
 	}
 	m.emitter = trace.NewCollectorWithLiveEvents(ctx, options.Clock, runID, definition.ID, version, live)
 	m.emitter.SetPersist(persist)
+	if options.RunMetadata != nil {
+		m.metadata = collectMetadata(ctx, options.RunMetadata)
+	}
 	m.record("", "", string(run.RunRunning))
 	return m, nil
 }
@@ -348,7 +390,7 @@ func (m *runMachine) record(id, from, to string) {
 	if id == "" {
 		if from == "" {
 			event.Type = events.RunStarted
-			event.Payload = events.RunStartedPayload{NodeCount: len(m.ids)}
+			event.Payload = events.RunStartedPayload{NodeCount: len(m.ids), RepoName: m.metadata.RepoName, RepoID: m.metadata.RepoID, RepoBranch: m.metadata.RepoBranch, RepoCommit: m.metadata.RepoCommit, RuntimeVersion: m.metadata.RuntimeVersion}
 		} else {
 			event.Type = events.RunFinished
 			counts := events.NodeCounts{}
@@ -365,7 +407,13 @@ func (m *runMachine) record(id, from, to string) {
 				}
 			}
 			failureKind, _ := eventFailure(m.result.Failure)
-			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: m.clock.Now().Sub(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind}
+			switch {
+			case to == string(run.RunCancelled):
+				m.result.Reason = m.causeReason()
+			case failureKind == string(run.FailureTimeout):
+				m.result.Reason = run.CancelNodeTimeout
+			}
+			event.Payload = events.RunFinishedPayload{Status: to, DurationMS: m.clock.Now().Sub(m.startedAt).Milliseconds(), NodeCounts: counts, FailureKind: failureKind, Reason: string(m.result.Reason)}
 		}
 	} else {
 		node := m.nodes[id]
@@ -377,11 +425,24 @@ func (m *runMachine) record(id, from, to string) {
 			event.Type, event.Payload = events.NodeStarted, events.NodeStartedPayload{}
 		default:
 			failureKind, codes := eventFailure(node.Failure)
+			if to == string(run.NodeCancelled) {
+				// A node cancelled by the run cause follows the run-scoped
+				// cancel_requested. The context.AfterFunc goroutine may not have
+				// emitted it yet, so emit it here (once) before the terminal fact.
+				m.requestRunCancel()
+			}
+			if to == string(run.NodeCancelled) && node.Reason == "" {
+				node.Reason = m.cancelledNodeReason()
+			}
+			reason := ""
+			if to == string(run.NodeCancelled) || failureKind == string(run.FailureTimeout) {
+				reason = string(node.Reason)
+			}
 			if from == string(run.NodeRunning) {
 				duration := m.clock.Now().Sub(m.nodeStarted[id]).Milliseconds()
-				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes, DurationMS: &duration}
+				event.Type, event.Payload = events.NodeFinished, events.NodeFinishedPayload{Status: to, FailureKind: failureKind, Reason: reason, DiagnosticCodes: codes, DurationMS: &duration}
 			} else {
-				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, DiagnosticCodes: codes}
+				event.Type, event.Payload = events.NodeTerminated, events.NodeTerminatedPayload{Status: to, FailureKind: failureKind, Reason: reason, DiagnosticCodes: codes}
 			}
 		}
 	}
@@ -430,6 +491,12 @@ func (m *runMachine) finish(ctx context.Context, to run.State) {
 		panic(fmt.Sprintf("invalid scheduler run transition: %s -> %s", m.result.State, to))
 	}
 	from := m.result.State
+	if to == run.RunCancelled {
+		m.requestRunCancel()
+	}
+	m.cancelMu.Lock()
+	m.runEnded = true
+	m.cancelMu.Unlock()
 	m.result.State = to
 	m.record("", string(from), string(to))
 }
@@ -598,6 +665,17 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 	var evidence *events.NodeEvidencePayload
 	var check *events.GateCheckPayload
 	checkInvalid := false
+	runCtx := ctx
+	ctx, settleDeadline, stopDeadline := m.withNodeDeadline(runCtx, id, node, attemptID)
+	defer stopDeadline()
+	var ignored run.CancelReason
+	deadlineFired := false
+	call := func(fn func() execOutcome) {
+		var o execOutcome
+		o, ignored = callBounded(ctx, m.limits.abandonBound(), fn)
+		deadlineFired = settleDeadline()
+		outputs, evidence, err = o.outputs, o.evidence, o.err
+	}
 	streaming, hasLogs := executor.(LogStreamingExecutor)
 	observed, hasObserved := executor.(ObservedExecutor)
 	if hasLogs || hasObserved {
@@ -646,92 +724,23 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 				checkInvalid = true
 				return
 			}
-			snapshot := events.CloneGate(p)
-			redact := func(s string) string { return progress.redact(s) }
-			snapshot.CheckID = redact(snapshot.CheckID)
-			snapshot.Reason = redact(snapshot.Reason)
-			if snapshot.ChangedFiles != nil {
-				for i, path := range snapshot.ChangedFiles.AllowedPaths {
-					snapshot.ChangedFiles.AllowedPaths[i] = redact(path)
-					snapshot.ChangedFiles.ScopeRedacted = snapshot.ChangedFiles.ScopeRedacted || snapshot.ChangedFiles.AllowedPaths[i] != path
-				}
-				sort.Strings(snapshot.ChangedFiles.AllowedPaths)
-				if snapshot.ChangedFiles.ScopeRedacted {
-					unique := snapshot.ChangedFiles.AllowedPaths[:0]
-					for _, path := range snapshot.ChangedFiles.AllowedPaths {
-						if len(unique) == 0 || unique[len(unique)-1] != path {
-							unique = append(unique, path)
-						}
-					}
-					snapshot.ChangedFiles.AllowedPaths = unique
-				}
-			}
-			for i := range snapshot.Scope.CheckedInputs {
-				snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
-			}
-			sort.Strings(snapshot.Scope.CheckedInputs)
-			for i := range snapshot.Evidence {
-				e := &snapshot.Evidence[i]
-				e.Path = redact(e.Path)
-				if e.Reference != nil {
-					e.Reference.Identifier = redact(e.Reference.Identifier)
-					e.Reference.Reason = redact(e.Reference.Reason)
-				}
-				// Byte evidence is redacted again at the trust boundary for custom executors.
-				r := redactionTemplate.clone()
-				b := append([]byte(nil), r.Write(events.Stdout, e.Stdout)...)
-				e.Stdout = append(b, r.Flush(events.Stdout)...)
-				r = redactionTemplate.clone()
-				b = append([]byte(nil), r.Write(events.Stderr, e.Stderr)...)
-				e.Stderr = append(b, r.Flush(events.Stderr)...)
-			}
-			if snapshot.Kind == events.CheckChangedFilesScope {
-				sort.SliceStable(snapshot.Evidence, func(i, j int) bool {
-					if snapshot.Evidence[i].Path == "" {
-						return false
-					}
-					if snapshot.Evidence[j].Path == "" {
-						return true
-					}
-					return snapshot.Evidence[i].Path < snapshot.Evidence[j].Path
-				})
-				// Redaction can expand path text after the Gate has applied its
-				// payload budget. Preserve a bounded, valid check by replacing
-				// excess path entries with a counted omission marker.
-				for {
-					encoded, marshalErr := json.Marshal(snapshot)
-					if marshalErr != nil || len(encoded) <= events.MaxGatePayload {
-						break
-					}
-					lastPath := -1
-					for i := len(snapshot.Evidence) - 1; i >= 0; i-- {
-						if snapshot.Evidence[i].Path != "" {
-							lastPath = i
-							break
-						}
-					}
-					if lastPath < 0 {
-						break
-					}
-					snapshot.Evidence = append(snapshot.Evidence[:lastPath], snapshot.Evidence[lastPath+1:]...)
-					last := len(snapshot.Evidence) - 1
-					if last >= 0 && snapshot.Evidence[last].Path == "" && snapshot.Evidence[last].Omitted > 0 {
-						snapshot.Evidence[last].Omitted++
-					} else {
-						snapshot.Evidence = append(snapshot.Evidence, events.GateEvidence{Kind: events.EvidenceKind(events.CheckChangedFilesScope), Source: "git", Omitted: 1, Reference: &events.EvidenceReference{Kind: "diff", State: "unavailable", Reason: "paths_exceed_evidence_limit"}})
-					}
-				}
-			}
-			if snapshot.Validate() != nil {
+			snapshot, valid := redactedCheck(p, progress.redact, redactionTemplate)
+			if !valid {
 				checkInvalid = true
 				return
 			}
 			check = &snapshot
 		}
 		if hasObserved {
-			outputs, evidence, err = observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }, SecretEnv: m.secretEnvFor(id, node)})
+			call(func() execOutcome {
+				o, ev, e := observed.ExecuteNodeObserved(ctx, id, node, resolved, ExecutionObservation{AttemptNumber: attemptNumber, LoopGate: attemptID != "" && attemptNumber == 0, ScopeBaseline: baseline, ScopeBaselineError: baselineError, Feedback: run.CloneFeedback(feedback), Correlation: run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID}, Log: observer, Progress: observerProgress, Check: observeCheck, NewCheckCapture: func() *CheckCapture { return newCheckCapture(redactionTemplate) }, SecretEnv: m.secretEnvFor(id, node)})
+				return execOutcome{outputs: o, evidence: ev, err: e}
+			})
 		} else {
-			outputs, err = streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+			call(func() execOutcome {
+				o, e := streaming.ExecuteNodeWithLogs(ctx, id, node, resolved, observer)
+				return execOutcome{outputs: o, err: e}
+			})
 		}
 		logMu.Lock()
 		emitLog(events.Stdout, redactor.Flush(events.Stdout))
@@ -740,25 +749,21 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 		closed = true
 		logMu.Unlock()
 	} else if correlated, ok := executor.(CorrelatedExecutor); ok {
-		outputs, err = correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
+		call(func() execOutcome {
+			o, e := correlated.ExecuteNodeWithCorrelation(ctx, id, node, resolved, run.ExecutionCorrelation{RunID: m.result.RunID, NodeRunID: nodeRunID, AttemptID: attemptID})
+			return execOutcome{outputs: o, err: e}
+		})
 	} else {
-		outputs, err = executor.ExecuteNode(ctx, id, node, resolved)
+		call(func() execOutcome {
+			o, e := executor.ExecuteNode(ctx, id, node, resolved)
+			return execOutcome{outputs: o, err: e}
+		})
 	}
+	abandoned := ignored != ""
+	timedOut := err != nil && nodeTimedOut(runCtx, deadlineFired)
+	m.reportCallEnd(id, attemptID, err, ignored, timedOut || runCtx.Err() != nil)
 	if evidence != nil {
-		snapshot := *evidence
-		snapshot.ChangedFiles = append([]events.ChangedFile{}, evidence.ChangedFiles...)
-		redact := func(s string) string {
-			r := redactionTemplate.clone()
-			data := append([]byte{}, r.Write(events.Stdout, []byte(s))...)
-			data = append(data, r.Flush(events.Stdout)...)
-			return string(data)
-		}
-		snapshot.AdapterID = redact(snapshot.AdapterID)
-		snapshot.AdapterVersion = redact(snapshot.AdapterVersion)
-		for i := range snapshot.ChangedFiles {
-			snapshot.ChangedFiles[i].Path = redact(snapshot.ChangedFiles[i].Path)
-		}
-		evidence = &snapshot
+		evidence = redactedEvidence(*evidence, redactionTemplate)
 	}
-	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err}
+	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err, timedOut: timedOut && !abandoned, shutdown: abandoned}
 }

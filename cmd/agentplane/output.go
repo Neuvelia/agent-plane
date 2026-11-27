@@ -209,10 +209,10 @@ func (r *eventRenderer) Event(event events.Event) error {
 		}
 		payload := event.Payload.(events.NodeFinishedPayload)
 		if payload.DurationMS != nil {
-			_, err := fmt.Fprintf(r.stderr, "%s %s %dms\n", event.NodeID, payload.Status, *payload.DurationMS)
+			_, err := fmt.Fprintf(r.stderr, "%s %s %dms\n", event.NodeID, withReason(payload.Status, payload.Reason), *payload.DurationMS)
 			return err
 		} else {
-			_, err := fmt.Fprintf(r.stderr, "%s %s\n", event.NodeID, payload.Status)
+			_, err := fmt.Fprintf(r.stderr, "%s %s\n", event.NodeID, withReason(payload.Status, payload.Reason))
 			return err
 		}
 	case events.NodeTerminated:
@@ -220,17 +220,27 @@ func (r *eventRenderer) Event(event events.Event) error {
 			return err
 		}
 		payload := event.Payload.(events.NodeTerminatedPayload)
-		_, err := fmt.Fprintf(r.stderr, "%s %s\n", event.NodeID, payload.Status)
+		_, err := fmt.Fprintf(r.stderr, "%s %s\n", event.NodeID, withReason(payload.Status, payload.Reason))
 		return err
 	case events.RunFinished:
 		if err := r.flushAll(); err != nil {
 			return err
 		}
 		payload := event.Payload.(events.RunFinishedPayload)
-		_, err := fmt.Fprintf(r.stderr, "Run %s\n", payload.Status)
+		_, err := fmt.Fprintf(r.stderr, "Run %s\n", withReason(payload.Status, payload.Reason))
 		return err
 	}
 	return nil
+}
+
+// withReason appends the typed cancel or timeout reason of a terminal fact
+// (F3.4): "cancelled (run_timeout)". The reason comes from a closed
+// vocabulary, never from process output.
+func withReason(status, reason string) string {
+	if reason == "" {
+		return status
+	}
+	return status + " (" + reason + ")"
 }
 
 func (r *eventRenderer) logLine(key logKey, content string) error {

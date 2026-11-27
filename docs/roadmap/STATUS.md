@@ -12,9 +12,9 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 
 | Phase | Name | P0 done | P1 done | P2 done | Exit criterion |
 | --- | --- | --- | --- | --- | --- |
-| 0 | Execution Core | 5/7 (71%) | - | - | met |
-| 1 | Agent Loop | 3/7 (42%) +3 diverged | 1/1 (100%) | - | met |
-| 2 | Local IDE | 4/9 (44%) | 1/3 (33%) | - | partial |
+| 0 | Execution Core | 5/7 (71%) +2 diverged | - | - | met |
+| 1 | Agent Loop | 4/7 (57%) +3 diverged | 1/1 (100%) | - | met |
+| 2 | Local IDE | 4/9 (44%) +1 diverged | 1/3 (33%) +1 diverged | - | partial |
 | 3 | Local Production Ready | 1/9 (11%) | 0/2 (0%) | - | not_met |
 | 4 | Connected Control Plane | 0/9 (0%) | 0/1 (0%) | - | not_met |
 | 5 | Pro / Team | 0/8 (0%) | 0/4 (0%) | - | not_met |
@@ -26,11 +26,11 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 
 | ID | Feature | Priority | Status | Criteria met | Issues |
 | --- | --- | --- | --- | --- | --- |
-| [F0.1](../../docs/features/F0.1-graph-definition-schema-v0.md) | Graph Definition Schema v0 | P0 | partial | 3/3 | #179 |
+| [F0.1](../../docs/features/F0.1-graph-definition-schema-v0.md) | Graph Definition Schema v0 | P0 | diverged | 3/3 | #179 |
 | [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | done | 4/4 | #180 |
 | [F0.3](../../docs/features/F0.3-data-bindings.md) | Data bindings na edge'ach | P0 | done | 2/2 |  |
 | [F0.4](../../docs/features/F0.4-dag-scheduler.md) | DAG Scheduler in-memory | P0 | done | 3/3 |  |
-| [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | partial | 3/3 | #181 |
+| [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | diverged | 3/3 | #181 |
 | [F0.6](../../docs/features/F0.6-event-model.md) | Event Model i Run/Node IDs | P0 | done | 3/3 |  |
 | [F0.7](../../docs/features/F0.7-cli-runner.md) | CLI Runner | P0 | done | 2/2 |  |
 
@@ -43,9 +43,9 @@ Note: Spełnione z gate'em typu diff, nie testem; test command jako check to F1.
 | ID | Feature | Priority | Status | Criteria met | Issues |
 | --- | --- | --- | --- | --- | --- |
 | [F1.1](../../docs/features/F1.1-agent-adapter-contract.md) | Agent Adapter Contract | P0 | done | 2/2 |  |
-| [F1.2](../../docs/features/F1.2-first-coding-agent-adapter.md) | Pierwszy coding-agent adapter | P0 | partial | 2/3 | #182 |
+| [F1.2](../../docs/features/F1.2-first-coding-agent-adapter.md) | Pierwszy coding-agent adapter | P0 | done | 3/3 | #182 |
 | [F1.3](../../docs/features/F1.3-unified-streaming.md) | Unified Streaming | P0 | diverged | 3/3 |  |
-| [F1.4](../../docs/features/F1.4-gate-node.md) | Gate Node | P0 | diverged | 2/3 | #183 |
+| [F1.4](../../docs/features/F1.4-gate-node.md) | Gate Node | P0 | diverged | 3/3 | #183 |
 | [F1.5](../../docs/features/F1.5-check-result-contract.md) | Check Result Contract | P0 | diverged | 2/2 |  |
 | [F1.6](../../docs/features/F1.6-correction-loop.md) | Correction Loop + maxAttempts | P0 | done | 3/3 |  |
 | [F1.7](../../docs/features/F1.7-return-envelope-scoped-retry.md) | Return Envelope / scoped retry | P0 | done | 2/2 |  |
@@ -67,9 +67,9 @@ Note: Spełnione dla grafów shell + human; brak e2e z node'em agent z desktopu;
 | [F2.6](../../docs/features/F2.6-run-inspector-overview.md) | Run Inspector - Overview | P0 | done | 2/2 |  |
 | [F2.7](../../docs/features/F2.7-run-inspector-node-detail.md) | Run Inspector - Node Detail | P0 | partial | 1/2 |  |
 | [F2.8](../../docs/features/F2.8-attempt-compare.md) | Attempt Compare | P1 | partial | 1/1 |  |
-| [F2.9](../../docs/features/F2.9-run-store.md) | Local Run History + SQLite | P0 | partial | 2/2 | #186 |
+| [F2.9](../../docs/features/F2.9-run-store.md) | Local Run History + SQLite | P0 | diverged | 2/2 | #186 |
 | [F2.10](../../docs/features/F2.10-human-node.md) | Human Gate UI | P0 | partial | 2/2 | #187 |
-| [F2.11](../../docs/features/F2.11-onboarding-capability-detection.md) | Onboarding + Capability Detection | P1 | partial | 0/1 | #188, #85 |
+| [F2.11](../../docs/features/F2.11-onboarding-capability-detection.md) | Onboarding + Capability Detection | P1 | diverged | 1/1 | #188, #85 |
 | [F2.12](../../docs/features/F2.12-graph-templates.md) | Graph Templates | P1 | done | 1/1 |  |
 
 ## Phase 3 - Local Production Ready (v0.4)
@@ -83,7 +83,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | [F3.1](../../docs/features/F3.1-workspace-isolation.md) | Workspace Isolation / Git Worktrees | P0 | partial | 2/2 | #189 |
 | [F3.2](../../docs/features/F3.2-durable-run-state.md) | Durable Run State / Append-only Event Store | P0 | done | 2/2 |  |
 | F3.3 | Resume / Recovery | P0 | not_started | 0/2 |  |
-| [F3.4](../../docs/features/F3.4-cancellation-and-timeouts.md) | Cancellation i Timeouts | P0 | in_progress | 1/2 | #190 |
+| [F3.4](../../docs/features/F3.4-cancellation-and-timeouts.md) | Cancellation i Timeouts | P0 | partial | 2/2 | #190 |
 | F3.5 | Artifact Store Local | P0 | not_started | 0/2 |  |
 | F3.6 | Graph Versioning i Run Reproducibility | P0 | partial | 1/2 | #186 |
 | F3.7 | Export JSON/CSV | P0 | not_started | 0/2 |  |
@@ -154,13 +154,22 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 
 | ID | Name | Kind | Parent | Status | Note |
 | --- | --- | --- | --- | --- | --- |
-| F1.4b | Test command as a loop check | derived | F1.4 | not_started | Nowy feature z decyzji D12; spec i ADR do napisania. |
+| [F1.4b](../../docs/features/F1.4b-test-command-loop-check.md) | Test command as a loop check | derived | F1.4 | done | ADR-0042 zaakceptowany przez właściciela 2026-11-27; nowy rodzaj check od schema 15 (ADR-0044). |
 | [F1.6a](../../docs/features/F1.6a-shell-loop.md) | Shell node correction loop | derived | F1.6 | done |  |
 | [F2.3-E6](../../docs/features/F2.3-E6-recorded-run-values.md) | Recorded run values (value_recorded) | derived | F2.3 | done |  |
 | [F2.5a](../../docs/features/F2.5a-desktop-redesign.md) | Desktop redesign (Tarmind design system, PL/EN) | derived | F2.5 | done | Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2. |
 | F2.8a | Attempt compare (desktop) | derived | F2.8 | done |  |
 | F2.8b | Attempt diff capture and display | derived | F2.8 | in_progress | Silnik (--record-diffs, attempt_diff) gotowy; panel w desktopie nie. |
 | [F3.4a](../../docs/features/F3.4a-windows-process-tree-termination.md) | Windows process-tree termination | derived | F3.4 | in_progress | proctree_windows.go istnieje, nigdy nie uruchomiony na Windows. |
+| [F2.3b](../../docs/features/F2.3b-json-field-selection.md) | JSON field selection in data bindings | derived | F2.3 | not_started | Spec i ADR-0040 proposed; wymaga wyboru właściciela (pole w bindingu albo przyszły node Code). |
+| F3.1b | Downstream file visibility | derived | F3.1 | not_started | Baza = baza runu + zaakceptowane unity upstream (ADR-0024, decyzja 5); bez speca. |
+| [F3.1c](../../docs/features/F3.1c-shell-workspace-isolation.md) | Workspace isolation for Shell loop producers | derived | F3.1 | not_started | Spec i ADR-0041 proposed. |
+| [F3.9c](../../docs/features/F3.9c-requested-permissions-ui.md) | Requested permissions in the desktop | derived | F3.9 | not_started | Spec i ADR-0039 proposed; zablokowane przez F3.9. |
+| F2.13 | Repository list and manual folder add | future |  | deferred | Dostarcza ścieżkę, której potrzebuje workspace szablonu; bez speca. |
+| F2.14 | Agent nodes in the desktop engine | future |  | deferred | Usuwa AGENTPLANE_CODEX_BIN i ręczny workspace; bez speca. |
+| F2.15 | Desktop runner self-check | future |  | deferred | CLI agentplane self-check istnieje; brak trasy i przycisku w desktopie. |
+| F2.16 | Desktop/engine version check | future |  | deferred | Bez speca. |
+| F3.12 | Using Docker | future |  | deferred | F2.11 tylko raportuje obecność Dockera; uruchamianie unitów w kontenerze to ten feature. |
 | FX.1 | Dynamic fan-out units (foreach / Splitter) | future |  | deferred | Z decyzji D13; brak fazy w roadmapie. |
 | [REL1](../../docs/features/REL1-release-engineering.md) | Release engineering | enabler |  | in_progress | LICENSE jest; brak tagów i paczek. |
 | [REL2](../../docs/features/REL2-public-roadmap-status.md) | Public roadmap status feed | enabler |  | not_started | Feed ma być generowany z features.yaml (ADR-0038). |
@@ -176,11 +185,7 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 
 | Criterion | Text | Issue | Note |
 | --- | --- | --- | --- |
-| F1.2-AC2 | Brak zainstalowanego CLI daje actionable error, nie panic. | #182 | brak panic, ale komunikat nie jest actionable |
-| F1.4-AC1 | Failing test daje verdict red i blokuje downstream. | #183 | gate command dopuszcza tylko /usr/bin/diff; test nie może być gate'em (D12) |
 | F2.7-AC2 | Dla retry można porównać wejście i rezultat kolejnych prób. |  | porównywany jest poprzedni check, nie input próby |
-| F2.11-AC1 | Nowy użytkownik może uruchomić starter graph bez ręcznej edycji configu. | #188 | starter agentowy wymaga ręcznego workspace i AGENTPLANE_CODEX_BIN |
-| F3.4-AC2 | Timeout emituje reason i jest odróżnialny od zwykłego failure. | #190 | timeouty nie są egzekwowane; cancel/timeout reasons nie są emitowane |
 | F3.6-AC1 | Stary run wskazuje dokładny graph snapshot nawet po zmianie pliku. |  | snapshot graph.yaml w store, brak testu zmiany pliku po runie |
 | F3.8-AC1 | Sekret nie pojawia się w YAML, SQLite ani standardowym eksporcie. |  | brak eksportu; nie da się sprawdzić w całości |
 | F3.10-AC2 | Eksport zawiera usage metadata. |  | brak eksportu |
@@ -190,23 +195,23 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 
 | Feature | Divergence | ADR | Issue | Deferred to |
 | --- | --- | --- | --- | --- |
-| F0.1 | JSON tylko przez parser YAML; brak testu kontraktowego. | ADR-0033 | #179 |  |
 | F0.1 | Wersja grafu to obliczany hash graph_version, bez pola autorskiego. | ADR-0033 |  |  |
-| F0.5 | Brak limitu całkowitego logu i pełnego logu jako artifactu. |  | #181 | F3.5 |
+| F0.5 | Pełny log ponad limit 1 MiB jako artifact. | ADR-0045 |  | F3.5 |
 | F0.6 | Wykrycie przerwanego runa działa przez opcjonalny store (F2.9/F3.2). | ADR-0027 |  |  |
 | F1.3 | Surowy event providera nie jest dołączany jako debug payload; limity pamięci dotyczą progressu, nie logów Shell. | ADR-0011 |  |  |
-| F1.4 | Gate command ograniczony do diff; test command jako check w pętli to luka do zamknięcia. | ADR-0037 | #183 | F1.4b |
+| F1.4 | Test command tylko jako Gate w pętli (test_command); samodzielny Gate zostaje read-only (diff). | ADR-0042 |  |  |
 | F1.5 | scope oznacza checked inputs; pełny output jako artifact odroczony. | ADR-0013 |  | F3.5 |
 | F2.2 | Brak sekcji permissions w inspectorze. |  | #184 | F3.9 |
-| F2.3 | Brak select pola z obiektu JSON. |  | #185 |  |
+| F2.3 | Brak select pola z obiektu JSON. |  | #185 | F2.3b |
 | F2.3 | Wartość na edge'u tylko przy włączonym --record-values. | ADR-0023 |  |  |
 | F2.8 | Diff między próbami nie jest renderowany w desktopie (silnik F2.8b gotowy). |  |  | F2.8b |
 | F2.9 | JSONL zamiast SQLite. | ADR-0027 |  |  |
-| F2.9 | Brak branch/commit, czasu trwania, wersji grafu i filtra per repo/graph na liście runów. |  | #186 |  |
-| F2.10 | Panel bez blast radius, checków, changed files i diffu; reject bez skonfigurowanej ścieżki. |  | #187 | F3.9 |
-| F2.11 | Brak detekcji shell/Docker, listy repo i self-checku runnera. |  | #188 |  |
+| F2.10 | Panel bez blast radius i bez treści diffu (checki i changed files są). |  | #187 | F3.9 |
+| F2.10 | on_reject: continue (ADR-0043) tylko gdy decyzja trafia wyłącznie do outputów grafu (żaden rodzaj Gate nie porównuje wartości tekstowej). | ADR-0043 |  |  |
+| F2.11 | Brak listy repozytoriów i agentów w silniku desktopu; starter agentowy wymaga ręcznego workspace. |  | #188 | F2.13 |
+| F2.11 | Self-check runnera tylko w CLI (agentplane self-check); brak w desktopie. |  |  | F2.15 |
 | F3.1 | Izolacja tylko dla Agent unitów w pętli (opt-in); wynik na refie integracyjnym, bez merge do brancha. | ADR-0024 |  |  |
-| F3.1 | Brak izolacji Shell nodes. |  | #189 |  |
+| F3.1 | Brak izolacji Shell nodes. |  | #189 | F3.1c |
 | F3.2 | Testy Windows nie były uruchamiane; run w CLI kontynuuje po błędzie zapisu (poprawka A1 w specu). | ADR-0027 |  |  |
-| F3.6 | Brak commit/branch repo i wersji runtime w metadanych runu. |  | #186 |  |
+| F3.4 | Brak flag --run-timeout/--cancel-grace, user_cancel z API/desktopu, Windows (F3.4a) i kryteriów trwałych (D) ze speca. |  | #190 |  |
 | F3.8 | Tylko provider env i Shell nodes; keychain i Agent secret_env odroczone. | ADR-0029 |  |  |

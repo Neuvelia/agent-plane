@@ -69,6 +69,7 @@ func Validate(definition *Definition) ValidationResult {
 	validator.validateDefinition()
 	validator.validateLoops()
 	validator.validateHumanNodes()
+	validator.validateLoopOnlyGateKinds()
 	validator.validateTimeouts()
 	validator.validateUnits()
 	validator.validateSecrets()

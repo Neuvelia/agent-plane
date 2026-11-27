@@ -17,6 +17,7 @@ the CLI, local run store, loopback API and desktop client.
 | Human approval facts and bounded text | `approval.go` |
 | Opt-in recorded run values (schema 10) and their bounds | `value.go` |
 | Secret and execution-policy facts, closed vocabularies (schema 14) | `policy.go` |
+| Run provenance, `test_command` check kind and `executor_abandoned` (schema 15, ADR-0044) | `runcontext.go` |
 | Workspace isolation facts, closed reason vocabulary, path bounding | `workspace.go` |
 | Opt-in attempt diff facts (schema 12), bounds and closed vocabularies | `diff.go` |
 | Cancel/timeout facts, closed cause vocabulary, terminal `reason` (schema 13) | `cancel.go` |

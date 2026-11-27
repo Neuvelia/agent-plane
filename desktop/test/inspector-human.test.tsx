@@ -65,9 +65,9 @@ describe.each(['en', 'pl'] as const)('human node inspector (%s)', (locale) => {
     expect(out).toContain('decision')
   })
 
-  it('shows only the descriptor fields prompt and context_inputs under Execution', () => {
+  it('shows only the descriptor fields prompt, context_inputs and on_reject under Execution', () => {
     const keys = [...section(html, 'section-execution')!.matchAll(/data-field-key="([^"]*)"/g)].map((m) => m[1])
-    expect(keys).toEqual(['prompt', 'context_inputs'])
+    expect(keys).toEqual(['prompt', 'context_inputs', 'on_reject'])
   })
 })
 

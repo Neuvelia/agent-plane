@@ -135,6 +135,32 @@ func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 	}
 }
 
+// roadmap: F2.10-AC2
+func TestHumanRejectWithOnRejectContinuePublishesTheRejectionToItsCheck(t *testing.T) {
+	// The decision feeds a graph output, the only consumer ADR-0043 accepts
+	// for on_reject: continue (validation is proven in internal/adapter/yamlgraph).
+	def := humanDef(nil)
+	node := def.Nodes["gate"]
+	node.Config = map[string]any{"prompt": "ship it?", "on_reject": graph.HumanRejectContinue}
+	def.Nodes["gate"] = node
+	def.Outputs = map[string]graph.OutputDefinition{"verdict": {From: "gate.outputs.decision"}}
+	result, err := Run(context.Background(), def, nil, noopExecutor(), Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, Decisions: providerFunc(func(context.Context, run.ApprovalRequest) (run.Decision, error) {
+		return run.Decision{Approve: false, Comment: "no"}, nil
+	})})
+	if err != nil || result.State != run.RunSucceeded || result.Failure != nil {
+		t.Fatalf("err=%v state=%s failure=%+v", err, result.State, result.Failure)
+	}
+	if len(result.Outputs) != 1 {
+		t.Fatalf("outputs = %+v", result.Outputs)
+	}
+	if got, _ := result.Outputs[0].Value.AsString(); got != "rejected" {
+		t.Fatalf("graph output verdict = %q, want rejected", got)
+	}
+	if _, dec := humanEvents(result); len(dec) != 1 || dec[0].Payload.(events.ApprovalDecidedPayload).Decision != "rejected" {
+		t.Fatalf("approval_decided must still record the rejection: %+v", dec)
+	}
+}
+
 // roadmap: F2.10-AC1
 func TestHumanWaitSharesBatchWithIndependentNode(t *testing.T) {
 	// Deterministic overlap proof: the decision is withheld until the sibling

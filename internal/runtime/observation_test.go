@@ -33,7 +33,7 @@ func TestObservedPrecedenceCorrelationEvidenceAndRedaction(t *testing.T) {
 	p := &observedProbe{combinedProbe: &combinedProbe{correlationProbe: &correlationProbe{received: map[string]run.ExecutionCorrelation{}}}}
 	for _, failed := range []bool{false, true} {
 		p.fail = failed
-		r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
+		r, e := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "shell"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{"SECRET"}})
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -67,7 +67,7 @@ func TestExecutorFailureCarriesOnlySafeDiagnosticCode(t *testing.T) {
 	e := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, safeCodeError{}
 	})
-	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, e, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	r, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "shell"}}), nil, e, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,7 +7,7 @@ import (
 
 // SchemaVersion is the event schema new events are stamped with. Readers
 // accept every earlier schema with its historical shape.
-const SchemaVersion = SchemaPolicy
+const SchemaVersion = SchemaRunContext
 
 type RunID string
 type NodeRunID string
@@ -38,8 +38,23 @@ const (
 // Payload is implemented only by the event payloads defined in this package.
 type Payload interface{ eventPayload() }
 
+// RunStartedPayload opens a run. The optional provenance fields exist from
+// SchemaRunContext (F2.9, F3.6, ADR-0044): a log written before them decodes
+// with them empty, and they are omitted when the repository or Git is
+// unavailable.
 type RunStartedPayload struct {
 	NodeCount int `json:"node_count"`
+	// RepoName is the base name of the Git work tree the run started in, never
+	// a path. RepoBranch is empty on a detached HEAD.
+	RepoName string `json:"repo_name,omitempty"`
+	// RepoID tells apart two work trees with the same base name: the first 16
+	// hex digits of the SHA-256 of the work tree's absolute path. It identifies
+	// a checkout without recording its path.
+	RepoID     string `json:"repo_id,omitempty"`
+	RepoBranch string `json:"repo_branch,omitempty"`
+	RepoCommit string `json:"repo_commit,omitempty"`
+	// RuntimeVersion is the engine version that produced the run.
+	RuntimeVersion string `json:"runtime_version,omitempty"`
 }
 type ChangedFile struct {
 	Path       string `json:"path"`

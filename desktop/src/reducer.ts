@@ -83,6 +83,10 @@ export interface NodeView {
   log: string
   approval?: ApprovalView
   failureKind?: string
+  /** Sorted Git-observed paths of a non-loop node: its node_evidence carries no attempt ID. Undefined: not observed. */
+  changedFiles?: string[]
+  /** The ignored cancel reason of an abandoned executor (executor_abandoned, ADR-0044): it may still be running. */
+  abandoned?: string
   diagnosticCodes: string[]
   durationMs?: number
   startedSeq?: number
@@ -256,11 +260,14 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
       }
       break
     case 'node_evidence':
-      // Evidence without an attempt ID belongs to a non-loop node; it has no attempt to compare.
-      if (id && event.attempt_id) {
-        const a = node(state, id).attempts.find((x) => x.id === event.attempt_id)
+      // Evidence without an attempt ID belongs to a non-loop node: it is kept on the node.
+      if (id) {
         const files = (Array.isArray(p.changed_files) ? p.changed_files : []) as Record<string, unknown>[]
-        if (a) a.changedFiles = [...new Set(files.map((f) => str(f.path)).filter((path) => path !== ''))].sort()
+        const paths = [...new Set(files.map((f) => str(f.path)).filter((path) => path !== ''))].sort()
+        const n = node(state, id)
+        if (!event.attempt_id) n.changedFiles = paths
+        const a = event.attempt_id ? n.attempts.find((x) => x.id === event.attempt_id) : undefined
+        if (a) a.changedFiles = paths
       }
       break
     case 'gate_check':
@@ -298,6 +305,9 @@ export function reduce(previous: RunView, event: ApEvent): RunView {
         const a = attemptFor(n, event.attempt_id)
         if (a && event.attempt_id) a.log = bounded(a.log + text)
       }
+      break
+    case 'executor_abandoned':
+      if (id) node(state, id).abandoned = str(p.reason)
       break
     case 'approval_requested':
       if (id) {
@@ -357,6 +367,10 @@ function summarize(event: ApEvent): EventSummary | null {
     case 'run_finished':
       row.detail = str(p.status) || undefined
       if (p.status === 'failed') row.kind = 'failed'
+      break
+    case 'executor_abandoned':
+      row.detail = str(p.reason) || undefined
+      row.kind = 'failed'
       break
     case 'approval_requested':
       row.kind = 'human'

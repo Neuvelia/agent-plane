@@ -57,7 +57,7 @@ func (m *runMachine) runBatchWorkers(ctx context.Context, executor Executor, bat
 		}
 		node := m.definition.Nodes[id]
 		if w := m.worktrees[id]; w != nil {
-			node = isolatedNode(node, w.path)
+			node = isolatedNode(node, m.isolation.source.Root, w.path)
 		}
 		resolved := m.resolved[id]
 		aid, feedback, baseline, number, carried := state.attempts[id], state.feedbacks[id], state.baselines[id], state.numbers[id], state.diffs[id]
