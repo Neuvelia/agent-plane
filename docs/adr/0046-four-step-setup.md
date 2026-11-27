@@ -29,10 +29,25 @@ check never blocking progress.
    `agentplane run <graph.yaml> --adapter codex --codex-bin <path>` command and
    Copy; (4) a first graph: the suggested template, `dependency-update`,
    `human-approval` and Blank as cards that draw their nodes in file order,
-   "Open a graph I already have…".
+   "Open a graph I already have…". The cards carry the F2.12 requirement-7
+   notices from the same report: a platform the commands do not support
+   replaces "Runs as is" and removes "Recommended", and each required tool is
+   shown with its status ("not checked" before the report arrives).
 3. The last step's primary action creates the picked graph directly (the same
    `newGraph` grant and template draft as the F2.12 picker); it no longer opens
-   the picker. The picker stays the editor's "New graph" flow.
+   the picker. The picker stays the editor's "New graph" flow. Setup is left
+   only once the save dialog led somewhere: a new document opens the editor
+   and completes setup; a cancelled dialog stays on setup; unsaved text or an
+   error opens the editor, where its prompt or message is shown.
+3a. Requirement 12, engine disconnected: instead of no rows, the check step
+   shows two explanatory rows that are not report data ("Engine: Not
+   connected" with the existing guidance, "Git, agent CLIs: Not checked") and
+   Retry. No stale report row is ever shown. While the engine is unreachable
+   the setup header also says "Connection lost", since the global bar is
+   hidden on this route.
+3b. Requirement 14, announcement: the polite live region that announces a
+   finished check lives outside the step content, so a check that finishes
+   while another step is open is still announced.
 4. Completion is recorded, as before, by creating, opening or skipping. Motion
    settles in under 3 seconds and is fully off under reduced motion, which shows
    the final frame. The Storybook smoke test judges every story with reduced
@@ -44,5 +59,7 @@ check never blocking progress.
 
 - No change to `GET /capabilities`, `POST /capabilities/check`, the preload
   bridge, `agentplane.welcome.v1` or any event.
-- The e2e demo walks the steps: Next to the report, Check again, the template
-  cards, Skip setup.
+- The e2e demo walks the steps (Next to the report, Check again, the template
+  cards, Skip setup) and the create path: a cancelled save dialog stays on
+  setup; a chosen file opens the editor, nothing is written before the first
+  save, and the saved file is the template with only its id line changed.

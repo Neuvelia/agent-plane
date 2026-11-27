@@ -11,6 +11,7 @@ import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
+import { useSetupCreate } from './setupCreate'
 import { Welcome } from './welcome'
 
 type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor' } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
@@ -81,6 +82,13 @@ function Shell({ lost }: { lost: boolean }) {
     setRoute(next)
     then?.()
   }
+  // Setup's Create leaves setup only once a file was chosen; a cancelled dialog stays on setup.
+  const createdFromSetup = useCallback(() => {
+    markWelcomeDone()
+    setRoute({ name: 'editor' })
+  }, [])
+  const showEditor = useCallback(() => setRoute({ name: 'editor' }), [])
+  const createFromSetup = useSetupCreate(editor, createdFromSetup, showEditor)
   const crumb = route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
   // Setup is full-bleed: its own header, progress and footer replace the bars (canvas "Setup, revised").
   const setup = route.name === 'welcome'
@@ -114,7 +122,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'welcome' && <Welcome lost={lost} onCreate={(make) => leaveWelcome({ name: 'editor' }, () => editor.create(make))()} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
+          {route.name === 'welcome' && <Welcome lost={lost} onCreate={createFromSetup} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

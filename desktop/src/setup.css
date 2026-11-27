@@ -131,7 +131,9 @@
 .su-path .seg{width:28px;height:2px;background:var(--su-line);flex:none}
 .su-path .blank{width:100%;height:40px;border:1.5px dashed var(--su-line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:var(--type-small-size)}
 .su-path .pulse{position:absolute;top:50%;margin-top:-5px;width:10px;height:10px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 4px var(--brand-soft);animation:su-run 2.4s linear infinite both}
-.su-meta{display:flex;align-items:center;gap:var(--space-6);font-size:var(--type-small-size);color:var(--muted)}
+.su-meta>svg{flex:none;margin-top:2px}
+.su-needs{display:flex;flex-direction:column;gap:2px;margin-top:-6px;font-size:var(--type-small-size);color:var(--muted)}
+.su-meta{display:flex;align-items:flex-start;gap:var(--space-6);font-size:var(--type-small-size);color:var(--muted)}
 
 /* Footer: Back, a hint, the one primary action. */
 .su-foot{flex:none;min-height:72px;display:flex;align-items:center;gap:var(--space-12);padding:var(--space-12) 24px;border-top:1px solid var(--hairline);flex-wrap:wrap;background:var(--bg)}

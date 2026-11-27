@@ -1,6 +1,6 @@
 import { statusOf, type CapabilityReport, type CapabilityTool } from './capabilities'
 import type { MessageKey } from './i18n'
-import { SUGGESTED, TEMPLATES, templateDraft, type TemplateEntry } from './templates'
+import { noticesFor, SUGGESTED, TEMPLATES, templateDraft, type Notice, type TemplateEntry } from './templates'
 
 // Pure model of the four-step setup (canvas "Setup, revised"). The views only
 // render what these functions decide; nothing here reads the bridge.
@@ -63,17 +63,31 @@ export interface SetupCard {
   id: string
   /** Node types in file order; empty for Blank. */
   flow: string[]
+  /** Suggested, and its commands run on the engine's system. */
   recommended: boolean
   placeholders: number
   agent: boolean
+  /** False when the report says the engine's system cannot run this template's commands. */
+  platformOk: boolean
+  /** The F2.12 "Needs <tool>: <status>" notices. They inform; nothing is disabled. */
+  needs: Extract<Notice, { kind: 'requires' }>[]
 }
 
-export function setupCards(templates: readonly TemplateEntry[] = TEMPLATES): SetupCard[] {
-  const cards = SETUP_TEMPLATES.flatMap((id) => {
+/**
+ * The cards of the last step, with the same notices as the F2.12 picker from the
+ * capability report (null while there is none). The agent-only notice is left
+ * out: every agent card already says its agent runs from the CLI.
+ */
+export function setupCards(report: CapabilityReport | null = null, templates: readonly TemplateEntry[] = TEMPLATES): SetupCard[] {
+  const cards = SETUP_TEMPLATES.flatMap((id): SetupCard[] => {
     const e = templates.find((t) => t.id === id)
-    return e ? [{ id, flow: e.flow, recommended: id === SUGGESTED, placeholders: e.placeholders, agent: e.flow.includes('agent') }] : []
+    if (!e) return []
+    const notices = noticesFor(e, report)
+    const platformOk = !notices.some((n) => n.kind === 'platform')
+    const needs = notices.filter((n): n is Extract<Notice, { kind: 'requires' }> => n.kind === 'requires')
+    return [{ id, flow: e.flow, recommended: id === SUGGESTED && platformOk, placeholders: e.placeholders, agent: e.flow.includes('agent'), platformOk, needs }]
   })
-  return [...cards, { id: BLANK, flow: [], recommended: false, placeholders: 0, agent: false }]
+  return [...cards, { id: BLANK, flow: [], recommended: false, placeholders: 0, agent: false, platformOk: true, needs: [] }]
 }
 
 /** What the last step creates: Blank (no draft maker) or the picked template's draft. */

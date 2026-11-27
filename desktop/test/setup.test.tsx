@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilityReport } from '../src/capabilities'
 import { I18nProvider } from '../src/i18n/context'
 import { BLANK, CLI_COMMAND, rowTone, scanDelay, setupCards, setupDraft, verdictDelay, verdictOf, type SetupStep } from '../src/setup'
+import { createOutcome } from '../src/setupCreate'
+import { windows } from '../src/storybook/capabilityFixtures'
 import { SUGGESTED, TEMPLATES, templateDraft } from '../src/templates'
 import { Welcome } from '../src/welcome'
 import recorded from './fixtures/capabilities-linux.json'
@@ -72,7 +74,7 @@ describe('setup template cards', () => {
     expect(setupCards().find((c) => c.id === BLANK)).toMatchObject({ flow: [], placeholders: 0, agent: false })
   })
   it('skip a template the build does not contain instead of inventing it', () => {
-    expect(setupCards([]).map((c) => c.id)).toEqual([BLANK])
+    expect(setupCards(null, []).map((c) => c.id)).toEqual([BLANK])
   })
 })
 
@@ -94,6 +96,43 @@ describe('setup create action', () => {
     expect(setupDraft('not-bundled')).toEqual({ usable: false })
     const broken = { ...TEMPLATES[0]!, text: 'schema_version: 0\n' }
     expect(setupDraft(broken.id, [broken])).toEqual({ usable: false })
+  })
+})
+
+describe('setup create outcome', () => {
+  const start = { grant: 'g-old', error: null }
+  it('completes setup only when a new document is open', () => {
+    expect(createOutcome(start, { grant: 'g-new', error: null, leave: false })).toBe('created')
+    expect(createOutcome({ grant: null, error: null }, { grant: 'g-new', error: null, leave: false })).toBe('created')
+  })
+  it('waits on setup while the save dialog is open or after it was cancelled', () => {
+    expect(createOutcome(start, { grant: 'g-old', error: null, leave: false })).toBe('pending')
+    expect(createOutcome({ grant: null, error: null }, { grant: null, error: null, leave: false })).toBe('pending')
+  })
+  it('shows the editor for its unsaved-text prompt, and for a new error but not an old one', () => {
+    expect(createOutcome(start, { grant: 'g-old', error: null, leave: true })).toBe('ask')
+    const old = { kind: 'open', message: 'earlier' }
+    expect(createOutcome({ grant: null, error: old }, { grant: null, error: old, leave: false })).toBe('pending')
+    expect(createOutcome({ grant: null, error: old }, { grant: null, error: { kind: 'open', message: 'denied' }, leave: false })).toBe('failed')
+  })
+})
+
+describe('setup template notices (F2.12 requirement 7)', () => {
+  it('without a report, says nothing about the platform and marks tools not checked', () => {
+    const cards = setupCards(null)
+    expect(cards.every((c) => c.platformOk)).toBe(true)
+    expect(cards.find((c) => c.id === 'dependency-update')!.needs.map((n) => [n.id, n.checked])).toEqual([['git', false], ['codex', false]])
+  })
+  it('on a system the commands do not support, drops Recommended and says so', () => {
+    const cards = setupCards(windows)
+    const suggested = cards.find((c) => c.id === SUGGESTED)!
+    expect(suggested.platformOk).toBe(false)
+    expect(suggested.recommended).toBe(false)
+    expect(cards.find((c) => c.id === BLANK)!.platformOk).toBe(true)
+  })
+  it('reports each tool a template needs with the status the engine gave', () => {
+    const needs = setupCards(windows).find((c) => c.id === 'dependency-update')!.needs
+    expect(needs.map((n) => [n.id, n.tool?.status])).toEqual([['git', 'unsupported_platform'], ['codex', 'unsupported_platform']])
   })
 })
 
@@ -156,6 +195,16 @@ describe('setup screen', () => {
     const css = readFileSync(join(__dirname, '..', 'src', 'setup.css'), 'utf8')
     expect(css).toContain('.su-prog .done i b{transform:scaleX(1);background:var(--muted)}')
     expect(css).toContain('.su-prog .cur i{height:6px;border-radius:3px}')
+  })
+  it('keeps the check announcement region on every step, so a check that ends early is still announced', () => {
+    for (const step of ['welcome', 'check', 'agents', 'graph'] as const) {
+      const out = html(step)
+      expect(out.match(/data-testid="cap-announce"/g), step).toHaveLength(1)
+      expect(out, step).toMatch(/role="status" aria-live="polite" data-testid="cap-announce"/)
+    }
+  })
+  it('shows what a template needs on its card before the report arrives', () => {
+    expect(html('graph')).toContain('Needs Codex: not checked.')
   })
   it('is translated into Polish', () => {
     const out = html('graph', 'pl')

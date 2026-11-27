@@ -539,21 +539,34 @@ async function startDemo(app, page) {
     await page.click('[data-testid="editor-close"]').catch(() => {})
     await page.click('[data-testid="nav-dashboard"]')
 
-    // ADR-0046: the last setup step creates the picked template directly. Nothing is written before the first save.
+    // ADR-0046: the last setup step creates the picked template directly.
     await page.click('[data-testid="nav-welcome"]')
     await page.click('[data-testid="setup-progress-graph"]')
     await page.click('[data-testid="setup-template-dependency-update"]')
     assert.match(await page.textContent('[data-testid="welcome-template"]'), /dependency-update/)
+    // A cancelled save dialog leaves the person on setup, not on an empty editor.
+    await app.evaluate(({ dialog }) => {
+      globalThis.cancelledSaves = 0
+      dialog.showSaveDialog = async () => {
+        globalThis.cancelledSaves++
+        return { canceled: true, filePath: '' }
+      }
+    })
+    await page.click('[data-testid="welcome-template"]')
+    for (let i = 0; i < 200 && (await app.evaluate(() => globalThis.cancelledSaves)) === 0; i++) await page.waitForTimeout(25) // the dialog was asked for
+    assert.equal(await app.evaluate(() => globalThis.cancelledSaves), 1)
+    assert.equal(await page.isVisible('[data-testid="setup-step-graph"]'), true, 'cancel stays on setup')
+    // A chosen file opens the editor; nothing is written before the first save, and the save is the template with only its id line changed.
     await stubSave(path.join(graphDir, 'from-setup'))
     await page.click('[data-testid="welcome-template"]')
-    await page.waitForSelector('[data-testid="yaml-content"]')
+    await page.waitForSelector('[data-testid="doc-state"]')
     assert.equal(await page.isVisible('[data-testid="welcome"]'), false, 'creating leaves setup for the editor')
-    const fromSetup = await page.innerText('[data-testid="yaml-content"]')
-    assert.match(fromSetup, /^id: from-setup$/m, 'the template id line takes the file name')
-    assert.match(fromSetup, /type: agent/, 'the picked template, not Blank')
     assert.equal(fs.existsSync(path.join(graphDir, 'from-setup.yaml')), false, 'nothing is written before the first save')
+    await page.click('[data-testid="editor-save"]')
+    await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    const dependencyUpdate = fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', 'dependency-update.yaml'), 'utf8')
+    assert.equal(fs.readFileSync(path.join(graphDir, 'from-setup.yaml'), 'utf8'), dependencyUpdate.replace(/^id: dependency-update$/m, 'id: from-setup'))
     await page.click('[data-testid="editor-close"]')
-    await page.click('[data-testid="leave-discard"]', { timeout: 2000 }).catch(() => {}) // a fresh draft may count as unsaved
     await page.waitForSelector('[data-testid="editor-empty"]')
     await page.click('[data-testid="nav-dashboard"]')
 

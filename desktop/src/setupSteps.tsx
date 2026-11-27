@@ -1,6 +1,7 @@
 import { useState, type CSSProperties, type ReactNode, type RefObject } from 'react'
 import { useI18n } from './i18n/context'
 import type { MessageKey } from './i18n'
+import { NoticeText } from './editor/TemplatePicker'
 import { CLI_COMMAND, type SetupCard } from './setup'
 import { Lock, Monitor, NodeGlyph, Prompt, StatusGlyph, Tick } from './setupIcons'
 
@@ -155,6 +156,12 @@ function Lane({ title, icon, kinds, at }: { title: string; icon: ReactNode; kind
   )
 }
 
+function metaText(t: ReturnType<typeof useI18n>['t'], card: SetupCard, blank: boolean): string {
+  if (blank) return t('setup.graph.blankMeta')
+  if (!card.platformOk) return t('picker.platform')
+  return card.placeholders > 0 ? t('setup.graph.fill', { count: card.placeholders }) : t('setup.graph.runsAsIs')
+}
+
 /** Step 4: template cards that show their steps as icons; the picked one plays its flow. */
 export function GraphStep({ headRef, cards, choice, onChoice, onOpen }: { headRef: HeadRef; cards: SetupCard[]; choice: string; onChoice: (id: string) => void; onOpen: () => void }) {
   const { t } = useI18n()
@@ -177,7 +184,7 @@ export function GraphStep({ headRef, cards, choice, onChoice, onOpen }: { headRe
 function TemplateCard({ card, on, at, onPick }: { card: SetupCard; on: boolean; at: number; onPick: () => void }) {
   const { t } = useI18n()
   const blank = card.flow.length === 0
-  const warn = card.placeholders > 0 || card.agent
+  const warn = card.placeholders > 0 || card.agent || !card.platformOk
   const metaId = `su-tpl-${card.id}-meta`
   return (
     <label className={`su-tpl su-a${on ? ' on' : ''}`} style={delay(at)} data-testid={`setup-tpl-${card.id}`}>
@@ -206,9 +213,20 @@ function TemplateCard({ card, on, at, onPick }: { card: SetupCard; on: boolean; 
       </span>
       <span className="su-meta" id={metaId}>
         {!blank && (warn ? <StatusGlyph tone="warn" size={14} /> : <Tick size={14} color="var(--ok)" />)}
-        <span>{blank ? t('setup.graph.blankMeta') : card.placeholders > 0 ? t('setup.graph.fill', { count: card.placeholders }) : t('setup.graph.runsAsIs')}</span>
-        {card.agent && <span>· {t('setup.graph.agentCli')}</span>}
+        <span>
+          {metaText(t, card, blank)}
+          {card.agent && ` · ${t('setup.graph.agentCli')}`}
+        </span>
       </span>
+      {card.needs.length > 0 && (
+        <span className="su-needs" data-testid="setup-needs">
+          {card.needs.map((n) => (
+            <span key={n.id}>
+              <NoticeText n={n} />
+            </span>
+          ))}
+        </span>
+      )}
     </label>
   )
 }

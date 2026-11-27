@@ -14,16 +14,13 @@ type T = ReturnType<typeof useI18n>['t']
 const TONE_TEXT: Record<RowTone, string> = { ok: 'su-ok', warn: 'su-wn', off: 'su-mu', bad: 'su-bd' }
 const word = (t: T, x: RowText['name'] | RowText['status']) => ('key' in x ? t(x.key) : x.raw)
 
-export function CapabilityPanel({ view, announce, appVersion, onCheck, onRetry }: { view: CapabilityView; announce: string; appVersion: string; onCheck: () => void; onRetry: () => void }) {
+export function CapabilityPanel({ view, appVersion, onCheck, onRetry }: { view: CapabilityView; appVersion: string; onCheck: () => void; onRetry: () => void }) {
   const { t } = useI18n()
   return (
     <section className="su-check" aria-label={t('welcome.listTitle')} data-testid="capabilities">
       {view.state === 'loading' && <Checking />}
       {view.state === 'loaded' && <Report report={view.report} refreshing={view.refreshing} appVersion={appVersion} onCheck={onCheck} />}
       {(view.state === 'failed' || view.state === 'disconnected') && <Unavailable view={view} onRetry={onRetry} />}
-      <p className="sr-only" role="status" aria-live="polite" data-testid="cap-announce">
-        {announce}
-      </p>
     </section>
   )
 }

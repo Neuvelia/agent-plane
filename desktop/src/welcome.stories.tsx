@@ -30,6 +30,10 @@ const settled = async (root: HTMLElement, selector: string) => {
 export const StepWelcome: S = story({ report: linux }, {}, 'welcome')
 export const StepAgents: S = story({ report: linux }, {}, 'agents')
 export const StepFirstGraph: S = story({ report: linux }, {}, 'graph')
+// The F2.12 notices: commands that need Linux or macOS, and each tool a template needs.
+export const StepFirstGraphWindows: S = story({ report: windows }, {}, 'graph', async ({ canvasElement }) => {
+  await settled(canvasElement, '[data-testid="setup-needs"]')
+})
 export const StepFirstGraphBlankPicked: S = story({ report: linux }, {}, 'graph', async ({ canvasElement }) => {
   await settled(canvasElement, '[data-testid="setup-template-blank"]')
   canvasElement.querySelector<HTMLInputElement>('[data-testid="setup-template-blank"]')?.click()

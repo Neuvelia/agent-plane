@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { checkCapabilities, getCapabilities, type CapabilityResult } from './capabilities'
 import { useConnectionReport } from './connection'
 import type { DraftMaker } from './editor/TemplatePicker'
@@ -16,7 +16,7 @@ export { CapabilityPanel, ToolRow, type CapabilityView } from './setupCheck'
 // F2.11 welcome screen as the four-step setup of the canvas "Setup, revised":
 // Welcome, Check this computer, Agent nodes, First graph. Skip is always in the
 // header, the check never blocks Next, and every progress segment jumps to its
-// step. Reaching the end, opening a graph or skipping marks setup completed.
+// step. Creating or opening a graph, or skipping, marks setup completed.
 
 export interface WelcomeActions {
   /** Create a new graph: Blank (undefined) or a template's draft. */
@@ -31,7 +31,6 @@ export interface WelcomeActions {
 
 const LABELS: Record<SetupStep, MessageKey> = { welcome: 'setup.step.welcome', check: 'setup.step.check', agents: 'setup.step.agents', graph: 'setup.step.graph' }
 const HINTS: Partial<Record<SetupStep, MessageKey>> = { agents: 'setup.hint.optional', graph: 'setup.hint.graph' }
-const CARDS = setupCards()
 
 export function Welcome({ onCreate, onOpen, onSkip, lost = false, initialStep = 'welcome' }: WelcomeActions) {
   const { t } = useI18n()
@@ -53,8 +52,12 @@ export function Welcome({ onCreate, onOpen, onSkip, lost = false, initialStep = 
     setStep(Math.min(SETUP_STEPS.length - 1, Math.max(0, n)))
   }
 
+  const report = check.view.state === 'loaded' ? check.view.report : null
+  const cards = useMemo(() => setupCards(report), [report])
   const draft = setupDraft(choice)
-  const create = () => draft.usable && onCreate(draft.make)
+  const create = () => {
+    if (draft.usable) onCreate(draft.make)
+  }
   const last = step === SETUP_STEPS.length - 1
   const hint = name === 'check' && check.view.state !== 'loaded' ? 'setup.hint.continue' : HINTS[name]
 
@@ -84,17 +87,22 @@ export function Welcome({ onCreate, onOpen, onSkip, lost = false, initialStep = 
           {t('setup.skip')}
         </button>
       </header>
+      {/* Outside the keyed stage, so it exists before a check finishes and the finish is announced
+          whichever step is open (F2.11 requirement 14). */}
+      <p className="sr-only" role="status" aria-live="polite" data-testid="cap-announce">
+        {check.announce}
+      </p>
       {/* Keyed by step: a new step mounts fresh, so its entrance plays from the start. */}
       <div className="su-stage" key={name}>
         {name === 'welcome' && <WelcomeStep headRef={stepHead} />}
         {name === 'check' && (
           <div className="su-col" data-testid="setup-step-check">
             <StepHead n={2} title={t('setup.check.title')} headRef={stepHead} />
-            <CapabilityPanel view={check.view} announce={check.announce} appVersion={appVersion()} onCheck={check.recheck} onRetry={check.load} />
+            <CapabilityPanel view={check.view} appVersion={appVersion()} onCheck={check.recheck} onRetry={check.load} />
           </div>
         )}
         {name === 'agents' && <AgentsStep headRef={stepHead} />}
-        {name === 'graph' && <GraphStep headRef={stepHead} cards={CARDS} choice={choice} onChoice={setChoice} onOpen={onOpen} />}
+        {name === 'graph' && <GraphStep headRef={stepHead} cards={cards} choice={choice} onChoice={setChoice} onOpen={onOpen} />}
       </div>
       <footer className="su-foot">
         {step > 0 && (
