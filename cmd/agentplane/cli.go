@@ -170,7 +170,7 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err != nil {
 		return commandError("run", "error", "graph", err, nil, *jsonMode, stdout, stderr, exitGraph)
 	}
-	validation := graph.Validate(def)
+	validation := validateForRun(def)
 	if validation.HasErrors() {
 		return commandError("run", "invalid", "validation", nil, validation.Diagnostics, *jsonMode, stdout, stderr, exitGraph)
 	}

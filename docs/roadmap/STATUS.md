@@ -26,8 +26,8 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 
 | ID | Feature | Priority | Status | Criteria met | Issues |
 | --- | --- | --- | --- | --- | --- |
-| [F0.1](../../docs/features/F0.1-graph-definition-schema-v0.md) | Graph Definition Schema v0 | P0 | partial | 2/3 | #178, #179 |
-| [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | partial | 2/3 | #178, #180 |
+| [F0.1](../../docs/features/F0.1-graph-definition-schema-v0.md) | Graph Definition Schema v0 | P0 | partial | 3/3 | #179 |
+| [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | partial | 3/3 | #180 |
 | [F0.3](../../docs/features/F0.3-data-bindings.md) | Data bindings na edge'ach | P0 | done | 2/2 |  |
 | [F0.4](../../docs/features/F0.4-dag-scheduler.md) | DAG Scheduler in-memory | P0 | done | 3/3 |  |
 | [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | partial | 3/3 | #181 |
@@ -176,8 +176,6 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 
 | Criterion | Text | Issue | Note |
 | --- | --- | --- | --- |
-| F0.1-AC1 | Niepoprawny typ node'a, brakujący input i cykl dają czytelny błąd z lokalizacją. | #178 | nieznany typ node'a przechodzi walidację |
-| F0.2-AC1 | CLI `graph validate` zwraca exit code 0 dla poprawnego graphu i !=0 dla błędnego. | #178 | type: foo daje exit 0 |
 | F1.2-AC2 | Brak zainstalowanego CLI daje actionable error, nie panic. | #182 | brak panic, ale komunikat nie jest actionable |
 | F1.4-AC1 | Failing test daje verdict red i blokuje downstream. | #183 | gate command dopuszcza tylko /usr/bin/diff; test nie może być gate'em (D12) |
 | F2.7-AC2 | Dla retry można porównać wejście i rezultat kolejnych prób. |  | porównywany jest poprzedni check, nie input próby |

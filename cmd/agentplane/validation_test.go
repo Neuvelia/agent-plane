@@ -95,6 +95,69 @@ func TestConfigErrorsBecomeDiagnosticsWithTheNodeAndPath(t *testing.T) {
 	}
 }
 
+const unknownNodeType = `schema_version: 0
+id: unknown-type
+inputs: {}
+nodes:
+  work:
+    type: foo
+edges: []
+outputs: {}
+`
+
+// roadmap: F0.1-AC1
+func TestUnknownNodeTypeIsABlockingDiagnosticWithTheNodeAndPath(t *testing.T) {
+	result := validateGraph(parseGraph(t, unknownNodeType))
+	if !result.HasErrors() || len(result.Diagnostics) != 1 {
+		t.Fatalf("got %+v", result.Diagnostics)
+	}
+	d := result.Diagnostics[0]
+	want := graph.Diagnostic{
+		Severity:   graph.SeverityError,
+		Code:       "E_NODE_TYPE_UNKNOWN",
+		Message:    `node "work" has unsupported type "foo"`,
+		GraphID:    "unknown-type",
+		Location:   graph.DiagnosticLocation{NodeID: "work", Path: "nodes.work.type"},
+		Suggestion: "use one of the node types: agent, gate, human, shell",
+	}
+	if d != want {
+		t.Errorf("diagnostic\n got %+v\nwant %+v", d, want)
+	}
+}
+
+func TestUnknownNodeTypeTextOutsideTheGrammarIsNotEchoed(t *testing.T) {
+	text := strings.Replace(unknownNodeType, "type: foo", "type: \"sk-live SECRET\"", 1)
+	diags := validateGraph(parseGraph(t, text)).Diagnostics
+	if len(diags) != 1 || strings.Contains(diags[0].Message, "SECRET") || diags[0].Location.Path != "nodes.work.type" {
+		t.Errorf("got %+v", diags)
+	}
+}
+
+func TestEveryCatalogueTypeIsKnown(t *testing.T) {
+	for _, nodeType := range []string{"agent", "gate", "human", "shell"} {
+		text := strings.Replace(unknownNodeType, "type: foo", "type: "+nodeType, 1)
+		for _, d := range validateGraph(parseGraph(t, text)).Diagnostics {
+			if d.Code == "E_NODE_TYPE_UNKNOWN" {
+				t.Errorf("%s reported as unknown: %+v", nodeType, d)
+			}
+		}
+	}
+}
+
+// roadmap: F0.2-AC1
+func TestUnknownNodeTypeExitsWithTheGraphCodeBeforeAnyRun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unknown.yaml")
+	if err := os.WriteFile(path, []byte(unknownNodeType), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"graph", "validate", path, "--json"}, {"run", path, "--json"}} {
+		code, stdout, _ := invoke(t, context.Background(), args...)
+		if code != exitGraph || !strings.Contains(stdout, "E_NODE_TYPE_UNKNOWN") || strings.Contains(stdout, "run_started") {
+			t.Errorf("%v: exit %d, stdout %s", args, code, stdout)
+		}
+	}
+}
+
 func TestLoopGateConfigErrorsPointAtTheGate(t *testing.T) {
 	text := strings.Replace(shellNoCommand, "command: \"\"", "command: /bin/true", 1)
 	text = strings.Replace(text, "      stdout: {type: string}\nedges", `      stdout: {type: string}

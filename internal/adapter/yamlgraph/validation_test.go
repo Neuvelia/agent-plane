@@ -48,6 +48,7 @@ outputs: {}
 	}
 }
 
+// roadmap: F0.1-AC1
 func TestValidateReportsMissingInputAndOutput(t *testing.T) {
 	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
@@ -92,7 +93,7 @@ outputs: {}
 	assertDiagnostic(t, result, "E_BINDING_TYPE_MISMATCH", "edges[0]")
 }
 
-// roadmap: F0.2-AC3
+// roadmap: F0.1-AC1, F0.2-AC3
 func TestValidateDetectsTwoNodeCycle(t *testing.T) {
 	result := graph.Validate(parseDefinition(t, `
 schema_version: 0

@@ -161,7 +161,7 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 		if graphHoldsSecret(def, graphBytes, config.redactions) {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: errGraphHoldsSecret.Error()}
 		}
-		validation := graph.Validate(def)
+		validation := validateForRun(def)
 		if validation.HasErrors() {
 			return &api.StartError{Status: http.StatusUnprocessableEntity, Message: "graph is invalid", Diagnostics: validation.Diagnostics}
 		}
