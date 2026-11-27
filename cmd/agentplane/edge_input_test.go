@@ -1,0 +1,201 @@
+package main
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"agentplane/internal/domain/graph"
+)
+
+// edgeInputGraph is a valid graph whose only edge delivers a.outputs.o to
+// b.inputs.i; TARGET is replaced by node b's definition.
+const edgeInputGraph = `schema_version: 0
+id: edge-input
+inputs: {}
+nodes:
+  a:
+    type: shell
+    config: {command: /usr/bin/printf, args: [x]}
+    outputs:
+      o: {type: string}
+  b:
+TARGET
+edges:
+  - {from: a.outputs.o, to: b.inputs.i}
+outputs: {}
+`
+
+// requireNoErrors fails when text has a blocking diagnostic: a "no warning"
+// case must not pass only because an error silenced the edge.
+func requireNoErrors(t *testing.T, text string) {
+	t.Helper()
+	if result := validateGraph(parseGraph(t, text)); result.HasErrors() {
+		t.Fatalf("unexpected errors: %+v", result.Diagnostics)
+	}
+}
+
+func edgeInputDiagnostics(t *testing.T, target string) []graph.Diagnostic {
+	t.Helper()
+	def := parseGraph(t, strings.Replace(edgeInputGraph, "TARGET", target, 1))
+	var out []graph.Diagnostic
+	for _, d := range validateGraph(def).Diagnostics {
+		if d.Code == edgeInputUnusedCode {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+const shellWithoutInputEnv = `    type: shell
+    config: {command: /usr/bin/printf, args: [y]}
+    inputs:
+      i: {type: string, required: true}`
+
+// roadmap: F0.2-AC4
+func TestEdgeToAnInputTheShellNodeDoesNotMapWarns(t *testing.T) {
+	diags := edgeInputDiagnostics(t, shellWithoutInputEnv)
+	edge := 0
+	want := graph.Diagnostic{
+		Severity:   graph.SeverityWarning,
+		Code:       "W_EDGE_INPUT_UNUSED",
+		Message:    `node "b" does not use input "i", which edge 0 delivers`,
+		GraphID:    "edge-input",
+		Location:   graph.DiagnosticLocation{EdgeIndex: &edge, Path: "edges[0].to"},
+		Suggestion: `name input "i" in config.input_env, or remove the edge`,
+	}
+	if len(diags) != 1 || mustJSON(t, diags[0]) != mustJSON(t, want) {
+		t.Fatalf("got %+v\nwant %+v", diags, want)
+	}
+}
+
+// roadmap: F0.2-AC4
+func TestUnusedEdgeInputDoesNotBlockValidateOrRun(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "edge-input.yaml")
+	text := strings.Replace(edgeInputGraph, "TARGET", shellWithoutInputEnv, 1)
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, _ := invoke(t, context.Background(), "graph", "validate", path, "--json")
+	if code != 0 || !strings.Contains(stdout, `"W_EDGE_INPUT_UNUSED"`) || !strings.Contains(stdout, `"status":"valid"`) {
+		t.Errorf("exit %d, stdout %s", code, stdout)
+	}
+	if result := validateForRun(parseGraph(t, text)); result.HasErrors() {
+		t.Errorf("the warning must not block a run: %+v", result.Diagnostics)
+	}
+}
+
+// roadmap: F2.3-AC2
+func TestUnusedEdgeInputReachesTheEditorAPI(t *testing.T) {
+	def := parseGraph(t, strings.Replace(edgeInputGraph, "TARGET", shellWithoutInputEnv, 1))
+	found := false
+	for _, d := range diagnosticsFor(def) {
+		found = found || (d.Code == edgeInputUnusedCode && d.Location.EdgeIndex != nil && *d.Location.EdgeIndex == 0)
+	}
+	if !found {
+		t.Errorf("the document API does not report the warning on edge 0")
+	}
+}
+
+func TestAgentInputOtherThanTaskWarnsWithoutAConfigKey(t *testing.T) {
+	diags := edgeInputDiagnostics(t, `    type: agent
+    config: {adapter: codex, workspace: /w, task: do it}
+    inputs:
+      i: {type: string, required: true}`)
+	if len(diags) != 1 || !strings.Contains(diags[0].Suggestion, "reads no input by that name") {
+		t.Errorf("got %+v", diags)
+	}
+}
+
+// roadmap: F0.2-AC4
+func TestInputsTheTargetReadsDoNotWarn(t *testing.T) {
+	cases := map[string]string{
+		"shell input_env": `    type: shell
+    config: {command: /bin/sh, args: ["-c", 'printf "%s" "$I"'], input_env: {i: I}}
+    inputs:
+      i: {type: string, required: true}`,
+		"human context_inputs": `    type: human
+    config: {prompt: "ok?", context_inputs: [i]}
+    inputs:
+      i: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}`,
+		"gate command input": `    type: gate
+    config: {check_id: same, kind: command, command: /usr/bin/diff, cwd: /tmp, left_input: i, right_input: i}
+    inputs:
+      i: {type: string, required: true}`,
+		"loop binding": `    type: shell
+    config: {command: /usr/bin/printf, args: ["{}"], stdout_json: true}
+    inputs:
+      i: {type: string, required: true}
+    outputs:
+      json: {type: json}
+    loop:
+      max_attempts: 2
+      gate:
+        inputs:
+          expected: {type: string, required: true}
+          candidate: {type: json, required: true}
+        config: {check_id: c, kind: json_predicate, input: candidate, field: [ok], operator: eq, expected: true}
+      bindings:
+        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+        - {from: node.inputs.i, to: gate.inputs.expected}`,
+	}
+	for name, target := range cases {
+		requireNoErrors(t, strings.Replace(edgeInputGraph, "TARGET", target, 1))
+		if diags := edgeInputDiagnostics(t, target); len(diags) != 0 {
+			t.Errorf("%s: got %+v", name, diags)
+		}
+	}
+}
+
+func TestAgentTaskInputDoesNotWarn(t *testing.T) {
+	text := strings.Replace(edgeInputGraph, "to: b.inputs.i", "to: b.inputs.task", 1)
+	text = strings.Replace(text, "TARGET", `    type: agent
+    config: {adapter: codex, workspace: /w}
+    inputs:
+      task: {type: string, required: true}`, 1)
+	requireNoErrors(t, text)
+	for _, d := range validateGraph(parseGraph(t, text)).Diagnostics {
+		if d.Code == edgeInputUnusedCode {
+			t.Errorf("got %+v", d)
+		}
+	}
+}
+
+// ADR-0017: a node waits for approval through a data edge from the human
+// node's decision, whether or not it reads the value.
+func TestHumanDecisionEdgeIsAnApprovalGateAndDoesNotWarn(t *testing.T) {
+	text := strings.Replace(edgeInputGraph, `  a:
+    type: shell
+    config: {command: /usr/bin/printf, args: [x]}
+    outputs:
+      o: {type: string}`, `  a:
+    type: human
+    config: {prompt: "go?"}
+    outputs:
+      decision: {type: string, required: true}`, 1)
+	text = strings.Replace(text, "a.outputs.o", "a.outputs.decision", 1)
+	text = strings.Replace(text, "TARGET", shellWithoutInputEnv, 1)
+	requireNoErrors(t, text)
+	for _, d := range validateGraph(parseGraph(t, text)).Diagnostics {
+		if d.Code == edgeInputUnusedCode {
+			t.Errorf("got %+v", d)
+		}
+	}
+}
+
+func TestEdgeWithABlockingErrorIsNotAlsoWarned(t *testing.T) {
+	text := strings.Replace(edgeInputGraph, "TARGET", strings.Replace(shellWithoutInputEnv, "i: {type: string", "i: {type: number", 1), 1)
+	result := validateGraph(parseGraph(t, text))
+	if !result.HasErrors() {
+		t.Fatalf("want a type mismatch: %+v", result.Diagnostics)
+	}
+	for _, d := range result.Diagnostics {
+		if d.Code == edgeInputUnusedCode {
+			t.Errorf("an invalid edge is also warned: %+v", d)
+		}
+	}
+}

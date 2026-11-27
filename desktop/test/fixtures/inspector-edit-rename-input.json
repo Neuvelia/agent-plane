@@ -126,6 +126,18 @@
     "message": "shell node \"build\": unknown shell config field \"retries\"",
     "severity": "error",
     "suggestion": "correct the configuration of node \"build\""
+   },
+   {
+    "code": "W_EDGE_INPUT_UNUSED",
+    "graph_id": "inspector-shell",
+    "line": 39,
+    "location": {
+     "edge_index": 0,
+     "path": "edges[0].to"
+    },
+    "message": "node \"report\" does not use input \"renamed\", which edge 0 delivers",
+    "severity": "warning",
+    "suggestion": "name input \"renamed\" in config.input_env, or remove the edge"
    }
   ],
   "hash": "b6483ee23a440f5304bec92417d027af2d60495894fb42d48a55bafa22dad8ef",

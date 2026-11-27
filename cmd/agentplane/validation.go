@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/fields"
 )
 
 // nodeTypeUnknownCode is the diagnostic for a node whose type no executor
@@ -16,12 +17,17 @@ const nodeTypeUnknownCode = "E_NODE_TYPE_UNKNOWN"
 // executors reject. Executors return plain errors, so one code carries them all.
 const nodeConfigCode = "E_NODE_CONFIG_INVALID"
 
+// edgeInputUnusedCode is the warning for an edge whose target node never reads
+// the input the edge delivers (#180, F0.2 and F2.3).
+const edgeInputUnusedCode = "W_EDGE_INPUT_UNUSED"
+
 // validateGraph is the one validation path of the CLI, the API and the editor
 // (ADR-0021): the graph rules, then each node's type against the node
 // catalogue, then each shell, gate and agent node's static configuration,
 // including a loop's embedded Gate. Human nodes are checked by graph.Validate.
 // The executors' checks are side-effect free (nothing runs, nothing is read). Configuration diagnostics follow the graph ones in node-id
-// order, so the result is deterministic.
+// order, then the unused-edge-input warnings in edge order, so the result is
+// deterministic.
 func validateGraph(def *graph.Definition) graph.ValidationResult {
 	result := graph.Validate(def)
 	executor := nodeExecutor{}
@@ -44,7 +50,111 @@ func validateGraph(def *graph.Definition) graph.ValidationResult {
 			}
 		}
 	}
+	result.Diagnostics = append(result.Diagnostics, unusedEdgeInputDiagnostics(def, result.Diagnostics)...)
 	return result
+}
+
+// unusedEdgeInputDiagnostics warns, in edge order, about each edge whose
+// target node never reads the input it delivers. A node reads an input that a
+// field of its type's catalogue descriptors names (fields.NamedInputs) or that
+// a loop binding forwards (node.inputs.X); an edge carrying a human decision
+// is an approval gate and always counts as used. An edge with an unknown
+// target, an undeclared input or an unknown node type, and an edge that an
+// error in reported names, is left to the blocking diagnostics. Graph input
+// bindings are not checked. The warning never blocks a run.
+func unusedEdgeInputDiagnostics(def *graph.Definition, reported []graph.Diagnostic) []graph.Diagnostic {
+	configFields := map[string][]fields.Field{}
+	for _, t := range nodeCatalogue() {
+		configFields[t.Type] = t.Config
+	}
+	invalid := invalidEdges(reported)
+	var out []graph.Diagnostic
+	for index, edge := range def.Edges {
+		nodeID, inputID, ok := edgeTarget(edge)
+		if !ok || invalid[index] {
+			continue
+		}
+		n, exists := def.Nodes[nodeID]
+		descriptors, known := configFields[n.Type]
+		_, declared := n.Inputs[inputID]
+		if !exists || !known || !declared {
+			continue
+		}
+		if nodeReadsInput(n, descriptors, inputID) || isApprovalGate(def, edge) {
+			continue
+		}
+		out = append(out, unusedEdgeInputDiagnostic(def.ID, index, nodeID, inputID, fields.InputKeys(descriptors)))
+	}
+	return out
+}
+
+// invalidEdges returns the indexes of the edges a blocking diagnostic names.
+func invalidEdges(diagnostics []graph.Diagnostic) map[int]bool {
+	invalid := map[int]bool{}
+	for _, d := range diagnostics {
+		if d.Severity == graph.SeverityError && d.Location.EdgeIndex != nil {
+			invalid[*d.Location.EdgeIndex] = true
+		}
+	}
+	return invalid
+}
+
+// isApprovalGate reports whether edge carries a human node's decision. ADR-0017
+// makes that data edge the way a node waits for approval (there is no
+// ordering-only edge), so the target is gated by it whether or not it reads
+// the value.
+func isApprovalGate(def *graph.Definition, edge graph.EdgeDefinition) bool {
+	parts := strings.Split(string(edge.From), ".")
+	if len(parts) != 3 || parts[1] != "outputs" || parts[2] != "decision" {
+		return false
+	}
+	source, exists := def.Nodes[parts[0]]
+	return exists && source.Type == "human"
+}
+
+// edgeTarget splits an edge's NODE.inputs.PORT target. Text outside the
+// identifier grammar is rejected: graph.Validate reports it.
+func edgeTarget(edge graph.EdgeDefinition) (string, string, bool) {
+	parts := strings.Split(string(edge.To), ".")
+	if len(parts) != 3 || parts[1] != "inputs" || !graph.ValidIdentifier(parts[0]) || !graph.ValidIdentifier(parts[2]) {
+		return "", "", false
+	}
+	return parts[0], parts[2], true
+}
+
+// nodeReadsInput reports whether n's configuration or loop bindings read the
+// named input.
+func nodeReadsInput(n graph.NodeDefinition, descriptors []fields.Field, inputID string) bool {
+	if fields.NamedInputs(descriptors, n.Config)[inputID] {
+		return true
+	}
+	if n.Loop == nil {
+		return false
+	}
+	for _, binding := range n.Loop.Bindings {
+		if binding.From == "node.inputs."+inputID {
+			return true
+		}
+	}
+	return false
+}
+
+// unusedEdgeInputDiagnostic names the edge, its target node and input (all in
+// the identifier grammar) and the config keys that could read the input.
+func unusedEdgeInputDiagnostic(graphID string, edgeIndex int, nodeID, inputID string, inputKeys []string) graph.Diagnostic {
+	suggestion := "this node type reads no input by that name: remove the edge, or connect it to an input the node reads"
+	if len(inputKeys) > 0 {
+		suggestion = fmt.Sprintf("name input %q in config.%s, or remove the edge", inputID, strings.Join(inputKeys, " or config."))
+	}
+	index := edgeIndex
+	return graph.Diagnostic{
+		Severity:   graph.SeverityWarning,
+		Code:       edgeInputUnusedCode,
+		Message:    fmt.Sprintf("node %q does not use input %q, which edge %d delivers", nodeID, inputID, edgeIndex),
+		GraphID:    shownGraphID(graphID),
+		Location:   graph.DiagnosticLocation{EdgeIndex: &index, Path: fmt.Sprintf("edges[%d].to", edgeIndex)},
+		Suggestion: suggestion,
+	}
 }
 
 // validateForRun is the gate before a run starts, for the CLI and `serve`: the
