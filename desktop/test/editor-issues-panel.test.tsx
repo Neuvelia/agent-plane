@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import type { Analysis } from '../src/editor/doc'
-import { IssuesPanel } from '../src/editor/IssuesPanel'
+import { ProblemsDrawer } from '../src/editor/IssuesPanel'
 import { I18nProvider } from '../src/i18n/context'
 
 const parsed = (extra: Partial<Analysis>): Analysis => ({ status: 'ready', diagnostics: [], parseError: 'parse graph definition: yaml: broken', stale: false, ...extra })
@@ -9,7 +9,7 @@ const parsed = (extra: Partial<Analysis>): Analysis => ({ status: 'ready', diagn
 function html(locale: 'en' | 'pl', analysis: Analysis) {
   return renderToStaticMarkup(
     <I18nProvider locale={locale}>
-      <IssuesPanel analysis={analysis} onFocus={() => undefined} onRetry={() => undefined} />
+      <ProblemsDrawer analysis={analysis} open onFocus={() => undefined} onRetry={() => undefined} />
     </I18nProvider>,
   )
 }

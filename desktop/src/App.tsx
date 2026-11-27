@@ -83,7 +83,8 @@ function Shell({ lost }: { lost: boolean }) {
   }
   const crumb = route.name === 'welcome' ? t('nav.welcome') : route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
   return (
-    <div className="app">
+    // The graph editor is full-bleed (graph editor v2): its own header row replaces the global bar and breadcrumb.
+    <div className={route.name === 'editor' ? 'app bleed' : 'app'}>
       <a
         className="skip-link"
         href="#content"
@@ -96,8 +97,8 @@ function Shell({ lost }: { lost: boolean }) {
       </a>
       <Sidebar entries={main} deferred={deferred} footer={footer} />
       <div className="col">
-        <GlobalBar lost={lost} />
-        <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
+        {route.name !== 'editor' && <GlobalBar lost={lost} />}
+        {route.name !== 'editor' && <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />}
         <main id="content" ref={mainRef} tabIndex={-1}>
           {route.name === 'dashboard' && (
             <Dashboard

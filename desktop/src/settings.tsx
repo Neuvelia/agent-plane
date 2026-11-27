@@ -1,6 +1,7 @@
 import { useEffect, useId, useState } from 'react'
 import { LOCALES, LOCALE_LABEL } from './i18n'
 import { useI18n } from './i18n/context'
+import { THEME_PREFS, useTheme } from './theme'
 import type { RecordingSettings } from './types'
 import { Button, Card, Field, HelpTip, ListRow, SegmentedControl } from './ui/primitives'
 
@@ -11,10 +12,11 @@ export function parseNames(text: string): string[] {
   return text.split(/[\s,]+/).filter((n) => n !== '')
 }
 
-// F2.5a: Settings holds the interface language. F2.3 E6 adds the opt-in
+// F2.5a: Settings holds the interface language; F2.5b adds the colour theme. F2.3 E6 adds the opt-in
 // "Record run values" preference (ADR-0023), held by the main process.
 export function Settings() {
   const { t, locale, setLocale } = useI18n()
+  const { pref, setPref } = useTheme()
   return (
     <section className="config">
       <h1>{t('settings.title')}</h1>
@@ -23,6 +25,11 @@ export function Settings() {
           <span style={{ flex: 1 }}>{t('settings.language')}</span>
           <HelpTip>{t('settings.languageHelp')}</HelpTip>
           <SegmentedControl label={t('settings.language')} value={locale} onChange={setLocale} segments={LOCALES.map((l) => ({ value: l, label: `${LOCALE_LABEL[l]} · ${NAME[l]}` }))} />
+        </ListRow>
+        <ListRow>
+          <span style={{ flex: 1 }}>{t('settings.theme')}</span>
+          <HelpTip>{t('settings.themeHelp')}</HelpTip>
+          <SegmentedControl label={t('settings.theme')} value={pref} onChange={setPref} segments={THEME_PREFS.map((p) => ({ value: p, label: t(`settings.theme.${p}`), testId: `theme-${p}` }))} />
         </ListRow>
       </Card>
       <RecordValues />

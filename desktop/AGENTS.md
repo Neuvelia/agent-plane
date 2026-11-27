@@ -67,7 +67,8 @@ changing behavior; verify older roadmap statements against current code.
 - `npm run check` builds Storybook but does not run browser story smoke.
   For changes to stories, shared UI, localisation or accessibility, run
   `make desktop-stories` when Chromium is available. It renders every story
-  in EN and PL with accessibility and no-external-request checks.
+  in EN and PL (dark) and EN (light) with accessibility and no-external-request
+  checks, and fails a story whose play function throws or never finishes.
 - For changes to Electron IPC, sidecar lifecycle, graph-file boundaries or
   end-to-end run flows, run `make desktop-e2e` when the required display is
   available. It uses a real Electron window and Go sidecar; on macOS and

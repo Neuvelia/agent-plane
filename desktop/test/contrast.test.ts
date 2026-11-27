@@ -2,12 +2,36 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 // WCAG contrast of the colour pairs the app actually draws, computed from the
-// shipped tokens.css (+ overrides.css). Text must reach 4.5:1; focus rings and
-// selection outlines 3:1. Translucent colours are composited over what is behind.
+// shipped tokens.css (+ overrides.css), for every theme. Text must reach 4.5:1;
+// focus rings and selection outlines 3:1. Translucent colours are composited over
+// what is behind. The light theme redefines colours in `:root[data-theme="light"]`.
 const css = ['tokens.css', 'overrides.css'].map((f) => readFileSync(new URL(`../src/design/${f}`, import.meta.url), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '')
-const token = new Map([...css.matchAll(/--([\w-]+):\s*([^;}]+?)\s*[;}]/g)].map((m) => [m[1]!, m[2]!]))
+const blocks = [...css.matchAll(/(:root(?:\[data-theme="(\w+)"\])?)\s*\{([^}]*)\}/g)]
+const declared = (body: string) => [...body.matchAll(/--([\w-]+):\s*([^;}]+?)\s*(?:;|$)/g)].map((m) => [m[1]!, m[2]!] as const)
+function tokensOf(theme: 'dark' | 'light'): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const b of blocks) if (!b[2]) for (const [k, v] of declared(b[3]!)) map.set(k, v)
+  if (theme === 'light') for (const b of blocks) if (b[2] === 'light') for (const [k, v] of declared(b[3]!)) map.set(k, v)
+  return map
+}
 
 type RGBA = [number, number, number, number]
+const over = (top: RGBA, under: RGBA): RGBA => {
+  const a = top[3] + under[3] * (1 - top[3])
+  const ch = (i: number) => (top[i]! * top[3] + under[i]! * under[3] * (1 - top[3])) / (a || 1)
+  return [ch(0), ch(1), ch(2), a]
+}
+const lum = ([r, g, b]: RGBA) => {
+  const f = (c: number) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+}
+const ratio = (a: RGBA, b: RGBA) => {
+  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x)
+  return (hi! + 0.05) / (lo! + 0.05)
+}
+
+for (const theme of ['dark', 'light'] as const) {
+const token = tokensOf(theme)
 function parse(name: string): RGBA {
   const v = token.get(name)
   if (!v) throw new Error(`no token --${name}`)
@@ -23,19 +47,6 @@ function parse(name: string): RGBA {
     return [r!, g!, b!, a ?? 1]
   }
   throw new Error(`cannot parse --${name}: ${v}`)
-}
-const over = (top: RGBA, under: RGBA): RGBA => {
-  const a = top[3] + under[3] * (1 - top[3])
-  const ch = (i: number) => (top[i]! * top[3] + under[i]! * under[3] * (1 - top[3])) / (a || 1)
-  return [ch(0), ch(1), ch(2), a]
-}
-const lum = ([r, g, b]: RGBA) => {
-  const f = (c: number) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
-}
-const ratio = (a: RGBA, b: RGBA) => {
-  const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x)
-  return (hi! + 0.05) / (lo! + 0.05)
 }
 /** Layers listed bottom to top, composited. */
 const stack = (...names: string[]): RGBA => names.map(parse).reduce((under, layer) => over(layer, under))
@@ -54,9 +65,11 @@ const grounds: Record<string, RGBA> = {
   'fill-6 tag': stack('bg', 'card-mid', 'fill-6'),
   'fill-4 hover': stack('bg', 'card-mid', 'fill-4'),
   'warn-wash': stack('bg', 'card-mid', 'warn-wash'),
+  'inset fill-8 (editor canvas chip)': stack('bg', 'inset', 'fill-8'),
 }
 const text = (fg: string, on: Record<string, RGBA>) => Object.entries(on).map(([n, bg]) => ({ pair: `${fg} on ${n}`, value: ratio(over(parse(fg), bg), bg) }))
 
+describe(`${theme} theme`, () => {
 describe('text contrast reaches 4.5:1', () => {
   const cases = [
     ...text('fg', grounds),
@@ -67,6 +80,8 @@ describe('text contrast reaches 4.5:1', () => {
     ...text('bad-text', { bg: grounds.bg!, card, 'bad-soft': stack('bg', 'card-mid', 'bad-soft'), 'bad-soft on warn-wash': stack('bg', 'card-mid', 'warn-wash', 'bad-soft') }),
     ...text('on-silver', { 'silver-top': parse('silver-top'), 'silver-bottom': parse('silver-bottom') }),
     ...text('fg', { 'button-top': parse('button-top'), 'button-bottom': parse('button-bottom') }),
+    ...text('brand-text', { bg: grounds.bg!, inset: grounds.inset!, 'brand-soft': stack('bg', 'brand-soft') }),
+    ...text('primary-fg', { 'primary-bg': parse('primary-bg'), 'primary-hover': parse('primary-hover') }),
     ...['code-key', 'code-string', 'code-number', 'code-var'].flatMap((c) => text(c, { 'code-bg': grounds['code-bg']! })),
   ]
   for (const c of cases) it(c.pair, () => expect(c.value).toBeGreaterThanOrEqual(4.5))
@@ -83,7 +98,13 @@ describe('non-text contrast reaches 3:1', () => {
   it('status dots on the card', () => {
     for (const c of ['ok', 'warn', 'brand', 'bad']) expect(ratio(parse(c), card), c).toBeGreaterThanOrEqual(3)
   })
+  it('the flat primary button stands out from the ground', () => {
+    expect(ratio(parse('primary-bg'), grounds.bg!)).toBeGreaterThanOrEqual(3)
+  })
 })
+
+})
+}
 
 describe('the faint colour is never body text', () => {
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')

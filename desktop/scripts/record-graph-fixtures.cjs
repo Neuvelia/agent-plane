@@ -11,6 +11,77 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '..', '..')
 const out = path.resolve(__dirname, '..', 'test', 'fixtures')
 
+const FIX_ISSUE = `# Fix an issue: read it, let an agent fix it in a bounded loop, check the change, ask a person.
+schema_version: 0
+id: fix-issue
+name: Fix an issue
+inputs: {}
+nodes:
+  read-issue:
+    type: shell
+    config:
+      command: /usr/bin/cat
+      args: [ISSUE.md]
+    outputs:
+      issue: {type: string, required: true}
+      log: {type: string}
+  fix:
+    type: agent
+    inputs:
+      issue: {type: string, required: true}
+    config:
+      adapter: codex
+      workspace: /work/repo
+      task: Fix the issue below. Change only files under src/. Run the tests before you finish.
+      allowed_paths: [src/]
+    outputs:
+      summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
+    loop:
+      max_attempts: 3
+      gate:
+        inputs:
+          candidate: {type: json, required: true}
+        config:
+          check_id: scope
+          kind: reported_file_scope
+          input: candidate
+          allowed_paths: [src/]
+      bindings:
+        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}
+  tests:
+    type: gate
+    inputs:
+      files: {type: json, required: true}
+    config: {check_id: tests, kind: reported_file_scope, input: files, allowed_paths: [src/]}
+    outputs:
+      verdict: {type: string, required: true}
+  review:
+    type: human
+    inputs:
+      summary: {type: string, required: true}
+      verdict: {type: string, required: true}
+    config:
+      prompt: Review the summary and the check. Accept the fix?
+      context_inputs: [summary]
+    outputs:
+      decision: {type: string, required: true}
+edges:
+  - {from: read-issue.outputs.issue, to: fix.inputs.issue}
+  - {from: fix.outputs.changed_files, to: tests.inputs.files}
+  - {from: fix.outputs.summary, to: review.inputs.summary}
+  - {from: tests.outputs.verdict, to: review.inputs.verdict}
+outputs:
+  decision: {from: review.outputs.decision}
+metadata:
+  layout:
+    nodes:
+      read-issue: {x: 0, y: 0}
+      fix: {x: 286, y: 0}
+      tests: {x: 598, y: 0}
+      review: {x: 598, y: 260}
+`
+
 const GRAPHS = {
   // valid, with the engine's "declared output not consumed" warning
   pair: `# Two shell nodes, not yet connected.
@@ -119,6 +190,10 @@ edges:
   - {from: a.outputs.stdout, to: b.inputs.text}
 outputs: {}
 `,
+  // F2.5b: the graph of the "Graph editor v2" artboards: shell -> agent -> gate -> human.
+  'fix-issue': FIX_ISSUE,
+  // the same graph with fix's required input left unconnected (the "error blocks run" artboard)
+  'fix-issue-error': FIX_ISSUE.replace('  - {from: read-issue.outputs.issue, to: fix.inputs.issue}\n', ''),
   // what a new graph starts as
   empty: 'schema_version: 0\nid: new-graph\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n',
   // YAML the engine cannot read
@@ -146,12 +221,14 @@ outputs: {}
     // F2.12: the engine's answer for a draft of the agent template, whose workspace is the one value to fill.
     // AP_RECORD=templates records only this.
     const template = fs.readFileSync(path.join(root, '.agents', 'templates', 'agent-scoped-approval.yaml'), 'utf8').replace(/^id: agent-scoped-approval$/m, 'id: new-graph')
-    write('graph-validate-template-agent-scoped-approval.json', (await call('POST', '/graphs/validate', { text: template })).body)
+    if (process.env.AP_RECORD !== 'editor-v2') write('graph-validate-template-agent-scoped-approval.json', (await call('POST', '/graphs/validate', { text: template })).body)
     if (process.env.AP_RECORD === 'templates') return
     // F2.11: this machine's capability report; stories derive the other states from it.
-    fs.writeFileSync(path.join(out, 'capabilities-linux.json'), JSON.stringify((await call('GET', '/capabilities')).body, null, 2) + '\n')
+    if (process.env.AP_RECORD !== 'editor-v2') fs.writeFileSync(path.join(out, 'capabilities-linux.json'), JSON.stringify((await call('GET', '/capabilities')).body, null, 2) + '\n')
     if (process.env.AP_RECORD === 'capabilities') return
-    for (const [name, text] of Object.entries(GRAPHS)) {
+    // AP_RECORD=editor-v2 records only the graphs of the editor v2 artboards (F2.5b).
+    const only = process.env.AP_RECORD === 'editor-v2' ? ['fix-issue', 'fix-issue-error'] : null
+    for (const [name, text] of Object.entries(GRAPHS).filter(([n]) => !only || only.includes(n))) {
       const file = path.join(dir, `${name}.yaml`)
       fs.writeFileSync(file, text)
       const grant = (await call('POST', '/graphs/grants', { path: file, mode: 'open' })).body.grant
@@ -161,6 +238,7 @@ outputs: {}
       const validated = await call('POST', '/graphs/validate', { text })
       write(`graph-validate-${name}.json`, validated.body)
     }
+    if (only) return
     // The canvas (E2.2): the demo graph, a file with anchors, and real answers to
     // the operations the canvas sends.
     const demoText = fs.readFileSync(path.join(root, '.agents', 'graphs', 'demo-vertical.yaml'), 'utf8')

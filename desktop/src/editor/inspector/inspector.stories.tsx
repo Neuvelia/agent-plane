@@ -44,22 +44,30 @@ async function until(root: Element, selector: string, ms = 4000): Promise<HTMLEl
     await wait(25)
   }
 }
-const click = async (root: Element, testId: string) => (await until(root, `[data-testid="${testId}"]`)).click()
+// The Find a step menu is portalled to <body>, so lookups use the whole document.
+const click = async (_root: Element, testId: string) => (await until(document.body, `[data-testid="${testId}"]`)).click()
 async function inspect(root: Element, node: string) {
   await click(root, 'editor-open')
+  await click(root, 'find-step')
   await click(root, `list-node-${node}`)
   await until(root, '[data-testid="inspector-node"]')
   await wait(200)
 }
+/** The YAML is on screen in the Split view (the editor opens in Visual). */
+async function yaml(root: Element): Promise<HTMLElement> {
+  if (!root.querySelector('.cm-content')) await click(root, 'view-split')
+  return until(root, '.cm-content')
+}
 const story = (g: GraphStory, play: (root: Element) => Promise<void>): S => ({
-  parameters: { bridge: { runs: [], graph: g } },
+  parameters: { bridge: { runs: [], graph: g }, bleed: true },
   render: () => <Harness />,
   play: async ({ canvasElement }) => play(canvasElement),
 })
 
 export const NothingSelected: S = story(graph(shellOpen), async (root) => {
   await click(root, 'editor-open')
-  await until(root, '[data-testid="inspector-empty"]')
+  // Nothing selected: the panel shows the graph itself (graph editor v2).
+  await until(root, '[data-testid="graph-heading"]')
 })
 export const ShellWithJsonPredicateLoop: S = story(graph(shellOpen), (root) => inspect(root, 'build'))
 export const AdvancedSection: S = story(graph(shellOpen), async (root) => {
@@ -87,21 +95,21 @@ export const PortRemovalPreview: S = story(graph(shellOpen), async (root) => {
 })
 export const ReadOnlyWhileYamlIsBroken: S = story(graph(shellOpen), async (root) => {
   await inspect(root, 'build')
-  const content = await until(root, '.cm-content')
+  const content = await yaml(root)
   content.focus()
   document.execCommand('insertText', false, 'id: [\n')
   await until(root, '[data-testid="inspector-readonly"]')
 })
 export const Checking: S = story(graph(shellOpen, { validateHang: true }), async (root) => {
   await inspect(root, 'build')
-  const content = await until(root, '.cm-content')
+  const content = await yaml(root)
   content.focus()
   document.execCommand('insertText', false, '# note\n')
   await until(root, '[data-testid="inspector-checking"]')
 })
 export const EngineUnreachable: S = story(graph(shellOpen, { validateFails: true }), async (root) => {
   await inspect(root, 'build')
-  const content = await until(root, '.cm-content')
+  const content = await yaml(root)
   content.focus()
   document.execCommand('insertText', false, '# note\n')
   await wait(700)

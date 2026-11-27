@@ -54,12 +54,21 @@ export function Sidebar({ entries, deferred, footer = [] }: { entries: NavEntry[
         <Entry key={e.id} e={e} />
       ))}
       <div className="side-gap" />
+      {deferred.length > 0 && (
+        <div className="side-sec lb" aria-hidden="true">
+          {t('nav.later')}
+        </div>
+      )}
       {deferred.map((e) => (
         <Entry key={e.id} e={{ ...e, disabled: true }} />
       ))}
-      {footer.map((e) => (
-        <Entry key={e.id} e={e} />
-      ))}
+      {footer.length > 0 && (
+        <div className="side-foot">
+          {footer.map((e) => (
+            <Entry key={e.id} e={e} />
+          ))}
+        </div>
+      )}
     </nav>
   )
 }

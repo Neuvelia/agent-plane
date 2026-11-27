@@ -2,7 +2,8 @@
 // node scripts/stories-smoke.cjs   (after `npm run build-storybook`)
 // AP_CHROMIUM=/path/to/chrome uses an installed browser instead of Playwright's.
 // AP_STORIES_WORKERS=n sets how many stories render at once (default: up to 4).
-// Opens every story in a real browser, in English and Polish, and fails on:
+// Opens every story in a real browser, in English and Polish (dark theme) and
+// in English in the light theme, and fails on:
 //   - a missing required story (screen states of F2.5a 6c, every primitive),
 //   - any request that is not served by the static Storybook itself,
 //   - a page error or console error,
@@ -38,6 +39,8 @@ const REQUIRED = [
   'screens--new-run-no-file', 'screens--new-run-ready', 'screens--new-run-warnings', 'screens--new-run-blocked',
   'screens-welcome--all-available', 'screens-welcome--git-missing', 'screens-welcome--codex-not-configured', 'screens-welcome--codex-found-on-path', 'screens-welcome--agent-clis-found', 'screens-welcome--codex-unsupported-version', 'screens-welcome--windows', 'screens-welcome--detection-error', 'screens-welcome--checking', 'screens-welcome--rechecking', 'screens-welcome--request-failed', 'screens-welcome--engine-disconnected',
   'screens-edge-inspector--no-run', 'screens-edge-inspector--run-unavailable', 'screens-edge-inspector--different-version-none-chosen', 'screens-edge-inspector--different-version-needs-confirmation', 'screens-edge-inspector--different-version-confirmed', 'screens-edge-inspector--node-not-finished', 'screens-edge-inspector--node-waiting-for-person', 'screens-edge-inspector--node-failed', 'screens-edge-inspector--older-run', 'screens-edge-inspector--not-recorded', 'screens-edge-inspector--no-value-for-this-port', 'screens-edge-inspector--value-not-carried', 'screens-edge-inspector--value-string', 'screens-edge-inspector--value-json-formatted', 'screens-edge-inspector--value-json-raw', 'screens-edge-inspector--value-not-json', 'screens-edge-inspector--value-truncated', 'screens-edge-inspector--value-redacted', 'screens-edge-inspector--value-long', 'screens-edge-inspector--value-hidden-characters', 'screens-edge-inspector--value-empty', 'screens-edge-inspector--value-artifact-reference', 'screens-edge-inspector--live-run-value-arrived', 'screens-edge-inspector--connection-lost', 'screens-edge-inspector--connection-lost-before-value',
+  'screens-editor--design-step-cards-light', 'screens-editor--design-step-cards-dark', 'screens-editor--design-error-blocks-run', 'screens-editor--design-graph-menu', 'screens-editor--design-step-menu', 'screens-editor--design-empty-graph', 'screens-editor--design-problems-open', 'screens-editor--design-split-view', 'screens-editor--design-edge-selected',
+  'screens--settings-language',
   'screens-template-picker--default', 'screens-template-picker--windows-report', 'screens-template-picker--no-report', 'screens-template-picker--codex-not-configured', 'screens-template-picker--agent-draft-shows-placeholder',
 ]
 
@@ -65,7 +68,8 @@ const server = http.createServer((req, res) => {
   })
   const failures = []
   const workers = Math.max(1, Number(process.env.AP_STORIES_WORKERS) || Math.min(4, os.cpus().length))
-  for (const locale of ['en', 'pl']) {
+  // roadmap: F2.5b-AC5
+  for (const [locale, theme] of [['en', 'dark'], ['pl', 'dark'], ['en', 'light']]) {
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
     const queue = [...ids]
     // Each page takes the next story from the shared queue; failures name the
@@ -73,7 +77,7 @@ const server = http.createServer((req, res) => {
     const worker = async () => {
       const page = await context.newPage()
       let current = ''
-      const fail = (msg) => failures.push(`[${locale}] ${current}: ${msg}`)
+      const fail = (msg) => failures.push(`[${locale}/${theme}] ${current}: ${msg}`)
       page.on('request', (r) => {
         if (!r.url().startsWith(origin) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) fail(`external request ${r.url()}`)
       })
@@ -81,7 +85,7 @@ const server = http.createServer((req, res) => {
       page.on('console', (m) => m.type() === 'error' && fail(`console error ${m.text()}`))
       while (queue.length) {
         current = queue.shift()
-        await checkStory(page, origin, current, locale, fail)
+        await checkStory(page, origin, current, locale, theme, fail)
       }
       await page.close()
     }
@@ -94,23 +98,35 @@ const server = http.createServer((req, res) => {
     console.error(failures.join('\n'))
     process.exit(1)
   }
-  console.log(`stories ok: ${ids.length} stories x 2 languages, zero axe violations, zero external requests`)
+  console.log(`stories ok: ${ids.length} stories x (2 languages dark + English light), zero axe violations, zero external requests`)
 })().catch((e) => {
   console.error(e)
   process.exit(1)
 })
 
-async function checkStory(page, origin, id, locale, fail) {
-  await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale}`)
+async function checkStory(page, origin, id, locale, theme, fail) {
+  await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale};theme:${theme}`)
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
   // Only React Flow views fade in after fit-view; other stories are ready once rendered.
+  // Wait for the story's play function: a story whose play throws, or never finishes, is broken.
+  const phase = await page
+    .waitForFunction(() => {
+      const p = window.__STORYBOOK_PREVIEW__?.currentRender?.phase
+      return ['completed', 'errored', 'aborted', 'finished'].includes(p) && p
+    }, null, { timeout: 15000 })
+    .then((h) => h.jsonValue())
+    .catch(() => 'timeout')
+  if (phase !== 'completed' && phase !== 'finished') fail(`play function ${phase}`)
   if (await page.$('#storybook-root .react-flow')) await page.waitForTimeout(900)
+  // Measure contrast at rest: wait (at most 2 s) for finite CSS animations and transitions to end.
+  await page.evaluate(() => Promise.race([Promise.all(document.getAnimations().filter((a) => a.effect?.getTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))), new Promise((r) => setTimeout(r, 2000))]))
   await page.addScriptTag({ content: axeSource })
   // The Storybook a11y addon runs its own axe on render; wait for it to finish.
   let result
   for (let tries = 0; tries < 20 && !result; tries++) {
     try {
-      result = await page.evaluate(() => axe.run('#storybook-root'))
+      // Menus are portalled to <body>: check them too when one is open.
+      result = await page.evaluate(() => axe.run(document.querySelector('.v2-menu') ? { include: [['#storybook-root'], ['.v2-menu']] } : '#storybook-root'))
     } catch (e) {
       if (!/already running/.test(String(e))) throw e
       await page.waitForTimeout(250)

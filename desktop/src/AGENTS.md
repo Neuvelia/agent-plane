@@ -19,6 +19,7 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
 | Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
+| Light/dark theme preference and `<html data-theme>` (F2.5b, ADR-0046) | `theme.tsx`; colour values in `design/tokens.json` |
 | Recorded run values and "Show values from run" (F2.3 E5b.1) | `values.ts`, `valuePicker.ts`, `useRunValues.ts`, `ValuePickerView.tsx` |
 | Edge inspector: states, safe value text, Copy, session recording hint (F2.3 E5b.2) | `editor/edgeValue.ts`, `editor/EdgeInspector.tsx`, `editor/EdgeValueBox.tsx`, `editor/valueText.ts`, `useSessionRecording.ts` |
 | Welcome screen, capability rows and first-run flag (F2.11) | `welcome.tsx`, `capabilities.ts` |

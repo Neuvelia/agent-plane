@@ -132,9 +132,8 @@ export function GraphMap({ graph, run, selected, onSelect, critical = NONE, dimm
         edgesFocusable={false}
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => onSelect(node.id)}
-        colorMode="dark"
       >
-        <Background gap={22} color="#242424" />
+        <Background gap={22} />
         <FitOnResize />
       </ReactFlow>
       </StateCtx.Provider>

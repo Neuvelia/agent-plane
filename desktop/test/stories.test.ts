@@ -26,3 +26,16 @@ describe('stories', () => {
     }
   })
 })
+
+describe('the browser story smoke (scripts/stories-smoke.cjs)', () => {
+  const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+  it('renders every story in English and Polish dark and English light, and fails a broken play function [F2.5b-AC5]', () => {
+    expect(smoke).toContain("[['en', 'dark'], ['pl', 'dark'], ['en', 'light']]")
+    expect(smoke).toContain('globals=locale:${locale};theme:${theme}')
+    expect(smoke).toContain('__STORYBOOK_PREVIEW__?.currentRender?.phase')
+    expect(smoke).toContain('fail(`play function ${phase}`)')
+  })
+  it('requires the graph editor v2 artboard stories', () => {
+    for (const id of ['design-step-cards-light', 'design-step-cards-dark', 'design-error-blocks-run', 'design-graph-menu', 'design-step-menu', 'design-empty-graph']) expect(smoke).toContain(`'screens-editor--${id}'`)
+  })
+})

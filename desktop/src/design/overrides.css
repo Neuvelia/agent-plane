@@ -11,3 +11,9 @@
    The solid `brand` colour (5.6:1 on the ground) is used instead.
    (Verified by test/contrast.test.ts.) */
 :root{--bad-text:#FF6961;--focus:#0A84FF}
+
+/* Light theme: the same two deviations. The light `bad` and `brand` already pass
+   4.5:1 as text and 3:1 as a focus ring, so they are used solid. */
+:root[data-theme="light"]{--bad-text:#B00018;--focus:#0066CC}
+:root{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}

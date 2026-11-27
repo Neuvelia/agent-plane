@@ -23,6 +23,10 @@ import editDelete from '../../test/fixtures/graph-edit-delete-demo.json'
 import editMove from '../../test/fixtures/graph-edit-move.json'
 import editRefused from '../../test/fixtures/graph-edit-refused.json'
 import editRename from '../../test/fixtures/graph-edit-rename-demo.json'
+import fixIssueOpen from '../../test/fixtures/graph-open-fix-issue.json'
+import fixIssueValidate from '../../test/fixtures/graph-validate-fix-issue.json'
+import fixIssueErrorOpen from '../../test/fixtures/graph-open-fix-issue-error.json'
+import fixIssueErrorValidate from '../../test/fixtures/graph-validate-fix-issue-error.json'
 import type { GraphStory } from '../storybook/bridge'
 import { EditorScreen } from './EditorScreen'
 import type { OpenResponse, ValidateResponse } from './types'
@@ -54,8 +58,15 @@ async function until(root: Element, selector: string, ms = 4000): Promise<Elemen
     await wait(25)
   }
 }
-const click = async (root: Element, testId: string) => (await until(root, `[data-testid="${testId}"]`) as HTMLElement).click()
+// Menus are portalled to <body>, so lookups use the whole document.
+const click = async (_root: Element, testId: string) => (await until(document.body, `[data-testid="${testId}"]`) as HTMLElement).click()
+/** The YAML is on screen in the Split view. */
+async function showYaml(root: Element) {
+  if (!root.querySelector('.cm-content')) await click(root, 'view-split')
+  await until(root, '.cm-content')
+}
 async function typeIn(root: Element, text: string) {
+  await showYaml(root)
   const content = (await until(root, '.cm-content')) as HTMLElement
   content.focus()
   document.execCommand('insertText', false, text)
@@ -63,11 +74,30 @@ async function typeIn(root: Element, text: string) {
 }
 const open = async (root: Element) => {
   await click(root, 'editor-open')
-  await until(root, '.cm-content')
+  await until(root, '[data-testid="editor-canvas"]')
+}
+/** Selects a step the keyboard way: Find a step, then its row. */
+async function pickNode(root: Element, id: string) {
+  await click(root, 'find-step')
+  await click(root, `list-node-${id}`)
+}
+/** Runs an action from a step's "…" menu. */
+async function stepAction(root: Element, id: string, action: string) {
+  await click(root, `step-menu-${id}`)
+  await click(root, action)
+}
+async function addStep(root: Element, type: string) {
+  await click(root, 'add-step')
+  await click(root, `add-${type}`)
+}
+async function openDrawer(root: Element) {
+  const toggle = (await until(root, '[data-testid="problems-toggle"]')) as HTMLElement
+  if (toggle.getAttribute('aria-expanded') !== 'true') toggle.click()
+  await wait(300)
 }
 
-const story = (graph: GraphStory, play?: (root: Element) => Promise<void>): S => ({
-  parameters: { bridge: { runs: [], graph } },
+const story = (graph: GraphStory, play?: (root: Element) => Promise<void>, theme?: 'light' | 'dark'): S => ({
+  parameters: { bridge: { runs: [], graph }, bleed: true, ...(theme ? { theme } : {}) },
   render: () => <Harness />,
   play: play ? async ({ canvasElement }) => play(canvasElement) : undefined,
 })
@@ -89,7 +119,7 @@ export const YamlErrorWhileTyping: S = story(base, async (root) => {
 export const NewGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
   await click(root, 'editor-new')
   await click(root, 'picker-create')
-  await until(root, '.cm-content')
+  await until(root, '[data-testid="empty-graph"]')
 })
 export const SaveConflict: S = story({ ...base, save: 'conflict' }, async (root) => {
   await open(root)
@@ -112,6 +142,7 @@ export const SaveFailed: S = story({ ...base, save: 'error' }, async (root) => {
 export const LeavePrompt: S = story(base, async (root) => {
   await open(root)
   await typeIn(root, '# unsaved\n')
+  await click(root, 'graph-menu')
   await click(root, 'editor-open')
   await until(root, '[data-testid="leave-prompt"]')
 })
@@ -139,38 +170,35 @@ const shown = async (root: Element) => {
 export const CanvasGraph: S = story(demo, shown)
 export const CanvasNodeSelected: S = story(demo, async (root) => {
   await shown(root)
-  await click(root, 'list-node-approve')
+  await pickNode(root, 'approve')
   await until(root, '[data-testid="selected"]')
 })
 export const CanvasConnectList: S = story(demo, async (root) => {
   await shown(root)
-  await click(root, 'list-node-fast')
-  await click(root, 'op-connect')
+  await stepAction(root, 'fast', 'op-connect')
   await click(root, 'connect-out-stdout')
   await until(root, '[data-testid^="connect-to-"]')
 })
 export const CanvasRename: S = story(demo, async (root) => {
   await shown(root)
-  await click(root, 'list-node-fast')
-  await click(root, 'op-rename')
+  await stepAction(root, 'fast', 'op-rename')
   await until(root, '[data-testid="rename-form"]')
 })
 export const CanvasDeleteConfirm: S = story(demo, async (root) => {
   await shown(root)
-  await click(root, 'list-node-flaky')
-  await click(root, 'op-delete')
+  await stepAction(root, 'flaky', 'op-delete')
   await until(root, '[data-testid="delete-confirm"]')
 })
 export const CanvasAddNode: S = story({ ...base, edit: () => editAddNode }, async (root) => {
   await open(root)
   await until(root, '[data-testid="node-a"]')
-  await click(root, 'add-shell')
+  await addStep(root, 'shell')
   await until(root, '[data-testid="node-shell_1"]')
 })
 export const CanvasOperationRefused: S = story({ ...base, edit: () => editRefused }, async (root) => {
   await open(root)
   await until(root, '[data-testid="node-a"]')
-  await click(root, 'add-shell')
+  await addStep(root, 'shell')
   await until(root, '[data-testid="editor-error"]')
 })
 export const CanvasReadOnlyAnchors: S = story({ ...base, opened: anchorsOpen as unknown as OpenResponse }, async (root) => {
@@ -185,7 +213,8 @@ export const CanvasYamlBroken: S = story(base, async (root) => {
 })
 export const CanvasEmptyGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
   await click(root, 'editor-new')
-  await until(root, '[data-testid="editor-canvas"]')
+  await click(root, 'picker-create')
+  await until(root, '[data-testid="empty-graph"]')
   await wait(400)
 })
 
@@ -225,10 +254,12 @@ const issueButton = async (root: Element, code: string) => (await until(root, `[
 
 export const IssuesNone: S = story({ ...base, opened: demoOpen as unknown as OpenResponse }, async (root) => {
   await open(root)
+  await openDrawer(root)
   await until(root, '[data-testid="issues-empty"]')
 })
 export const IssuesWarningsOnly: S = story(base, async (root) => {
   await open(root)
+  await openDrawer(root)
   await until(root, '[data-testid="issue"]')
 })
 export const IssuesErrorsAndWarnings: S = story(mixed, async (root) => {
@@ -238,6 +269,7 @@ export const IssuesErrorsAndWarnings: S = story(mixed, async (root) => {
 })
 export const IssuesFiltered: S = story(mixed, async (root) => {
   await open(root)
+  await openDrawer(root)
   await click(root, 'issues-filter-warning')
   await until(root, '[data-testid="issue"][data-severity="warning"]')
 })
@@ -256,29 +288,33 @@ export const IssuesFocusedNode: S = story(mixed, async (root) => {
 export const IssuesFocusedPort: S = story(mixed, async (root) => {
   await open(root)
   ;(await issueButton(root, 'E_REQUIRED_INPUT_UNBOUND')).click()
-  await until(root, '.ed-port.focus')
+  await until(root, '.v2-in.focus, .v2-tok.focus')
 })
 export const IssuesParseError: S = story(base, async (root) => {
   await open(root)
   await typeIn(root, 'id: [\n')
+  await openDrawer(root)
   await until(root, '[data-testid="issue"][data-code="YAML"]')
 })
 const unknownFieldValidate = (text: string): ValidateResponse => ((text.includes('colour:') ? parseColumnValidate : pairValidate) as unknown as ValidateResponse)
 export const IssuesParseErrorColumn: S = story({ ...base, validate: unknownFieldValidate }, async (root) => {
   await open(root)
   await typeIn(root, 'colour: red\n')
+  await openDrawer(root)
   const issue = await issueButton(root, 'YAML')
-  const position = issue.querySelector('.mu.mono')?.textContent ?? ''
+  const position = issue.querySelector('.meta .mono')?.textContent ?? ''
   if (!/\b6\b\D+\b5\b/.test(position)) throw new Error(`the parse issue does not show line 6 and column 5: "${position}"`)
 })
 export const IssuesValidating: S = story({ ...mixed, validateHang: true }, async (root) => {
   await open(root)
   await typeIn(root, '# note\n')
+  await openDrawer(root)
   await until(root, '[data-testid="validating"]')
 })
 export const IssuesEngineUnreachable: S = story({ ...mixed, validateFails: true }, async (root) => {
   await open(root)
   await typeIn(root, '# note\n')
+  await openDrawer(root)
   await until(root, '[data-testid="issues-unreachable"]')
 })
 
@@ -366,4 +402,83 @@ export const HintUnboundInputOptions: S = story(hinted(mixedOpen), async (root) 
   hint.click()
   await until(root, '[data-testid="hint-candidates"]')
   await wait(200)
+})
+
+// ---- Graph editor v2 (F2.5b): the artboards, on the recorded graph they show ----------
+const fixIssue: GraphStory = { ...base, opened: fixIssueOpen as unknown as OpenResponse, validate: () => fixIssueValidate as unknown as ValidateResponse, recent: [{ id: 'r1', label: 'fix-issue.yaml' }, { id: 'r2', label: 'code-review.yaml' }] }
+const fixIssueError: GraphStory = { ...fixIssue, opened: fixIssueErrorOpen as unknown as OpenResponse, validate: () => fixIssueErrorValidate as unknown as ValidateResponse }
+/** The artboards show the agent step selected and the graph unsaved. */
+const artboard = async (root: Element) => {
+  await open(root)
+  await until(root, '[data-testid="node-fix"]')
+  await pickNode(root, 'fix')
+  await wait(350)
+}
+
+export const DesignStepCardsLight: S = story(fixIssue, artboard, 'light')
+export const DesignStepCardsDark: S = story(fixIssue, artboard, 'dark')
+export const DesignErrorBlocksRun: S = story(fixIssueError, artboard, 'light')
+export const DesignGraphMenu: S = story(
+  fixIssue,
+  async (root) => {
+    await artboard(root)
+    await click(root, 'graph-menu')
+    await until(document.body, '[data-testid="graph-menu-list"]')
+    await wait(200)
+  },
+  'dark',
+)
+export const DesignStepMenu: S = story(
+  fixIssue,
+  async (root) => {
+    await artboard(root)
+    await click(root, 'step-menu-fix')
+    await until(document.body, '[data-testid="step-menu"]')
+    await wait(200)
+  },
+  'light',
+)
+export const DesignAddStepMenu: S = story(fixIssue, async (root) => {
+  await artboard(root)
+  await click(root, 'add-step')
+  await until(document.body, '[data-testid="add-menu"]')
+  await wait(200)
+})
+export const DesignFindStep: S = story(fixIssue, async (root) => {
+  await open(root)
+  await click(root, 'find-step')
+  await until(document.body, '[data-testid="find-menu"]')
+  await wait(200)
+})
+export const DesignEmptyGraph: S = story(
+  { ...base, validate: () => emptyValidate as unknown as ValidateResponse },
+  async (root) => {
+    await click(root, 'editor-new')
+    await click(root, 'picker-create')
+    await until(root, '[data-testid="empty-graph"]')
+    await wait(400)
+  },
+  'light',
+)
+export const DesignProblemsOpen: S = story(fixIssue, async (root) => {
+  await open(root)
+  await openDrawer(root)
+})
+export const DesignSplitView: S = story(fixIssue, async (root) => {
+  await artboard(root)
+  await showYaml(root)
+  await wait(300)
+})
+export const DesignMinimap: S = story(fixIssue, async (root) => {
+  await open(root)
+  await click(root, 'minimap-toggle')
+  await wait(300)
+})
+export const DesignEdgeSelected: S = story(fixIssue, async (root) => {
+  await open(root)
+  await until(root, '.react-flow__edge')
+  const edge = root.querySelector('[data-testid="rf__edge-fix.outputs.summary->review.inputs.summary"]') as HTMLElement | null
+  edge?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await until(root, '[data-testid="edge-inspector"]')
+  await wait(300)
 })

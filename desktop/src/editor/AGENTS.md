@@ -11,7 +11,9 @@ before changing a document, operation or save flow.
 | Pure draft, history, analysis and run gating state | `doc.ts` |
 | Async open/create/edit/validate/save/run orchestration | `useGraphDocument.ts` |
 | Typed bridge calls and response mapping | `api.ts`, `types.ts`, `hash.ts` |
-| Toolbar, YAML/Visual/Split views, diagnostics and conflict UI | `EditorScreen.tsx` |
+| Editor v2 layout: views, banners, inspector slot, drawer and status bar (F2.5b) | `EditorScreen.tsx`, `HeaderBar.tsx`, `SidePanel.tsx`, `IssuesPanel.tsx`, `editor-v2.css` |
+| Graph menu, step menu, dock and view controls; menu keyboard and motion | `GraphMenu.tsx`, `StepMenu.tsx`, `CanvasChrome.tsx`, `Menu.tsx` |
+| Step cards and edge labels: what a card says about a step | `StepCard.tsx`, `cardModel.ts`, `StepEdge.tsx` |
 | "New graph" picker (Blank or a bundled template, F2.12) | `TemplatePicker.tsx`, `../templates.ts` |
 | Port handles, operation gestures and keyboard paths | `GraphCanvas.tsx` |
 | Display positions and canvas-only helpers | `layout.ts` |
@@ -71,6 +73,14 @@ before changing a document, operation or save flow.
   read-only reasons and actionable conflict errors. Stories use recorded Go
   API responses alongside controlled failure cases through the in-memory
   bridge.
+- Editor v2 (F2.5b, ADR-0046) is presentation only. A step card is a summary read
+  from the definition, the descriptors and the diagnostics (`cardModel.ts`); it
+  never branches on a node type to decide anything. Controls without engine or
+  file-grant support (Test this step, Run from this step, comments, copy and
+  duplicate a step, file rename/duplicate/reveal/copy path/delete) stay visible,
+  `aria-disabled` and tagged "Soon"; they send nothing. Open, New and Close live in
+  the graph menu while a graph is open; node selection by keyboard goes through
+  "Find a step".
 - The inspector (F2.2) renders the sidecar's descriptors (`node_types`) and
   per-node data (`node_info`); it never branches on a node type or decides a
   value's validity. A committed change (blur, Enter, toggle) is one batch
@@ -105,6 +115,7 @@ and the F2.4 Issues panel are present; F2.3 E5a.2-E5a.3 (Bindings panel, graph i
 
 - Edge inspector states, text safety, JSON formatting and Copy: `desktop/test/edge-inspector.test.tsx`; stories `edgeValue.stories.tsx`.
 - Draft/history, stale validation and run gating: `desktop/test/editor-doc.test.ts`.
+- Editor v2 header, status bar, drawer and step cards: `desktop/test/editor-v2.test.tsx`, `desktop/test/card-model.test.ts`; artboard stories `Design*` in `editor.stories.tsx`.
 - Template picker and draft text: `desktop/test/templates.test.tsx`, stories in `picker.stories.tsx`.
 - Layout, ID suggestion and deletion counts: `desktop/test/editor-layout.test.ts`.
 - Guard against renderer graph rules: `desktop/test/no-graph-rules.test.ts`.

@@ -1,13 +1,15 @@
 // Pure generator: design-system tokens.json -> tokens.css. Used by
 // scripts/sync-tokens.mjs (writes the file) and by test/tokens.test.ts (parity).
-// Only the dark theme exists (F2.5a); other themes are ignored.
+// The first colour theme (dark) is the :root default; every other theme is a
+// `:root[data-theme="<id>"]` block that redefines the colour tokens only
+// (spacing, radius, size, shadow and type do not change with the theme).
 
 const kebab = (s) => s.replace(/[^A-Za-z0-9_-]+/g, '-')
 
 export function buildTokensCss(tokens) {
   const out = ['/* Generated from src/design/tokens.json by scripts/sync-tokens.mjs. Do not edit. */', ':root {']
-  const theme = tokens.color.themes[0].id
-  for (const t of tokens.color.tokens) out.push(`  --${kebab(t.name)}: ${t.value[theme]};`)
+  const [base, ...others] = tokens.color.themes.map((t) => t.id)
+  for (const t of tokens.color.tokens) out.push(`  --${kebab(t.name)}: ${t.value[base]};`)
   for (const family of ['spacing', 'radius', 'shadow', 'size']) {
     for (const t of tokens[family]?.tokens ?? []) out.push(`  --${kebab(t.name)}: ${t.value};`)
   }
@@ -20,5 +22,10 @@ export function buildTokensCss(tokens) {
     }
   }
   out.push('}', '')
+  for (const theme of others) {
+    out.push(`:root[data-theme="${theme}"] {`, `  color-scheme: ${theme};`)
+    for (const t of tokens.color.tokens) out.push(`  --${kebab(t.name)}: ${t.value[theme] ?? t.value[base]};`)
+    out.push('}', '')
+  }
   return out.join('\n')
 }
