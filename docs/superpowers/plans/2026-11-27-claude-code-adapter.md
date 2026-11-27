@@ -1,8 +1,8 @@
 # Plan: adapter Claude Code (drugi coding-agent adapter)
 
 **Data:** 2026-11-27
-**Status:** plan (bez implementacji); wymaga decyzji z sekcji 10 przed startem
-**Proponowany ID:** `F1.2b` (kind `derived`, parent `F1.2`) — patrz D1
+**Status:** plan zatwierdzony 2026-11-27 (bez implementacji); decyzje D1–D9 przyjęte zgodnie z rekomendacjami
+**ID:** `F1.2b` (kind `derived`, parent `F1.2`); issue Neuvelia/agent-plane#202
 **Zweryfikowano przeciw:** Claude Code `2.1.332` (`claude --help`, natywny ELF, `env -i claude --version` działa)
 
 ## 1. Stan obecny
@@ -226,7 +226,23 @@ wskazująca na F1.2b.
   po wyjściu lidera; `setsid` poza kontraktem (jak ADR-0010).
 - **Koszt testów** — realny smoke wymaga płatnego auth; CI używa wyłącznie fake CLI.
 
-## 10. needs_decision
+## 10. Decyzje (przyjęte 2026-11-27)
+
+Właściciel przyjął wszystkie rekomendacje:
+
+- D1: `F1.2b` (derived od F1.2), adapter ID `claude`.
+- D2: wydzielić wspólne helpery procesu do neutralnego pakietu.
+- D3: `--bare` + `--strict-mcp-config`.
+- D4: Bash tylko z sandboxem Claude Code, fail closed; bez Bash, dopóki spike nie potwierdzi sandboxa.
+- D5: prywatny tymczasowy `HOME`/`CLAUDE_CONFIG_DIR` poza workspace, usuwany po runie.
+- D6: auth przez `ANTHROPIC_API_KEY` w `environment_refs`.
+- D7: wiele adapterów w jednym runie dozwolone (`--adapter` powtarzalne).
+- D8: wiersz `claude` jako `agent_adapter` z tekstami w desktopie teraz.
+- D9: `Usage: nil` do F3.10.
+
+Wyniki spike'u (krok 0) mogą wymusić zmianę D3–D6; każda zmiana trafia do ADR-0046.
+
+### Opcje rozważane
 
 - **D1 ID i rodzaj wpisu:** `F1.2b` (derived od F1.2) — rekomendowane; alternatywa
   nowy `F1.9`. Adapter ID: `claude` (zgodny z id wiersza capability z ADR-0025) —
