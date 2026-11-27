@@ -64,14 +64,20 @@ numbered `D1`, `D2`, ...; one checkbox per option; the recommended option first
 and marked. Environment or review needs (a macOS machine, an API key, a design)
 are a decision with the options the owner can choose from.
 
+Each option ends with an outcome marker in backticks, saying what follows if it
+is chosen: `→ ready` (the issue can become `claude-ready`), `→ ADR` (an ADR
+first), `→ spec` (a spec first), `→ split` (split into smaller issues),
+`→ blocked` (waits for another feature or for the owner's own work) or
+`→ close`. The markers are fixed English words in every issue language.
+
 ```markdown
 ## Owner decisions
 
 <!-- Tick one option per decision, or comment with another answer. -->
 
 **D1. What does `#` match in the command palette?**
-- [ ] A: run ID prefix only, as in the spec (recommended; no ADR)
-- [ ] B: run ID prefix or graph name (spec change, needs an ADR)
+- [ ] A: run ID prefix only, as in the spec (recommended) `→ ready`
+- [ ] B: run ID prefix or graph name (spec change) `→ ADR`
 
 **When decided:** with A the issue becomes `claude-ready`; with B an ADR comes first.
 ```
