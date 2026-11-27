@@ -4,8 +4,11 @@ import { listApprovals, listRuns } from '../api'
 import { usePoll } from '../hooks'
 import { RecentRuns } from '../sidebarRecent'
 import type { BridgeData } from '../storybook/bridge'
+import { allAvailable } from '../storybook/capabilityFixtures'
 import { approvalsOf, asRun, demoApprove, demoGraph, demoReject, demoYaml, exhaustedRetries, summaryOf, waitingForHuman } from '../storybook/fixtures'
 import type { ApEvent } from '../types'
+import { AboutDialog, ShortcutsDialog } from './dialogs'
+import { ProfileMenu, type ProfileMenuState } from './profileMenu'
 import { GlobalBar, IconRail, Sidebar, TopBar, type NavEntry } from './shell'
 
 const meta: Meta = { title: 'UI/Shell' }
@@ -43,7 +46,34 @@ function SidebarWithRecent() {
   const approvals = usePoll(listApprovals, 60_000)
   return <Sidebar primary={primary} entries={main} recent={<RecentRuns runs={runs.data} approvals={approvals.data ?? []} failed={runs.status === 'error'} onOpen={() => undefined} onAll={() => undefined} nowOverride={afterFixtures} />} deferred={deferred} footer={footer} />
 }
+
+const noop = () => undefined
+/** The sidebar as the app draws it, with room on the right for the menu and its submenu (F2.5c). */
+function WithProfile({ initial }: { initial: ProfileMenuState }) {
+  return (
+    <div style={{ width: 520, height: 'calc(100vh - 16px)', minHeight: 640, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ width: 224, flex: 1, display: 'flex', flexDirection: 'column' }}>
+        <Sidebar primary={primary} entries={main} deferred={deferred} footer={footer} profile={<ProfileMenu appVersion="0.14.0" initial={initial} onSettings={noop} onShortcuts={noop} onAbout={noop} />} />
+      </div>
+    </div>
+  )
+}
 export const Rail: S = { render: () => <div style={{ width: 52, height: 320 }}><IconRail entries={main} /></div> }
 export const GlobalBarConnected: S = { render: () => <GlobalBar lost={false} /> }
 export const GlobalBarLost: S = { render: () => <GlobalBar lost /> }
+export const GlobalBarWithSearch: S = { render: () => <GlobalBar lost={false} search={{ onOpen: () => undefined, keys: 'Ctrl K', ariaKeys: 'Control+K' }} /> }
 export const Breadcrumbs: S = { render: () => <TopBar crumbs={['Runs', '4af0e02b']} /> }
+
+// F2.5c profile menu states, one per design state. The light variants pin the theme.
+export const ProfileMenuClosed: S = { render: () => <WithProfile initial="closed" /> }
+export const ProfileMenuOpen: S = { render: () => <WithProfile initial="open" /> }
+export const ProfileMenuLanguage: S = { render: () => <WithProfile initial="language" /> }
+export const ProfileMenuAppearance: S = { render: () => <WithProfile initial="appearance" /> }
+export const ProfileMenuAppearanceLight: S = { parameters: { theme: 'light' }, render: () => <WithProfile initial="appearance" /> }
+export const ProfileMenuOpenLight: S = { parameters: { theme: 'light' }, render: () => <WithProfile initial="open" /> }
+
+const about: BridgeData = { runs: [], capabilities: { report: allAvailable } }
+export const KeyboardShortcuts: S = { render: () => <ShortcutsDialog onClose={noop} /> }
+export const AboutTarmind: S = { parameters: { bridge: about }, render: () => <AboutDialog appVersion="0.14.0" onClose={noop} /> }
+export const AboutEngineUnreachable: S = { parameters: { bridge: { runs: [], unreachable: true } satisfies BridgeData }, render: () => <AboutDialog appVersion="0.14.0" onClose={noop} /> }
+export const AboutTarmindLight: S = { parameters: { bridge: about, theme: 'light' }, render: () => <AboutDialog appVersion="0.14.0" onClose={noop} /> }

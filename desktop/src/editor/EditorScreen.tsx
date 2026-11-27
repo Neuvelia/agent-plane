@@ -22,10 +22,12 @@ export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: s
   const newGraph = () => setPicker(true)
 
   // Ctrl/Cmd+S saves from anywhere on the screen; inside the editor CodeMirror has already handled it.
+  // Not while a modal dialog (command palette, template picker) is open over the editor.
   useEffect(() => {
     if (!doc) return
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 's') return
+      if (document.querySelector('dialog[open]')) return
       e.preventDefault()
       void g.save()
     }

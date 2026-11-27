@@ -80,3 +80,11 @@ export const InAppEngineDisconnected: S = inApp({ runs: [], unreachable: true },
   await settled(canvasElement, '[data-testid="setup-progress-check"]')
   canvasElement.querySelector<HTMLButtonElement>('[data-testid="setup-progress-check"]')?.click()
 })
+
+// The canvas's light artboards ("Setup, revised" 1-4 and "checking" · light), with the theme pinned (F2.5c).
+const light = (base: S): S => ({ ...base, parameters: { ...base.parameters, theme: 'light' } })
+export const InAppFirstLaunchLight: S = light(InAppFirstLaunch)
+export const StepCheckLight: S = light(CodexNotConfigured)
+export const StepAgentsLight: S = light(StepAgents)
+export const StepFirstGraphLight: S = light(StepFirstGraph)
+export const CheckingLight: S = light(Checking)

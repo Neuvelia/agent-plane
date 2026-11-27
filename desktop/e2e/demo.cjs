@@ -547,7 +547,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="editor-close"]').catch(() => {})
     await page.click('[data-testid="nav-inbox"]')
 
-    // ADR-0047: the last setup step creates the picked template directly.
+    // ADR-0048: the last setup step creates the picked template directly.
     await page.click('[data-testid="nav-welcome"]')
     await page.click('[data-testid="setup-progress-graph"]')
     await page.click('[data-testid="setup-template-dependency-update"]')
@@ -904,8 +904,40 @@ async function startDemo(app, page) {
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
     assert.equal(await page.isVisible('[data-testid="inbox"]'), true, 'a disabled entry must not navigate')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
-    assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
+    assert.match(await page.textContent('[data-testid="profile"]'), /^KW\s*Kacper\s*Local$/)
     assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
+
+    // roadmap: F2.5c-AC4
+    // F2.5c profile menu in the real app: Appearance paints the theme at once and keeps it after a reload.
+    await page.click('[data-testid="profile"]')
+    await page.waitForSelector('[data-testid="profile-menu"]')
+    await page.click('[data-testid="profile-appearance"]')
+    await page.click('[data-testid="profile-theme-light"]')
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light')
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached' })
+    await page.reload()
+    await page.waitForSelector('[data-testid="profile"]')
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light', 'the theme choice survives a reload')
+    await page.click('[data-testid="profile"]')
+    await page.click('[data-testid="profile-appearance"]')
+    await page.click('[data-testid="profile-theme-dark"]')
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark')
+    // roadmap: F2.5c-AC8
+    await page.click('[data-testid="profile-about"]')
+    await page.waitForSelector('[data-testid="about-dialog"]')
+    await page.waitForFunction(() => /\d/.test(document.querySelector('[data-testid="about-engine"]')?.textContent ?? ''))
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('[data-testid="about-dialog"]', { state: 'detached' })
+    // roadmap: F2.5c-AC9
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+/' : 'Control+/')
+    await page.waitForSelector('[data-testid="shortcuts-dialog"]')
+    await page.click('[data-testid="shortcuts-dialog-close"]')
+    await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+,' : 'Control+,')
+    await page.waitForSelector('[data-testid="settings-theme-dark"][aria-pressed="true"]')
+    await page.click('[data-testid="settings-theme-system"]')
+    await page.click('[data-testid="nav-inbox"]')
     await page.click('[data-testid="nav-settings"]')
     await page.click('button:has-text("PL ·")')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Uruchomienia/)

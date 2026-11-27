@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listApprovals, listRuns } from './api'
 import { ConnectionProvider, useConnectionReport } from './connection'
 import { Inbox } from './inboxView'
@@ -8,6 +8,12 @@ import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, type NavEntry } from './ui/shell'
+import { CommandPalette, isMac, usePaletteRuns, type PaletteCommand } from './ui/CommandPalette'
+import { runEntries, SHORTCUTS, shortcutText, type GlobalCommand } from './palette'
+import { useGlobalShortcuts } from './useShortcuts'
+import { runStatusKey } from './status'
+import { AboutDialog, ShortcutsDialog } from './ui/dialogs'
+import { ProfileMenu } from './ui/profileMenu'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -49,6 +55,10 @@ function Shell({ lost }: { lost: boolean }) {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+  // F2.5c: the profile menu's two windows. Their shortcuts (Ctrl or Cmd with , and /) go through
+  // the shell's one shortcut listener below (F2.5d useGlobalShortcuts).
+  const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null)
+  const appVersion = typeof window.agentplane?.appVersion === 'string' ? window.agentplane.appVersion : ''
 
   // After navigating, move focus to the content so keyboard and screen-reader users start there.
   const mainRef = useRef<HTMLElement>(null)
@@ -65,6 +75,44 @@ function Shell({ lost }: { lost: boolean }) {
   }, [routeKey])
 
   const go = (name: Route['name']) => () => setRoute({ name } as Route)
+
+  // F2.5d command palette and global shortcuts: they only navigate or open what the shell offers.
+  const mac = useMemo(isMac, [])
+  // The open palette's session: a new number for every opening (it keys the component and the
+  // run read), or null when closed.
+  const [palette, setPalette] = useState<number | null>(null)
+  const sessions = useRef(0)
+  const openPalette = () => {
+    if (palette === null) setPalette(++sessions.current)
+  }
+  const paletteRuns = usePaletteRuns(palette)
+  const perform: Record<Exclude<GlobalCommand, 'palette'>, () => void> = {
+    newRun: go('new'),
+    openGraph: () => {
+      setRoute({ name: 'editor' })
+      editor.open()
+    },
+    approvals: go('approvals'),
+    settings: go('settings'),
+    shortcuts: () => setDialog('shortcuts'),
+    inbox: go('inbox'),
+  }
+  useGlobalShortcuts(mac, (c) => (c === 'palette' ? openPalette() : perform[c]()))
+  const statusText = (s: string) => {
+    const key = runStatusKey(s)
+    return key ? t(key).toLowerCase() : s
+  }
+  const commands: PaletteCommand[] = [
+    { id: 'new-run', group: 'actions', label: t('nav.new'), hint: '', shortcut: SHORTCUTS.newRun, icon: 'play', perform: perform.newRun },
+    { id: 'open-graph', group: 'actions', label: t('palette.openGraph'), hint: '', shortcut: SHORTCUTS.openGraph, icon: 'file', perform: perform.openGraph },
+    { id: 'approvals', group: 'actions', label: t('palette.reviewApprovals'), hint: pending ? t('palette.waiting', { count: pending }) : '', shortcut: SHORTCUTS.approvals, icon: 'shield', perform: perform.approvals },
+    ...runEntries(paletteRuns.runs, statusText).map((e) => ({ ...e, icon: 'play' as const, perform: () => setRoute({ name: 'run', id: e.runId! }) })),
+    { id: 'go-inbox', group: 'goto', label: t('nav.inbox'), hint: '', shortcut: SHORTCUTS.inbox, icon: 'inbox', perform: perform.inbox },
+    { id: 'go-runs', group: 'goto', label: t('nav.runs'), hint: '', icon: 'runs', perform: go('runs') },
+    { id: 'go-editor', group: 'goto', label: t('nav.editor'), hint: '', icon: 'editor', perform: go('editor') },
+    { id: 'go-welcome', group: 'goto', label: t('nav.welcome'), hint: '', icon: 'welcome', perform: go('welcome') },
+    { id: 'go-settings', group: 'goto', label: t('nav.settings'), hint: '', shortcut: SHORTCUTS.settings, icon: 'settings', perform: perform.settings },
+  ]
   const main: NavEntry[] = [
     { id: 'inbox', icon: 'inbox', label: 'nav.inbox', active: route.name === 'inbox', onSelect: go('inbox') },
     { id: 'runs', icon: 'runs', label: 'nav.runs', active: route.name === 'runs' || route.name === 'run', onSelect: go('runs') },
@@ -112,9 +160,16 @@ function Shell({ lost }: { lost: boolean }) {
         recent={<RecentRuns runs={polledRuns.data} approvals={polled.status === 'error' ? [] : (polled.data ?? [])} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
         deferred={deferred}
         footer={footer}
+        profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />}
       />
       <div className="col">
-        {!setup && <GlobalBar lost={lost} crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />}
+        {!setup && (
+          <GlobalBar
+            lost={lost}
+            crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]}
+            search={{ onOpen: openPalette, keys: shortcutText(SHORTCUTS.palette, mac), ariaKeys: mac ? 'Meta+K' : 'Control+K' }}
+          />
+        )}
         <main id="content" ref={mainRef} tabIndex={-1} className={setup ? 'setup-host' : undefined}>
           {route.name === 'inbox' && (
             <Inbox
@@ -133,6 +188,18 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
+      {palette !== null && (
+        <CommandPalette
+          key={palette}
+          commands={commands}
+          runs={paletteRuns.status}
+          mac={mac}
+          // Ctrl/Cmd+K during the exit animation: a fresh palette (new key) opens once this one has closed.
+          onClose={(reopen) => setPalette(reopen ? ++sessions.current : null)}
+        />
+      )}
+      {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'about' && <AboutDialog appVersion={appVersion} onClose={() => setDialog(null)} />}
     </div>
   )
 }

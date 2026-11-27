@@ -3,11 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 import { WELCOME_KEY } from "../src/capabilities";
 import { I18nProvider } from "../src/i18n/context";
+import { ThemeProvider } from "../src/theme";
 
 const launch = () =>
   renderToStaticMarkup(
     <I18nProvider locale="en">
-      <App />
+      <ThemeProvider>
+        <App />
+      </ThemeProvider>
     </I18nProvider>,
   );
 

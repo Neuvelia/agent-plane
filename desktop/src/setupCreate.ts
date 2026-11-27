@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DraftMaker } from './editor/TemplatePicker'
 import type { GraphDocument } from './editor/useGraphDocument'
 
-// Setup's "Create and open" (ADR-0047). Creating asks for a file first (the
+// Setup's "Create and open" (ADR-0048). Creating asks for a file first (the
 // native save dialog), so setup is left only once that has led somewhere:
 // a new document opens the editor and completes setup; a cancelled dialog
 // leaves the person on setup, not on an empty editor.

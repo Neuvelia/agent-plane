@@ -1,7 +1,7 @@
 /* Setup, revised (canvas "Setup, revised" 1-4, checking, engine lost): a
    four-step story told mostly in motion. Each step is a headline, one animated
    picture and one action in the footer. Sizes and timings are the canvas's; the
-   colours are the app's tokens (the app is dark only). Under reduced motion
+   colours are the app's tokens, dark and light (F2.5c). Under reduced motion
    every animation is off and the final frame is shown. */
 .su{
   --su-line:var(--card-line);
@@ -12,6 +12,13 @@
   --su-brand-text:#6CB4FF;
   --su-ease:cubic-bezier(.2,.8,.2,1);
   display:flex;flex-direction:column;height:100%;min-height:0;background:var(--bg);color:var(--fg);font-size:var(--type-body-size);line-height:1.45
+}
+/* Light theme (F2.5c): the canvas's light artboards ("Setup, revised" 1-4 · light, tm.css .light). */
+:root[data-theme="light"] .su{
+  --su-line:rgba(0,0,0,.14);
+  --su-pr-bg:#1D1D1F;--su-pr-fg:#FFFFFF;--su-pr-hover:#2C2C2E;
+  --su-shadow:0 2px 10px rgba(0,0,0,.08),0 0 0 1px rgba(0,0,0,.04);
+  --su-brand-text:var(--brand)
 }
 .su :is(h1,h2,p){margin:0}
 
@@ -65,7 +72,7 @@
 /* Step 1: the graph */
 .su-flow{position:relative;width:100%;display:flex;align-items:center;justify-content:center;padding:28px 0}
 .su-node{position:relative;z-index:1;width:150px;flex:none;border:1px solid var(--su-line);border-radius:var(--radius-12);background:var(--bg);padding:16px 14px;display:flex;flex-direction:column;align-items:center;gap:var(--space-8);box-shadow:var(--su-shadow)}
-.su-node .glyph{width:44px;height:44px;border-radius:12px;background:var(--fill-6);display:flex;align-items:center;justify-content:center}
+.su-node .su-glyph{width:44px;height:44px;border-radius:12px;background:var(--fill-6);display:flex;align-items:center;justify-content:center}
 .su-node b{font-size:var(--type-lede-size);font-weight:600}
 .su-node .id{font:400 var(--type-small-size) var(--font-mono);color:var(--muted)}
 .su-link{flex:1 1 40px;max-width:72px;height:2px;position:relative}
@@ -108,7 +115,7 @@
 .su-term .tb .st{margin-left:auto;font-size:var(--type-small-size);color:#98989B}
 .su-term .tb .su-btn{margin-left:var(--space-8);height:var(--size-control-sm);background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.12);color:#F5F5F5;font-size:var(--type-small-size)}
 .su-term pre{margin:0;padding:18px 16px;font:400 14px/1.5 var(--font-mono);display:flex;white-space:nowrap;overflow-x:auto}
-.su-term .pm{color:#98989B;margin-right:1ch}
+.su-term .su-prompt{color:#98989B;margin-right:1ch}
 .su-typed{display:inline-block;overflow:hidden;white-space:nowrap;animation:su-type 1.8s steps(var(--su-chars)) .9s both}
 .su-caret{display:inline-block;width:8px;height:1.2em;background:#F5F5F5;margin-left:2px;vertical-align:-3px;animation:su-blink 1s step-end infinite}
 .su-soon{font-size:var(--type-body-size);color:var(--muted);display:flex;gap:var(--space-8);flex-wrap:wrap;justify-content:center;align-items:center}
@@ -128,7 +135,7 @@
 .su-rec{margin-left:auto;display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:12px;font-size:var(--type-small-size);font-weight:500;background:var(--brand-soft);color:var(--su-brand-text);white-space:nowrap}
 .su-path{position:relative;display:flex;align-items:center;min-height:40px}
 .su-path .track{position:relative;display:inline-flex;align-items:center}
-.su-path .seg{width:28px;height:2px;background:var(--su-line);flex:none}
+.su-path .su-seg{width:28px;height:2px;background:var(--su-line);flex:none}
 .su-path .blank{width:100%;height:40px;border:1.5px dashed var(--su-line);border-radius:10px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:var(--type-small-size)}
 .su-path .pulse{position:absolute;top:50%;margin-top:-5px;width:10px;height:10px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 4px var(--brand-soft);animation:su-run 2.4s linear infinite both}
 .su-meta>svg{flex:none;margin-top:2px}

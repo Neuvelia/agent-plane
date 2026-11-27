@@ -73,7 +73,7 @@ function FlowNode({ node, first, label }: { node: (typeof EXAMPLE)[number]; firs
         </div>
       )}
       <div className="su-node" style={{ animation: pop }} aria-hidden="true">
-        <span className="glyph">
+        <span className="su-glyph">
           <NodeGlyph kind={node.kind} size={20} />
         </span>
         <b>{label}</b>
@@ -117,7 +117,7 @@ export function AgentsStep({ headRef }: { headRef: HeadRef }) {
           </button>
         </div>
         <pre>
-          <span className="pm" aria-hidden="true">
+          <span className="su-prompt" aria-hidden="true">
             $
           </span>
           <code className="su-typed" style={{ width: `${chars}ch`, '--su-chars': chars } as CSSProperties} data-testid="setup-command">
@@ -201,7 +201,7 @@ function TemplateCard({ card, on, at, onPick }: { card: SetupCard; on: boolean; 
           <span className="track">
             {card.flow.map((k, i) => (
               <span key={i} style={{ display: 'contents' }}>
-                {i > 0 && <span className="seg" />}
+                {i > 0 && <span className="su-seg" />}
                 <span className="su-mini">
                   <NodeGlyph kind={k} />
                 </span>

@@ -1,4 +1,4 @@
-# ADR-0047 - Welcome and setup as a four-step setup
+# ADR-0048 - Welcome and setup as a four-step setup
 
 **Status:** proposed (2026-11-27)
 **Date:** 2026-11-27
@@ -52,8 +52,9 @@ check never blocking progress.
    settles in under 3 seconds and is fully off under reduced motion, which shows
    the final frame. The Storybook smoke test judges every story with reduced
    motion on, so axe checks settled frames.
-5. The canvas's light variant is not implemented: the app is dark only
-   (F2.5a non-goal). A light theme needs its own feature.
+5. Both themes follow the canvas: the dark artboards on the app's dark tokens,
+   the light artboards on the F2.5c light tokens (ADR-0047), with setup's own
+   primary button, card shadow and line colour taken from the light artboards.
 
 ## Consequences
 
