@@ -89,3 +89,51 @@ func TestInputRulesDoNotGateKeys(t *testing.T) {
 		t.Error("an input rule changed which keys are accepted")
 	}
 }
+
+// namedMap stands for a named map type such as graph.NodeConfig, which a
+// nested YAML mapping decodes to.
+type namedMap map[string]any
+
+func inputFields() []Field {
+	return []Field{
+		{ID: "t.task", Key: "task", Kind: Text, Excludes: []Rule{{Input: "task"}}},
+		{ID: "t.env", Key: "env", Kind: Map, InputTypes: []string{"string"}},
+		{ID: "t.plain", Key: "plain", Kind: Map},
+		{ID: "t.list", Key: "list", Kind: List, Item: &Field{ID: "t.list.item", Kind: InputName}},
+		{ID: "t.kind", Key: "kind", Kind: Enum, Enum: []string{"a", "b"}},
+		{ID: "t.a", Kind: Group, Requires: []Rule{{Key: "kind", Equals: "a"}}, Fields: []Field{
+			{ID: "t.a.input", Key: "input", Kind: InputName},
+		}},
+	}
+}
+
+func TestNamedInputsReadsEveryInputNamingField(t *testing.T) {
+	config := map[string]any{
+		"env":   namedMap{"from_env": "E"},
+		"plain": map[string]any{"not_an_input": "x"},
+		"list":  []any{"from_list", 3},
+		"kind":  "a",
+		"input": "from_group",
+	}
+	want := []string{"from_env", "from_group", "from_list", "task"}
+	if got := keys(NamedInputs(inputFields(), config)); !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+func TestNamedInputsIgnoresInactiveGroups(t *testing.T) {
+	config := map[string]any{"kind": "b", "input": "hidden", "list": []string{"listed"}}
+	if got := keys(NamedInputs(inputFields(), config)); !reflect.DeepEqual(got, []string{"listed", "task"}) {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestInputKeysListsTheKeysThatNameInputsOfTheType(t *testing.T) {
+	if got := InputKeys(inputFields(), "string"); !reflect.DeepEqual(got, []string{"env", "list", "input"}) {
+		t.Errorf("string: got %v", got)
+	}
+	// env accepts string inputs only; list and input accept any type.
+	if got := InputKeys(inputFields(), "json"); !reflect.DeepEqual(got, []string{"list", "input"}) {
+		t.Errorf("json: got %v", got)
+	}
+}
