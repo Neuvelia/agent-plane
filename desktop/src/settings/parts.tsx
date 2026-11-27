@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { useI18n } from '../i18n/context'
 
-// Building blocks of the Settings screen (F2.5b): a titled group, a list of
+// Building blocks of the Settings screen (F2.5e): a titled group, a list of
 // rows, and the controls the design draws inside rows. Every control is a
 // native element; animation is CSS only and is removed under reduced motion.
 

@@ -184,7 +184,7 @@ export const CanvasYamlBroken: S = story(base, async (root) => {
   await until(root, '[data-testid="canvas-readonly"]')
 })
 export const CanvasEmptyGraph: S = story({ ...base, validate: () => emptyValidate as unknown as ValidateResponse }, async (root) => {
-  // New opens the template picker first (F2.12); Create gives the empty graph.
+  // Since F2.12, New opens the template picker; the blank graph is its default choice.
   await click(root, 'editor-new')
   await click(root, 'picker-create')
   await until(root, '[data-testid="editor-canvas"]')
@@ -350,7 +350,7 @@ export const GraphInputsCard: S = story(hinted(inputsOpen), async (root) => {
 export const GraphInputRemovalPreview: S = story(hinted(inputsOpen), async (root) => {
   await open(root)
   await click(root, 'remove-graph-input-topic')
-  await until(root, '[data-testid="graph-input-preview-apply"]')
+  ;(await until(root, '[data-testid="graph-input-preview-apply"]')).scrollIntoView({ block: 'center' })
 })
 export const GraphOutputsCard: S = story(hinted(configErrorOpen), async (root) => {
   await open(root)

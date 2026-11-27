@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { MAX_NAMES, createRecordingSettings, serveFlags } from '../electron/recording.cjs'
 import { I18nProvider } from '../src/i18n/context'
+import { ThemeProvider } from '../src/theme'
 import { Settings, parseNames } from '../src/settings'
 
 function store() {
@@ -83,7 +84,9 @@ describe('Settings: record run values', () => {
   const html = (locale: 'en' | 'pl') =>
     renderToStaticMarkup(
       <I18nProvider locale={locale}>
-        <Settings />
+        <ThemeProvider>
+          <Settings />
+        </ThemeProvider>
       </I18nProvider>,
     )
   it('is localised', () => {

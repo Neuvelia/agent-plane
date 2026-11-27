@@ -23,8 +23,10 @@ export interface TemplateEntry {
   platforms: string[]
   /** Number of values the person must fill (the index's placeholders). */
   placeholders: number
-  /** Node types shown in the picker. test/templates.test.tsx checks them against the files. */
+  /** Distinct node types, shown in the picker. */
   nodeTypes: string[]
+  /** Every node's type in file order, drawn as the setup card's path. */
+  flow: string[]
 }
 
 const TEXT: Record<string, string> = {
@@ -38,16 +40,17 @@ const TEXT: Record<string, string> = {
   'dependency-update': dependencyUpdate,
   'repo-audit': repoAudit,
 }
-const NODE_TYPES: Record<string, string[]> = {
-  'parallel-shell': ['shell'],
+// Node types in file order (test/templates.test.tsx checks them against the files).
+const FLOW: Record<string, string[]> = {
+  'parallel-shell': ['shell', 'shell', 'shell'],
   'shell-check-loop': ['shell'],
-  'human-approval': ['shell', 'human'],
-  'modify-test-approve': ['shell', 'human'],
-  'agent-scoped-approval': ['human', 'agent', 'shell'],
-  'fix-issue': ['human', 'agent', 'shell'],
-  'code-review': ['human', 'agent', 'shell'],
-  'dependency-update': ['human', 'agent', 'shell'],
-  'repo-audit': ['human', 'agent', 'shell'],
+  'human-approval': ['shell', 'human', 'shell'],
+  'modify-test-approve': ['shell', 'shell', 'human', 'shell'],
+  'agent-scoped-approval': ['human', 'agent', 'human', 'shell'],
+  'fix-issue': ['human', 'agent', 'human', 'shell'],
+  'code-review': ['human', 'agent', 'human', 'shell'],
+  'dependency-update': ['human', 'agent', 'human', 'shell'],
+  'repo-audit': ['human', 'agent', 'human', 'shell'],
 }
 
 /** Picker order (F2.12 requirement 7); `parallel-shell` is the suggested first graph. */
@@ -59,7 +62,7 @@ type IndexEntry = { id: string; requires: string[]; platforms: string[]; placeho
 export const TEMPLATES: TemplateEntry[] = TEMPLATE_ORDER.flatMap((id) => {
   const e = (index.templates as IndexEntry[]).find((t) => t.id === id)
   const text = TEXT[id]
-  return e && text !== undefined ? [{ id, text, requires: [...e.requires], platforms: [...e.platforms], placeholders: e.placeholders.length, nodeTypes: NODE_TYPES[id] ?? [] }] : []
+  return e && text !== undefined ? [{ id, text, requires: [...e.requires], platforms: [...e.platforms], placeholders: e.placeholders.length, nodeTypes: [...new Set(FLOW[id] ?? [])], flow: [...(FLOW[id] ?? [])] }] : []
 })
 
 /**

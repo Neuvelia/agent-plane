@@ -53,6 +53,13 @@ describe('bundled templates', () => {
     }
   })
 
+  it('draw every node of their file, in file order', () => {
+    for (const t of TEMPLATES) {
+      const inOrder = [...t.text.matchAll(/^ {4}type: (\w+)\s*$/gm)].map((m) => m[1]!)
+      expect(t.flow, t.id).toEqual(inOrder)
+    }
+  })
+
   it('have EN and PL title and description', () => {
     for (const t of TEMPLATES) {
       for (const c of Object.values(catalogues)) {

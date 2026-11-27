@@ -1,5 +1,6 @@
 import { LOCALES } from '../i18n'
-import { useI18n } from '../i18n/context'
+import { useI18n, type LocaleChoice } from '../i18n/context'
+import { THEME_CHOICES, useTheme, type ThemeChoice } from '../theme'
 import { Button } from '../ui/primitives'
 import type { CapabilityView } from '../welcome'
 import { Group, Row, Segmented, Stepper } from './parts'
@@ -9,20 +10,29 @@ const NAME: Record<(typeof LOCALES)[number], string> = { en: 'English', pl: 'Pol
 /** Values the desktop engine runs with today: `agentplane serve` defaults and the loop default (internal/domain/graph). */
 const ENGINE_DEFAULTS = Object.freeze({ maxConcurrency: 2, maxAttempts: 3 })
 
+const THEME_LABEL = { system: 'choice.system', light: 'theme.light', dark: 'theme.dark' } as const satisfies Record<ThemeChoice, string>
+
 interface Ring {
   ring: number | null
   onRingEnd: () => void
 }
 
 export function GeneralGroup({ ring, onRingEnd }: Ring) {
-  const { t, locale, setLocale } = useI18n()
-  // Every catalogue language, Polski first as the design draws it; each name is in its own language.
+  const { t, choice: languageChoice, setChoice: setLanguageChoice } = useI18n()
+  const { choice: themeChoice, setChoice: setThemeChoice } = useTheme()
+  // F2.5c: the same choices as the profile menu. System follows the operating
+  // system; then every catalogue language, Polski first as the design draws it,
+  // each name in its own language.
   const ordered = [...LOCALES.filter((l) => l === 'pl'), ...LOCALES.filter((l) => l !== 'pl')]
-  const options = ordered.map((l) => ({ value: l, label: <span lang={l}>{NAME[l]}</span>, testId: `language-${l}` }))
+  const languages = [{ value: 'system' as LocaleChoice, label: t('choice.system'), testId: 'settings-language-system' }, ...ordered.map((l) => ({ value: l as LocaleChoice, label: <span lang={l}>{NAME[l]}</span>, testId: `language-${l}` }))]
+  const themes = THEME_CHOICES.map((c) => ({ value: c, label: t(THEME_LABEL[c]), testId: `settings-theme-${c}` }))
   return (
     <Group id="general" title={t('settings.nav.general')} description={t('settings.general.desc')} ring={ring} onRingEnd={onRingEnd} testId="settings-application">
       <Row title={t('settings.language')} hint={t('settings.languageHint')}>
-        <Segmented label={t('settings.language')} value={locale} options={options} onChange={setLocale} />
+        <Segmented label={t('settings.language')} value={languageChoice} options={languages} onChange={setLanguageChoice} />
+      </Row>
+      <Row title={t('settings.appearance')} hint={t('settings.appearanceHint')}>
+        <Segmented label={t('settings.appearance')} value={themeChoice} options={themes} onChange={setThemeChoice} />
       </Row>
       {/* No folder preference exists and the renderer never sees paths. */}
       <Row title={t('settings.graphFolder')} hint={t('settings.graphFolderHint')} soon testId="settings-graph-folder">

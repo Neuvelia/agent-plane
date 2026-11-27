@@ -19,7 +19,9 @@ Do not start with code changes. First:
    (`// roadmap: {{FEATURE_ID}}-ACn`).
 5. Propose the smallest fix.
 
-Then implement the fix if the task authorizes it.
+Then implement the fix if the task authorizes it. If the issue is labelled
+`claude-ready` but the fix needs a decision, stop, comment what is missing and
+swap the label to `needs-owner` (docs/roadmap/issue-triage.md).
 
 Constraints:
 - No unrelated refactors.
@@ -37,4 +39,6 @@ Finish:
 - Commit `fix(area): [{{FEATURE_ID}}] ... ({{ISSUE}})` and open a PR that
   references the issue ("Fixes {{ISSUE}}" only if the owner wants it closed on
   merge).
+- Label any follow-up issue you create `claude-ready` or `needs-owner` by
+  docs/roadmap/issue-triage.md.
 ```

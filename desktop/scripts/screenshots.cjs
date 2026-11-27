@@ -11,8 +11,8 @@ const root = path.resolve(__dirname, '..', 'storybook-static')
 const out = path.resolve(process.argv[2] ?? path.join(__dirname, '..', '..', 'docs', 'validation', 'F2.5a-screenshots'))
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2', '.png': 'image/png', '.svg': 'image/svg+xml' }
 const SHOTS = {
-  'dashboard': 'screens--full-app-shell',
-  'dashboard-needs-attention': 'screens--dashboard-needs-attention',
+  'inbox': 'screens--full-app-shell',
+  'inbox-needs-attention': 'screens--inbox-needs-attention',
   'inspector-running': 'screens--inspector-running',
   'inspector-waiting-for-human': 'screens--inspector-waiting-for-human',
   'inspector-failed-after-retries': 'screens--inspector-failed-after-retries',

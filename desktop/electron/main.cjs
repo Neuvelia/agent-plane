@@ -168,7 +168,7 @@ function createWindow() {
     title: 'Tarmind',
     // macOS: hide the native title bar so the window is black edge to edge. The
     // renderer's global bar becomes the drag area (class "mac" in styles.css).
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 18 } } : {}),
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 16 } } : {}),
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       // The sandboxed preload cannot call app.getVersion(); it reads this one

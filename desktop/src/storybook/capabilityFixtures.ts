@@ -24,3 +24,4 @@ export const windows = withRows(
   { os: 'windows', arch: 'amd64' },
 )
 export const detectionError = withRows(linux, { git: { status: 'error', version: '', reason: 'probe_timeout' }, codex: { status: 'error', reason: 'probe_failed' } })
+export const shellMissing = withRows(linux, { shell: { status: 'missing', version: '' } })

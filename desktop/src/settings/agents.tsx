@@ -5,7 +5,7 @@ import { useI18n } from '../i18n/context'
 import { Button } from '../ui/primitives'
 import type { CapabilityView } from '../welcome'
 
-// Settings, Agents (F2.5b): the agent rows of the F2.11 capability report.
+// Settings, Agents (F2.5e): the agent rows of the F2.11 capability report.
 // The report carries no paths, so the design's Program and "Used by" rows and
 // the path chooser are not drawn; Codex is still given through AGENTPLANE_CODEX_BIN.
 

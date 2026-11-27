@@ -1,35 +1,144 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { checkCapabilities, getCapabilities, reasonKey, rowText, type CapabilityReport, type CapabilityResult, type CapabilityTool, type RowText } from './capabilities'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { checkCapabilities, getCapabilities, type CapabilityResult } from './capabilities'
 import { useConnectionReport } from './connection'
+import type { DraftMaker } from './editor/TemplatePicker'
 import { formatDateTime } from './i18n'
+import type { MessageKey } from './i18n'
 import { useI18n } from './i18n/context'
-import { Button, Pill, type Tone } from './ui/primitives'
+import { BLANK, SETUP_STEPS, setupCards, setupDraft, type CheckState, type SetupStep } from './setup'
+import { CapabilityPanel } from './setupCheck'
+import { Arrow } from './setupIcons'
+import { AgentsStep, GraphStep, StepHead, WelcomeStep } from './setupSteps'
+import { SUGGESTED } from './templates'
 
-export type CapabilityView =
-  | { state: 'loading' }
-  | { state: 'loaded'; report: CapabilityReport; refreshing: boolean }
-  | { state: 'failed'; status: number }
-  | { state: 'disconnected' }
+export { CapabilityPanel, ToolRow, type CapabilityView } from './setupCheck'
 
-const TONES: Record<string, Tone> = { available: 'p', detected_no_adapter: 'b', not_configured: 'w', missing: 'w', unsupported_platform: 'n', unsupported_version: 'w', error: 'x' }
+// F2.11 welcome screen as the four-step setup of the canvas "Setup, revised":
+// Welcome, Check this computer, Agent nodes, First graph. Skip is always in the
+// header, the check never blocks Next, and every progress segment jumps to its
+// step. Creating or opening a graph, or skipping, marks setup completed.
 
 export interface WelcomeActions {
-  onTemplate: () => void
+  /** Create a new graph: Blank (undefined) or a template's draft. */
+  onCreate: (make: DraftMaker | undefined) => void
   onOpen: () => void
   onSkip: () => void
+  /** The engine connection is lost; setup hides the global bar, so its header says so instead. */
+  lost?: boolean
+  /** Step to open on; stories use it, the app starts at the first. */
+  initialStep?: SetupStep
 }
 
-export function Welcome({ onTemplate, onOpen, onSkip }: WelcomeActions) {
+const LABELS: Record<SetupStep, MessageKey> = { welcome: 'setup.step.welcome', check: 'setup.step.check', agents: 'setup.step.agents', graph: 'setup.step.graph' }
+const HINTS: Partial<Record<SetupStep, MessageKey>> = { agents: 'setup.hint.optional', graph: 'setup.hint.graph' }
+
+export function Welcome({ onCreate, onOpen, onSkip, lost = false, initialStep = 'welcome' }: WelcomeActions) {
+  const { t } = useI18n()
+  const [step, setStep] = useState(SETUP_STEPS.indexOf(initialStep))
+  const [choice, setChoice] = useState<string>(SUGGESTED)
+  const check = useCapabilities()
+  const title = useRef<HTMLHeadingElement>(null)
+  const stepHead = useRef<HTMLHeadingElement>(null)
+  const moved = useRef(false)
+  const name = SETUP_STEPS[step]!
+
+  // The screen opens on its title; each later step change moves focus to that step's heading.
+  useEffect(() => {
+    if (!moved.current) title.current?.focus({ preventScroll: true })
+    else stepHead.current?.focus({ preventScroll: true })
+  }, [step])
+  const go = (n: number) => {
+    moved.current = true
+    setStep(Math.min(SETUP_STEPS.length - 1, Math.max(0, n)))
+  }
+
+  const report = check.view.state === 'loaded' ? check.view.report : null
+  const cards = useMemo(() => setupCards(report), [report])
+  const draft = setupDraft(choice)
+  const create = () => {
+    if (draft.usable) onCreate(draft.make)
+  }
+  const last = step === SETUP_STEPS.length - 1
+  const hint = name === 'check' && check.view.state !== 'loaded' ? 'setup.hint.continue' : HINTS[name]
+
+  return (
+    <section className="su" data-testid="welcome" data-step={name}>
+      <header className="su-bar">
+        <h1 ref={title} tabIndex={-1}>
+          {t('setup.title', { app: t('app.name') })}
+        </h1>
+        <nav className="su-prog" aria-label={t('setup.progress')}>
+          {SETUP_STEPS.map((s, i) => (
+            <button key={s} type="button" className={i < step ? 'done' : i === step ? 'cur' : ''} aria-label={t('setup.stepLabel', { n: i + 1, label: t(LABELS[s]) })} aria-current={i === step ? 'step' : undefined} title={t(LABELS[s])} onClick={() => go(i)} data-testid={`setup-progress-${s}`}>
+              <i>
+                <b />
+              </i>
+            </button>
+          ))}
+        </nav>
+        <span className="su-sp" />
+        {lost && (
+          <span className="conn bad" role="status" data-testid="setup-connection-lost">
+            <span className="dot sm" aria-hidden="true" />
+            {t('topbar.lost')}
+          </span>
+        )}
+        <button type="button" className="su-btn ghost" title={t('setup.skipHint')} onClick={onSkip} data-testid="welcome-skip">
+          {t('setup.skip')}
+        </button>
+      </header>
+      {/* Outside the keyed stage, so it exists before a check finishes and the finish is announced
+          whichever step is open (F2.11 requirement 14). */}
+      <p className="sr-only" role="status" aria-live="polite" data-testid="cap-announce">
+        {check.announce}
+      </p>
+      {/* Keyed by step: a new step mounts fresh, so its entrance plays from the start. */}
+      <div className="su-stage" key={name}>
+        {name === 'welcome' && <WelcomeStep headRef={stepHead} />}
+        {name === 'check' && (
+          <div className="su-col" data-testid="setup-step-check">
+            <StepHead n={2} title={t('setup.check.title')} headRef={stepHead} />
+            <CapabilityPanel view={check.view} appVersion={appVersion()} onCheck={check.recheck} onRetry={check.load} />
+          </div>
+        )}
+        {name === 'agents' && <AgentsStep headRef={stepHead} />}
+        {name === 'graph' && <GraphStep headRef={stepHead} cards={cards} choice={choice} onChoice={setChoice} onOpen={onOpen} />}
+      </div>
+      <footer className="su-foot">
+        {step > 0 && (
+          <button type="button" className="su-btn" onClick={() => go(step - 1)} data-testid="setup-back">
+            {t('setup.back')}
+          </button>
+        )}
+        <span className="su-sp" />
+        {hint && <span className="hint">{t(hint)}</span>}
+        {last ? (
+          <button type="button" className="su-btn pr" onClick={create} disabled={!draft.usable} data-testid="welcome-template">
+            {choice === BLANK ? t('setup.createBlank') : t('setup.create', { name: choice })}
+            <Arrow />
+          </button>
+        ) : (
+          <button type="button" className="su-btn pr" onClick={() => go(step + 1)} data-testid="setup-next">
+            {t(step === 0 ? 'setup.next.check' : 'setup.next')}
+            <Arrow />
+          </button>
+        )}
+      </footer>
+    </section>
+  )
+}
+
+function appVersion(): string {
+  return typeof window.agentplane?.appVersion === 'string' ? window.agentplane.appVersion : ''
+}
+
+/** Reads the capability report once on open; "Check again" asks the engine to detect again. */
+function useCapabilities() {
   const { t, locale } = useI18n()
-  const [view, setView] = useState<CapabilityView>({ state: 'loading' })
+  const [view, setView] = useState<CheckState>({ state: 'loading' })
   const [announce, setAnnounce] = useState('')
-  const heading = useRef<HTMLHeadingElement>(null)
   const seq = useRef(0)
   useConnectionReport('welcome', view.state === 'disconnected')
-
-  useEffect(() => {
-    heading.current?.focus({ preventScroll: true })
-  }, [])
 
   // Only the latest request may settle the view, so a slow first read cannot overwrite a newer check.
   const settle = useCallback(
@@ -51,128 +160,12 @@ export function Welcome({ onTemplate, onOpen, onSkip }: WelcomeActions) {
   }, [settle])
   useEffect(load, [load])
 
-  const check = () => {
+  const recheck = useCallback(() => {
     const mine = ++seq.current
     setView((v) => (v.state === 'loaded' ? { ...v, refreshing: true } : { state: 'loading' }))
     setAnnounce('')
     void checkCapabilities().then((r) => settle(r, mine))
-  }
+  }, [settle])
 
-  const appVersion = typeof window.agentplane?.appVersion === 'string' ? window.agentplane.appVersion : ''
-  return (
-    <section className="welcome" data-testid="welcome">
-      <h1 ref={heading} tabIndex={-1}>
-        {t('welcome.title', { app: t('app.name') })}
-      </h1>
-      <p className="welcome-intro">{t('welcome.intro1')}</p>
-      <p className="welcome-intro mu">{t('welcome.intro2')}</p>
-      <CapabilityPanel view={view} announce={announce} appVersion={appVersion} onCheck={check} onRetry={load} />
-      <div className="row" role="group" aria-label={t('welcome.actions')} data-testid="welcome-actions">
-        <Button variant="primary" onClick={onTemplate} data-testid="welcome-template">
-          {t('welcome.template')}
-        </Button>
-        <Button onClick={onOpen} data-testid="welcome-open">
-          {t('welcome.open')}
-        </Button>
-        <Button onClick={onSkip} data-testid="welcome-skip">
-          {t('welcome.skip')}
-        </Button>
-      </div>
-    </section>
-  )
-}
-
-export function CapabilityPanel({ view, announce, appVersion, onCheck, onRetry }: { view: CapabilityView; announce: string; appVersion: string; onCheck: () => void; onRetry: () => void }) {
-  const { t } = useI18n()
-  const busy = view.state === 'loading' || (view.state === 'loaded' && view.refreshing)
-  return (
-    <section className="card" aria-labelledby="cap-title" data-testid="capabilities">
-      <header className="card-head">
-        <div className="card-titles">
-          <h2 className="card-title" id="cap-title">
-            {t('welcome.listTitle')}
-          </h2>
-        </div>
-        <Button size="sm" onClick={onCheck} disabled={busy || view.state === 'disconnected'} data-testid="check-again">
-          {busy ? t('welcome.checking') : t('welcome.check')}
-        </Button>
-      </header>
-      {view.state === 'loaded' && view.refreshing && (
-        <p className="mu cap-note" data-testid="cap-refreshing">
-          {t('welcome.refreshing')}
-        </p>
-      )}
-      {view.state === 'loading' && (
-        <ul className="cap-list" aria-busy="true" aria-labelledby="cap-title" data-testid="cap-list">
-          <li className="cap-row cap-pending">
-            <span className="mu">{t('welcome.checking')}</span>
-          </li>
-        </ul>
-      )}
-      {view.state === 'loaded' && (
-        <ul className="cap-list" aria-busy={view.refreshing} aria-labelledby="cap-title" data-testid="cap-list">
-          <EngineRow report={view.report} appVersion={appVersion} />
-          {view.report.tools.map((tool) => (
-            <ToolRow key={`${tool.kind}:${tool.id}`} tool={tool} />
-          ))}
-        </ul>
-      )}
-      {(view.state === 'failed' || view.state === 'disconnected') && (
-        <div className="cap-state" role="alert" data-testid={view.state === 'failed' ? 'cap-failed' : 'cap-disconnected'}>
-          <span>{view.state === 'failed' ? t('welcome.failed', { status: view.status }) : t('welcome.disconnected')}</span>
-          <Button size="sm" onClick={onRetry} data-testid="cap-retry">
-            {t('state.retry')}
-          </Button>
-        </div>
-      )}
-      <p className="mu cap-note" role="status" aria-live="polite" data-testid="cap-announce">
-        {announce}
-      </p>
-    </section>
-  )
-}
-
-function EngineRow({ report, appVersion }: { report: CapabilityReport; appVersion: string }) {
-  const { t } = useI18n()
-  return (
-    <li className="cap-row" data-testid="cap-engine" data-status="running">
-      <div className="cap-head">
-        <span className="cap-name">{t('cap.tool.engine')}</span>
-        <Pill tone="p" small>
-          <span aria-hidden="true">✓&nbsp;</span>
-          {t('cap.engine.running')}
-        </Pill>
-        <span className="tag" data-testid="cap-engine-version">
-          {appVersion ? t('welcome.engineVersions', { engine: report.engine.version, app: appVersion }) : t('welcome.version', { version: report.engine.version })}
-        </span>
-      </div>
-      <p className="cap-meaning">{t('cap.meaning.engine', { os: report.engine.os, arch: report.engine.arch })}</p>
-    </li>
-  )
-}
-
-function word(t: ReturnType<typeof useI18n>['t'], x: RowText['name'] | RowText['status']): string {
-  return 'key' in x ? t(x.key) : x.raw
-}
-
-export function ToolRow({ tool }: { tool: CapabilityTool }) {
-  const { t } = useI18n()
-  const r = rowText(tool)
-  const reason = tool.reason ? reasonKey(tool.reason) : undefined
-  return (
-    <li className="cap-row" data-testid={`cap-${tool.id}`} data-status={tool.status}>
-      <div className="cap-head">
-        <span className="cap-name">{word(t, r.name)}</span>
-        <Pill tone={r.known ? (TONES[tool.status] ?? 'n') : 'n'} small>
-          <span aria-hidden="true">{r.glyph}&nbsp;</span>
-          <span data-testid="cap-status">{word(t, r.status)}</span>
-        </Pill>
-        {tool.status === 'available' && tool.version && <span className="tag">{t('welcome.version', { version: tool.version })}</span>}
-        {tool.reason && <span className="tag">{t('welcome.reason', { reason: tool.reason })}</span>}
-      </div>
-      <p className="cap-meaning">{t(r.meaning)}</p>
-      {reason && <p className="cap-still mu">{t(reason)}</p>}
-      {r.still && <p className="cap-still mu">{t(r.still)}</p>}
-    </li>
-  )
+  return { view, announce, load, recheck }
 }
