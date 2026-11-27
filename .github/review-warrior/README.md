@@ -58,7 +58,9 @@ ReviewWarrior is therefore skipped, with a passing status.
    Model, effort and CLI version are fixed in the workflow.
 5. **Check.** `reviewwarrior check` accounts for every line of the review:
    the four headings exactly, at column 0 and in order, with nothing before
-   the first and no other heading or workflow marker anywhere. The verdict
+   the first, no other heading at column 0 and no workflow marker anywhere
+   (an indented `#` line, such as a shell comment in a snippet, is entry
+   text and is still checked for tags). The verdict
    carries no `[TAG]` or `[Pn]`. A tagged section is either `None.` /
    `No actionable findings.` alone, or numbered entries at column 0 with a
    `[TAG][Pn]` prefix, each followed only by indented text with no tag in it.
@@ -68,7 +70,8 @@ ReviewWarrior is therefore skipped, with a passing status.
    "no findings". A
    review that contains the API key verbatim is a failure and is not
    published; an encoded copy is not detected.
-6. **Publish.** Every `@mention` and `<` is neutralized, inside code too (a
+6. **Publish.** Every `@mention`, also one written as a character
+   reference such as `&#64;`, and every `<` is neutralized, inside code too (a
    `<` in code shows as `&lt;`). The new
    review replaces every earlier review comment, read fresh at publish time.
    The comment records the reviewed commit and the newest comment the run

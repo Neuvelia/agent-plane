@@ -65,13 +65,15 @@ func (f finding) blocking() bool {
 	return f.priority <= 1
 }
 
-// section returns the body under heading, up to the next level-2 heading or
-// workflow marker, and whether the heading was found.
+// section returns the body under heading, up to the next level-2 heading at
+// column 0 or workflow marker, and whether the heading was found. It reads a
+// published review, whose sections the gate split the same way, so an
+// indented `##` inside an entry does not cut a section short.
 func section(text, heading string) (string, bool) {
 	var body []string
 	inside := false
 	for _, line := range strings.Split(text, "\n") {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimRight(line, " \t\r")
 		if !inside {
 			inside = trimmed == heading
 			continue
@@ -113,8 +115,11 @@ func parseReview(text string) ([]finding, error) {
 	return findings, nil
 }
 
-// headingLine matches a Markdown ATX heading at any indentation.
-var headingLine = regexp.MustCompile(`^\s*#{1,6}(\s|$)`)
+// headingLine matches a Markdown ATX heading at column 0. An indented one
+// (`   # comment` in a shell snippet of an entry) is text: it cannot move a
+// line to another section, and every line of a section is still checked
+// for tags, so a heading GitHub shows there cannot hide an entry.
+var headingLine = regexp.MustCompile(`^#{1,6}(\s|$)`)
 
 // splitSections returns the body of each review section, in reviewSections
 // order. A heading may only be the next expected one, written exactly and at

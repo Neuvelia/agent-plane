@@ -90,6 +90,45 @@ func TestParseReviewIgnoresIndentedSubLists(t *testing.T) {
 	}
 }
 
+// An indented heading-like line is entry text: a shell comment in a snippet
+// is accepted, and an entry after an indented `##` is still counted.
+func TestParseReviewReadsIndentedHeadingsAsEntryText(t *testing.T) {
+	tests := map[string]struct {
+		text            string
+		count, blocking int
+	}{
+		"shell comment in a snippet":      {"Reuse pathscope.Match:\n\n   ```bash\n   # quote it\n   echo \"$x\"\n   ```", 3, 2},
+		"entry after an indented heading": {"Reuse pathscope.Match.\n    ## example\n4. **[NEW][P0] Secret leak** - `b.go:2`", 4, 3},
+	}
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			findings, err := parseReview(strings.Replace(wellFormedReview, "Reuse pathscope.Match.", test.text, 1))
+			if err != nil {
+				t.Fatalf("parseReview: %v", err)
+			}
+			blocking := 0
+			for _, f := range findings {
+				if f.blocking() {
+					blocking++
+				}
+			}
+			if len(findings) != test.count || blocking != test.blocking {
+				t.Fatalf("got %d findings, %d blocking; want %d and %d", len(findings), blocking, test.count, test.blocking)
+			}
+		})
+	}
+}
+
+// The next run reads the previous findings with section, which must split
+// the review where the gate did.
+func TestSectionKeepsEntriesAfterAnIndentedHeading(t *testing.T) {
+	review := strings.Replace(wellFormedReview, "Reuse pathscope.Match.", "Reuse pathscope.Match.\n   ## example\n4. **[NEW][P0] Later entry** - `b.go:2`", 1)
+	body, found := section(review, headingFindings)
+	if !found || !strings.Contains(body, "Later entry") {
+		t.Fatalf("got %q, %v; want the entry after the indented heading", body, found)
+	}
+}
+
 func TestSectionStopsAtWorkflowMarker(t *testing.T) {
 	text := "## Findings\n\n1. **[NEW][P1] A** - `a.go:1`\n<!-- review-warrior-reviewed-sha: x -->\n2. hidden\n"
 	body, found := section(text, headingFindings)
@@ -164,8 +203,6 @@ func TestParseReviewRejectsFindingsOutsideTheFourSections(t *testing.T) {
 			"## Findings\n\nNone.\n\n## Security\n\n"+hidden+"\n\n", 1),
 		"heading with two spaces ends a section": strings.Replace(wellFormedReview, wellFormedFindings(),
 			"## Findings\n\nNone.\n\n##  Findings\n\n"+hidden+"\n\n", 1),
-		"indented heading inside an entry": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",
-			"Reuse pathscope.Match.\n    ## example\n2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
 		"workflow marker inside the review": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",
 			"Reuse pathscope.Match.\n<!-- review-warrior -->\n2. **[NEW][P0] Secret leak** - `b.go:2`", 1),
 		"entry after a lone carriage return": strings.Replace(wellFormedReview, "Reuse pathscope.Match.",

@@ -64,7 +64,7 @@ P0 and P1 findings block the merge gate, so give them only with a concrete failu
 
 Keep each finding under 80 words, in plain, concise English. Each finding states the priority and a short title, the exact file and line, the evidence and impact, and the smallest fix, including code that can be removed. Avoid code blocks unless a short snippet is essential.
 
-Output exactly these four sections, in this order, and nothing else. Every numbered entry starts with its tag and priority in brackets, as shown, with no other text before it. Start each entry at the beginning of a line with its number, indent every following line of the entry, and do not use bullets or unnumbered entries. Write no other headings, no text before `## Verdict`, and no `[TAG]` or `[Pn]` anywhere except at the start of an entry. Anything else makes the review malformed and fails the gate.
+Output exactly these four sections, in this order, and nothing else. Every numbered entry starts with its tag and priority in brackets, as shown, with no other text before it. Start each entry at the beginning of a line with its number, indent every following line of the entry, code blocks included, and do not use bullets or unnumbered entries. Write no other headings, no text before `## Verdict`, and no `[TAG]` or `[Pn]` anywhere except at the start of an entry. Anything else makes the review malformed and fails the gate.
 
 ## Verdict
 

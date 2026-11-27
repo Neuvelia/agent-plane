@@ -15,11 +15,18 @@ import (
 
 var mention = regexp.MustCompile(`@([A-Za-z0-9])`)
 
+// mentionReference matches a character reference that renders as `@`
+// (`&#64;`, `&#x40;`, `&commat;`); GitHub finds mentions in the rendered
+// text. Escaping only these keeps `&lt;` from the previous review, which the
+// next one may quote, from growing on every round.
+var mentionReference = regexp.MustCompile(`&(#0*64;|#[xX]0*40;|commat;)`)
+
 // zeroWidthSpace breaks a mention and is invisible in text and in code.
 const zeroWidthSpace = "​"
 
 // neutralize escapes every mention and every HTML tag opener.
 func neutralize(text string) string {
+	text = mentionReference.ReplaceAllString(text, "&amp;$1")
 	text = strings.ReplaceAll(text, "<", "&lt;")
 	return mention.ReplaceAllString(text, "@"+zeroWidthSpace+"$1")
 }

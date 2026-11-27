@@ -1,6 +1,7 @@
 package main
 
 import (
+	"html"
 	"strings"
 	"testing"
 )
@@ -19,11 +20,16 @@ func TestNeutralizeEscapesMentionsAndHTMLEverywhere(t *testing.T) {
 		"backtick in fence info": "```x`\n<img src=x> @owner\n```",
 		"fenced block":           "```\n<details>@owner\n```",
 		"unclosed code span":     "`@owner <b>",
+		"decimal reference":      "ping &#64;owner",
+		"hex reference":          "ping &#X0040;owner",
+		"named reference":        "ping &commat;owner",
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := neutralize(input)
-			if strings.Contains(got, "<") || mention.MatchString(got) {
+			// One unescape is what the renderer does: a reference that
+			// survives it as `@name` would be a mention.
+			if strings.Contains(got, "<") || mention.MatchString(html.UnescapeString(got)) {
 				t.Fatalf("neutralize(%q) = %q still carries a mention or a tag", input, got)
 			}
 		})
@@ -35,6 +41,14 @@ func TestNeutralizeKeepsTheTextReadable(t *testing.T) {
 	want := "see @" + zeroWidthSpace + "owner and a&lt;b"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+}
+
+// The next review may quote this one; its escapes must not grow each round.
+func TestNeutralizeIsStableOnItsOwnOutput(t *testing.T) {
+	once := neutralize("a<b, &amp; and &#64;owner")
+	if twice := neutralize(once); twice != once {
+		t.Fatalf("second pass changed %q to %q", once, twice)
 	}
 }
 
