@@ -14,13 +14,14 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Attempt compare (F2.8a): pure model and view | `compare.ts`, `AttemptCompare.tsx`, `check.tsx` |
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
-| Runs, inspector, approvals and New run screens | `views.tsx`, `preflight.ts`, `GraphMap.tsx`, `NodePanel.tsx` |
+| Runs, inspector and approvals screens | `views.tsx`, `GraphMap.tsx`, `NodePanel.tsx` |
+| New run with preflight (F2.5e): view, state, pure preflight model | `NewRun.tsx`, `useNewRun.ts`, `newRunSession.ts` (pick/grant ordering), `settledPick.ts` (arrow-key picks), `newRunModel.ts`, `preflight.ts` |
 | Inbox triage queue (F2.5b): queue, detail, decision in place | `inbox.ts`, `inboxRun.ts`, `inboxView.tsx`, `InboxDetail.tsx`, `ui/glyphs.tsx` |
 | Sidebar (F2.5b): New run, navigation, recent runs, Later, profile | `ui/shell.tsx`, `sidebarRecent.tsx`, `ui/icons.tsx` |
 | Event-derived run insight | `insight.ts` |
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
-| Settings (F2.5e): section list, groups, Agents and About panes; language (System/PL/EN), appearance (System/Light/Dark) and the opt-in "Record run values" switch | `settings/` (recording preference held by Electron main; capability report via `settings/useEngineReport.ts`) |
+| Settings (F2.5f): section list, groups, Agents and About panes; language (System/PL/EN), appearance (System/Light/Dark) and the opt-in "Record run values" switch | `settings/` (recording preference held by Electron main; capability report via `settings/useEngineReport.ts`) |
 | Profile menu, Keyboard shortcuts and About (F2.5c) | `ui/profileMenu.tsx`, `ui/menuKeys.ts`, `ui/presence.ts`, `ui/dialogs.tsx` |
 | Theme choice (System/Light/Dark) and `data-theme` (F2.5c, ADR-0047) | `theme.tsx`; light tokens in `design/tokens.json` |
 | Recorded run values and "Show values from run" (F2.3 E5b.1) | `values.ts`, `valuePicker.ts`, `useRunValues.ts`, `ValuePickerView.tsx` |
@@ -88,7 +89,7 @@ as implemented merely because the full spec describes it.
   schema-10 `value_recorded` streams leave run views unchanged:
   `desktop/test/schema10.test.ts`.
 - Settings recording preference and serve flags: `desktop/test/recording.test.tsx`;
-  Settings sections, Soon rows, save notices, Agents order and diagnostics (F2.5e):
+  Settings sections, Soon rows, save notices, Agents order and diagnostics (F2.5f):
   `desktop/test/settings.test.tsx`, stories `settings/settings.stories.tsx`.
 - Run overview selectors and views (F2.6: waits, critical path, outcome, node filters, timeline segments): `desktop/test/overview.test.ts`, `desktop/test/overview.test.tsx`.
 - Recorded values (F2.3 E5b.1: `values.ts` reducer, `valuePicker.ts` picker rules, `useRunValues.ts`, `ValuePickerView.tsx`; values stay out of `reducer.ts` and never touch storage or console): `desktop/test/edge-values.test.ts`, `desktop/test/edge-values-view.test.tsx`.
@@ -98,7 +99,9 @@ as implemented merely because the full spec describes it.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
 - Command palette (F2.5d: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, DOM behaviour under jsdom in `desktop/test/palette-dom.test.tsx` (the file opts in with `// @vitest-environment jsdom`; jsdom has no `<dialog>` methods, so the test stubs them), stories `ui/palette.stories.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
-  `desktop/test/preflight.test.ts`.
+  `desktop/test/preflight.test.ts`; New run inputs, preflight rows and headline over
+  recorded engine answers: `desktop/test/new-run.test.tsx`; pick and grant ordering:
+  `desktop/test/new-run-session.test.ts`; stories `NewRun.stories.tsx`.
 - Inbox queue and detail selectors (F2.5b): `desktop/test/inbox.test.ts`; stories `Screens/Inbox*`.
 - Timeline and bounded event detail:
   `desktop/test/insight.test.ts`.

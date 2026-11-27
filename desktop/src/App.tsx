@@ -15,7 +15,8 @@ import { runStatusKey } from './status'
 import { AboutDialog, ShortcutsDialog } from './ui/dialogs'
 import { ProfileMenu } from './ui/profileMenu'
 import type { ChosenGraph } from './types'
-import { Approvals, RunConfig, RunInspector, RunsList } from './views'
+import { NewRun } from './NewRun'
+import { Approvals, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
 import { useSetupCreate } from './setupCreate'
 import { Welcome } from './welcome'
@@ -196,7 +197,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'settings' && <Settings visit={settingsVisit} lost={lost} onPaneChange={setSettingsPane} />}
           {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'welcome' && <Welcome lost={lost} onCreate={createFromSetup} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'inbox' })} />}
-          {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
+          {route.name === 'new' && <NewRun key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
       {palette !== null && (

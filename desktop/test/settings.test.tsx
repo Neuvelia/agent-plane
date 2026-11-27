@@ -24,7 +24,7 @@ const render = (node: ReactNode, locale: Locale = 'en') =>
 const noop = () => undefined
 
 describe('Settings sections', () => {
-  it('lists the eight design sections in order, with Secrets and Policy inert [F2.5e-AC1]', () => {
+  it('lists the eight design sections in order, with Secrets and Policy inert [F2.5f-AC1]', () => {
     expect(SECTIONS.map((s) => s.id)).toEqual(['general', 'recording', 'execution', 'agents', 'engine', 'secrets', 'policy', 'about'])
     const out = render(<Settings />)
     for (const id of ['secrets', 'policy']) {
@@ -45,7 +45,7 @@ describe('Settings sections', () => {
 })
 
 describe('rows without a backing contract', () => {
-  it('are disabled and say Soon; the retry budget shows the loop default [F2.5e-AC2]', () => {
+  it('are disabled and say Soon; the retry budget shows the loop default [F2.5f-AC2]', () => {
     const out = render(<Settings />)
     const rows = out.split('<div class="st-row')
     for (const id of ['settings-graph-folder', 'settings-diffs', 'settings-store']) {
@@ -59,7 +59,7 @@ describe('rows without a backing contract', () => {
 })
 
 describe('record run values', () => {
-  it('is a native, labelled checkbox that starts off [F2.5e-AC3]', () => {
+  it('is a native, labelled checkbox that starts off [F2.5f-AC3]', () => {
     const out = render(<Settings />)
     const box = /<input[^>]*data-testid="values-record"[^>]*>/.exec(out)?.[0] ?? ''
     expect(box).toContain('type="checkbox"')
@@ -67,25 +67,25 @@ describe('record run values', () => {
     const id = /id="([^"]+)"/.exec(box)?.[1]
     expect(out).toContain(`for="${id}"`)
   })
-  it('maps save results and never reports a failed save as saved [F2.5e-AC3]', () => {
+  it('maps save results and never reports a failed save as saved [F2.5f-AC3]', () => {
     expect(noticeOf({ ok: true, settings: { enabled: true, redactEnv: [], active: false, missing: [] } })).toEqual({ kind: 'saved' })
     expect(noticeOf({ ok: false, code: 'invalid', name: 'A=B' })).toEqual({ kind: 'invalid', name: 'A=B' })
     expect(noticeOf({ ok: false, code: 'save_failed' })).toEqual({ kind: 'failed' })
     expect(noticeOf(null)).toEqual({ kind: 'failed' })
   })
-  it('tells a typed names draft from the saved list, so a toggle keeps an unsaved draft [F2.5e-AC3]', () => {
+  it('tells a typed names draft from the saved list, so a toggle keeps an unsaved draft [F2.5f-AC3]', () => {
     expect(namesDirty('GITHUB_TOKEN', ['GITHUB_TOKEN'])).toBe(false)
     expect(namesDirty(' GITHUB_TOKEN, ', ['GITHUB_TOKEN'])).toBe(false)
     expect(namesDirty('GITHUB_TOKEN NPM_TOKEN', ['GITHUB_TOKEN'])).toBe(true)
     expect(namesDirty('NPM_TOKEN GITHUB_TOKEN', ['GITHUB_TOKEN', 'NPM_TOKEN'])).toBe(true)
     expect(namesDirty('', [])).toBe(false)
   })
-  it('after a toggle, a clean draft follows the saved list and a typed draft stays [F2.5e-AC3]', () => {
+  it('after a toggle, a clean draft follows the saved list and a typed draft stays [F2.5f-AC3]', () => {
     expect(draftAfterToggle('GITHUB_TOKEN', ['GITHUB_TOKEN'], ['GITHUB_TOKEN'])).toBe('GITHUB_TOKEN')
     expect(draftAfterToggle(' GITHUB_TOKEN,', ['GITHUB_TOKEN'], ['GITHUB_TOKEN'])).toBe('GITHUB_TOKEN')
     expect(draftAfterToggle('GITHUB_TOKEN NPM_TOKEN', ['GITHUB_TOKEN'], ['GITHUB_TOKEN'])).toBe('GITHUB_TOKEN NPM_TOKEN')
   })
-  it('states next to the switch, visibly and in its description, that only listed variables are hidden (ADR-0023) [F2.5e-AC3]', () => {
+  it('states next to the switch, visibly and in its description, that only listed variables are hidden (ADR-0023) [F2.5f-AC3]', () => {
     for (const [locale, text] of [['en', 'saved as it is'], ['pl', 'zapisują się bez zmian']] as const) {
       const out = render(<Settings />, locale)
       const box = /<input[^>]*data-testid="values-record"[^>]*>/.exec(out)?.[0] ?? ''
@@ -118,7 +118,7 @@ describe('engine status', () => {
 })
 
 describe('Agents', () => {
-  it('shows agent rows only, known agents in order and unknown ones last as received [F2.5e-AC4]', () => {
+  it('shows agent rows only, known agents in order and unknown ones last as received [F2.5f-AC4]', () => {
     const report = withTools([
       { id: 'git', kind: 'tool' },
       { id: 'newagent', kind: 'agent_cli' },
@@ -132,7 +132,7 @@ describe('Agents', () => {
     expect(out).not.toContain('data-testid="agent-git"')
     expect(out).toContain('newagent')
   })
-  it('lists the probe checks and the sign-in note for an available Codex [F2.5e-AC4]', () => {
+  it('lists the probe checks and the sign-in note for an available Codex [F2.5f-AC4]', () => {
     const report = withTools([{ id: 'codex', kind: 'agent_adapter', status: 'available', version: '0.169.0' }, { id: 'claude', status: 'detected_no_adapter' }])
     const out = render(<AgentsPane view={{ state: 'loaded', report, refreshing: false }} onCheck={noop} onRetry={noop} />)
     const codex = /data-testid="agent-codex"[\s\S]*?<\/section>/.exec(out)?.[0] ?? ''
@@ -150,7 +150,7 @@ describe('Agents', () => {
 })
 
 describe('About', () => {
-  it('copies versions and statuses only [F2.5e-AC5]', () => {
+  it('copies versions and statuses only [F2.5f-AC5]', () => {
     const text = diagnosticsText('0.14.0', linux)
     expect(text.split('\n')[0]).toBe('app 0.14.0')
     expect(text).toContain('engine 0.0.0-dev linux/amd64')

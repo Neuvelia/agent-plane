@@ -10,7 +10,7 @@ import { useEngineReport } from './useEngineReport'
 
 export { parseNames } from './recording'
 
-// F2.5e: the Settings screen of the design canvas. A section list on the left;
+// F2.5f: the Settings screen of the design canvas. A section list on the left;
 // General, Recording, Execution and Engine are groups of one scrolling page,
 // Agents and About are panes of their own. Preferences stay where they are
 // held (language in the renderer, recording in Electron main); nothing here

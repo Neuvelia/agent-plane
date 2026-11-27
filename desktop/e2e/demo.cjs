@@ -106,8 +106,8 @@ async function startDemo(app, page) {
   await stubOpenDialog(app, graph)
   await page.click('[data-testid="nav-new"]')
   await page.click('[data-testid="choose"]')
-  await page.waitForSelector('[data-testid="preflight-status"]')
-  assert.equal(await page.textContent('[data-testid="preflight-status"]'), 'Ready')
+  // F2.5e: the preflight headline is always shown; choosing the graph checks it.
+  await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run', null, { timeout: 15000 })
   await page.click('[data-testid="run"]')
   await page.waitForSelector('[data-testid="graph-map"]')
 }
@@ -165,7 +165,7 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="inbox-empty"]')
     await stubOpenDialog(app, graph)
     await page.click('[data-testid="quick-open"]')
-    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run')
     assert.equal(await page.textContent('[data-testid="graph-label"]'), path.basename(graph), 'Open graph on the Inbox lands on New run with the file chosen')
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
@@ -1052,7 +1052,7 @@ async function startDemo(app, page) {
     await shot(page, '4-succeeded')
     const finishedEvents = await page.textContent('[data-testid="event-count"]')
 
-    // roadmap: F2.5e-AC3
+    // roadmap: F2.5f-AC3
     // F2.3 E6 through the Settings switch: it saves at once to the main-process file
     // read at start, keeps an unsaved names draft as typed, and keeps keyboard focus.
     // The runs above were not recorded; the ones after the restart below are.
@@ -1228,7 +1228,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="nav-new"]')
     assert.equal(await page.locator('[data-testid="graph-path"]').count(), 0, 'New run has no field for a path')
     await page.click('[data-testid="choose"]')
-    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run')
     assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml')
     assert.equal((await page.content()).includes(work), false, 'the page never shows the path')
     // The file is saved again after it was chosen and checked: the run reads the saved bytes.

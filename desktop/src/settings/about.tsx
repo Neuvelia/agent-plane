@@ -18,7 +18,7 @@ export function diagnosticsText(appVersion: string, report: CapabilityReport | n
 
 type Copy = 'idle' | 'copied' | 'failed'
 
-// Settings, About (F2.5e): versions from the app and the capability report, and
+// Settings, About (F2.5f): versions from the app and the capability report, and
 // the number of stored runs from the run list. Copy happens only on click.
 export function AboutPane({ view }: { view: CapabilityView }) {
   const { t } = useI18n()

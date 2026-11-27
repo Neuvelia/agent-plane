@@ -3,7 +3,7 @@ import type { BridgeData } from '../storybook/bridge'
 import { allAvailable, codexFoundOnPath, codexUnsupportedVersion, detectionError, linux } from '../storybook/capabilityFixtures'
 import { Settings } from '.'
 
-// F2.5e Settings. Preferences come from the in-memory bridge; the capability
+// F2.5f Settings. Preferences come from the in-memory bridge; the capability
 // report is the recorded Linux one or a row-level variant of it. Plays wait for
 // the element or state they need, never for a fixed time.
 const meta: Meta = { title: 'Screens/Settings' }

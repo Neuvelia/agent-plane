@@ -35,6 +35,8 @@ describe('palette filtering', () => {
     expect(ids('#8c1f')).toEqual(['run:8c1f40a2-bbbb'])
     // A run id is matched from its start, not anywhere inside it.
     expect(ids('#1f40')).toEqual([])
+    // The graph name (the entry label) is not part of the '#' scope.
+    expect(ids('#release')).toEqual([])
   })
   it('returns nothing when nothing matches', () => {
     expect(ids('zzz')).toEqual([])

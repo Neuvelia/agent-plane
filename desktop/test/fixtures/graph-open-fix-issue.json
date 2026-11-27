@@ -1,0 +1,1013 @@
+{
+ "text": "# Template: fix an issue with a coding agent. A person approves before any agent\n# call; \"fix\" runs Codex in a bounded loop whose reported_file_scope gate rejects\n# changes outside allowed_paths; a person approves the result before it is recorded.\n# Fill the workspace before running. Agent nodes run through\n#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex --input issue=...\n# Codex authentication needs a named environment reference (for example\n# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.\n# The shell node only prints text. Nothing is staged, committed, pushed or sent.\nschema_version: 0\nid: fix-issue\nname: Fix an issue\ninputs:\n  issue: {type: string, required: true}\nnodes:\n  confirm_start:\n    type: human\n    config:\n      prompt: Start the coding agent on this issue? This may use a paid model.\n      context_inputs: [issue]\n    inputs:\n      issue: {type: string, required: true}\n    outputs:\n      decision: {type: string, required: true}\n  fix:\n    type: agent\n    inputs:\n      task: {type: string, required: true}\n      start: {type: string, required: true}\n    config:\n      adapter: codex\n      workspace: /work/repo\n      allowed_paths: [\"src/\", \"tests/\"] # REVIEW: the paths the fix is meant to change\n    outputs:\n      summary: {type: string}\n      changed_files: {type: json}\n    loop:\n      max_attempts: 3\n      gate:\n        inputs:\n          candidate: {type: json, required: true}\n        config:\n          check_id: reported-scope\n          kind: reported_file_scope\n          input: candidate\n          allowed_paths: [\"src/\", \"tests/\"] # REVIEW: keep equal to config.allowed_paths\n      bindings:\n        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}\n  approve_fix:\n    type: human\n    config:\n      prompt: Review the summary and changed files. Accept the fix? Run your own tests before merging.\n      context_inputs: [summary]\n    inputs:\n      summary: {type: string, required: true}\n      changed_files: {type: json, required: true}\n    outputs:\n      decision: {type: string, required: true}\n  record:\n    type: shell\n    config:\n      command: /usr/bin/printf\n      args: [\"fix accepted\\n\"]\n    inputs:\n      decision: {type: string, required: true}\ngraph_input_bindings:\n  - {from: inputs.issue, to: confirm_start.inputs.issue}\n  - {from: inputs.issue, to: fix.inputs.task}\nedges:\n  - {from: confirm_start.outputs.decision, to: fix.inputs.start}\n  - {from: fix.outputs.summary, to: approve_fix.inputs.summary}\n  - {from: fix.outputs.changed_files, to: approve_fix.inputs.changed_files}\n  - {from: approve_fix.outputs.decision, to: record.inputs.decision}\noutputs: {}\nmetadata:\n  layout:\n    nodes:\n      confirm_start: {x: 0, y: 0}\n      fix: {x: 320, y: 0}\n      approve_fix: {x: 640, y: 0}\n      record: {x: 960, y: 0}\n",
+ "hash": "1ad0ea5d9a84c5930e9902faecde634f7f94b494c39a7c0a7cd2b952442459c9",
+ "version": "sha256-v0:07aad8f7574a0d9d021eccaf0e3fca6a5afd1123ddd094721bbf7e9ede58c115",
+ "definition": {
+  "schema_version": 0,
+  "id": "fix-issue",
+  "name": "Fix an issue",
+  "metadata": {
+   "layout": {
+    "nodes": {
+     "approve_fix": {
+      "x": 640,
+      "y": 0
+     },
+     "confirm_start": {
+      "x": 0,
+      "y": 0
+     },
+     "fix": {
+      "x": 320,
+      "y": 0
+     },
+     "record": {
+      "x": 960,
+      "y": 0
+     }
+    }
+   }
+  },
+  "inputs": {
+   "issue": {
+    "type": "string",
+    "required": true
+   }
+  },
+  "nodes": {
+   "approve_fix": {
+    "type": "human",
+    "inputs": {
+     "changed_files": {
+      "type": "json",
+      "required": true
+     },
+     "summary": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "context_inputs": [
+      "summary"
+     ],
+     "prompt": "Review the summary and changed files. Accept the fix? Run your own tests before merging."
+    },
+    "outputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    }
+   },
+   "confirm_start": {
+    "type": "human",
+    "inputs": {
+     "issue": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "context_inputs": [
+      "issue"
+     ],
+     "prompt": "Start the coding agent on this issue? This may use a paid model."
+    },
+    "outputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    }
+   },
+   "fix": {
+    "type": "agent",
+    "loop": {
+     "max_attempts": 3,
+     "gate": {
+      "inputs": {
+       "candidate": {
+        "type": "json",
+        "required": true
+       }
+      },
+      "config": {
+       "allowed_paths": [
+        "src/",
+        "tests/"
+       ],
+       "check_id": "reported-scope",
+       "input": "candidate",
+       "kind": "reported_file_scope"
+      }
+     },
+     "bindings": [
+      {
+       "from": "candidate.outputs.changed_files",
+       "to": "gate.inputs.candidate"
+      }
+     ]
+    },
+    "inputs": {
+     "start": {
+      "type": "string",
+      "required": true
+     },
+     "task": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "adapter": "codex",
+     "allowed_paths": [
+      "src/",
+      "tests/"
+     ],
+     "workspace": "/work/repo"
+    },
+    "outputs": {
+     "changed_files": {
+      "type": "json"
+     },
+     "summary": {
+      "type": "string"
+     }
+    }
+   },
+   "record": {
+    "type": "shell",
+    "inputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "args": [
+      "fix accepted\n"
+     ],
+     "command": "/usr/bin/printf"
+    }
+   }
+  },
+  "edges": [
+   {
+    "from": "confirm_start.outputs.decision",
+    "to": "fix.inputs.start"
+   },
+   {
+    "from": "fix.outputs.summary",
+    "to": "approve_fix.inputs.summary"
+   },
+   {
+    "from": "fix.outputs.changed_files",
+    "to": "approve_fix.inputs.changed_files"
+   },
+   {
+    "from": "approve_fix.outputs.decision",
+    "to": "record.inputs.decision"
+   }
+  ],
+  "graph_input_bindings": [
+   {
+    "from": "inputs.issue",
+    "to": "confirm_start.inputs.issue"
+   },
+   {
+    "from": "inputs.issue",
+    "to": "fix.inputs.task"
+   }
+  ],
+  "outputs": {}
+ },
+ "diagnostics": [],
+ "readonly_canvas": false,
+ "line_ending": "lf",
+ "label": "fix-issue.yaml",
+ "node_types": {
+  "agent": {
+   "config": [
+    {
+     "id": "agent.config.adapter",
+     "key": "adapter",
+     "kind": "string",
+     "required": true,
+     "format": "not_blank"
+    },
+    {
+     "id": "agent.config.workspace",
+     "key": "workspace",
+     "kind": "string",
+     "required": true,
+     "format": "absolute_path"
+    },
+    {
+     "id": "agent.config.task",
+     "key": "task",
+     "kind": "text",
+     "required": true,
+     "format": "not_blank",
+     "excludes": [
+      {
+       "input": "task"
+      }
+     ]
+    },
+    {
+     "id": "agent.config.allowed_paths",
+     "key": "allowed_paths",
+     "kind": "path_list",
+     "item": {
+      "id": "agent.config.allowed_paths.item",
+      "kind": "string",
+      "format": "not_blank"
+     }
+    },
+    {
+     "id": "agent.config.context_refs",
+     "key": "context_refs",
+     "kind": "list",
+     "item": {
+      "id": "agent.config.context_refs.item",
+      "kind": "string",
+      "format": "not_blank"
+     }
+    },
+    {
+     "id": "agent.config.environment_refs",
+     "key": "environment_refs",
+     "kind": "list",
+     "item": {
+      "id": "agent.config.environment_refs.item",
+      "kind": "string",
+      "format": "not_blank"
+     }
+    },
+    {
+     "id": "agent.config.isolation",
+     "key": "isolation",
+     "kind": "enum",
+     "default": "none",
+     "enum": [
+      "none",
+      "worktree"
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "summary",
+     "type": "string"
+    },
+    {
+     "name": "changed_files",
+     "type": "json"
+    },
+    {
+     "name": "artifacts",
+     "type": "json"
+    },
+    {
+     "name": "raw_metadata",
+     "type": "json"
+    },
+    {
+     "name": "usage",
+     "type": "json"
+    }
+   ],
+   "outputs_locked": false,
+   "loop": {
+    "fields": [
+     {
+      "id": "loop.max_attempts",
+      "key": "max_attempts",
+      "kind": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10
+     }
+    ],
+    "gate": [
+     {
+      "id": "gate.config.check_id",
+      "key": "check_id",
+      "kind": "string",
+      "required": true,
+      "max_bytes": 256,
+      "format": "not_blank"
+     },
+     {
+      "id": "gate.config.kind",
+      "key": "kind",
+      "kind": "enum",
+      "required": true,
+      "enum": [
+       "command",
+       "json_predicate",
+       "reported_file_scope",
+       "changed_files_scope",
+       "test_command"
+      ]
+     },
+     {
+      "id": "gate.config.command",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.command.command",
+        "key": "command",
+        "kind": "string",
+        "required": true,
+        "locked": {
+         "value": "/usr/bin/diff",
+         "reason": "a command Gate compares two inputs with /usr/bin/diff only"
+        }
+       },
+       {
+        "id": "gate.config.command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true,
+        "format": "clean_absolute_path"
+       },
+       {
+        "id": "gate.config.command.left_input",
+        "key": "left_input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.command.right_input",
+        "key": "right_input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string"
+        ],
+        "input_required": true
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "command"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.json_predicate",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.json_predicate.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "json"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.json_predicate.field",
+        "key": "field",
+        "kind": "list",
+        "required": true,
+        "item": {
+         "id": "gate.config.json_predicate.field.item",
+         "kind": "string",
+         "format": "nonempty"
+        }
+       },
+       {
+        "id": "gate.config.json_predicate.operator",
+        "key": "operator",
+        "kind": "enum",
+        "required": true,
+        "enum": [
+         "eq",
+         "ne"
+        ]
+       },
+       {
+        "id": "gate.config.json_predicate.expected",
+        "key": "expected",
+        "kind": "scalar",
+        "required": true,
+        "excludes": [
+         {
+          "key": "expected_json"
+         }
+        ]
+       },
+       {
+        "id": "gate.config.json_predicate.expected_json",
+        "key": "expected_json",
+        "kind": "string",
+        "required": true,
+        "format": "json_scalar",
+        "excludes": [
+         {
+          "key": "expected"
+         }
+        ]
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "json_predicate"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.reported_file_scope",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.reported_file_scope.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "json"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.reported_file_scope.allowed_paths",
+        "key": "allowed_paths",
+        "kind": "path_list",
+        "required": true,
+        "item": {
+         "id": "gate.config.reported_file_scope.allowed_paths.item",
+         "kind": "string",
+         "format": "relative_path"
+        }
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "reported_file_scope"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.test_command",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.test_command.command",
+        "key": "command",
+        "kind": "string",
+        "required": true,
+        "format": "nonempty"
+       },
+       {
+        "id": "gate.config.test_command.args",
+        "key": "args",
+        "kind": "list",
+        "item": {
+         "id": "gate.config.test_command.args.item",
+         "kind": "string"
+        }
+       },
+       {
+        "id": "gate.config.test_command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true,
+        "format": "clean_absolute_path"
+       },
+       {
+        "id": "gate.config.test_command.env_allowlist",
+        "key": "env_allowlist",
+        "kind": "list",
+        "item": {
+         "id": "gate.config.test_command.env_name",
+         "kind": "string",
+         "format": "env_name"
+        }
+       },
+       {
+        "id": "gate.config.test_command.env",
+        "key": "env",
+        "kind": "map"
+       },
+       {
+        "id": "gate.config.test_command.side_effects",
+        "key": "side_effects",
+        "kind": "enum",
+        "required": true,
+        "enum": [
+         "none",
+         "workspace_writes"
+        ]
+       },
+       {
+        "id": "gate.config.test_command.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string",
+         "json"
+        ],
+        "input_required": true
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "test_command"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.changed_files_scope",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.changed_files_scope.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string",
+         "json"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.changed_files_scope.allowed_paths",
+        "key": "allowed_paths",
+        "kind": "path_list",
+        "required": true,
+        "item": {
+         "id": "gate.config.changed_files_scope.allowed_paths.item",
+         "kind": "string",
+         "format": "relative_path"
+        }
+       },
+       {
+        "id": "gate.config.changed_files_scope.mode",
+        "key": "mode",
+        "kind": "enum",
+        "required": true,
+        "default": "warn",
+        "enum": [
+         "warn",
+         "deny"
+        ]
+       },
+       {
+        "id": "gate.config.changed_files_scope.workspace",
+        "key": "workspace",
+        "kind": "string",
+        "required": true,
+        "format": "clean_absolute_path"
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "changed_files_scope"
+       }
+      ]
+     }
+    ],
+    "gate_kinds": [
+     "command",
+     "json_predicate",
+     "reported_file_scope",
+     "changed_files_scope",
+     "test_command"
+    ]
+   }
+  },
+  "human": {
+   "config": [
+    {
+     "id": "human.config.prompt",
+     "key": "prompt",
+     "kind": "text",
+     "max_bytes": 1024
+    },
+    {
+     "id": "human.config.context_inputs",
+     "key": "context_inputs",
+     "kind": "list",
+     "max_items": 8,
+     "item": {
+      "id": "human.config.context_inputs.item",
+      "kind": "input_name",
+      "input_types": [
+       "string"
+      ]
+     }
+    },
+    {
+     "id": "human.config.on_reject",
+     "key": "on_reject",
+     "kind": "enum",
+     "default": "fail",
+     "enum": [
+      "fail",
+      "continue"
+     ]
+    }
+   ],
+   "outputs": [
+    {
+     "name": "decision",
+     "type": "string",
+     "required": true
+    }
+   ],
+   "outputs_locked": true
+  },
+  "shell": {
+   "config": [
+    {
+     "id": "shell.config.command",
+     "key": "command",
+     "kind": "string",
+     "required": true,
+     "format": "nonempty"
+    },
+    {
+     "id": "shell.config.args",
+     "key": "args",
+     "kind": "list",
+     "item": {
+      "id": "shell.config.args.item",
+      "kind": "string"
+     }
+    },
+    {
+     "id": "shell.config.cwd",
+     "key": "cwd",
+     "kind": "string"
+    },
+    {
+     "id": "shell.config.env_allowlist",
+     "key": "env_allowlist",
+     "kind": "list",
+     "item": {
+      "id": "shell.config.env_name",
+      "kind": "string",
+      "format": "env_name"
+     }
+    },
+    {
+     "id": "shell.config.env",
+     "key": "env",
+     "kind": "map"
+    },
+    {
+     "id": "shell.config.input_env",
+     "key": "input_env",
+     "kind": "map",
+     "item": {
+      "id": "shell.config.env_name",
+      "kind": "string",
+      "format": "env_name"
+     },
+     "input_types": [
+      "string"
+     ]
+    },
+    {
+     "id": "shell.config.secret_env",
+     "key": "secret_env",
+     "kind": "map",
+     "item": {
+      "id": "shell.config.secret_name",
+      "kind": "string",
+      "format": "secret_name"
+     }
+    },
+    {
+     "id": "shell.config.stdout_json",
+     "key": "stdout_json",
+     "kind": "bool",
+     "default": false
+    }
+   ],
+   "outputs": [
+    {
+     "name": "stdout",
+     "type": "string"
+    },
+    {
+     "name": "stderr",
+     "type": "string"
+    },
+    {
+     "name": "exit_code",
+     "type": "number"
+    },
+    {
+     "name": "json",
+     "type": "json",
+     "requires": [
+      {
+       "key": "stdout_json",
+       "equals": "true"
+      }
+     ]
+    }
+   ],
+   "outputs_locked": false,
+   "loop": {
+    "fields": [
+     {
+      "id": "loop.max_attempts",
+      "key": "max_attempts",
+      "kind": "int",
+      "default": 3,
+      "min": 1,
+      "max": 10
+     }
+    ],
+    "gate": [
+     {
+      "id": "gate.config.check_id",
+      "key": "check_id",
+      "kind": "string",
+      "required": true,
+      "max_bytes": 256,
+      "format": "not_blank"
+     },
+     {
+      "id": "gate.config.kind",
+      "key": "kind",
+      "kind": "enum",
+      "required": true,
+      "enum": [
+       "command",
+       "json_predicate",
+       "reported_file_scope",
+       "test_command"
+      ]
+     },
+     {
+      "id": "gate.config.command",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.command.command",
+        "key": "command",
+        "kind": "string",
+        "required": true,
+        "locked": {
+         "value": "/usr/bin/diff",
+         "reason": "a command Gate compares two inputs with /usr/bin/diff only"
+        }
+       },
+       {
+        "id": "gate.config.command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true,
+        "format": "clean_absolute_path"
+       },
+       {
+        "id": "gate.config.command.left_input",
+        "key": "left_input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.command.right_input",
+        "key": "right_input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string"
+        ],
+        "input_required": true
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "command"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.json_predicate",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.json_predicate.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "json"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.json_predicate.field",
+        "key": "field",
+        "kind": "list",
+        "required": true,
+        "item": {
+         "id": "gate.config.json_predicate.field.item",
+         "kind": "string",
+         "format": "nonempty"
+        }
+       },
+       {
+        "id": "gate.config.json_predicate.operator",
+        "key": "operator",
+        "kind": "enum",
+        "required": true,
+        "enum": [
+         "eq",
+         "ne"
+        ]
+       },
+       {
+        "id": "gate.config.json_predicate.expected",
+        "key": "expected",
+        "kind": "scalar",
+        "required": true,
+        "excludes": [
+         {
+          "key": "expected_json"
+         }
+        ]
+       },
+       {
+        "id": "gate.config.json_predicate.expected_json",
+        "key": "expected_json",
+        "kind": "string",
+        "required": true,
+        "format": "json_scalar",
+        "excludes": [
+         {
+          "key": "expected"
+         }
+        ]
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "json_predicate"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.reported_file_scope",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.reported_file_scope.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "json"
+        ],
+        "input_required": true
+       },
+       {
+        "id": "gate.config.reported_file_scope.allowed_paths",
+        "key": "allowed_paths",
+        "kind": "path_list",
+        "required": true,
+        "item": {
+         "id": "gate.config.reported_file_scope.allowed_paths.item",
+         "kind": "string",
+         "format": "relative_path"
+        }
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "reported_file_scope"
+       }
+      ]
+     },
+     {
+      "id": "gate.config.test_command",
+      "kind": "group",
+      "fields": [
+       {
+        "id": "gate.config.test_command.command",
+        "key": "command",
+        "kind": "string",
+        "required": true,
+        "format": "nonempty"
+       },
+       {
+        "id": "gate.config.test_command.args",
+        "key": "args",
+        "kind": "list",
+        "item": {
+         "id": "gate.config.test_command.args.item",
+         "kind": "string"
+        }
+       },
+       {
+        "id": "gate.config.test_command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true,
+        "format": "clean_absolute_path"
+       },
+       {
+        "id": "gate.config.test_command.env_allowlist",
+        "key": "env_allowlist",
+        "kind": "list",
+        "item": {
+         "id": "gate.config.test_command.env_name",
+         "kind": "string",
+         "format": "env_name"
+        }
+       },
+       {
+        "id": "gate.config.test_command.env",
+        "key": "env",
+        "kind": "map"
+       },
+       {
+        "id": "gate.config.test_command.side_effects",
+        "key": "side_effects",
+        "kind": "enum",
+        "required": true,
+        "enum": [
+         "none",
+         "workspace_writes"
+        ]
+       },
+       {
+        "id": "gate.config.test_command.input",
+        "key": "input",
+        "kind": "input_name",
+        "required": true,
+        "input_types": [
+         "string",
+         "json"
+        ],
+        "input_required": true
+       }
+      ],
+      "requires": [
+       {
+        "key": "kind",
+        "equals": "test_command"
+       }
+      ]
+     }
+    ],
+    "gate_kinds": [
+     "command",
+     "json_predicate",
+     "reported_file_scope",
+     "test_command"
+    ]
+   }
+  }
+ },
+ "node_info": {
+  "approve_fix": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
+  "confirm_start": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
+  "fix": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
+  "record": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  }
+ }
+}
