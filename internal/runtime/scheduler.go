@@ -137,11 +137,6 @@ type Options struct {
 	TimeLimits TimeLimits
 }
 
-// RunMetadata is the optional provenance recorded in run_started.
-type RunMetadata struct {
-	RepoName, RepoID, RepoBranch, RepoCommit, RuntimeVersion string
-}
-
 // IDGenerator is the engine's source of identifiers; the composition root
 // supplies random ones and tests supply deterministic ones.
 type IDGenerator interface {
@@ -895,6 +890,9 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 	settleDeadline()
 	abandoned := ignored != ""
 	if abandoned {
+		// The ignored run-scoped cancel request precedes the abandonment fact
+		// (ADR-0044); it is idempotent and emits nothing for a node deadline.
+		m.requestRunCancel()
 		m.reportAbandoned(id, attemptID, ignored)
 	}
 	timedOut := err != nil && nodeTimedOut(runCtx, ctx)
@@ -919,33 +917,4 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 		evidence = &snapshot
 	}
 	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err, timedOut: timedOut && !abandoned, shutdown: abandoned}
-}
-
-// metadataBound is the most time run_started waits for its provenance (F2.9,
-// F3.6). The provider runs a few local Git queries; a slow repository loses its
-// provenance rather than delaying the run.
-const metadataBound = 2 * time.Second
-
-// collectMetadata calls the provider defensively: a panic, a slow provider or
-// one that ignores its context yields empty metadata after metadataBound, never
-// a failed or stalled run. The provider's goroutine owns no run state; its
-// context is cancelled when the wait ends, so a provider that honours it stops.
-func collectMetadata(ctx context.Context, provider func(context.Context) RunMetadata) RunMetadata {
-	bounded, cancel := context.WithTimeout(ctx, metadataBound)
-	defer cancel()
-	result := make(chan RunMetadata, 1)
-	go func() {
-		defer func() {
-			if recover() != nil {
-				result <- RunMetadata{}
-			}
-		}()
-		result <- provider(bounded)
-	}()
-	select {
-	case meta := <-result:
-		return meta
-	case <-bounded.Done():
-		return RunMetadata{}
-	}
 }

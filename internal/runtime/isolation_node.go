@@ -36,7 +36,21 @@ func isolatedNode(n graph.NodeDefinition, root, path string) graph.NodeDefinitio
 }
 
 // relativeToRoot returns dir relative to root when dir is root or below it.
+// root is symlink-resolved (gitstate.CanonicalWorkspace), so an authored dir
+// that reaches the repository through a symlink (/tmp -> /private/tmp on
+// macOS) is compared resolved when its lexical form falls outside root.
 func relativeToRoot(root, dir string) (string, bool) {
+	if rel, inside := lexicallyBelow(root, dir); inside {
+		return rel, true
+	}
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return "", false
+	}
+	return lexicallyBelow(root, resolved)
+}
+
+func lexicallyBelow(root, dir string) (string, bool) {
 	rel, err := filepath.Rel(root, dir)
 	if err != nil || !filepath.IsAbs(dir) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", false

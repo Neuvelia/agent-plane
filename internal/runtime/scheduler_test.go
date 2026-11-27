@@ -589,6 +589,11 @@ func TestRunStartedRecordsOptionalRunMetadata(t *testing.T) {
 		// A provider that ignores its context cannot hold run_started past the
 		// bound (F2.9, F3.6).
 		"ignoring context": func(context.Context) RunMetadata { <-release; return RunMetadata{RepoName: "late"} },
+		// A field run_started would reject (a folder named r\x) is dropped and
+		// the rest kept, instead of panicking the scheduler (ADR-0044).
+		"malformed field": func(context.Context) RunMetadata {
+			return RunMetadata{RepoName: `r\x`, RepoID: "not-hex", RepoBranch: "main", RepoCommit: "abc123", RuntimeVersion: "9.9"}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 1, RunMetadata: provider})
@@ -602,8 +607,11 @@ func TestRunStartedRecordsOptionalRunMetadata(t *testing.T) {
 				}
 			}
 			want := events.RunStartedPayload{NodeCount: 1}
-			if name == "recorded" {
+			switch name {
+			case "recorded":
 				want = events.RunStartedPayload{NodeCount: 1, RepoName: "r", RepoBranch: "main", RepoCommit: "abc123", RuntimeVersion: "9.9"}
+			case "malformed field":
+				want = events.RunStartedPayload{NodeCount: 1, RepoBranch: "main", RepoCommit: "abc123", RuntimeVersion: "9.9"}
 			}
 			if got != want {
 				t.Fatalf("run_started = %#v, want %#v", got, want)

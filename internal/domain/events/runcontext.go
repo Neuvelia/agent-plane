@@ -55,6 +55,15 @@ func validateRunStarted(e Event, p RunStartedPayload) error {
 	if err := requireRunContextSchema(e, "run_started provenance"); err != nil {
 		return err
 	}
+	return CheckRunProvenance(p)
+}
+
+// CheckRunProvenance reports whether the provenance fields of p are well
+// formed (bounded, valid UTF-8, no NUL or newline, repo_name a base name,
+// repo_id 16 lowercase hex digits). A producer of best-effort provenance uses
+// it to drop a field instead of failing the run (ADR-0044).
+func CheckRunProvenance(p RunStartedPayload) error {
+	fields := []string{p.RepoName, p.RepoID, p.RepoBranch, p.RepoCommit, p.RuntimeVersion}
 	for _, text := range fields {
 		if len(text) > MaxRunContextText || !utf8.ValidString(text) || strings.ContainsAny(text, "\x00\n") {
 			return errors.New("invalid run_started provenance field")
