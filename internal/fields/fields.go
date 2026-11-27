@@ -8,6 +8,8 @@
 // behavior; the owning validator stays the authority on values.
 package fields
 
+import "reflect"
+
 // Kind is the editing control a field needs.
 type Kind string
 
@@ -174,6 +176,133 @@ func equals(v any, text string) bool {
 		return (v && text == "true") || (!v && text == "false")
 	}
 	return false
+}
+
+// NamedInputs returns the input ports of a node that the fields active for
+// config name: the value of an InputName field, each item of a list of
+// InputName, each key of a map whose keys are inputs (InputTypes set), and an
+// input a rule in Excludes offers as the field's alternative source (an Agent
+// task). It is how a validator learns from descriptors alone which inputs a
+// node reads (W_EDGE_INPUT_UNUSED, #180). Values of an unexpected shape name
+// nothing; the owning validator reports them.
+func NamedInputs(fs []Field, config map[string]any) map[string]bool {
+	named := map[string]bool{}
+	for _, f := range Active(fs, config) {
+		for _, r := range f.Excludes {
+			if r.Input != "" {
+				named[r.Input] = true
+			}
+		}
+		for _, name := range inputsIn(f, config[f.Key]) {
+			named[name] = true
+		}
+	}
+	return named
+}
+
+// InputKeys returns the keys of fs whose values or keys can name an input of
+// type inputType, in descriptor order. A field without InputTypes accepts any
+// type. Rules are not consulted.
+func InputKeys(fs []Field, inputType string) []string {
+	var keys []string
+	seen := map[string]bool{}
+	var walk func([]Field)
+	walk = func(fs []Field) {
+		for _, f := range fs {
+			if f.Kind == Group && f.Key == "" {
+				walk(f.Fields)
+				continue
+			}
+			if namesInputs(f) && acceptsType(f, inputType) && !seen[f.Key] {
+				seen[f.Key] = true
+				keys = append(keys, f.Key)
+			}
+		}
+	}
+	walk(fs)
+	return keys
+}
+
+// acceptsType reports whether f may name an input of inputType: a list of
+// input names carries the types on its item.
+func acceptsType(f Field, inputType string) bool {
+	types := f.InputTypes
+	if f.Kind == List && f.Item != nil {
+		types = f.Item.InputTypes
+	}
+	if len(types) == 0 {
+		return true
+	}
+	for _, t := range types {
+		if t == inputType {
+			return true
+		}
+	}
+	return false
+}
+
+func namesInputs(f Field) bool {
+	switch f.Kind {
+	case InputName:
+		return true
+	case List:
+		return f.Item != nil && f.Item.Kind == InputName
+	case Map:
+		return len(f.InputTypes) > 0
+	}
+	return false
+}
+
+// inputsIn returns the input names value holds for f, or nil when f names no
+// input or value has another shape.
+func inputsIn(f Field, value any) []string {
+	if !namesInputs(f) {
+		return nil
+	}
+	switch f.Kind {
+	case InputName:
+		if name, ok := value.(string); ok {
+			return []string{name}
+		}
+	case List:
+		return listStrings(value)
+	case Map:
+		return mapKeys(value)
+	}
+	return nil
+}
+
+// listStrings returns the string items of a list. Config decoded from YAML
+// holds []any; programmatic config may hold []string.
+func listStrings(value any) []string {
+	switch items := value.(type) {
+	case []string:
+		return items
+	case []any:
+		var names []string
+		for _, item := range items {
+			if name, ok := item.(string); ok {
+				names = append(names, name)
+			}
+		}
+		return names
+	}
+	return nil
+}
+
+// mapKeys returns the keys of a map with string keys. Reflection is needed
+// because a nested mapping decodes to the graph package's NodeConfig type,
+// which this package cannot import (graph imports fields).
+func mapKeys(value any) []string {
+	entries := reflect.ValueOf(value)
+	if entries.Kind() != reflect.Map || entries.Type().Key().Kind() != reflect.String {
+		return nil
+	}
+	var names []string
+	for _, key := range entries.MapKeys() {
+		names = append(names, key.String())
+	}
+	return names
 }
 
 // IntPtr returns a pointer to v, for Min and Max.

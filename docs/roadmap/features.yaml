@@ -48,7 +48,7 @@ features:
     kind: roadmap
     phase: 0
     priority: P0
-    status: partial
+    status: done
     owner_package: graph-schema
     spec: docs/features/F0.2-graph-validator-and-lint.md
     depends_on: ["F0.1"]
@@ -71,12 +71,19 @@ features:
           - "internal/adapter/yamlgraph/validation_test.go::TestValidateDetectsTwoNodeCycle"
           - "internal/adapter/yamlgraph/validation_test.go::TestValidateReportsMissingSourceAndTargetNodes"
           - "internal/adapter/yamlgraph/validation_test.go::TestValidateRejectsIncompatibleBindingTypes"
+      - id: F0.2-AC4
+        text: "Ostrzeżenie dla edge'a, którego output nie jest używany przez kolejny node (W_EDGE_INPUT_UNUSED)."
+        status: met
+        evidence:
+          - "cmd/agentplane/edge_input_test.go::TestEdgeToAnInputTheShellNodeDoesNotMapWarns"
+          - "cmd/agentplane/edge_input_test.go::TestUnusedEdgeInputDoesNotBlockValidateOrRun"
+          - "cmd/agentplane/edge_input_test.go::TestInputsTheTargetReadsDoNotWarn"
+          - "cmd/agentplane/edge_input_test.go::TestShippedGraphsHaveNoUnusedEdgeInput"
+        issue: 180
+        note: "Z zakresu roadmapy F0.2 (luka #180, decyzja właściciela Q17 w docs/roadmap/audit/AUDIT-2026-11-25.md). Krawędzie do node'a human i z jego decision to zależności zatwierdzenia (ADR-0017) i nie są zgłaszane."
     out_of_scope:
       - "Autofix i inteligentne sugestie z LLM pozostają poza fazą."
     decisions: ["ADR-0002"]
-    divergences:
-      - text: "Ostrzeżenie o nieużywanym outputcie ma inną semantykę (W_DECLARED_OUTPUT_UNUSED)."
-        issue: 180
     tasks: [180]
   - id: F0.3
     name: "Data bindings na edge'ach"
@@ -546,14 +553,13 @@ features:
         status: met
         evidence:
           - "desktop/e2e/demo.cjs"
+          - "cmd/agentplane/edge_input_test.go::TestUnusedEdgeInputReachesTheEditorAPI"
     out_of_scope:
       - "Graficzne ETL nie jest celem; złożone transformacje trafiają do Code node."
     decisions: ["ADR-0020", "ADR-0023"]
     divergences:
       - text: "Brak select pola z obiektu JSON."
         issue: 185
-      - text: "Ostrzeżenie 'target does not consume source output' przedefiniowane."
-        issue: 180
       - text: "Wartość na edge'u tylko przy włączonym --record-values."
         adr: ADR-0023
     tasks: [180, 185]

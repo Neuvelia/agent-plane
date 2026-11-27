@@ -12,7 +12,7 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 
 | Phase | Name | P0 done | P1 done | P2 done | Exit criterion |
 | --- | --- | --- | --- | --- | --- |
-| 0 | Execution Core | 4/7 (57%) +1 diverged | - | - | met |
+| 0 | Execution Core | 5/7 (71%) +1 diverged | - | - | met |
 | 1 | Agent Loop | 3/7 (42%) +3 diverged | 1/1 (100%) | - | met |
 | 2 | Local IDE | 4/9 (44%) | 1/3 (33%) | - | partial |
 | 3 | Local Production Ready | 1/9 (11%) | 0/2 (0%) | - | not_met |
@@ -27,7 +27,7 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 | ID | Feature | Priority | Status | Criteria met | Issues |
 | --- | --- | --- | --- | --- | --- |
 | [F0.1](../../docs/features/F0.1-graph-definition-schema-v0.md) | Graph Definition Schema v0 | P0 | partial | 3/3 | #179 |
-| [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | partial | 3/3 | #180 |
+| [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | done | 4/4 | #180 |
 | [F0.3](../../docs/features/F0.3-data-bindings.md) | Data bindings na edge'ach | P0 | done | 2/2 |  |
 | [F0.4](../../docs/features/F0.4-dag-scheduler.md) | DAG Scheduler in-memory | P0 | done | 3/3 |  |
 | [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | diverged | 3/3 |  |
@@ -192,7 +192,6 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | --- | --- | --- | --- | --- |
 | F0.1 | JSON tylko przez parser YAML; brak testu kontraktowego. | ADR-0033 | #179 |  |
 | F0.1 | Wersja grafu to obliczany hash graph_version, bez pola autorskiego. | ADR-0033 |  |  |
-| F0.2 | Ostrzeżenie o nieużywanym outputcie ma inną semantykę (W_DECLARED_OUTPUT_UNUSED). |  | #180 |  |
 | F0.5 | Limit przechwyconego logu jest zaimplementowany (1 MiB na strumień, marker pominięcia, E_SHELL_OUTPUT_TRUNCATED); pełny log jako artifact odroczony. | ADR-0039 | #181 | F3.5 |
 | F0.6 | Wykrycie przerwanego runa działa przez opcjonalny store (F2.9/F3.2). | ADR-0027 |  |  |
 | F1.3 | Surowy event providera nie jest dołączany jako debug payload; limity pamięci dotyczą progressu, nie logów Shell. | ADR-0011 |  |  |
@@ -200,7 +199,6 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F1.5 | scope oznacza checked inputs; pełny output jako artifact odroczony. | ADR-0013 |  | F3.5 |
 | F2.2 | Brak sekcji permissions w inspectorze. |  | #184 | F3.9 |
 | F2.3 | Brak select pola z obiektu JSON. |  | #185 |  |
-| F2.3 | Ostrzeżenie 'target does not consume source output' przedefiniowane. |  | #180 |  |
 | F2.3 | Wartość na edge'u tylko przy włączonym --record-values. | ADR-0023 |  |  |
 | F2.8 | Diff między próbami nie jest renderowany w desktopie (silnik F2.8b gotowy). |  |  | F2.8b |
 | F2.9 | JSONL zamiast SQLite. | ADR-0027 |  |  |

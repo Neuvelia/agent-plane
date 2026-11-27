@@ -95,7 +95,7 @@ func decisionProvider(def *graph.Definition, approve, reject inputFlags, interac
 	flags := map[string]bool{}
 	human := map[string]bool{}
 	for id, n := range def.Nodes {
-		if n.Type == "human" {
+		if n.Type == humanNodeType {
 			human[id] = true
 		}
 	}
