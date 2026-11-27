@@ -1,4 +1,4 @@
-// F2.5c: arrow keys in a native radio group select each row they pass, and New
+// F2.5e: arrow keys in a native radio group select each row they pass, and New
 // run opens the graph it selects (a grant, a validation, a document read). A
 // pick made with an arrow key is therefore shown at once but opened only when
 // the selection rests; a click or Space opens at once.

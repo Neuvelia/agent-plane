@@ -2,11 +2,14 @@
 // node scripts/stories-smoke.cjs   (after `npm run build-storybook`)
 // AP_CHROMIUM=/path/to/chrome uses an installed browser instead of Playwright's.
 // AP_STORIES_WORKERS=n sets how many stories render at once (default: up to 4).
-// Opens every story in a real browser, in English and Polish, and fails on:
+// Opens every story in a real browser, in English and Polish and in the dark
+// and light themes (F2.5c), and fails on:
 //   - a missing required story (screen states of F2.5a 6c, every primitive),
 //   - any request that is not served by the static Storybook itself,
 //   - a page error or console error, or a play function that fails or never finishes,
-//   - an axe-core accessibility violation.
+//   - an axe-core accessibility violation,
+//   - a broken profile menu interaction (keyboard, focus, theme switch, motion).
+// AP_STORIES_THEMES=dark,light limits the themes (default: both).
 const { chromium } = require('playwright')
 const axeSource = require('node:fs').readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8')
 const http = require('node:http')
@@ -21,7 +24,10 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
 const REQUIRED = [
   'ui-primitives--pills', 'ui-primitives--buttons', 'ui-primitives--card-with-header', 'ui-primitives--segmented', 'ui-primitives--kpis', 'ui-primitives--fields',
   'ui-data--outcomes', 'ui-data--events', 'ui-data--timeline', 'ui-data--yaml',
-  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--sidebar-recent-runs', 'ui-shell--sidebar-recent-unavailable', 'ui-shell--sidebar-no-runs', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--breadcrumbs',
+  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--sidebar-recent-runs', 'ui-shell--sidebar-recent-unavailable', 'ui-shell--sidebar-no-runs', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--global-bar-with-search', 'ui-shell--breadcrumbs',
+  'screens-command-palette--open', 'screens-command-palette--keyboard-navigation', 'screens-command-palette--filtered', 'screens-command-palette--actions-only', 'screens-command-palette--run-ids', 'screens-command-palette--nothing-matches', 'screens-command-palette--runs-loading', 'screens-command-palette--runs-unavailable',
+  'ui-shell--profile-menu-closed', 'ui-shell--profile-menu-open', 'ui-shell--profile-menu-language', 'ui-shell--profile-menu-appearance', 'ui-shell--profile-menu-appearance-light', 'ui-shell--profile-menu-open-light',
+  'ui-shell--keyboard-shortcuts', 'ui-shell--about-tarmind', 'ui-shell--about-engine-unreachable', 'ui-shell--about-tarmind-light',
   'screens--runs-list-empty', 'screens--runs-list-busy', 'screens--inbox-empty', 'screens--inbox-no-runs', 'screens--inbox-busy', 'screens--inbox-needs-attention', 'screens--inbox-failed-selected', 'screens--inbox-retries-used-up', 'screens--inbox-interrupted-selected', 'screens--inbox-running-selected', 'screens--inbox-filter-stopped', 'screens--inbox-filter-empty', 'screens--inbox-decided', 'screens--inbox-decided-here', 'screens--inbox-run-not-found', 'screens--inbox-stays-on-shown-item', 'screens--inbox-keyboard-focus', 'screens--inbox-decision-error', 'screens--inbox-connection-lost',
   'screens--inspector-running', 'screens--inspector-waiting-for-human', 'screens--inspector-failed-after-retries', 'screens--inspector-succeeded', 'screens--inspector-yaml-view', 'screens--inspector-split-view', 'screens--inspector-first-attempt', 'screens--inspector-compare-shell-attempts', 'screens--inspector-compare-agent-scope', 'screens--inspector-compare-scope-indeterminate','screens--inspector-connection-lost', 'screens--inspector-run-not-found',
   'screens--approvals-empty', 'screens--approvals-one-pending', 'screens--approvals-many-pending', 'screens--approvals-decision-error',
@@ -37,6 +43,7 @@ const REQUIRED = [
   'screens--runs-list-loading', 'screens--runs-list-error', 'screens--inbox-loading', 'screens--inbox-error', 'screens--approvals-loading', 'screens--approvals-error', 'screens--full-app-shell-engine-down',
   'screens-new-run--no-graph', 'screens-new-run--recent-graphs', 'screens-new-run--agent-graph-ready', 'screens-new-run--agent-graph-codex-not-configured', 'screens-new-run--agent-graph-checking-codex', 'screens-new-run--ready', 'screens-new-run--input-required', 'screens-new-run--input-filled', 'screens-new-run--warnings', 'screens-new-run--blocked', 'screens-new-run--validating', 'screens-new-run--engine-unreachable', 'screens-new-run--start-fails', 'screens-new-run--pick-fails',
   'screens-welcome--all-available', 'screens-welcome--git-missing', 'screens-welcome--codex-not-configured', 'screens-welcome--codex-found-on-path', 'screens-welcome--agent-clis-found', 'screens-welcome--codex-unsupported-version', 'screens-welcome--windows', 'screens-welcome--detection-error', 'screens-welcome--checking', 'screens-welcome--rechecking', 'screens-welcome--request-failed', 'screens-welcome--engine-disconnected',
+  'screens-welcome--step-welcome', 'screens-welcome--step-agents', 'screens-welcome--step-first-graph', 'screens-welcome--step-first-graph-blank-picked', 'screens-welcome--step-first-graph-windows', 'screens-welcome--in-app-first-launch-light', 'screens-welcome--step-check-light', 'screens-welcome--step-agents-light', 'screens-welcome--step-first-graph-light', 'screens-welcome--checking-light', 'screens-welcome--shell-missing', 'screens-welcome--in-app-first-launch', 'screens-welcome--in-app-engine-disconnected',
   'screens-edge-inspector--no-run', 'screens-edge-inspector--run-unavailable', 'screens-edge-inspector--different-version-none-chosen', 'screens-edge-inspector--different-version-needs-confirmation', 'screens-edge-inspector--different-version-confirmed', 'screens-edge-inspector--node-not-finished', 'screens-edge-inspector--node-waiting-for-person', 'screens-edge-inspector--node-failed', 'screens-edge-inspector--older-run', 'screens-edge-inspector--not-recorded', 'screens-edge-inspector--no-value-for-this-port', 'screens-edge-inspector--value-not-carried', 'screens-edge-inspector--value-string', 'screens-edge-inspector--value-json-formatted', 'screens-edge-inspector--value-json-raw', 'screens-edge-inspector--value-not-json', 'screens-edge-inspector--value-truncated', 'screens-edge-inspector--value-redacted', 'screens-edge-inspector--value-long', 'screens-edge-inspector--value-hidden-characters', 'screens-edge-inspector--value-empty', 'screens-edge-inspector--value-artifact-reference', 'screens-edge-inspector--live-run-value-arrived', 'screens-edge-inspector--connection-lost', 'screens-edge-inspector--connection-lost-before-value',
   'screens-template-picker--default', 'screens-template-picker--windows-report', 'screens-template-picker--no-report', 'screens-template-picker--codex-not-configured', 'screens-template-picker--agent-draft-shows-placeholder',
 ]
@@ -65,15 +72,17 @@ const server = http.createServer((req, res) => {
   })
   const failures = []
   const workers = Math.max(1, Number(process.env.AP_STORIES_WORKERS) || Math.min(4, os.cpus().length))
-  for (const locale of ['en', 'pl']) {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const themes = (process.env.AP_STORIES_THEMES || 'dark,light').split(',')
+  for (const [locale, theme] of ['en', 'pl'].flatMap((l) => themes.map((t) => [l, t]))) {
+    // Reduced motion: axe judges each story's settled frame, not a fade caught halfway.
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' })
     const queue = [...ids]
     // Each page takes the next story from the shared queue; failures name the
     // story that page was rendering, so the report matches a sequential run.
     const worker = async () => {
       const page = await context.newPage()
       let current = ''
-      const fail = (msg) => failures.push(`[${locale}] ${current}: ${msg}`)
+      const fail = (msg) => failures.push(`[${locale}/${theme}] ${current}: ${msg}`)
       page.on('request', (r) => {
         if (!r.url().startsWith(origin) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) fail(`external request ${r.url()}`)
       })
@@ -93,27 +102,28 @@ const server = http.createServer((req, res) => {
       page.on('console', (m) => m.type() === 'error' && fail(`console error ${m.text()}`))
       while (queue.length) {
         current = queue.shift()
-        await checkStory(page, origin, current, locale, fail)
+        await checkStory(page, origin, current, `locale:${locale};theme:${theme}`, fail)
       }
       await page.close()
     }
     await Promise.all(Array.from({ length: workers }, worker))
     await context.close()
   }
+  await checkProfileMenu(browser, origin, (msg) => failures.push(`[profile menu] ${msg}`))
   await browser.close()
   server.close()
   if (failures.length) {
     console.error(failures.join('\n'))
     process.exit(1)
   }
-  console.log(`stories ok: ${ids.length} stories x 2 languages, zero axe violations, zero external requests`)
+  console.log(`stories ok: ${ids.length} stories x 2 languages x ${themes.length} themes, zero axe violations, zero external requests, profile menu interactions ok`)
 })().catch((e) => {
   console.error(e)
   process.exit(1)
 })
 
-async function checkStory(page, origin, id, locale, fail) {
-  await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale}`)
+async function checkStory(page, origin, id, globals, fail) {
+  await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=${globals}`)
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
   // Wait for the story to finish, play function included, so a failing play fails the smoke and
   // axe checks the state the play function reached, not the first render.
@@ -129,6 +139,10 @@ async function checkStory(page, origin, id, locale, fail) {
   if (playError) return fail(`play function failed: ${playError}`)
   // Only React Flow views fade in after fit-view; other stories are ready once rendered.
   if (await page.$('#storybook-root .react-flow')) await page.waitForTimeout(900)
+  await settleAnimations(page)
+  const painted = await page.evaluate(() => document.documentElement.dataset.theme)
+  const wanted = /theme:light/.test(globals) || /-light$/.test(id) ? 'light' : 'dark'
+  if (painted !== wanted) fail(`theme ${painted} painted, ${wanted} expected`)
   await page.addScriptTag({ content: axeSource })
   // The Storybook a11y addon runs its own axe on render; wait for it to finish.
   let result
@@ -142,4 +156,180 @@ async function checkStory(page, origin, id, locale, fail) {
   }
   if (!result) return fail('axe never became available')
   for (const v of result.violations) fail(`axe ${v.id}: ${v.help} (${v.nodes.length} nodes) e.g. ${v.nodes[0].html.slice(0, 160)} -> ${(v.nodes[0].any[0] || v.nodes[0].all[0] || {}).message}`)
+}
+
+/** Waits for finite animations (menu and dialog entrances) so axe measures final colours, not a fade. */
+async function settleAnimations(page) {
+  await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))))
+}
+
+// roadmap: F2.5c-AC5
+// roadmap: F2.5c-AC6
+// The profile menu in a real browser: keyboard model, focus return, the
+// submenu's alignment, the theme switch and motion (on, and off under reduced motion).
+async function checkProfileMenu(browser, origin, fail) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const page = await context.newPage()
+  page.on('pageerror', (e) => fail(`page error ${e.message}`))
+  const expect = (cond, msg) => cond || fail(msg)
+  const focused = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid') ?? document.activeElement?.tagName)
+  const theme = () => page.evaluate(() => document.documentElement.dataset.theme)
+  const menuOpen = async () => (await page.$('[data-testid="profile-menu"]:not(.closing)')) !== null
+  const level = (sub) => page.evaluate((s) => [document.querySelector(`[data-sub="${s}"]`).getBoundingClientRect().bottom, [...document.querySelectorAll('.pm-sub .mi')].pop().getBoundingClientRect().bottom], sub)
+  // A story that starts with a submenu open places it on first mount, too.
+  await page.goto(`${origin}/iframe.html?id=ui-shell--profile-menu-language&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  await settleAnimations(page)
+  const [lt, ll] = await level('language')
+  expect(Math.abs(lt - ll) <= 1, `on first mount the submenu's last item (${ll}) is not level with its trigger (${lt})`)
+  await page.goto(`${origin}/iframe.html?id=ui-shell--profile-menu-closed&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+
+  // Open by click: the menu animates in and focus lands on its first item.
+  await page.click('[data-testid="profile"]')
+  await page.waitForSelector('[data-testid="profile-menu"]')
+  expect((await page.evaluate(() => getComputedStyle(document.querySelector('.pm')).animationName)) === 'pm-in', 'the menu has no entrance animation')
+  expect((await focused()) === 'profile-settings', `first item not focused on open: ${await focused()}`)
+  expect((await page.getAttribute('[data-testid="profile"]', 'aria-expanded')) === 'true', 'button not expanded')
+  // Arrows rove and wrap; Home and End jump.
+  await page.keyboard.press('ArrowUp')
+  expect((await focused()) === 'profile-about', `ArrowUp from the first item should wrap to About: ${await focused()}`)
+  await page.keyboard.press('Home')
+  expect((await focused()) === 'profile-settings', 'Home did not reach Settings')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown')
+  expect((await focused()) === 'profile-appearance', `three ArrowDowns should reach Appearance: ${await focused()}`)
+  // ArrowRight opens the submenu on the checked choice; it lines up with its trigger.
+  await page.keyboard.press('ArrowRight')
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  await settleAnimations(page)
+  expect((await focused()) === 'profile-theme-dark', `the checked choice should take focus: ${await focused()}`)
+  // Nothing clips the menu or its submenu (the sidebar scrolls; both are fixed in the viewport):
+  // the middle of each one's right edge is the menu itself.
+  const unclipped = await page.evaluate(() => ['.pm', '.pm-sub'].every((sel) => {
+    const el = document.querySelector(sel)
+    const r = el.getBoundingClientRect()
+    const hit = document.elementFromPoint(r.right - 8, r.top + r.height / 2)
+    return hit !== null && el.contains(hit)
+  }))
+  expect(unclipped, 'the menu or its submenu is clipped or covered')
+  const [trigger, last] = await level('appearance')
+  expect(Math.abs(trigger - last) <= 1, `submenu's last item (${last}) is not level with its trigger (${trigger})`)
+  // Picking Light paints it at once, closes the submenu and returns focus to its trigger; the menu stays open.
+  await page.keyboard.press('ArrowUp')
+  await page.keyboard.press('Enter')
+  expect((await theme()) === 'light', `Light was not applied: ${await theme()}`)
+  await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
+  expect((await focused()) === 'profile-appearance', `focus did not return to Appearance: ${await focused()}`)
+  expect(await menuOpen(), 'the menu closed after picking a theme')
+  // Enter opens the submenu too; ArrowLeft closes only the submenu.
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
+  expect((await focused()) === 'profile-appearance', 'ArrowLeft did not return focus to the trigger')
+  // Review M1 (the story pins English, so English is checked): a submenu opened by pointer still takes the keyboard. ArrowRight and Enter on its
+  // open trigger move focus to the checked choice; ArrowLeft brings it back.
+  await page.click('[data-testid="profile-language"]')
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  expect((await focused()) === 'profile-language', `a pointer click should leave focus on the trigger: ${await focused()}`)
+  await page.keyboard.press('ArrowRight')
+  expect((await focused()) === 'profile-language-en', `ArrowRight on a pointer-opened submenu should focus the checked choice: ${await focused()}`)
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
+  await page.click('[data-testid="profile-language"]')
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  await page.keyboard.press('Enter')
+  // Wait on the outcome, not a clock: focus reaches the checked choice (or the step fails).
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'profile-language-en', null, { timeout: 2000 }).catch(() => undefined)
+  expect((await page.$('[data-testid="profile-submenu"]:not(.closing)')) !== null, 'Enter on an open trigger closed its submenu')
+  expect((await focused()) === 'profile-language-en', `Enter on an open trigger should focus the checked choice: ${await focused()}`)
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
+  await page.keyboard.press('Home')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown')
+  // Escape closes the menu (with an exit animation) and returns focus to the profile button.
+  await page.keyboard.press('Escape')
+  expect((await page.$('.pm.closing')) !== null, 'the menu left without an exit animation')
+  await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached' })
+  expect((await focused()) === 'profile', `Escape did not return focus to the profile button: ${await focused()}`)
+  expect((await page.getAttribute('[data-testid="profile"]', 'aria-expanded')) === 'false', 'button still expanded')
+  // ArrowUp on the button opens on the last item; a press outside closes.
+  await page.keyboard.press('ArrowUp')
+  await page.waitForSelector('[data-testid="profile-menu"]')
+  expect((await focused()) === 'profile-about', `ArrowUp on the button should focus the last item: ${await focused()}`)
+  await page.mouse.click(1200, 40)
+  await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached' })
+  // Back to Dark by pointer; the disabled Help item does nothing.
+  await page.click('[data-testid="profile"]')
+  await page.click('[data-testid="profile-help"]', { force: true })
+  expect(await menuOpen(), 'the disabled Help item closed the menu')
+  await page.click('[data-testid="profile-appearance"]')
+  await page.click('[data-testid="profile-theme-dark"]')
+  expect((await theme()) === 'dark', 'Dark was not applied')
+  // roadmap: F2.5c-AC8
+  // In the whole app: About closes on a backdrop press and focus returns to the profile button;
+  // app shortcuts do nothing while a window is open; a window closed just before a shortcut
+  // never closes the next one (review m1, m2).
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.goto(`${origin}/iframe.html?id=screens--full-app-shell&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+  const openAbout = async () => {
+    await page.click('[data-testid="profile"]')
+    await page.click('[data-testid="profile-about"]')
+    await page.waitForSelector('[data-testid="about-dialog"][open]')
+    await settleAnimations(page)
+  }
+  await openAbout()
+  const route = () => page.evaluate(() => document.querySelector('main')?.innerHTML.length)
+  const before = await route()
+  await page.keyboard.press('Control+,')
+  await page.keyboard.press('Control+/')
+  expect((await page.$('[data-testid="shortcuts-dialog"]')) === null, 'Ctrl+/ opened a second window over About')
+  expect((await route()) === before, 'Ctrl+, changed the screen behind About')
+  await page.mouse.click(4, 4)
+  await page.waitForSelector('[data-testid="about-dialog"]', { state: 'detached' })
+  expect((await focused()) === 'profile', `focus did not return to the profile button after a backdrop press: ${await focused()}`)
+  await openAbout()
+  await page.click('[data-testid="about-dialog-close"]')
+  await page.keyboard.press('Control+/')
+  // The shortcut list's entrance (160 ms) outlasts About's old exit timer (140 ms): once it has
+  // settled, a late onClose from About would already have closed it.
+  await page.waitForSelector('[data-testid="shortcuts-dialog"][open]')
+  await settleAnimations(page)
+  expect((await page.$('[data-testid="shortcuts-dialog"][open]')) !== null, 'the closing About window closed the shortcut list opened after it')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+
+  // Review N1: an app shortcut closes the menu even when focus is outside it.
+  await page.goto(`${origin}/iframe.html?id=screens--full-app-shell&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+  await page.click('[data-testid="profile"]')
+  await page.waitForSelector('[data-testid="profile-menu"]')
+  await page.click('.pm-who')
+  await page.keyboard.press('Control+/')
+  await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached' })
+  await page.waitForSelector('[data-testid="shortcuts-dialog"][open]')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+
+  // Review m4: the YAML editor's CodeMirror base theme follows the app theme.
+  const editorClasses = async (theme) => {
+    await page.goto(`${origin}/iframe.html?id=screens-editor--opened&viewMode=story&globals=locale:en;theme:${theme}`)
+    await page.waitForSelector('.cm-editor')
+    return page.evaluate(() => [...document.querySelector('.cm-editor').classList].sort().join(' '))
+  }
+  const darkEditor = await editorClasses('dark')
+  const lightEditor = await editorClasses('light')
+  expect(darkEditor !== lightEditor, `the YAML editor looks the same in both themes (${darkEditor})`)
+
+  // Reduced motion: no animation, and the menu leaves at once.
+  await page.goto(`${origin}/iframe.html?id=ui-shell--profile-menu-closed&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+  await page.click('[data-testid="profile"]')
+  await page.waitForSelector('[data-testid="profile-menu"]')
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect((await page.evaluate(() => getComputedStyle(document.querySelector('.pm')).animationName)) === 'none', 'the menu animates under reduced motion')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached', timeout: 50 }).catch(() => fail('the menu lingered under reduced motion'))
+  await context.close()
 }

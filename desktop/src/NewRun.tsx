@@ -9,7 +9,7 @@ import { SettledPick } from './settledPick'
 import { useNewRun } from './useNewRun'
 import type { Definition } from './editor/types'
 
-// F2.5c: New run with preflight (Tarmind canvas, artboard "New run with preflight").
+// F2.5e: New run with preflight (Tarmind canvas, artboard "New run with preflight").
 // Left: the graph, its declared inputs and the run options. Right: the preflight,
 // which reacts to every choice on the left, and the one primary action.
 
@@ -141,7 +141,7 @@ function InputsGroup({ chosen, loading, def, values, onChange }: { chosen: boole
   )
 }
 
-// The engine has no per-run setting for either option yet (issues linked from the F2.5c spec):
+// The engine has no per-run setting for either option yet (issues linked from the F2.5e spec):
 // both are shown as they will be, disabled, with where the value comes from today.
 function OptionsGroup({ def }: { def: Definition | null }) {
   const { t } = useI18n()

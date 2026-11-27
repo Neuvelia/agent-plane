@@ -22,6 +22,7 @@ tracking process. Their combined result is `docs/roadmap/canonical-spec.md`.
 | #186, #183, #190 | Event schema 15: run provenance, `test_command`, `executor_abandoned`; canonical-spec §3 | [ADR-0044](../../adr/0044-event-schema-15-run-context.md) (accepted 2026-11-27) |
 | #181 | Shell capture bound; declared outputs complete or failed | [ADR-0045](../../adr/0045-shell-declared-output-completeness.md) (accepted 2026-11-27) |
 | Q17 (#184, #185, #189) | Requested permissions UI, JSON field selection, Shell isolation (specs only) | [ADR-0039](../../adr/0039-requested-permissions-in-desktop.md), [ADR-0040](../../adr/0040-json-field-selection-in-bindings.md), [ADR-0041](../../adr/0041-shell-node-workspace-isolation.md) (proposed) |
+| F2.5c | Desktop light theme, theme and language preferences, profile menu (widens the non-goals of F2.5a and F2.5b) | [ADR-0047](../../adr/0047-desktop-light-theme-and-profile-menu.md) (accepted 2026-11-27) |
 
 New roadmap decisions: create an ADR with `scripts/new-adr.sh <slug>`, then add a
 row here and update `canonical-spec.md` if the decision changes it.

@@ -148,7 +148,7 @@ outputs: {}
     const template = fs.readFileSync(path.join(root, '.agents', 'templates', 'agent-scoped-approval.yaml'), 'utf8').replace(/^id: agent-scoped-approval$/m, 'id: new-graph')
     write('graph-validate-template-agent-scoped-approval.json', (await call('POST', '/graphs/validate', { text: template })).body)
     if (process.env.AP_RECORD === 'templates') return
-    // F2.5c: New run's answers for a saved graph with an Agent node and a required input
+    // F2.5e: New run's answers for a saved graph with an Agent node and a required input
     // (the fix-issue template with its workspace filled). AP_RECORD=newrun records only this.
     const fixIssue = path.join(dir, 'fix-issue.yaml')
     fs.writeFileSync(fixIssue, fs.readFileSync(path.join(root, '.agents', 'templates', 'fix-issue.yaml'), 'utf8').replace(/^(\s*workspace:) "".*$/m, '$1 /work/repo'))

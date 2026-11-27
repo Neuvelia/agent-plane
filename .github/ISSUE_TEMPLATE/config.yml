@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Issue triage rule (claude-ready / needs-owner)
+    url: https://github.com/Neuvelia/agent-plane/blob/main/docs/roadmap/issue-triage.md
+    about: How issues are classified for autonomous agents.

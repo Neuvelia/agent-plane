@@ -14,7 +14,7 @@ const SHAPES: Record<GlyphKind, ReactNode> = {
       <rect x="7.1" y="2" width="2.4" height="8" rx=".8" fill="var(--warn)" />
     </>
   ),
-  // A warning that does not block (F2.5c preflight): a triangle, not the approval diamond.
+  // A warning that does not block (F2.5e preflight): a triangle, not the approval diamond.
   warn: <path d="M6 1 11.2 10.5H.8z" fill="var(--warn)" />,
   approval: <path d="M6 1 11 6 6 11 1 6z" fill="var(--warn)" />,
   running: (

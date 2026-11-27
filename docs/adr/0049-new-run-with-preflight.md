@@ -1,9 +1,9 @@
-# ADR-0047 - New run with a live preflight replaces the stepped New run form
+# ADR-0049 - New run with a live preflight replaces the stepped New run form
 
 **Status:** proposed
 **Date:** 2026-11-27
 **Amends:** F2.5a requirement 17 (New run)
-**Feature:** F2.5c (`docs/features/F2.5c-new-run-preflight.md`)
+**Feature:** F2.5e (`docs/features/F2.5e-new-run-preflight.md`)
 
 ## Context
 
@@ -15,7 +15,7 @@ The artboard also shows per-run options that the engine does not accept yet.
 
 ## Decision
 
-1. New run follows the artboard (F2.5c). Choosing a graph validates it and opens its document;
+1. New run follows the artboard (F2.5e). Choosing a graph validates it and opens its document;
    there is no separate Validate button. Inputs are one field per declared graph input instead of
    free text.
 2. The preflight is a view of engine answers only: validation status and diagnostics, the

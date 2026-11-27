@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { SettledPick, type Timers } from '../src/settledPick'
 
-// F2.5c: arrow keys select each recent graph they pass; only the one the selection
+// F2.5e: arrow keys select each recent graph they pass; only the one the selection
 // rests on is opened. A fake clock is released by the test, no real waiting.
 class FakeTimers implements Timers {
   private next = 0

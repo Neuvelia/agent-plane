@@ -4,7 +4,7 @@ import type { Definition } from './editor/types'
 import { agentWorkspace, inputFields, inputLines } from './newRunModel'
 import type { ChosenGraph, Diagnostic, GraphGrantResult, RecentGraph } from './types'
 
-// F2.5c: the state behind New run, without React so its ordering rules are
+// F2.5e: the state behind New run, without React so its ordering rules are
 // testable. The graph is addressed by grant only; its path stays in the main
 // process (ADR-0021). Rules:
 // - only the newest pick counts; a grant from an older pick, or one that arrives

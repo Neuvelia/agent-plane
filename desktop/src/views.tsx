@@ -19,7 +19,7 @@ import type { GraphSummary } from './types'
 import { CodeView, EventLog, type EventRow } from './ui/data'
 import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Tag } from './ui/primitives'
 
-// R1: Run Inspector and Approvals on the design system (New run is NewRun.tsx, F2.5c). Behaviour and
+// R1: Run Inspector and Approvals on the design system (New run is NewRun.tsx, F2.5e). Behaviour and
 // data are unchanged from F2.5; the Dashboard is redesigned in R2.
 
 export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {

@@ -1,0 +1,50 @@
+name: Task
+description: A bounded follow-up, gap or improvement inside one registry entry
+title: "[Fx.y] "
+body:
+  - type: input
+    id: feature_id
+    attributes:
+      label: Feature ID
+      description: The registry entry in docs/roadmap/features.yaml.
+      placeholder: F2.5b
+    validations:
+      required: true
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected outcome
+      description: Observable result; the criterion ID or path:line it changes.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: The test or check that proves it.
+
+  - type: textarea
+    id: owner_input
+    attributes:
+      label: Owner decisions
+      description: Only for "Needs me". One numbered decision per block, one checkbox per option, recommended first (docs/roadmap/issue-triage.md).
+      value: |
+        **D1. ...?**
+        - [ ] A: ... (recommended) `→ ready`
+        - [ ] B: ... `→ ADR`
+
+        **When decided:** ...
+
+  - type: dropdown
+    id: autonomy
+    attributes:
+      label: Autonomy
+      description: "Rule: docs/roadmap/issue-triage.md. Choose \"Claude\" only if all seven conditions hold; the issue-labels workflow sets claude-ready or needs-owner from this answer."
+      options:
+        - Needs me (decision, environment or review)
+        - Claude can take it autonomously
+      default: 0
+    validations:
+      required: true

@@ -13,7 +13,7 @@ import { NewRun } from './NewRun'
 import { allAvailable, linux } from './storybook/capabilityFixtures'
 import type { BridgeData } from './storybook/bridge'
 
-// F2.5c: New run with preflight. Graph-document and validation answers are
+// F2.5e: New run with preflight. Graph-document and validation answers are
 // recorded from the real engine (test/fixtures/graph-*.json); the capability
 // reports are those of the Welcome stories.
 

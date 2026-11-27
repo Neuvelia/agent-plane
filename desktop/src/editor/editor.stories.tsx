@@ -350,7 +350,7 @@ export const GraphInputsCard: S = story(hinted(inputsOpen), async (root) => {
 export const GraphInputRemovalPreview: S = story(hinted(inputsOpen), async (root) => {
   await open(root)
   await click(root, 'remove-graph-input-topic')
-  await until(root, '[data-testid="graph-input-preview-apply"]')
+  ;(await until(root, '[data-testid="graph-input-preview-apply"]')).scrollIntoView({ block: 'center' })
 })
 export const GraphOutputsCard: S = story(hinted(configErrorOpen), async (root) => {
   await open(root)

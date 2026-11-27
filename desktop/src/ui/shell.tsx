@@ -46,10 +46,12 @@ export interface SidebarProps {
   recent?: ReactNode
   deferred: NavEntry[]
   footer?: NavEntry[]
+  /** The profile row at the foot (F2.5c profile menu); without it the static placeholder row is drawn. */
+  profile?: ReactNode
 }
 
 /** Sidebar of the Tarmind Dashboard UX canvas (F2.5b): brand, New run, navigation, recent runs, later surfaces, footer with the profile. */
-export function Sidebar({ primary, entries, recent, deferred, footer = [] }: SidebarProps) {
+export function Sidebar({ primary, entries, recent, deferred, footer = [], profile }: SidebarProps) {
   const { t } = useI18n()
   return (
     <nav className="side" aria-label={t('nav.main')}>
@@ -82,12 +84,14 @@ export function Sidebar({ primary, entries, recent, deferred, footer = [] }: Sid
         {footer.map((e) => (
           <Entry key={e.id} e={e} />
         ))}
-        <div className="side-me">
-          <span className="avatar" role="img" aria-label={`${t('topbar.profile')}: ${PROFILE_INITIALS}`} data-testid="profile">
-            {PROFILE_INITIALS}
-          </span>
-          <span className="side-me-name">{t('nav.localProfile')}</span>
-        </div>
+        {profile ?? (
+          <div className="side-me">
+            <span className="avatar" role="img" aria-label={`${t('topbar.profile')}: ${PROFILE_INITIALS}`} data-testid="profile">
+              {PROFILE_INITIALS}
+            </span>
+            <span className="side-me-name">{t('nav.localProfile')}</span>
+          </div>
+        )}
       </div>
     </nav>
   )
@@ -116,10 +120,19 @@ export function IconRail({ entries }: { entries: NavEntry[] }) {
 /** Placeholder identity until accounts exist (F2.5a): initials are hard-coded. */
 export const PROFILE_INITIALS = 'KW'
 
-/** Bar above the page content: connection state at the right (the profile sits in the sidebar footer, F2.5b).
+/** The command palette trigger (F2.5d): its shortcut as written on screen and for assistive technology. */
+export interface SearchTrigger {
+  onOpen: () => void
+  /** "Ctrl K" or "⌘ K". */
+  keys: string
+  /** aria-keyshortcuts value, e.g. "Control+K". */
+  ariaKeys: string
+}
+
+/** Bar above the page content: connection state and Search (F2.5d) at the right (the profile sits in the sidebar footer).
  *  On macOS the window has no native title bar, so this bar (with the sidebar's
  *  brand strip) is the drag area (see styles.css `.mac`). */
-export function GlobalBar({ lost, crumbs }: { lost: boolean; crumbs?: ReactNode[] }) {
+export function GlobalBar({ lost, crumbs, search }: { lost: boolean; crumbs?: ReactNode[]; search?: SearchTrigger }) {
   const { t } = useI18n()
   return (
     <header className="global-bar">
@@ -129,6 +142,11 @@ export function GlobalBar({ lost, crumbs }: { lost: boolean; crumbs?: ReactNode[
           <span className="dot sm" aria-hidden="true" />
           {lost ? t('topbar.lost') : t('topbar.connected')}
         </span>
+        {search && (
+          <button type="button" className="ib-btn ghost sm" onClick={search.onOpen} aria-label={t('palette.triggerLabel')} aria-keyshortcuts={search.ariaKeys} aria-haspopup="dialog" title={`${t('palette.triggerLabel')} (${search.keys})`} data-testid="palette-open">
+            {t('palette.trigger')}
+          </button>
+        )}
       </div>
     </header>
   )

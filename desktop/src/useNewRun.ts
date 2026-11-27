@@ -5,7 +5,7 @@ import { openDocument, recentGraphs } from './editor/api'
 import { NewRunSession, type NewRunPorts } from './newRunSession'
 import type { ChosenGraph } from './types'
 
-// F2.5c: binds a NewRunSession to the component's lifetime and to the bridge.
+// F2.5e: binds a NewRunSession to the component's lifetime and to the bridge.
 
 // The bridge is read on each call, so rendering without one (server markup in tests) is safe.
 const bridgePorts = (): NewRunPorts => ({

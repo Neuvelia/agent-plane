@@ -4,7 +4,7 @@ import type { MessageKey } from './i18n'
 import type { PreflightState } from './preflight'
 import type { Diagnostic } from './types'
 
-// F2.5c: New run with preflight. Pure views of what the engine answered: the
+// F2.5e: New run with preflight. Pure views of what the engine answered: the
 // graph document (its declared inputs, node kinds and the Agent `isolation`
 // setting as written in the file), the engine's validation and the capability
 // report. Nothing here validates the graph or decides whether a run may start;

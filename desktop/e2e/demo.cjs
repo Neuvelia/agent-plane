@@ -106,7 +106,7 @@ async function startDemo(app, page) {
   await stubOpenDialog(app, graph)
   await page.click('[data-testid="nav-new"]')
   await page.click('[data-testid="choose"]')
-  // F2.5c: the preflight headline is always shown; choosing the graph checks it.
+  // F2.5e: the preflight headline is always shown; choosing the graph checks it.
   await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run', null, { timeout: 15000 })
   await page.click('[data-testid="run"]')
   await page.waitForSelector('[data-testid="graph-map"]')
@@ -119,9 +119,14 @@ async function startDemo(app, page) {
     const leaked = await page.evaluate(() => ({ require: typeof require, process: typeof process, token: JSON.stringify(window.agentplane).includes('token') }))
     assert.deepEqual(leaked, { require: 'undefined', process: 'undefined', token: false })
 
-    // F2.11: a first launch opens the welcome screen with the engine's capability report, keyboard only.
-    await page.waitForSelector('[data-testid="cap-engine"]')
+    // F2.11: a first launch opens setup on its title; Next leads to the engine's capability report, keyboard only.
+    await page.waitForSelector('[data-testid="welcome"]')
     assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'H1')
+    assert.equal(await page.isVisible('[data-testid="setup-step-welcome"]'), true)
+    await page.focus('[data-testid="setup-next"]')
+    await page.keyboard.press('Enter')
+    await page.waitForSelector('[data-testid="cap-engine"]')
+    assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), 'setup-heading', 'a new step moves focus to its heading')
     const engineVersion = require('node:child_process').execFileSync(env.AGENTPLANE_BIN, ['version'], { encoding: 'utf8' }).trim()
     assert.ok((await page.textContent('[data-testid="cap-engine-version"]')).includes(engineVersion.split(/\s+/).pop()), 'Engine row shows the sidecar version')
     const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="cap-list"] > li')].map((li) => [li.dataset.testid, li.dataset.status]))
@@ -138,11 +143,20 @@ async function startDemo(app, page) {
     await page.keyboard.press('Enter')
     await page.waitForFunction(() => /Check finished/.test(document.querySelector('[data-testid="cap-announce"]')?.textContent || '') && !document.querySelector('[data-testid="check-again"]')?.disabled)
     assert.equal(await page.getAttribute('[data-testid="cap-announce"]', 'aria-live'), 'polite')
-    for (const id of ['welcome-template', 'welcome-open', 'welcome-skip']) {
+    await page.focus('[data-testid="check-again"]')
+    for (const id of ['setup-back', 'setup-next']) {
       await page.keyboard.press('Tab')
       assert.equal(await page.evaluate(() => document.activeElement?.dataset.testid), id)
     }
     await shot(page, '0-welcome')
+    // The last step offers the suggested graph first; Skip setup is always in the header.
+    await page.click('[data-testid="setup-progress-graph"]')
+    assert.deepEqual(
+      await page.$$eval('[data-testid^="setup-tpl-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('setup-tpl-', ''))),
+      ['parallel-shell', 'dependency-update', 'human-approval', 'blank'],
+    )
+    assert.equal(await page.isChecked('[data-testid="setup-template-parallel-shell"]'), true)
+    await page.focus('[data-testid="welcome-skip"]')
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid="inbox"]')
     assert.equal(await page.evaluate(() => localStorage.getItem('agentplane.welcome.v1')), 'done')
@@ -533,11 +547,42 @@ async function startDemo(app, page) {
     await page.click('[data-testid="editor-close"]').catch(() => {})
     await page.click('[data-testid="nav-inbox"]')
 
-    // F2.12: New graph offers templates; the welcome screen opens the same picker.
+    // ADR-0048: the last setup step creates the picked template directly.
+    await page.click('[data-testid="nav-welcome"]')
+    await page.click('[data-testid="setup-progress-graph"]')
+    await page.click('[data-testid="setup-template-dependency-update"]')
+    assert.match(await page.textContent('[data-testid="welcome-template"]'), /dependency-update/)
+    // A cancelled save dialog leaves the person on setup, not on an empty editor.
+    await app.evaluate(({ dialog }) => {
+      globalThis.cancelledSaves = 0
+      dialog.showSaveDialog = async () => {
+        globalThis.cancelledSaves++
+        return { canceled: true, filePath: '' }
+      }
+    })
+    await page.click('[data-testid="welcome-template"]')
+    for (let i = 0; i < 200 && (await app.evaluate(() => globalThis.cancelledSaves)) === 0; i++) await page.waitForTimeout(25) // the dialog was asked for
+    assert.equal(await app.evaluate(() => globalThis.cancelledSaves), 1)
+    assert.equal(await page.isVisible('[data-testid="setup-step-graph"]'), true, 'cancel stays on setup')
+    // A chosen file opens the editor; nothing is written before the first save, and the save is the template with only its id line changed.
+    await stubSave(path.join(graphDir, 'from-setup'))
+    await page.click('[data-testid="welcome-template"]')
+    await page.waitForSelector('[data-testid="doc-state"]')
+    assert.equal(await page.isVisible('[data-testid="welcome"]'), false, 'creating leaves setup for the editor')
+    assert.equal(fs.existsSync(path.join(graphDir, 'from-setup.yaml')), false, 'nothing is written before the first save')
+    await page.click('[data-testid="editor-save"]')
+    await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
+    const dependencyUpdate = fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', 'dependency-update.yaml'), 'utf8')
+    assert.equal(fs.readFileSync(path.join(graphDir, 'from-setup.yaml'), 'utf8'), dependencyUpdate.replace(/^id: dependency-update$/m, 'id: from-setup'))
+    await page.click('[data-testid="editor-close"]')
+    await page.waitForSelector('[data-testid="editor-empty"]')
+    await page.click('[data-testid="nav-inbox"]')
+
+    // F2.12: New graph offers templates.
     const readTemplate = (id) => fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', `${id}.yaml`), 'utf8')
     const activeTestId = () => page.evaluate(() => document.activeElement?.getAttribute('data-testid'))
-    await page.click('[data-testid="nav-welcome"]')
-    await page.click('[data-testid="welcome-template"]')
+    await page.click('[data-testid="nav-editor"]')
+    await page.click('[data-testid="editor-new"]')
     await page.waitForSelector('[data-testid="template-picker"]')
     assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
     assert.deepEqual(
@@ -859,8 +904,40 @@ async function startDemo(app, page) {
     for (const id of ['projects', 'runners', 'docs']) await page.click(`[data-testid="nav-${id}"]`, { force: true })
     assert.equal(await page.isVisible('[data-testid="inbox"]'), true, 'a disabled entry must not navigate')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
-    assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
+    assert.match(await page.textContent('[data-testid="profile"]'), /^KW\s*Kacper\s*Local$/)
     assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
+
+    // roadmap: F2.5c-AC4
+    // F2.5c profile menu in the real app: Appearance paints the theme at once and keeps it after a reload.
+    await page.click('[data-testid="profile"]')
+    await page.waitForSelector('[data-testid="profile-menu"]')
+    await page.click('[data-testid="profile-appearance"]')
+    await page.click('[data-testid="profile-theme-light"]')
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light')
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached' })
+    await page.reload()
+    await page.waitForSelector('[data-testid="profile"]')
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light', 'the theme choice survives a reload')
+    await page.click('[data-testid="profile"]')
+    await page.click('[data-testid="profile-appearance"]')
+    await page.click('[data-testid="profile-theme-dark"]')
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark')
+    // roadmap: F2.5c-AC8
+    await page.click('[data-testid="profile-about"]')
+    await page.waitForSelector('[data-testid="about-dialog"]')
+    await page.waitForFunction(() => /\d/.test(document.querySelector('[data-testid="about-engine"]')?.textContent ?? ''))
+    await page.keyboard.press('Escape')
+    await page.waitForSelector('[data-testid="about-dialog"]', { state: 'detached' })
+    // roadmap: F2.5c-AC9
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+/' : 'Control+/')
+    await page.waitForSelector('[data-testid="shortcuts-dialog"]')
+    await page.click('[data-testid="shortcuts-dialog-close"]')
+    await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+    await page.keyboard.press(process.platform === 'darwin' ? 'Meta+,' : 'Control+,')
+    await page.waitForSelector('[data-testid="settings-theme-dark"][aria-pressed="true"]')
+    await page.click('[data-testid="settings-theme-system"]')
+    await page.click('[data-testid="nav-inbox"]')
     await page.click('[data-testid="nav-settings"]')
     await page.click('button:has-text("PL ·")')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Uruchomienia/)

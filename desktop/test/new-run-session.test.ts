@@ -10,7 +10,7 @@ import { NewRunSession, type NewRunPorts } from '../src/newRunSession'
 import { attachSession } from '../src/useNewRun'
 import type { Diagnostic, GraphGrantResult } from '../src/types'
 
-// F2.5c requirement 2 and the failure behavior: ordering and grant rules of New run,
+// F2.5e requirement 2 and the failure behavior: ordering and grant rules of New run,
 // over a hand-written fake of the bridge whose answers the test releases one by one.
 
 type Validation = { status: string; diagnostics: Diagnostic[] } | ApiFailure

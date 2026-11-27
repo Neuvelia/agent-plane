@@ -64,7 +64,9 @@ schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
 Storybook; the API and event contracts are unchanged. F2.5b (ADR-0046, presentation only) replaces the
 Dashboard with the Inbox triage queue: approvals, stopped and running runs beside the
-selected item's evidence, with approvals decided in place. Slice E6 of F2.3 adds
+selected item's evidence, with approvals decided in place. F2.5c (ADR-0047, presentation only) adds the
+profile menu at the foot of the sidebar, a System/Light/Dark theme with light
+values for every colour token, and the Keyboard shortcuts and About windows. Slice E6 of F2.3 adds
 opt-in, bounded and redacted `value_recorded` events (event schema 10,
 ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
 starts the sidecar with it; the E5b.1 values reducer and run picker and the E5b.2 edge inspector (the recorded value of a selected edge or graph input binding, shown as text only) are implemented in the renderer. The graph
@@ -302,6 +304,24 @@ describes the workflow. For every feature, fix or docs change:
 - Reference the feature ID in commits and pull requests (`[F1.7] ...`).
 - Reusable prompts for planning, implementation, fixes, docs, reviews, new specs and
   re-audits live in `prompts/` (`prompts/README.md`).
+
+Issues and labels (`docs/roadmap/issue-triage.md`):
+
+- Every issue you open gets exactly one class label: `claude-ready` when all seven
+  conditions of the triage rule hold (one feature, unambiguous outcome, no ADR,
+  deterministic proof, runs in an agent container, no trust boundary, one PR),
+  otherwise `needs-owner`. When in doubt, `needs-owner`.
+- `needs_decision`, `epic`, `spike` and `feature` are always `needs-owner`; the
+  `issue-labels` workflow enforces that and the `triage` label.
+- Put the feature ID in the title (`[F2.5b] ...`). A `claude-ready` body states the
+  expected outcome and how to verify it; a `needs-owner` body ends with an
+  `## Owner decisions` section: one numbered decision per block, one checkbox
+  per option, recommended option first, each option ending with an outcome
+  marker (`→ ready`, `→ ADR`, `→ spec`, `→ split`, `→ blocked`, `→ close`).
+  Never tick Owner decisions checkboxes yourself: the owner's ticks drive the
+  `issue-labels` workflow.
+- Take only `claude-ready` issues on your own. If one turns out to need a
+  decision, stop, comment what is missing and swap the label to `needs-owner`.
 
 Roadmap invariants (roadmap §2), checked in every change and re-audit:
 

@@ -25,6 +25,15 @@ describe('stories', () => {
       expect(text, f).not.toMatch(/nodes:\s*\{[^}]*status:/)
     }
   })
+  it('render in both languages and both themes, with the profile menu states and its interaction check [F2.5c-AC10]', () => {
+    const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+    expect(smoke).toContain("(process.env.AP_STORIES_THEMES || 'dark,light')")
+    expect(smoke).toContain("['en', 'pl'].flatMap")
+    expect(smoke).toContain('await checkProfileMenu(browser, origin')
+    for (const id of ['ui-shell--profile-menu-open', 'ui-shell--profile-menu-language', 'ui-shell--profile-menu-appearance', 'ui-shell--profile-menu-open-light', 'ui-shell--keyboard-shortcuts', 'ui-shell--about-tarmind']) expect(smoke).toContain(`'${id}'`)
+    const preview = readFileSync(fileURLToPath(new URL('../.storybook/preview.tsx', import.meta.url)), 'utf8')
+    expect(preview).toContain('<ThemeProvider key={theme} initialChoice={theme}>')
+  })
 })
 
 describe('Inbox stories (F2.5b)', () => {

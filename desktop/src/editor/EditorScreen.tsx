@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Button, Card, HelpTip, ListRow, Pill, SegmentedControl, Tag } from '../ui/primitives'
 import { GraphCanvas } from './GraphCanvas'
@@ -14,26 +14,20 @@ import { TemplatePicker } from './TemplatePicker'
 // CodeMirror is loaded when the editor is first shown, not at application start.
 const YamlEditor = lazy(() => import('./YamlEditor').then((m) => ({ default: m.YamlEditor })))
 
-export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDocument; onRun?: (runId: string) => void; startWithPicker?: boolean }) {
+export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: string) => void }) {
   const { t } = useI18n()
   const { doc } = g
-  // "New graph" first offers Blank or a template (F2.12); the welcome screen can open it directly.
-  const [picker, setPicker] = useState(startWithPicker)
+  // "New graph" first offers Blank or a template (F2.12); setup creates its pick directly.
+  const [picker, setPicker] = useState(false)
   const newGraph = () => setPicker(true)
-  // When the picker was opened from the welcome screen its opener is gone, so a cancel lands on "New graph".
-  const cancelled = useRef(false)
-  const sectionRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    if (picker || !cancelled.current) return
-    cancelled.current = false
-    sectionRef.current?.querySelector<HTMLElement>('[data-testid="editor-new"]')?.focus()
-  }, [picker])
 
   // Ctrl/Cmd+S saves from anywhere on the screen; inside the editor CodeMirror has already handled it.
+  // Not while a modal dialog (command palette, template picker) is open over the editor.
   useEffect(() => {
     if (!doc) return
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 's') return
+      if (document.querySelector('dialog[open]')) return
       e.preventDefault()
       void g.save()
     }
@@ -42,7 +36,7 @@ export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDo
   }, [doc, g])
 
   return (
-    <section ref={sectionRef} className="editor" data-testid="editor">
+    <section className="editor" data-testid="editor">
       <h1>{doc ? doc.label : t('editor.title')}</h1>
       {g.error && (
         <div className="banner" role="alert" data-testid="editor-error">
@@ -71,10 +65,7 @@ export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDo
       {doc ? <Open key={doc.grant} g={g} doc={doc} onRun={onRun} onNew={newGraph} /> : <Empty g={g} onNew={newGraph} />}
       {picker && (
         <TemplatePicker
-          onCancel={() => {
-            cancelled.current = true
-            setPicker(false)
-          }}
+          onCancel={() => setPicker(false)}
           onChoose={(draft) => {
             setPicker(false)
             g.create(draft)
