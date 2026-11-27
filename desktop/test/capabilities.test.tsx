@@ -130,7 +130,7 @@ describe('capability panel states', () => {
 
 describe('no direct network access in the welcome code', () => {
   it('uses only the preload bridge', () => {
-    for (const f of ['capabilities.ts', 'welcome.tsx']) {
+    for (const f of ['capabilities.ts', 'welcome.tsx', 'setup.ts', 'setupCheck.tsx', 'setupSteps.tsx']) {
       const text = readFileSync(join(__dirname, '..', 'src', f), 'utf8')
       expect(text, f).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|EventSource/)
     }

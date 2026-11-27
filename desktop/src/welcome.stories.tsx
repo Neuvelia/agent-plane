@@ -1,21 +1,43 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
+import App from './App'
+import { WELCOME_KEY } from './capabilities'
+import type { SetupStep } from './setup'
 import type { BridgeData } from './storybook/bridge'
-import { allAvailable, clisFound, codexFoundOnPath, codexUnsupportedVersion, detectionError, gitMissing, linux, windows } from './storybook/capabilityFixtures'
+import { allAvailable, clisFound, codexFoundOnPath, codexUnsupportedVersion, detectionError, gitMissing, linux, shellMissing, windows } from './storybook/capabilityFixtures'
 import { Welcome } from './welcome'
 
+// Setup, revised (canvas artboards "Setup, revised" 1-4, checking and engine
+// not connected). The capability states open on step 2, where the report is shown.
 const meta: Meta = { title: 'Screens/Welcome' }
 export default meta
 type S = StoryObj
 
 const noop = () => undefined
-const story = (capabilities: BridgeData['capabilities'], extra: Partial<BridgeData> = {}, play?: S['play']): S => ({
+const frame = { height: 'calc(100vh - 16px)', display: 'flex', flexDirection: 'column' } as const
+const story = (capabilities: BridgeData['capabilities'], extra: Partial<BridgeData> = {}, step: SetupStep = 'check', play?: S['play']): S => ({
   parameters: { bridge: { runs: [], capabilities, ...extra } satisfies BridgeData },
-  render: () => <Welcome onTemplate={noop} onOpen={noop} onSkip={noop} />,
+  render: () => (
+    <div style={frame}>
+      <Welcome onCreate={noop} onOpen={noop} onSkip={noop} initialStep={step} />
+    </div>
+  ),
   play,
+})
+const settled = async (root: HTMLElement, selector: string) => {
+  for (let i = 0; i < 40 && !root.querySelector(selector); i++) await new Promise((r) => setTimeout(r, 25))
+}
+
+export const StepWelcome: S = story({ report: linux }, {}, 'welcome')
+export const StepAgents: S = story({ report: linux }, {}, 'agents')
+export const StepFirstGraph: S = story({ report: linux }, {}, 'graph')
+export const StepFirstGraphBlankPicked: S = story({ report: linux }, {}, 'graph', async ({ canvasElement }) => {
+  await settled(canvasElement, '[data-testid="setup-template-blank"]')
+  canvasElement.querySelector<HTMLInputElement>('[data-testid="setup-template-blank"]')?.click()
 })
 
 export const AllAvailable: S = story({ report: allAvailable })
 export const GitMissing: S = story({ report: gitMissing })
+export const ShellMissing: S = story({ report: shellMissing })
 export const CodexNotConfigured: S = story({ report: linux })
 export const CodexFoundOnPath: S = story({ report: codexFoundOnPath })
 export const AgentClisFound: S = story({ report: clisFound })
@@ -23,10 +45,34 @@ export const CodexUnsupportedVersion: S = story({ report: codexUnsupportedVersio
 export const Windows: S = story({ report: windows })
 export const DetectionError: S = story({ report: detectionError })
 export const Checking: S = story({ getHangs: true })
-export const Rechecking: S = story({ report: linux, checkHangs: true }, {}, async ({ canvasElement }) => {
-  for (let i = 0; i < 40 && !canvasElement.querySelector('[data-testid="cap-git"]'); i++) await new Promise((r) => setTimeout(r, 25))
+export const Rechecking: S = story({ report: linux, checkHangs: true }, {}, 'check', async ({ canvasElement }) => {
+  await settled(canvasElement, '[data-testid="cap-git"]')
   canvasElement.querySelector<HTMLButtonElement>('[data-testid="check-again"]')?.click()
   await new Promise((r) => setTimeout(r, 100))
 })
 export const RequestFailed: S = story({ status: 503 })
 export const EngineDisconnected: S = story(undefined, { unreachable: true })
+
+// The whole window on first launch: the sidebar beside the setup, no bars.
+const firstLaunch = () => {
+  try {
+    localStorage.removeItem(WELCOME_KEY)
+  } catch {
+    // Storage unavailable: the app opens setup anyway.
+  }
+}
+const inApp = (bridge: BridgeData, play?: S['play']): S => ({
+  parameters: { bridge },
+  beforeEach: firstLaunch,
+  render: () => (
+    <div style={{ height: 'calc(100vh - 16px)' }}>
+      <App />
+    </div>
+  ),
+  play,
+})
+export const InAppFirstLaunch: S = inApp({ runs: [], capabilities: { report: linux } })
+export const InAppEngineDisconnected: S = inApp({ runs: [], unreachable: true }, async ({ canvasElement }) => {
+  await settled(canvasElement, '[data-testid="setup-progress-check"]')
+  canvasElement.querySelector<HTMLButtonElement>('[data-testid="setup-progress-check"]')?.click()
+})

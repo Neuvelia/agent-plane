@@ -781,7 +781,7 @@ features:
         note: "szablony shell (w tym modify-test-approve) działają bez edycji; starter agentowy nadal wymaga workspace i AGENTPLANE_CODEX_BIN (F2.13, F2.14)"
     out_of_scope:
       - "Automatyczne skanowanie całego dysku nie jest wymagane."
-    decisions: ["ADR-0025"]
+    decisions: ["ADR-0025", "ADR-0046"]
     divergences:
       - text: "Brak listy repozytoriów i agentów w silniku desktopu; starter agentowy wymaga ręcznego workspace."
         issue: 188

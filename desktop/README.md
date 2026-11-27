@@ -143,8 +143,10 @@ a dev dependency and is never part of the packaged app.
   reported by `GET /capabilities`; "Check again" calls `POST /capabilities/check`.
   The CLIs are only looked up on the engine's `PATH`, never run. Main passes
   `--codex-bin` only when `AGENTPLANE_CODEX_BIN` is an absolute path
-  (`electron/capabilities.cjs`). "Start from a template" opens the New graph
-  picker (F2.12, below).
+  (`electron/capabilities.cjs`). The screen is a four-step setup (ADR-0046):
+  Welcome, Check this computer (the list above), Agent nodes (the CLI command)
+  and First graph, whose primary action creates the picked template directly;
+  "Skip setup" is always in its header.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 

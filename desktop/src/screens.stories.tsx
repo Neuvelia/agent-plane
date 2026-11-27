@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
+import { markWelcomeDone } from './capabilities'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
 import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
@@ -160,7 +161,11 @@ export const NewRunBlocked: S = {
   play: choose,
 }
 
+// The shell after setup: first launch is covered by Screens/Welcome.
+const setupDone = () => markWelcomeDone()
+
 export const FullAppShell: S = {
+  beforeEach: setupDone,
   parameters: { bridge: { runs: [run(waitingForHuman, 'running', 'open'), run(exhaustedRetries, 'failed', 'end', false)], approvals: pending } satisfies BridgeData },
   render: () => (
     <div style={{ height: '100vh' }}>
@@ -204,6 +209,7 @@ export const NewRunValidating: S = {
   play: choose,
 }
 export const FullAppShellEngineDown: S = {
+  beforeEach: setupDone,
   parameters: { bridge: down },
   render: () => (
     <div style={{ height: '100vh' }}>
