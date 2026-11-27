@@ -5,7 +5,6 @@ import (
 	"agentplane/internal/domain/run"
 	"agentplane/internal/domain/secrets"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sort"
@@ -502,51 +501,6 @@ func (m *runMachine) finish(ctx context.Context, to run.State) {
 	m.record("", string(from), string(to))
 }
 
-// causeReason reads the typed cancel cause of the run context. Error text and
-// the bare context errors never yield a reason.
-func (m *runMachine) causeReason() run.CancelReason {
-	if m.ctx == nil || m.ctx.Err() == nil {
-		return ""
-	}
-	reason, _ := run.ReasonOf(context.Cause(m.ctx))
-	return reason
-}
-
-// cancelledNodeReason explains a cancelled node: the run cause, or a failed
-// sibling when the run context is still live.
-func (m *runMachine) cancelledNodeReason() run.CancelReason {
-	if m.ctx != nil && m.ctx.Err() != nil {
-		return m.causeReason()
-	}
-	return run.CancelSiblingFailed
-}
-
-// requestRunCancel emits the run-scoped cancel_requested fact once, before any
-// process termination or terminal fact, and never after run_finished. A cancel
-// without a typed cause (a bare context.Canceled) has no reason and emits nothing.
-func (m *runMachine) requestRunCancel() {
-	m.cancelMu.Lock()
-	defer m.cancelMu.Unlock()
-	if m.cancelSent || m.runEnded {
-		return
-	}
-	reason := m.causeReason()
-	if reason == "" {
-		return
-	}
-	m.cancelSent = true
-	source := events.CancelSourceSignal
-	switch reason {
-	case run.CancelRunTimeout, run.CancelNodeTimeout:
-		source = events.CancelSourceDeadline
-	case run.CancelUserCancel:
-		source = events.CancelSourceAPI
-	case run.CancelSiblingFailed:
-		source = events.CancelSourceFailure
-	}
-	m.appendEvent(events.Event{Type: events.CancelRequested, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeRun, Reason: string(reason), Source: source}})
-}
-
 //nolint:gocognit // legacy size, split in stage 3c of docs/audits/2026-11-16-clean-architecture-refactor-plan.md
 func (m *runMachine) promoteReady(ctx context.Context, plan *graph.BindingPlan, graphInputs map[string]graph.Value, dependencies map[string][]string) []*run.Failure {
 	var failures []*run.Failure
@@ -712,21 +666,14 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 	var check *events.GateCheckPayload
 	checkInvalid := false
 	runCtx := ctx
-	settleDeadline := func() {}
-	if node.TimeoutSeconds != nil {
-		var cancelNode context.CancelCauseFunc
-		ctx, cancelNode = context.WithCancelCause(runCtx)
-		defer cancelNode(nil)
-		deadline := events.Event{Type: events.CancelRequested, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeNode, Reason: events.ReasonNodeTimeout, Source: events.CancelSourceDeadline}}
-		settleDeadline = m.armNodeDeadline(runCtx, m.limits.seconds(*node.TimeoutSeconds), deadline, func() {
-			cancelNode(run.CancelCause{Reason: run.CancelNodeTimeout, Node: id})
-		})
-		defer settleDeadline()
-	}
+	ctx, settleDeadline, stopDeadline := m.withNodeDeadline(runCtx, id, node, attemptID)
+	defer stopDeadline()
 	var ignored run.CancelReason
+	deadlineFired := false
 	call := func(fn func() execOutcome) {
 		var o execOutcome
 		o, ignored = callBounded(ctx, m.limits.abandonBound(), fn)
+		deadlineFired = settleDeadline()
 		outputs, evidence, err = o.outputs, o.evidence, o.err
 	}
 	streaming, hasLogs := executor.(LogStreamingExecutor)
@@ -777,83 +724,8 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 				checkInvalid = true
 				return
 			}
-			snapshot := events.CloneGate(p)
-			redact := func(s string) string { return progress.redact(s) }
-			snapshot.CheckID = redact(snapshot.CheckID)
-			snapshot.Reason = redact(snapshot.Reason)
-			if snapshot.ChangedFiles != nil {
-				for i, path := range snapshot.ChangedFiles.AllowedPaths {
-					snapshot.ChangedFiles.AllowedPaths[i] = redact(path)
-					snapshot.ChangedFiles.ScopeRedacted = snapshot.ChangedFiles.ScopeRedacted || snapshot.ChangedFiles.AllowedPaths[i] != path
-				}
-				sort.Strings(snapshot.ChangedFiles.AllowedPaths)
-				if snapshot.ChangedFiles.ScopeRedacted {
-					unique := snapshot.ChangedFiles.AllowedPaths[:0]
-					for _, path := range snapshot.ChangedFiles.AllowedPaths {
-						if len(unique) == 0 || unique[len(unique)-1] != path {
-							unique = append(unique, path)
-						}
-					}
-					snapshot.ChangedFiles.AllowedPaths = unique
-				}
-			}
-			for i := range snapshot.Scope.CheckedInputs {
-				snapshot.Scope.CheckedInputs[i] = redact(snapshot.Scope.CheckedInputs[i])
-			}
-			sort.Strings(snapshot.Scope.CheckedInputs)
-			for i := range snapshot.Evidence {
-				e := &snapshot.Evidence[i]
-				e.Path = redact(e.Path)
-				if e.Reference != nil {
-					e.Reference.Identifier = redact(e.Reference.Identifier)
-					e.Reference.Reason = redact(e.Reference.Reason)
-				}
-				// Byte evidence is redacted again at the trust boundary for custom executors.
-				r := redactionTemplate.clone()
-				b := append([]byte(nil), r.Write(events.Stdout, e.Stdout)...)
-				e.Stdout = append(b, r.Flush(events.Stdout)...)
-				r = redactionTemplate.clone()
-				b = append([]byte(nil), r.Write(events.Stderr, e.Stderr)...)
-				e.Stderr = append(b, r.Flush(events.Stderr)...)
-			}
-			if snapshot.Kind == events.CheckChangedFilesScope {
-				sort.SliceStable(snapshot.Evidence, func(i, j int) bool {
-					if snapshot.Evidence[i].Path == "" {
-						return false
-					}
-					if snapshot.Evidence[j].Path == "" {
-						return true
-					}
-					return snapshot.Evidence[i].Path < snapshot.Evidence[j].Path
-				})
-				// Redaction can expand path text after the Gate has applied its
-				// payload budget. Preserve a bounded, valid check by replacing
-				// excess path entries with a counted omission marker.
-				for {
-					encoded, marshalErr := json.Marshal(snapshot)
-					if marshalErr != nil || len(encoded) <= events.MaxGatePayload {
-						break
-					}
-					lastPath := -1
-					for i := len(snapshot.Evidence) - 1; i >= 0; i-- {
-						if snapshot.Evidence[i].Path != "" {
-							lastPath = i
-							break
-						}
-					}
-					if lastPath < 0 {
-						break
-					}
-					snapshot.Evidence = append(snapshot.Evidence[:lastPath], snapshot.Evidence[lastPath+1:]...)
-					last := len(snapshot.Evidence) - 1
-					if last >= 0 && snapshot.Evidence[last].Path == "" && snapshot.Evidence[last].Omitted > 0 {
-						snapshot.Evidence[last].Omitted++
-					} else {
-						snapshot.Evidence = append(snapshot.Evidence, events.GateEvidence{Kind: events.EvidenceKind(events.CheckChangedFilesScope), Source: "git", Omitted: 1, Reference: &events.EvidenceReference{Kind: "diff", State: "unavailable", Reason: "paths_exceed_evidence_limit"}})
-					}
-				}
-			}
-			if snapshot.Validate() != nil {
+			snapshot, valid := redactedCheck(p, progress.redact, redactionTemplate)
+			if !valid {
 				checkInvalid = true
 				return
 			}
@@ -887,34 +759,11 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			return execOutcome{outputs: o, err: e}
 		})
 	}
-	settleDeadline()
 	abandoned := ignored != ""
-	if abandoned {
-		// The ignored run-scoped cancel request precedes the abandonment fact
-		// (ADR-0044); it is idempotent and emits nothing for a node deadline.
-		m.requestRunCancel()
-		m.reportAbandoned(id, attemptID, ignored)
-	}
-	timedOut := err != nil && nodeTimedOut(runCtx, ctx)
-	if err != nil && !abandoned && (timedOut || runCtx.Err() != nil) {
-		m.requestRunCancel()
-		m.reportProcessTermination(id, attemptID, err)
-	}
+	timedOut := err != nil && nodeTimedOut(runCtx, deadlineFired)
+	m.reportCallEnd(id, attemptID, err, ignored, timedOut || runCtx.Err() != nil)
 	if evidence != nil {
-		snapshot := *evidence
-		snapshot.ChangedFiles = append([]events.ChangedFile{}, evidence.ChangedFiles...)
-		redact := func(s string) string {
-			r := redactionTemplate.clone()
-			data := append([]byte{}, r.Write(events.Stdout, []byte(s))...)
-			data = append(data, r.Flush(events.Stdout)...)
-			return string(data)
-		}
-		snapshot.AdapterID = redact(snapshot.AdapterID)
-		snapshot.AdapterVersion = redact(snapshot.AdapterVersion)
-		for i := range snapshot.ChangedFiles {
-			snapshot.ChangedFiles[i].Path = redact(snapshot.ChangedFiles[i].Path)
-		}
-		evidence = &snapshot
+		evidence = redactedEvidence(*evidence, redactionTemplate)
 	}
 	return completedNode{id: id, attemptID: attemptID, outputs: outputs, evidence: evidence, check: check, checkInvalid: checkInvalid, err: err, timedOut: timedOut && !abandoned, shutdown: abandoned}
 }

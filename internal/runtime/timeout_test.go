@@ -298,3 +298,31 @@ func TestAbandonedExecutorIsNotRestarted(t *testing.T) {
 		t.Fatalf("executor started %d times", got)
 	}
 }
+
+// A deadline that fires after the executor call has returned (settle first)
+// records no cancel_requested and cancels nothing, so the call's own failure
+// keeps its kind instead of becoming a timeout (final review of #198).
+//
+// roadmap: F3.4-AC2
+func TestNodeDeadlineFiringAfterTheCallReturnedChangesNothing(t *testing.T) {
+	recorded, cancelled := 0, 0
+	d := &nodeDeadline{record: func() { recorded++ }, cancel: func() { cancelled++ }}
+	if d.settle() {
+		t.Fatal("settle reported a deadline that never fired")
+	}
+	d.fire()
+	if recorded != 0 || cancelled != 0 || d.settle() {
+		t.Fatalf("late deadline: recorded=%d cancelled=%d", recorded, cancelled)
+	}
+}
+
+// A deadline that fires before the call returns records, cancels, and is
+// reported by settle, so the attempt is classified as a timeout.
+func TestNodeDeadlineFiringBeforeTheCallReturnedIsReported(t *testing.T) {
+	recorded, cancelled := 0, 0
+	d := &nodeDeadline{record: func() { recorded++ }, cancel: func() { cancelled++ }}
+	d.fire()
+	if recorded != 1 || cancelled != 1 || !d.settle() || !d.settle() {
+		t.Fatalf("deadline: recorded=%d cancelled=%d", recorded, cancelled)
+	}
+}

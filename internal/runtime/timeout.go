@@ -85,38 +85,93 @@ func callBounded(execCtx context.Context, bound time.Duration, fn func() execOut
 	}
 }
 
-// armNodeDeadline starts a node deadline. When it fires while the run is live,
-// it records the node-scoped cancel_requested at that moment and then calls
-// cancel, so the request precedes any process termination, abandonment or
-// terminal fact of the node. The returned settle stops the deadline once the
-// executor call has returned: a deadline that fires later records nothing.
-// settle is idempotent.
-func (m *runMachine) armNodeDeadline(runCtx context.Context, after time.Duration, request events.Event, cancel func()) func() {
-	var mu sync.Mutex
-	settled := false
-	timer := time.AfterFunc(after, func() {
-		mu.Lock()
-		if !settled && runCtx.Err() == nil {
-			m.appendEvent(request)
-		}
-		mu.Unlock()
-		cancel()
+// withNodeDeadline returns the context a node's executor call runs under,
+// the settle func the call reports its return to, and a stop func to defer.
+// Without timeout_seconds the run context is used and settle never fires.
+func (m *runMachine) withNodeDeadline(runCtx context.Context, id string, node graph.NodeDefinition, attemptID events.AttemptID) (context.Context, func() bool, func()) {
+	if node.TimeoutSeconds == nil {
+		return runCtx, func() bool { return false }, func() {}
+	}
+	ctx, cancelNode := context.WithCancelCause(runCtx)
+	request := events.Event{Type: events.CancelRequested, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, AttemptID: attemptID, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeNode, Reason: events.ReasonNodeTimeout, Source: events.CancelSourceDeadline}}
+	settle := m.armNodeDeadline(runCtx, m.limits.seconds(*node.TimeoutSeconds), request, func() {
+		cancelNode(run.CancelCause{Reason: run.CancelNodeTimeout, Node: id})
 	})
-	return func() {
-		timer.Stop()
-		mu.Lock()
-		settled = true
-		mu.Unlock()
+	return ctx, settle, func() { settle(); cancelNode(nil) }
+}
+
+// reportCallEnd records how an executor call ended when a cancel reached it.
+// An abandoned executor (it ignored the cancel cause) gets the run-scoped
+// cancel_requested and then executor_abandoned (ADR-0044); a cancelled one that
+// returned gets the request and its process termination.
+func (m *runMachine) reportCallEnd(id string, attemptID events.AttemptID, err error, ignored run.CancelReason, cancelled bool) {
+	if ignored != "" {
+		m.requestRunCancel()
+		m.reportAbandoned(id, attemptID, ignored)
+		return
+	}
+	if err != nil && cancelled {
+		m.requestRunCancel()
+		m.reportProcessTermination(id, attemptID, err)
 	}
 }
 
-// nodeTimedOut reports whether the node deadline, not the run, ended the call.
-func nodeTimedOut(runCtx, execCtx context.Context) bool {
-	if runCtx.Err() != nil {
-		return false
+// armNodeDeadline starts a node deadline. When it fires while the run is live,
+// it records the node-scoped cancel_requested at that moment and then calls
+// cancel, so the request precedes any process termination, abandonment or
+// terminal fact of the node. The returned settle stops the deadline as soon as
+// the executor call has returned and reports whether the deadline fired first.
+func (m *runMachine) armNodeDeadline(runCtx context.Context, after time.Duration, request events.Event, cancel func()) func() bool {
+	d := &nodeDeadline{record: func() {
+		if runCtx.Err() == nil {
+			m.appendEvent(request)
+		}
+	}, cancel: cancel}
+	d.timer = time.AfterFunc(after, d.fire)
+	return d.settle
+}
+
+// nodeDeadline orders a firing deadline against the executor call returning.
+// Whichever takes mu first wins: a deadline that fires after settle records
+// nothing and cancels nothing, so an ordinary failure returned just before the
+// deadline is never reclassified as a timeout.
+type nodeDeadline struct {
+	mu      sync.Mutex
+	settled bool
+	fired   bool
+	timer   *time.Timer
+	record  func()
+	cancel  func()
+}
+
+func (d *nodeDeadline) fire() {
+	d.mu.Lock()
+	if d.settled {
+		d.mu.Unlock()
+		return
 	}
-	reason, ok := run.ReasonOf(context.Cause(execCtx))
-	return ok && reason == run.CancelNodeTimeout
+	d.fired = true
+	d.record()
+	d.mu.Unlock()
+	d.cancel()
+}
+
+// settle stops the deadline and reports whether it fired first. It is
+// idempotent.
+func (d *nodeDeadline) settle() bool {
+	if d.timer != nil {
+		d.timer.Stop()
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.settled = true
+	return d.fired
+}
+
+// nodeTimedOut reports whether the node deadline, not the run, ended the call:
+// the deadline fired before the call returned and the run is still live.
+func nodeTimedOut(runCtx context.Context, deadlineFired bool) bool {
+	return deadlineFired && runCtx.Err() == nil
 }
 
 // reportProcessTermination records how the node's process tree ended when the

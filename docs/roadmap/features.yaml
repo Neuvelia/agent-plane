@@ -914,6 +914,7 @@ features:
           - "internal/runtime/timeout_test.go::TestAbandonedExecutorUnderRunTimeoutIsCancelledAndRecordedAsAbandoned"
           - "internal/runtime/cancel_order_test.go::TestCancelRequestedPrecedesNodesCancelledByTheRunCause"
           - "internal/runtime/timeout_loop_test.go::TestUnitTimedOutAttemptIsRetriedWithoutAnEnvelope"
+          - "internal/runtime/timeout_test.go::TestNodeDeadlineFiringAfterTheCallReturnedChangesNothing"
           - "cmd/agentplane/exitcode_test.go::TestBuiltBinaryRunTimeoutExits124WithReason"
           - "cmd/agentplane/exitcode_test.go::TestBuiltBinaryInterruptReportsInterruptReasonInJSON"
         issue: 190
