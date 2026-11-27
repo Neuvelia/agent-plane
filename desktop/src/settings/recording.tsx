@@ -31,6 +31,11 @@ export function namesDirty(draft: string, saved: readonly string[]): boolean {
   return typed.length !== saved.length || typed.some((n, i) => n !== saved[i])
 }
 
+/** The names field after a toggle saved: a draft equal to the names saved before follows the new saved list; any other draft stays as typed. */
+export function draftAfterToggle(draft: string, before: readonly string[], saved: readonly string[]): string {
+  return namesDirty(draft, before) ? draft : saved.join(' ')
+}
+
 export interface Recording {
   current: RecordingSettings | null
   loadFailed: boolean
@@ -90,8 +95,7 @@ export function useRecording(): Recording {
     if (!current || busy) return
     const before = current.redactEnv
     setPending(enabled)
-    // A draft equal to the saved names follows the saved list; a different draft stays as typed.
-    void save({ enabled, redactEnv: before }, (saved) => setNames((draft) => (namesDirty(draft, before) ? draft : saved.join(' '))))
+    void save({ enabled, redactEnv: before }, (saved) => setNames((draft) => draftAfterToggle(draft, before, saved)))
   }
   const saveNames = () => {
     if (!current || busy) return
@@ -100,18 +104,21 @@ export function useRecording(): Recording {
   return { current, loadFailed, pending, names, setNames, busy, notice, toggle, saveNames }
 }
 
-// While a save runs the controls are aria-disabled, not disabled, so keyboard
+// ADR-0023: what is and is not hidden is stated next to the switch and is part
+// of its description. While a save runs the controls are aria-disabled, not disabled, so keyboard
 // focus stays on the control that was used; input before the first read is disabled.
-export function RecordingGroup({ recording, flash, onFlashEnd }: { recording: Recording; flash: boolean; onFlashEnd: () => void }) {
+export function RecordingGroup({ recording, ring, onRingEnd }: { recording: Recording; ring: number | null; onRingEnd: () => void }) {
   const { t } = useI18n()
   const switchId = useId()
   const hintId = useId()
+  const warningId = useId()
   const namesId = useId()
+  const namesHintId = useId()
   const { current, busy, names } = recording
   const checked = recording.pending ?? current?.enabled ?? false
   const dirty = current ? namesDirty(names, current.redactEnv) : false
   return (
-    <Group id="recording" title={t('settings.nav.recording')} description={t('settings.recording.desc')} flash={flash} onFlashEnd={onFlashEnd} footer={<RecordingFoot current={current} notice={recording.notice} />} testId="settings-values">
+    <Group id="recording" title={t('settings.nav.recording')} description={t('settings.recording.desc')} ring={ring} onRingEnd={onRingEnd} footer={<RecordingFoot current={current} notice={recording.notice} />} testId="settings-values">
       {recording.loadFailed ? (
         <div className="st-row">
           <p className="err" role="alert" data-testid="values-load-failed">
@@ -120,12 +127,12 @@ export function RecordingGroup({ recording, flash, onFlashEnd }: { recording: Re
         </div>
       ) : (
         <>
-          <Row title={<label htmlFor={switchId}>{t('settings.values.record')}</label>} hint={t('settings.values.recordHint')} hintId={hintId}>
-            <Switch id={switchId} checked={checked} disabled={!current} aria-disabled={busy || undefined} onChange={(e) => recording.toggle(e.target.checked)} aria-describedby={hintId} data-testid="values-record" />
+          <Row title={<label htmlFor={switchId}>{t('settings.values.record')}</label>} hint={t('settings.values.recordHint')} hintId={hintId} warning={t('settings.values.redactionWarning')} warningId={warningId}>
+            <Switch id={switchId} checked={checked} disabled={!current} aria-disabled={busy || undefined} onChange={(e) => recording.toggle(e.target.checked)} aria-describedby={`${hintId} ${warningId}`} data-testid="values-record" />
           </Row>
-          <Row title={<label htmlFor={namesId}>{t('settings.values.redactEnv')}</label>} hint={t('settings.values.redactEnvHint')}>
+          <Row title={<label htmlFor={namesId}>{t('settings.values.redactEnv')}</label>} hint={t('settings.values.redactEnvHint')} hintId={namesHintId}>
             <div className="st-names">
-              <input id={namesId} value={names} disabled={!current} readOnly={busy} onChange={(e) => recording.setNames(e.target.value)} placeholder="GITHUB_TOKEN" spellCheck={false} autoComplete="off" data-testid="values-redact-env" />
+              <input id={namesId} value={names} disabled={!current} readOnly={busy} aria-describedby={namesHintId} onChange={(e) => recording.setNames(e.target.value)} placeholder="GITHUB_TOKEN" spellCheck={false} autoComplete="off" data-testid="values-redact-env" />
               <Button size="sm" onClick={recording.saveNames} disabled={!current} aria-disabled={busy || undefined} data-testid="values-save">
                 {t('settings.values.save')}
               </Button>
@@ -173,7 +180,6 @@ function RecordingFoot({ current, notice }: { current: RecordingSettings | null;
         <summary>{t('settings.values.more')}</summary>
         <div className="st-more-body">
           <p>{t('settings.values.explain')}</p>
-          <p>{t('settings.values.redactionWarning')}</p>
           <p>{t('settings.values.redactEnvHelp')}</p>
         </div>
       </details>

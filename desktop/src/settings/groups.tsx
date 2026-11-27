@@ -9,17 +9,18 @@ const NAME: Record<(typeof LOCALES)[number], string> = { en: 'English', pl: 'Pol
 /** Values the desktop engine runs with today: `agentplane serve` defaults and the loop default (internal/domain/graph). */
 const ENGINE_DEFAULTS = Object.freeze({ maxConcurrency: 2, maxAttempts: 3 })
 
-interface Flash {
-  flash: boolean
-  onFlashEnd: () => void
+interface Ring {
+  ring: number | null
+  onRingEnd: () => void
 }
 
-export function GeneralGroup({ flash, onFlashEnd }: Flash) {
+export function GeneralGroup({ ring, onRingEnd }: Ring) {
   const { t, locale, setLocale } = useI18n()
-  // The design lists Polski first; the order is fixed, not by locale.
-  const options = (['pl', 'en'] as const).map((l) => ({ value: l, label: NAME[l], testId: `language-${l}` }))
+  // Every catalogue language, Polski first as the design draws it; each name is in its own language.
+  const ordered = [...LOCALES.filter((l) => l === 'pl'), ...LOCALES.filter((l) => l !== 'pl')]
+  const options = ordered.map((l) => ({ value: l, label: <span lang={l}>{NAME[l]}</span>, testId: `language-${l}` }))
   return (
-    <Group id="general" title={t('settings.nav.general')} description={t('settings.general.desc')} flash={flash} onFlashEnd={onFlashEnd} testId="settings-application">
+    <Group id="general" title={t('settings.nav.general')} description={t('settings.general.desc')} ring={ring} onRingEnd={onRingEnd} testId="settings-application">
       <Row title={t('settings.language')} hint={t('settings.languageHint')}>
         <Segmented label={t('settings.language')} value={locale} options={options} onChange={setLocale} />
       </Row>
@@ -35,10 +36,10 @@ export function GeneralGroup({ flash, onFlashEnd }: Flash) {
 
 // Execution defaults are flags of `agentplane serve` and graph fields; the
 // desktop has no setting for them yet, so they show today's values, read only.
-export function ExecutionGroup({ flash, onFlashEnd }: Flash) {
+export function ExecutionGroup({ ring, onRingEnd }: Ring) {
   const { t } = useI18n()
   return (
-    <Group id="execution" title={t('settings.nav.execution')} description={t('settings.execution.desc')} flash={flash} onFlashEnd={onFlashEnd} testId="settings-execution">
+    <Group id="execution" title={t('settings.nav.execution')} description={t('settings.execution.desc')} ring={ring} onRingEnd={onRingEnd} testId="settings-execution">
       <Row title={t('settings.concurrency')} hint={t('settings.concurrencyHint')} soon>
         <Stepper value={ENGINE_DEFAULTS.maxConcurrency} min={1} max={16} label={t('settings.concurrency')} testId="settings-concurrency" />
       </Row>
@@ -62,13 +63,14 @@ export function ExecutionGroup({ flash, onFlashEnd }: Flash) {
   )
 }
 
-export function EngineGroup({ view, flash, onFlashEnd }: Flash & { view: CapabilityView }) {
+export function EngineGroup({ view, lost, ring, onRingEnd }: Ring & { view: CapabilityView; lost: boolean }) {
   const { t } = useI18n()
-  // Any HTTP answer means the engine is reachable; only an unreachable engine is "not connected".
-  const state = view.state === 'loading' ? 'checking' : view.state === 'disconnected' ? 'bad' : 'ok'
+  // Any HTTP answer means the engine is reachable; an unreachable engine, or the
+  // app reporting the connection lost since (`lost`), is "not connected".
+  const state = lost || view.state === 'disconnected' ? 'bad' : view.state === 'loading' ? 'checking' : 'ok'
   const label = state === 'ok' ? t('settings.engine.connected') : state === 'checking' ? t('welcome.checking') : t('settings.engine.lost')
   return (
-    <Group id="engine" title={t('settings.nav.engine')} flash={flash} onFlashEnd={onFlashEnd} testId="settings-engine">
+    <Group id="engine" title={t('settings.nav.engine')} ring={ring} onRingEnd={onRingEnd} testId="settings-engine">
       <Row title={t('settings.engine.status')} hint="agentplane serve · 127.0.0.1" hintMono>
         <span className={`st-pill ${state}`} data-testid="engine-status" data-state={state}>
           <span className="dot" aria-hidden="true" />

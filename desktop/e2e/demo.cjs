@@ -971,6 +971,20 @@ async function startDemo(app, page) {
     await page.click('[data-testid="values-save"]')
     await page.waitForSelector('[data-testid="values-invalid"]')
     assert.deepEqual(JSON.parse(fs.readFileSync(recordingFile, 'utf8')).redactEnv, [], 'an invalid name is not saved')
+    // Panes keep the recording draft; the breadcrumb names the pane; choosing
+    // Settings in the sidebar opens the main pane again without losing the draft.
+    await page.fill('[data-testid="values-redact-env"]', 'KEPT_DRAFT')
+    await page.click('[data-testid="settings-nav-agents"]')
+    await page.waitForSelector('[data-testid="settings-agents"]')
+    assert.match(await page.textContent('.topbar'), /Settings\s*\/?\s*Agents/)
+    await page.click('[data-testid="nav-settings"]')
+    await page.waitForSelector('[data-testid="values-redact-env"]')
+    assert.equal(await page.locator('.crumb').count(), 1, 'the breadcrumb is back to Settings only')
+    assert.equal(await page.inputValue('[data-testid="values-redact-env"]'), 'KEPT_DRAFT')
+    // Choosing a group in the section list moves focus to its heading.
+    await page.click('[data-testid="settings-nav-engine"]')
+    await page.waitForFunction(() => document.activeElement?.id === 'st-engine-h')
+    assert.equal(await page.getAttribute('[data-testid="settings-nav-engine"]', 'aria-current'), 'true')
     await page.fill('[data-testid="values-redact-env"]', '')
     await app.close()
 

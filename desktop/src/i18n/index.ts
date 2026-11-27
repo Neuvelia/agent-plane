@@ -4,7 +4,6 @@ import { pl } from './pl'
 export type Locale = 'en' | 'pl'
 export type { MessageKey }
 export const LOCALES: Locale[] = ['en', 'pl']
-export const LOCALE_LABEL: Record<Locale, string> = { en: 'EN', pl: 'PL' }
 
 const catalogues: Record<Locale, Record<MessageKey, string>> = { en, pl }
 const STORAGE_KEY = 'agentplane.locale'

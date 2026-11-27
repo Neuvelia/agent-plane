@@ -11,14 +11,15 @@ export default meta
 type S = StoryObj
 type Ctx = Parameters<NonNullable<S['play']>>[0]
 
-/** Resolves with the first element matching `selector` (that also passes `ready`), polling each frame. */
+/** Resolves with the first element matching `selector` (that also passes `ready`), checking each frame for up to 4 s. */
 async function until<E extends Element>(root: Element, selector: string, ready: (e: E) => boolean = () => true): Promise<E> {
-  for (let i = 0; i < 600; i++) {
+  const end = Date.now() + 4000
+  for (;;) {
     const el = root.querySelector<E>(selector)
     if (el && ready(el)) return el
-    await new Promise((r) => requestAnimationFrame(r))
+    if (Date.now() > end) throw new Error(`story never showed ${selector}`)
+    await new Promise((r) => setTimeout(r, 16))
   }
-  throw new Error(`story never showed ${selector}`)
 }
 const enabled = (e: HTMLInputElement | HTMLButtonElement) => !e.disabled
 const open = (section: string, shows: string): S['play'] => async ({ canvasElement }: Ctx) => {

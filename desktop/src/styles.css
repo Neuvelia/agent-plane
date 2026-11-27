@@ -397,8 +397,11 @@ main:focus{outline:none}
 .st-grp h2{margin:0 0 4px;font-size:13px;font-weight:600}
 .st-desc{margin:0 0 10px;color:var(--muted);font-size:12.5px;max-width:64ch}
 .st-list{border:1px solid var(--card-line);border-radius:var(--radius-14);background:var(--inset);overflow:hidden}
-.st-grp.flash .st-list{animation:st-flash .9s cubic-bezier(.23,1,.32,1)}
-@keyframes st-flash{0%{box-shadow:0 0 0 0 var(--brand-soft)}30%{box-shadow:0 0 0 4px var(--brand-soft)}100%{box-shadow:0 0 0 0 transparent}}
+.st-grp.ring-0 .st-list{animation:st-ring0 .9s cubic-bezier(.23,1,.32,1)}
+.st-grp.ring-1 .st-list{animation:st-ring1 .9s cubic-bezier(.23,1,.32,1)}
+/* Two identical keyframes: switching the name restarts the ring for the same group. */
+@keyframes st-ring0{0%{box-shadow:0 0 0 0 var(--brand-soft)}30%{box-shadow:0 0 0 4px var(--brand-soft)}100%{box-shadow:0 0 0 0 transparent}}
+@keyframes st-ring1{0%{box-shadow:0 0 0 0 var(--brand-soft)}30%{box-shadow:0 0 0 4px var(--brand-soft)}100%{box-shadow:0 0 0 0 transparent}}
 .st-row{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-10) 20px;min-height:56px;padding:var(--space-12) 16px;border-top:1px solid var(--hairline);transition:background-color .2s}
 .st-row:first-child{border-top:0}
 .st-row:hover{background:var(--fill-4)}
@@ -406,6 +409,8 @@ main:focus{outline:none}
 .st-text{flex:1 1 220px;min-width:0}
 .st-text b{display:block;font-weight:500}
 .st-text b label{cursor:pointer}
+.st-text span.st-warn{margin-top:4px;color:var(--warn);max-width:60ch}
+.st :is(button,input)[aria-disabled=true]{opacity:.6;cursor:progress}
 .st-text span{display:block;margin-top:1px;color:var(--muted);font-size:12.5px}
 .st-soon{font:500 11px/1 var(--font-sans);letter-spacing:.02em;color:var(--muted)}
 .st-row.soon :is(button,input):disabled{opacity:.45}

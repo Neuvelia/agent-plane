@@ -121,7 +121,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'runs' && <RunsList onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'settings' && <Settings visit={settingsVisit} onPaneChange={setSettingsPane} />}
+          {route.name === 'settings' && <Settings visit={settingsVisit} lost={lost} onPaneChange={setSettingsPane} />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}

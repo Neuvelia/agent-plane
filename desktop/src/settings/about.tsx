@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listRuns } from '../api'
+import { copyDisplayed } from '../editor/EdgeValueBox'
 import type { CapabilityReport } from '../capabilities'
 import { useI18n } from '../i18n/context'
 import { Button } from '../ui/primitives'
@@ -25,11 +26,7 @@ export function AboutPane({ view }: { view: CapabilityView }) {
   const report = view.state === 'loaded' ? view.report : null
   const runs = useRunCount()
   const [copy, setCopy] = useState<Copy>('idle')
-  const doCopy = () =>
-    void navigator.clipboard
-      .writeText(diagnosticsText(appVersion, report))
-      .then(() => setCopy('copied'))
-      .catch(() => setCopy('failed'))
+  const doCopy = () => void copyDisplayed(diagnosticsText(appVersion, report)).then((ok) => setCopy(ok ? 'copied' : 'failed'))
   const engine = report ? `${report.engine.version} · ${report.engine.os}/${report.engine.arch}` : view.state === 'loading' ? t('welcome.checking') : '—'
   return (
     <div className="st-body" data-testid="settings-about">
@@ -60,7 +57,7 @@ export function AboutPane({ view }: { view: CapabilityView }) {
           {t('settings.about.copy')}
         </Button>
         <span className={copy === 'failed' ? 'st-notice err' : 'st-notice mu'} role="status" data-testid="about-copy-result">
-          {copy === 'copied' ? t('editor.edgeValue.copied') : copy === 'failed' ? t('editor.edgeValue.copyFailed') : ''}
+          {copy === 'copied' ? t('settings.about.copied') : copy === 'failed' ? t('settings.about.copyFailed') : ''}
         </span>
       </div>
     </div>

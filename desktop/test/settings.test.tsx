@@ -9,7 +9,7 @@ import { SECTIONS, Settings } from '../src/settings'
 import { diagnosticsText } from '../src/settings/about'
 import { AgentsPane, agentRows } from '../src/settings/agents'
 import { EngineGroup } from '../src/settings/groups'
-import { namesDirty, noticeOf, sessionKey } from '../src/settings/recording'
+import { draftAfterToggle, namesDirty, noticeOf, sessionKey } from '../src/settings/recording'
 import type { CapabilityView } from '../src/welcome'
 
 const linux = recorded as CapabilityReport
@@ -22,8 +22,10 @@ describe('Settings sections', () => {
     expect(SECTIONS.map((s) => s.id)).toEqual(['general', 'recording', 'execution', 'agents', 'engine', 'secrets', 'policy', 'about'])
     const out = render(<Settings />)
     for (const id of ['secrets', 'policy']) {
-      const entry = new RegExp(`<div[^>]*aria-disabled="true"[^>]*data-testid="settings-nav-${id}"`).exec(out)
-      expect(entry, id).not.toBeNull()
+      const entry = new RegExp(`<(\\w+)[^>]*data-testid="settings-nav-${id}"[^>]*>`).exec(out)
+      expect(entry?.[1], id).toBe('div')
+      expect(entry?.[0], id).toContain('aria-disabled="true"')
+      expect(entry?.[0], id).not.toMatch(/tabindex|onclick/i)
     }
     expect(out).toMatch(/<button[^>]*aria-current="true"[^>]*data-testid="settings-nav-general"/)
   })
@@ -72,6 +74,23 @@ describe('record run values', () => {
     expect(namesDirty('NPM_TOKEN GITHUB_TOKEN', ['GITHUB_TOKEN', 'NPM_TOKEN'])).toBe(true)
     expect(namesDirty('', [])).toBe(false)
   })
+  it('after a toggle, a clean draft follows the saved list and a typed draft stays [F2.5b-AC3]', () => {
+    expect(draftAfterToggle('GITHUB_TOKEN', ['GITHUB_TOKEN'], ['GITHUB_TOKEN'])).toBe('GITHUB_TOKEN')
+    expect(draftAfterToggle(' GITHUB_TOKEN,', ['GITHUB_TOKEN'], ['GITHUB_TOKEN'])).toBe('GITHUB_TOKEN')
+    expect(draftAfterToggle('GITHUB_TOKEN NPM_TOKEN', ['GITHUB_TOKEN'], ['GITHUB_TOKEN'])).toBe('GITHUB_TOKEN NPM_TOKEN')
+  })
+  it('states next to the switch, visibly and in its description, that only listed variables are hidden (ADR-0023) [F2.5b-AC3]', () => {
+    for (const [locale, text] of [['en', 'saved as it is'], ['pl', 'zapisują się bez zmian']] as const) {
+      const out = render(<Settings />, locale)
+      const box = /<input[^>]*data-testid="values-record"[^>]*>/.exec(out)?.[0] ?? ''
+      const described = /aria-describedby="([^"]+)"/.exec(box)?.[1]?.split(' ') ?? []
+      expect(described.length, locale).toBe(2)
+      const warning = new RegExp(`<span id="${described[1]}" class="st-warn">([^<]+)</span>`).exec(out)?.[1] ?? ''
+      expect(warning, locale).toContain(text)
+      const details = /<details[\s\S]*?<\/details>/.exec(out)?.[0] ?? ''
+      expect(details, locale).not.toContain(text)
+    }
+  })
   it('reports the session the running engine has', () => {
     expect(sessionKey({ enabled: true, redactEnv: [], active: true, missing: [] })).toBe('settings.values.sessionOn')
     expect(sessionKey({ enabled: true, redactEnv: ['A'], active: false, missing: ['A'] })).toBe('settings.values.sessionMissing')
@@ -80,7 +99,10 @@ describe('record run values', () => {
 })
 
 describe('engine status', () => {
-  const status = (view: CapabilityView) => /data-state="(\w+)"/.exec(render(<EngineGroup view={view} flash={false} onFlashEnd={noop} />))?.[1]
+  const status = (view: CapabilityView, lost = false) => /data-state="(\w+)"/.exec(render(<EngineGroup view={view} lost={lost} ring={null} onRingEnd={noop} />))?.[1]
+  it('is not connected once the app reports the connection lost, even after a good read', () => {
+    expect(status({ state: 'loaded', report: linux, refreshing: false }, true)).toBe('bad')
+  })
   it('is connected for any answer, not connected only when unreachable', () => {
     expect(status({ state: 'loaded', report: linux, refreshing: false })).toBe('ok')
     expect(status({ state: 'failed', status: 503 })).toBe('ok')

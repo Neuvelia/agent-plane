@@ -22,6 +22,7 @@ export function agentRows(report: CapabilityReport): CapabilityTool[] {
 export function AgentsPane({ view, onCheck, onRetry }: { view: CapabilityView; onCheck: () => void; onRetry: () => void }) {
   const { t } = useI18n()
   const busy = view.state === 'loading' || (view.state === 'loaded' && view.refreshing)
+  const rows = view.state === 'loaded' ? agentRows(view.report) : []
   return (
     <div className="st-body" data-testid="settings-agents">
       <h1>{t('settings.nav.agents')}</h1>
@@ -46,10 +47,10 @@ export function AgentsPane({ view, onCheck, onRetry }: { view: CapabilityView; o
               {t('welcome.refreshing')}
             </p>
           )}
-          {agentRows(view.report).map((tool) => (
+          {rows.map((tool) => (
             <AgentCard key={`${tool.kind}:${tool.id}`} tool={tool} checkedAt={view.report.checked_at} busy={busy} onCheck={onCheck} />
           ))}
-          {agentRows(view.report).length === 0 && <p className="mu">{t('settings.agents.none')}</p>}
+          {rows.length === 0 && <p className="mu">{t('settings.agents.none')}</p>}
         </div>
       )}
       <p className="st-note">{t('settings.agents.order')}</p>
@@ -79,7 +80,8 @@ function AgentCard({ tool, checkedAt, busy, onCheck }: { tool: CapabilityTool; c
         {tool.version && <span className="st-tg">{t('welcome.version', { version: tool.version })}</span>}
         {tool.reason && <span className="st-tg">{t('welcome.reason', { reason: tool.reason })}</span>}
         <span className="st-sp" />
-        <Button size="sm" onClick={onCheck} disabled={busy} data-testid={`agent-check-${tool.id}`}>
+        {/* aria-disabled, not disabled, while checking: keyboard focus stays on the button. */}
+        <Button size="sm" onClick={() => !busy && onCheck()} aria-disabled={busy || undefined} aria-describedby={headId} data-testid={`agent-check-${tool.id}`}>
           {busy ? t('welcome.checking') : t('welcome.check')}
         </Button>
       </div>

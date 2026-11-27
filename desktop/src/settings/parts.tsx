@@ -5,11 +5,19 @@ import { useI18n } from '../i18n/context'
 // rows, and the controls the design draws inside rows. Every control is a
 // native element; animation is CSS only and is removed under reduced motion.
 
-/** A titled group: heading, optional one-line description, its rows, then notes below them. */
-export function Group({ id, title, description, flash, onFlashEnd, children, footer, testId }: { id: string; title: ReactNode; description?: ReactNode; flash?: boolean; onFlashEnd?: () => void; children: ReactNode; footer?: ReactNode; testId?: string }) {
+/**
+ * A titled group: heading, optional one-line description, its rows, then notes
+ * below them. `ring` is a counter that is set when the group was chosen in the
+ * section list: each new value restarts the ring (two keyframe names alternate,
+ * so the same group can ring again). The heading takes focus after a jump.
+ */
+export function Group({ id, title, description, ring, onRingEnd, children, footer, testId }: { id: string; title: ReactNode; description?: ReactNode; ring?: number | null; onRingEnd?: () => void; children: ReactNode; footer?: ReactNode; testId?: string }) {
+  const className = ring ? `st-grp ring-${ring % 2}` : 'st-grp'
   return (
-    <section className={flash ? 'st-grp flash' : 'st-grp'} id={`st-${id}`} aria-labelledby={`st-${id}-h`} data-group={id} data-testid={testId} onAnimationEnd={(e) => e.animationName === 'st-flash' && onFlashEnd?.()}>
-      <h2 id={`st-${id}-h`}>{title}</h2>
+    <section className={className} id={`st-${id}`} aria-labelledby={`st-${id}-h`} data-group={id} data-testid={testId} onAnimationEnd={(e) => e.animationName.startsWith('st-ring') && onRingEnd?.()}>
+      <h2 id={`st-${id}-h`} tabIndex={-1}>
+        {title}
+      </h2>
       {description && <p className="st-desc">{description}</p>}
       <div className="st-list">{children}</div>
       {footer}
@@ -17,8 +25,8 @@ export function Group({ id, title, description, flash, onFlashEnd, children, foo
   )
 }
 
-/** One setting: its name and hint on the left, its control on the right. */
-export function Row({ title, hint, children, soon, testId, hintMono = false, hintId }: { title: ReactNode; hint?: ReactNode; children?: ReactNode; soon?: boolean; testId?: string; hintMono?: boolean; hintId?: string }) {
+/** One setting: its name, hint and an optional always-visible warning on the left, its control on the right. */
+export function Row({ title, hint, warning, children, soon, testId, hintMono = false, hintId, warningId }: { title: ReactNode; hint?: ReactNode; warning?: ReactNode; children?: ReactNode; soon?: boolean; testId?: string; hintMono?: boolean; hintId?: string; warningId?: string }) {
   return (
     <div className={soon ? 'st-row soon' : 'st-row'} data-testid={testId}>
       <div className="st-text">
@@ -26,6 +34,11 @@ export function Row({ title, hint, children, soon, testId, hintMono = false, hin
         {hint && (
           <span id={hintId} className={hintMono ? 'mono' : undefined}>
             {hint}
+          </span>
+        )}
+        {warning && (
+          <span id={warningId} className="st-warn">
+            {warning}
           </span>
         )}
       </div>
@@ -106,9 +119,7 @@ export function Stepper({ value, label, min, max, onChange, testId }: { value: n
       <button type="button" aria-label={t('settings.decrease')} disabled={!onChange || value <= min} onClick={() => onChange?.(value - 1)}>
         −
       </button>
-      <span className="mono" aria-live="polite">
-        {value}
-      </span>
+      <span className="mono">{value}</span>
       <button type="button" aria-label={t('settings.increase')} disabled={!onChange || value >= max} onClick={() => onChange?.(value + 1)}>
         +
       </button>

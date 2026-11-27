@@ -105,11 +105,15 @@ async function checkStory(page, origin, id, locale, fail) {
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
   // Only React Flow views fade in after fit-view; other stories are ready once rendered.
   if (await page.$('#storybook-root .react-flow')) await page.waitForTimeout(900)
-  // A story's play function changes the screen after render; check the state it ends in.
+  // A story's play function changes the screen after render; check the state it
+  // ends in. The render phase is a Storybook internal (storybook is pinned, see
+  // package.json): without it, fail at once rather than after a timeout per story.
+  if (!(await page.evaluate(() => typeof window.__STORYBOOK_PREVIEW__?.currentRender === 'object'))) return fail('Storybook preview internals not found; update the smoke for this Storybook version')
   await page
-    .waitForFunction(() => ['finished', 'errored', 'aborted'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase), null, { timeout: 15000 })
+    .waitForFunction(() => ['finished', 'aborted'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase), null, { timeout: 15000 })
     .catch(() => fail('story play never finished'))
-  if (await page.evaluate(() => window.__STORYBOOK_PREVIEW__?.currentRender?.phase === 'errored')) fail('story play failed')
+  // A throwing play ends as 'finished' too; Storybook then shows its error display.
+  if (await page.evaluate(() => document.body.classList.contains('sb-show-errordisplay'))) fail('story play failed')
   await settleAnimations(page)
   await page.addScriptTag({ content: axeSource })
   // The Storybook a11y addon runs its own axe on render; wait for it to finish.

@@ -44,12 +44,12 @@ const reducedMotion = () => typeof window.matchMedia === 'function' && window.ma
  * `visit` changes when Settings is chosen again in the sidebar: the main pane
  * opens, without remounting, so a save in flight and a typed draft are kept.
  */
-export function Settings({ onPaneChange, visit = 0 }: { onPaneChange?: (pane: SettingsPane) => void; visit?: number }) {
+export function Settings({ onPaneChange, visit = 0, lost = false }: { onPaneChange?: (pane: SettingsPane) => void; visit?: number; lost?: boolean }) {
   const { t, locale } = useI18n()
   const [pane, setPane] = useState<SettingsPane>('main')
   const [active, setActive] = useState<SectionId>('general')
   const [target, setTarget] = useState<GroupId | null>(null)
-  const [flash, setFlash] = useState<GroupId | null>(null)
+  const [ring, setRing] = useState<{ id: GroupId; n: number } | null>(null)
   const engine = useEngineReport()
   const recording = useRecording()
   const spyLock = useRef(0)
@@ -59,6 +59,7 @@ export function Settings({ onPaneChange, visit = 0 }: { onPaneChange?: (pane: Se
   const show = useCallback(
     (next: SettingsPane) => {
       setPane(next)
+      setRing(null)
       onPaneChange?.(next)
       // The page scrolls inside the app's main area: a new pane starts at its heading.
       root.current?.scrollIntoView?.({ block: 'start' })
@@ -81,25 +82,31 @@ export function Settings({ onPaneChange, visit = 0 }: { onPaneChange?: (pane: Se
     show('main')
   }, [visit, show])
 
-  // Scroll to the chosen group after the main pane is on screen, then ring it once.
-  // Under reduced motion the jump is instant and there is no ring to wait for.
+  // Scroll to the chosen group after the main pane is on screen, move focus to
+  // its heading (so a screen reader says where it landed) and ring it once.
+  // Under reduced motion the jump is instant and there is no ring.
   useEffect(() => {
     if (!target || pane !== 'main') return
     const still = reducedMotion()
     spyLock.current = performance.now() + 800
     document.getElementById(`st-${target}`)?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
+    document.getElementById(`st-${target}-h`)?.focus({ preventScroll: true })
     setTarget(null)
-    if (still) return
-    // Cleared first so choosing the same group again rings it again.
-    setFlash(null)
-    const frame = requestAnimationFrame(() => setFlash(target))
-    return () => cancelAnimationFrame(frame)
+    if (!still) setRing((r) => ({ id: target, n: (r?.n ?? 0) + 1 }))
   }, [target, pane])
+
+  // The engine came back after the app saw it lost: read the report again.
+  const wasLost = useRef(lost)
+  const { reload } = engine
+  useEffect(() => {
+    if (wasLost.current && !lost) reload()
+    wasLost.current = lost
+  }, [lost, reload])
 
   useScrollSpy(pane === 'main', spyLock, setActive)
   const markY = useMarker(nav, active, locale)
-  const endFlash = useCallback(() => setFlash(null), [])
-  const groupProps = (id: GroupId) => ({ flash: flash === id, onFlashEnd: endFlash })
+  const endRing = useCallback(() => setRing(null), [])
+  const groupProps = (id: GroupId) => ({ ring: ring?.id === id ? ring.n : null, onRingEnd: endRing })
 
   return (
     <div className="st" ref={root} data-testid="settings">
@@ -111,6 +118,8 @@ export function Settings({ onPaneChange, visit = 0 }: { onPaneChange?: (pane: Se
               {t(s.label)}
             </button>
           ) : (
+            // Same pattern as the sidebar's deferred entries (F2.5a requirement 5):
+            // aria-disabled, not focusable, no handler; the Soon tag says why.
             <div key={s.id} className="st-nav-off" aria-disabled="true" data-testid={`settings-nav-${s.id}`}>
               <span className="st-nav-label">{t(s.label)}</span>
               <SoonTag />
@@ -125,7 +134,7 @@ export function Settings({ onPaneChange, visit = 0 }: { onPaneChange?: (pane: Se
             <GeneralGroup {...groupProps('general')} />
             <RecordingGroup recording={recording} {...groupProps('recording')} />
             <ExecutionGroup {...groupProps('execution')} />
-            <EngineGroup view={engine.view} {...groupProps('engine')} />
+            <EngineGroup view={engine.view} lost={lost} {...groupProps('engine')} />
           </div>
         )}
         {pane === 'agents' && <AgentsPane view={engine.view} onCheck={engine.check} onRetry={engine.reload} />}
