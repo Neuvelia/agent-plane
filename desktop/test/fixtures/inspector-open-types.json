@@ -136,6 +136,18 @@
    "message": "output \"verdict\" on node \"scope\" is not consumed",
    "severity": "warning",
    "suggestion": "remove the output or bind it to an edge or graph output"
+  },
+  {
+   "code": "E_NODE_TYPE_UNKNOWN",
+   "graph_id": "inspector-types",
+   "line": 34,
+   "location": {
+    "node_id": "future",
+    "path": "nodes.future.type"
+   },
+   "message": "node \"future\" has unsupported type \"plugin\"",
+   "severity": "error",
+   "suggestion": "use one of the node types: agent, gate, human, shell"
   }
  ],
  "hash": "348cf38e8544a9b34aa3289f344f44dacadb6e6c59ea6a4f0f3c32e3809b897e",

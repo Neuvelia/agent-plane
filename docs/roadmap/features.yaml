@@ -17,10 +17,12 @@ features:
     acceptance:
       - id: F0.1-AC1
         text: "Niepoprawny typ node'a, brakujący input i cykl dają czytelny błąd z lokalizacją."
-        status: open
-        evidence: []
+        status: met
+        evidence:
+          - "cmd/agentplane/validation_test.go::TestUnknownNodeTypeIsABlockingDiagnosticWithTheNodeAndPath"
+          - "internal/adapter/yamlgraph/validation_test.go::TestValidateReportsMissingInputAndOutput"
+          - "internal/adapter/yamlgraph/validation_test.go::TestValidateDetectsTwoNodeCycle"
         issue: 178
-        note: "nieznany typ node'a przechodzi walidację"
       - id: F0.1-AC2
         text: "Ten sam plik po serializacji i ponownym odczycie zachowuje znaczenie."
         status: met
@@ -40,7 +42,7 @@ features:
         issue: 179
       - text: "Wersja grafu to obliczany hash graph_version, bez pola autorskiego."
         adr: ADR-0033
-    tasks: [178, 179]
+    tasks: [179]
   - id: F0.2
     name: "Graph Validator i lint"
     kind: roadmap
@@ -53,10 +55,10 @@ features:
     acceptance:
       - id: F0.2-AC1
         text: "CLI `graph validate` zwraca exit code 0 dla poprawnego graphu i !=0 dla błędnego."
-        status: open
-        evidence: []
+        status: met
+        evidence:
+          - "cmd/agentplane/validation_test.go::TestUnknownNodeTypeExitsWithTheGraphCodeBeforeAnyRun"
         issue: 178
-        note: "type: foo daje exit 0"
       - id: F0.2-AC2
         text: "Komunikat zawiera feature/node id i sugestię naprawy."
         status: met
@@ -75,7 +77,7 @@ features:
     divergences:
       - text: "Ostrzeżenie o nieużywanym outputcie ma inną semantykę (W_DECLARED_OUTPUT_UNUSED)."
         issue: 180
-    tasks: [178, 180]
+    tasks: [180]
   - id: F0.3
     name: "Data bindings na edge'ach"
     kind: roadmap

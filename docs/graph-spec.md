@@ -577,8 +577,10 @@ Examples:
 
 - invalid schema;
 - duplicate IDs;
-- missing node or missing `type` field (an unrecognized `type` value is not
-  yet rejected by `graph validate`; it fails at execution, see the 2026-11-25 audit);
+- missing node, missing `type` field (`E_NODE_TYPE_REQUIRED`) or a `type` that is
+  not `agent`, `gate`, `human` or `shell` (`E_NODE_TYPE_UNKNOWN`, at
+  `nodes.<id>.type`; `graph validate` and `run` both reject it with exit 3,
+  before any run starts);
 - missing referenced node/input/output;
 - incompatible binding;
 - cycle;
