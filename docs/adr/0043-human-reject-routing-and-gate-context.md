@@ -27,25 +27,27 @@ that model rather than add control flow.
    `rejected`, unchanged payload) and the node ends `succeeded` with its
    `decision` output set to `"rejected"` instead of `"approved"`. No failure kind
    or `human_rejected` code exists for that node; the run is not failed by the
-   rejection. The "route" is the explicit data binding: nodes that bind
-   `decision` run and see the verdict as an ordinary string input, and a graph
-   output may expose it. The author must judge the verdict with a
-   deterministic check (rule 3).
+   rejection. The "route" is the explicit data binding to a graph output, which
+   records the verdict in the run result (rule 3 allows no other consumer).
 3. Validation: `on_reject` must be `fail` or `continue` (`E_HUMAN_INVALID`).
-   `continue` requires that `<node>.outputs.decision` reaches **only
-   deterministic checks**, otherwise `E_HUMAN_REJECT_UNROUTED` (an error):
-   - every node bound to the decision is a Gate node whose configuration reads
-     the input that receives it; and
-   - at least one such Gate or a graph output exists.
+   `continue` requires that `<node>.outputs.decision` reaches **graph outputs
+   only**, and at least one; otherwise `E_HUMAN_REJECT_UNROUTED` (an error),
+   reported once per node bound to the decision.
 
-   Any other consumer is reported, even next to a Gate or a graph output: a
-   Shell or Agent node bound to the decision runs on rejection, so a rejected
-   change would go through (for example a `deploy` step). A loop node is not a
-   check either, even when its loop forwards the decision to its embedded Gate:
-   the loop's producer runs before the Gate judges anything.
-   Which inputs a Gate reads comes from the field descriptors
-   (`internal/fields`), supplied by the composition root. A caller without
-   descriptors counts any Gate target.
+   Every node bound to the decision runs on rejection, so none of them can be
+   the check:
+   - a Shell or Agent node would let the rejected change through (for example
+     a `deploy` step);
+   - a loop node's producer runs before its embedded Gate judges anything;
+   - no standalone Gate kind can compare the verdict string: `command`
+     compares two files named by its inputs, `json_predicate` and
+     `reported_file_scope` need JSON, `test_command` is loop-only and
+     `changed_files_scope` needs a loop baseline.
+
+   The graph output records the verdict for whoever reads the run result. A Gate
+   kind that compares a string value would be a new contract (a later ADR) and
+   could then be allowed here. The rule does not depend on field descriptors,
+   so every validation path (CLI, API, runtime) applies it the same way.
 4. The non-blocking `W_EDGE_INPUT_UNUSED` warning (#180) never fires on an
    approval edge: an edge from a human `decision` output or an edge into a
    human node. A decision edge into an Agent's otherwise unused input is what

@@ -72,11 +72,10 @@ func (v *definitionValidator) validateHumanNodes() {
 
 // validateHumanOnReject accepts "fail" or "continue". "continue" lets a
 // rejection succeed the node, and every node bound to the decision then runs
-// (ADR-0043). So the decision must reach only deterministic checks: each node
-// that receives it must be a Gate that reads it, and at least one Gate or graph
-// output must judge it. Any other consumer (a Shell, an Agent, or a loop node,
-// whose producer runs before its Gate) would run its side effects on a
-// rejection.
+// (ADR-0043). No node kind can judge the verdict string deterministically: a
+// Shell, Agent or loop node runs its side effects first, and no standalone
+// Gate kind compares a string value (command compares files). So with
+// "continue" the decision may reach graph outputs only, and must reach one.
 func (v *definitionValidator) validateHumanOnReject(id string, value any, loc DiagnosticLocation) {
 	mode, isString := value.(string)
 	if !isString || (mode != HumanRejectFail && mode != HumanRejectContinue) {
@@ -86,43 +85,32 @@ func (v *definitionValidator) validateHumanOnReject(id string, value any, loc Di
 	if mode != HumanRejectContinue {
 		return
 	}
-	judged, unchecked := v.decisionConsumers(id)
-	for _, target := range unchecked {
-		v.error("E_HUMAN_REJECT_UNROUTED", fmt.Sprintf("on_reject: continue lets node %q run after a rejection: only a Gate that reads the decision may receive it", target), loc,
-			"bind "+id+".outputs.decision only to Gate inputs the Gate reads or to graph outputs, or remove on_reject")
+	exposed, consumers := v.decisionConsumers(id)
+	for _, target := range consumers {
+		v.error("E_HUMAN_REJECT_UNROUTED", fmt.Sprintf("on_reject: continue lets node %q run after a rejection: the decision may reach graph outputs only", target), loc,
+			"remove the edge from "+id+".outputs.decision to "+target+" and expose the decision as a graph output, or remove on_reject")
 	}
-	if !judged && len(unchecked) == 0 {
-		v.error("E_HUMAN_REJECT_UNROUTED", "on_reject: continue needs a deterministic check of the decision: no Gate or graph output reads it", loc,
-			"bind "+id+".outputs.decision to a Gate input the Gate reads, or to a graph output, or remove on_reject")
+	if !exposed && len(consumers) == 0 {
+		v.error("E_HUMAN_REJECT_UNROUTED", "on_reject: continue needs the decision as a graph output: nothing records the verdict", loc,
+			"add a graph output from "+id+".outputs.decision, or remove on_reject")
 	}
 }
 
 // decisionConsumers reports whether the decision of human node id reaches a
-// graph output or a Gate node that reads it, and lists, sorted and unique, the
-// other nodes that receive it.
+// graph output, and lists, sorted and unique, the nodes bound to it.
 func (v *definitionValidator) decisionConsumers(id string) (bool, []string) {
 	from := NodeOutputReference(id + ".outputs.decision")
-	judged := false
+	exposed := false
 	for _, o := range v.definition.Outputs {
-		judged = judged || o.From == from
+		exposed = exposed || o.From == from
 	}
-	unchecked := map[string]bool{}
+	consumers := map[string]bool{}
 	for _, e := range v.definition.Edges {
-		to, ok := parseNodeInputReference(string(e.To))
-		if e.From != from || !ok {
-			continue
+		if to, ok := parseNodeInputReference(string(e.To)); ok && e.From == from {
+			consumers[to.nodeID] = true
 		}
-		target, found := v.definition.Nodes[to.nodeID]
-		if !found {
-			continue
-		}
-		if target.Type == nodeTypeGate && v.reads(target, to.portID) {
-			judged = true
-			continue
-		}
-		unchecked[to.nodeID] = true
 	}
-	return judged, sortedKeys(unchecked)
+	return exposed, sortedKeys(consumers)
 }
 
 func stringItems(value any) ([]string, bool) {

@@ -634,11 +634,11 @@ Graph input bindings are not checked. The warning does not block execution.
 gap-closing choice for the roadmap's "unused edge" warnings (owner decision
 Q17).
 
-A human node with `on_reject: continue` needs its `decision` to reach only
-deterministic checks: every node bound to it must be a Gate node that reads it,
-and at least one such Gate or a graph output must exist. Any other consumer,
-including a loop node (its producer runs before its Gate), is
-`E_HUMAN_REJECT_UNROUTED` (ADR-0043). A Gate node of kind `test_command` outside a loop is
+A human node with `on_reject: continue` may expose its `decision` only as
+graph outputs, and must expose it as at least one. Any edge from that
+`decision` to a node input is `E_HUMAN_REJECT_UNROUTED` (ADR-0043): every
+bound node would run after a rejection, and no node kind can judge the verdict
+string (a `command` Gate compares files, not values). A Gate node of kind `test_command` outside a loop is
 `E_GATE_KIND_LOOP_ONLY` (ADR-0042).
 
 Unreachable-node analysis and parallelism suggestions are later work.

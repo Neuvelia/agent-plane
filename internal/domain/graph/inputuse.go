@@ -15,9 +15,8 @@ import (
 type InputUse func(node NodeDefinition, inputID string) bool
 
 // ValidateWith is Validate plus the checks that need to know which inputs a
-// node reads: the non-blocking W_EDGE_INPUT_UNUSED warning (F0.2, #180) and
-// the stricter routing rule of human on_reject: continue (ADR-0043). A nil use
-// is Validate.
+// node reads: the non-blocking W_EDGE_INPUT_UNUSED warning (F0.2, #180). A
+// nil use is Validate.
 func ValidateWith(definition *Definition, use InputUse) ValidationResult {
 	return validate(definition, use)
 }

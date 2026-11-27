@@ -347,11 +347,12 @@ func TestEdgeIntoAnInputTheTargetDoesNotReadWarns(t *testing.T) {
 	}
 }
 
-// With descriptors available, on_reject: continue also needs the Gate to read
-// the decision input; an input the Gate ignores judges nothing (ADR-0043).
+// The composition root's validation (with descriptors) rejects even a Gate
+// that reads the decision: a command Gate compares files, so it cannot judge
+// the verdict string. Only a graph output may receive it (ADR-0043).
 //
 // roadmap: F2.10-AC2
-func TestOnRejectContinueNeedsAGateThatReadsTheDecision(t *testing.T) {
+func TestOnRejectContinueRejectsAGateThatReadsTheDecision(t *testing.T) {
 	const doc = `schema_version: 0
 id: reject-route
 inputs: {}
@@ -362,28 +363,23 @@ nodes:
     outputs: {decision: {type: string, required: true}}
   check:
     type: gate
-    config: {check_id: approved, kind: command, command: /usr/bin/diff, left_input: %s, right_input: %s}
-    inputs: {decision: {type: string, required: true}, other: {type: string, required: true}}
-  src:
-    type: shell
-    config: {command: /usr/bin/true}
-    outputs: {stdout: {type: string}}
+    config: {check_id: approved, kind: command, command: /usr/bin/diff, left_input: decision, right_input: decision}
+    inputs: {decision: {type: string, required: true}}
 edges:
-  - {from: ask.outputs.decision, to: check.inputs.decision}
-  - {from: src.outputs.stdout, to: check.inputs.other}
-outputs: {}
+%s
+outputs:
+  verdict: {from: ask.outputs.decision}
 `
 	for _, tc := range []struct {
-		left, right string
-		routed      bool
-	}{{"decision", "other", true}, {"other", "other", false}} {
-		result := validateGraph(parseGraph(t, strings.Replace(strings.Replace(doc, "%s", tc.left, 1), "%s", tc.right, 1)))
+		edges  string
+		routed bool
+	}{{"  - {from: ask.outputs.decision, to: check.inputs.decision}", false}, {"  []", true}} {
 		unrouted := false
-		for _, d := range result.Diagnostics {
+		for _, d := range validateGraph(parseGraph(t, strings.Replace(doc, "%s", tc.edges, 1))).Diagnostics {
 			unrouted = unrouted || d.Code == "E_HUMAN_REJECT_UNROUTED"
 		}
 		if unrouted == tc.routed {
-			t.Fatalf("left_input %s: unrouted=%v, diagnostics %+v", tc.left, unrouted, result.Diagnostics)
+			t.Fatalf("edges %q: unrouted=%v", tc.edges, unrouted)
 		}
 	}
 }

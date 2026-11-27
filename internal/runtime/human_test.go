@@ -137,9 +137,8 @@ func TestHumanRejectFailsNodeSkipsDependentsWithSafeCode(t *testing.T) {
 
 // roadmap: F2.10-AC2
 func TestHumanRejectWithOnRejectContinuePublishesTheRejectionToItsCheck(t *testing.T) {
-	// The decision feeds a graph output, one of the two deterministic checks
-	// ADR-0043 accepts; validation of the other (a Gate) is proven in
-	// internal/adapter/yamlgraph.
+	// The decision feeds a graph output, the only consumer ADR-0043 accepts
+	// for on_reject: continue (validation is proven in internal/adapter/yamlgraph).
 	def := humanDef(nil)
 	node := def.Nodes["gate"]
 	node.Config = map[string]any{"prompt": "ship it?", "on_reject": graph.HumanRejectContinue}

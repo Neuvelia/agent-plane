@@ -61,8 +61,13 @@ func TestHumanNodeCannotLoop(t *testing.T) {
 	}
 }
 
+// With on_reject: continue every node bound to the decision runs on a
+// rejection, and no node kind can judge the verdict string: a Shell, Agent or
+// loop node runs its side effects first, and a command Gate compares files,
+// not values. So the decision may reach graph outputs only (ADR-0043).
+//
 // roadmap: F2.10-AC2
-func TestHumanOnRejectContinueNeedsADeterministicCheckOfTheDecision(t *testing.T) {
+func TestHumanOnRejectContinueExposesTheDecisionOnlyAsAGraphOutput(t *testing.T) {
 	const head = `schema_version: 0
 id: h
 inputs: {}
@@ -84,8 +89,6 @@ nodes:
     inputs: {verdict: {type: string, required: true}}
     outputs: {}
 `
-	// A loop's producer runs before its Gate, so forwarding the decision to
-	// the Gate does not stop a rejected change.
 	const loop = `  fix:
     type: shell
     config: {command: /bin/true}
@@ -106,17 +109,12 @@ nodes:
 		name, doc string
 		ok        bool
 	}{
-		// A Shell that receives the decision runs the same on rejection: the
-		// rejected change would go through and the run would succeed (M1).
-		{"shell consumer is not a check", head + shellReads + "edges: [{from: ask.outputs.decision, to: after.inputs.verdict}]\noutputs: {}\n", false},
-		{"gate consumer", head + gate + "edges: [{from: ask.outputs.decision, to: check.inputs.verdict}]\noutputs: {}\n", true},
-		{"graph output consumer", head + "edges: []\noutputs: {verdict: {from: ask.outputs.decision}}\n", true},
+		{"graph output", head + "edges: []\noutputs: {verdict: {from: ask.outputs.decision}}\n", true},
 		{"no consumer", head + "edges: []\noutputs: {}\n", false},
-		// Every consumer must be a check: a Shell next to a judge still runs
-		// its side effect on rejection (review of #198, finding 1).
+		{"shell consumer", head + shellReads + "edges:\n" + toShell + "outputs: {}\n", false},
 		{"shell beside a graph output", head + shellReads + "edges:\n" + toShell + "outputs: {verdict: {from: ask.outputs.decision}}\n", false},
-		{"shell beside a gate", head + shellReads + gate + "edges:\n" + toShell + toGate + "outputs: {}\n", false},
-		{"gate beside a graph output", head + gate + "edges:\n" + toGate + "outputs: {verdict: {from: ask.outputs.decision}}\n", true},
+		{"gate consumer", head + gate + "edges:\n" + toGate + "outputs: {}\n", false},
+		{"gate beside a graph output", head + gate + "edges:\n" + toGate + "outputs: {verdict: {from: ask.outputs.decision}}\n", false},
 		{"loop forwarding to its gate", head + loop + "edges: [{from: ask.outputs.decision, to: fix.inputs.verdict}]\noutputs: {}\n", false},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

@@ -740,8 +740,8 @@ features:
         evidence:
           - "internal/runtime/human_test.go::TestHumanRejectFailsNodeSkipsDependentsWithSafeCode"
           - "internal/runtime/human_test.go::TestHumanRejectWithOnRejectContinuePublishesTheRejectionToItsCheck"
-          - "internal/adapter/yamlgraph/human_test.go::TestHumanOnRejectContinueNeedsADeterministicCheckOfTheDecision"
-          - "cmd/agentplane/validation_test.go::TestOnRejectContinueNeedsAGateThatReadsTheDecision"
+          - "internal/adapter/yamlgraph/human_test.go::TestHumanOnRejectContinueExposesTheDecisionOnlyAsAGraphOutput"
+          - "cmd/agentplane/validation_test.go::TestOnRejectContinueRejectsAGateThatReadsTheDecision"
           - "desktop/e2e/demo.cjs"
     out_of_scope:
       - "Granularne role użytkowników dopiero Team."
@@ -750,7 +750,7 @@ features:
       - text: "Panel bez blast radius i bez treści diffu (checki i changed files są)."
         issue: 187
         deferred_to: F3.9
-      - text: "on_reject: continue (ADR-0043, proposed) tylko gdy decyzję dostają wyłącznie Gate'y, które ją czytają, i outputy grafu (węzeł z pętlą się nie liczy)."
+      - text: "on_reject: continue (ADR-0043, proposed) tylko gdy decyzja trafia wyłącznie do outputów grafu (żaden rodzaj Gate nie porównuje wartości tekstowej)."
         adr: ADR-0043
     tasks: [187]
   - id: F2.11

@@ -72,7 +72,7 @@ const en: Record<string, FieldText> = {
   'human.config.prompt': { label: 'Prompt', help: 'What the person is asked (at most 1024 bytes).' },
   'human.config.context_inputs': { label: 'Context inputs', help: 'Declared string inputs shown to the person with the prompt (at most 8).' },
   'human.config.context_inputs.item': { label: 'Input', help: 'A declared string input.' },
-  'human.config.on_reject': { label: 'On reject', help: 'fail (default) fails the node and the run. continue lets the run go on and publishes the decision "rejected" to the nodes that use it; bind the decision output to a node input or a graph output first.' },
+  'human.config.on_reject': { label: 'On reject', help: 'fail (default) fails the node and the run. continue lets the run go on and publishes the decision "rejected" as a graph output; bind the decision output to a graph output only, never to a node input.' },
   'loop.max_attempts': { label: 'Max attempts', help: 'How many times the node may produce a candidate before the loop gives up (1 to 10).' },
 }
 
@@ -135,7 +135,7 @@ const pl: Record<string, FieldText> = {
   'human.config.prompt': { label: 'Pytanie', help: 'O co pytamy człowieka (najwyżej 1024 bajty).' },
   'human.config.context_inputs': { label: 'Wejścia kontekstu', help: 'Zadeklarowane wejścia tekstowe pokazywane razem z pytaniem (najwyżej 8).' },
   'human.config.context_inputs.item': { label: 'Wejście', help: 'Zadeklarowane wejście tekstowe.' },
-  'human.config.on_reject': { label: 'Po odrzuceniu', help: 'fail (domyślnie) kończy węzeł i przebieg błędem. continue pozwala przebiegowi iść dalej i przekazuje decyzję "rejected" węzłom, które jej używają; najpierw połącz wyjście decision z wejściem węzła lub wyjściem grafu.' },
+  'human.config.on_reject': { label: 'Po odrzuceniu', help: 'fail (domyślnie) kończy węzeł i przebieg błędem. continue pozwala przebiegowi iść dalej i publikuje decyzję "rejected" jako wyjście grafu; połącz wyjście decision tylko z wyjściem grafu, nigdy z wejściem węzła.' },
   'loop.max_attempts': { label: 'Maks. liczba prób', help: 'Ile razy węzeł może wytworzyć kandydata, zanim pętla się podda (od 1 do 10).' },
 }
 
