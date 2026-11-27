@@ -70,7 +70,7 @@ export interface RowText {
 
 function meaningOf(t: CapabilityTool): { meaning: MessageKey; still?: MessageKey } {
   const s = t.status
-  if (s === 'error') return { meaning: 'cap.meaning.error', still: t.id === 'git' ? 'cap.still.shell' : t.kind === 'agent_cli' ? 'cap.still.cli' : 'cap.still.noDesktopAgents' }
+  if (s === 'error') return { meaning: 'cap.meaning.error', still: t.id === 'git' ? 'cap.still.shell' : t.id === 'shell' ? 'cap.still.noShell' : t.id === 'docker' ? undefined : t.kind === 'agent_cli' ? 'cap.still.cli' : 'cap.still.noDesktopAgents' }
   if (t.id === 'git' && t.kind === 'tool') {
     if (s === 'available') return { meaning: 'cap.meaning.git.available' }
     if (s === 'missing' && t.reason === 'developer_tools_missing') return { meaning: 'cap.meaning.git.devtools', still: 'cap.still.shell' }
@@ -84,6 +84,15 @@ function meaningOf(t: CapabilityTool): { meaning: MessageKey; still?: MessageKey
     if (s === 'missing') return { meaning: 'cap.meaning.codex.missing', still: 'cap.still.noDesktopAgents' }
     if (s === 'unsupported_version') return { meaning: 'cap.meaning.codex.version', still: 'cap.still.noDesktopAgents' }
     if (s === 'unsupported_platform') return { meaning: 'cap.meaning.codex.platform', still: 'cap.still.noDesktopAgents' }
+  }
+  if (t.id === 'shell' && t.kind === 'tool') {
+    if (s === 'available') return { meaning: 'cap.meaning.shell.available' }
+    if (s === 'missing') return { meaning: 'cap.meaning.shell.missing', still: 'cap.still.noShell' }
+    if (s === 'unsupported_platform') return { meaning: 'cap.meaning.shell.platform', still: 'cap.still.noShell' }
+  }
+  if (t.id === 'docker' && t.kind === 'tool') {
+    if (s === 'available') return { meaning: 'cap.meaning.docker.available' }
+    if (s === 'missing') return { meaning: 'cap.meaning.docker.missing' }
   }
   if (t.kind === 'agent_cli') {
     if (s === 'detected_no_adapter') return { meaning: 'cap.meaning.cli.found', still: 'cap.still.cli' }

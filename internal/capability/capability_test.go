@@ -208,6 +208,9 @@ func TestUnsupportedPlatformStartsNoProcess(t *testing.T) {
 	bin := fakeBinary(t, `: > `+marker+`; printf 'git version 2.43.0\n'`)
 	r := Detector{GOOS: "windows", GitPath: bin, Agents: []Agent{{ID: "codex", Adapter: codex.Adapter{Binary: bin}}}}.Detect(context.Background())
 	for _, tool := range r.Tools {
+		if tool.ID == "docker" {
+			continue // a PATH lookup starts no process and is reported on every OS
+		}
 		if tool.Status != StatusUnsupportedPlatform || tool.Reason != ReasonPlatformNotSupported {
 			t.Fatalf("row %+v", tool)
 		}
@@ -463,13 +466,15 @@ func fakeLook(found ...string) (func(string) (string, error), *[]string) {
 
 func TestAgentCLIRowsComeFromTheLookupOnly(t *testing.T) {
 	look, _ := fakeLook("claude", "gemini")
-	r := Detector{GOOS: "linux", GitPath: absent, Agents: []Agent{{ID: "codex", Command: "codex"}}, CLIs: AgentCLIs, LookPath: look}.Detect(context.Background())
+	r := Detector{GOOS: "linux", GitPath: absent, Stat: shellPresent, Agents: []Agent{{ID: "codex", Command: "codex"}}, CLIs: AgentCLIs, LookPath: look}.Detect(context.Background())
 	want := []Tool{
 		{ID: "git", Kind: "tool", Status: StatusMissing},
 		{ID: "codex", Kind: "agent_adapter", Status: StatusNotConfigured, Reason: ReasonNoBinaryConfigured},
 		{ID: "claude", Kind: "agent_cli", Status: StatusDetectedNoAdapter},
 		{ID: "cursor-agent", Kind: "agent_cli", Status: StatusMissing},
 		{ID: "gemini", Kind: "agent_cli", Status: StatusDetectedNoAdapter},
+		{ID: "shell", Kind: "tool", Status: StatusAvailable},
+		{ID: "docker", Kind: "tool", Status: StatusMissing},
 	}
 	if !slices.Equal(r.Tools, want) {
 		t.Fatalf("tools\n got %+v\nwant %+v", r.Tools, want)
@@ -490,7 +495,7 @@ func TestUnconfiguredCodexFoundOnPathSaysSo(t *testing.T) {
 	// A configured adapter is detected through Detect alone; PATH is not consulted.
 	*asked = nil
 	r = Detector{GOOS: "linux", GitPath: absent, Agents: []Agent{{ID: "codex", Command: "codex", Adapter: counting}}, LookPath: look}.Detect(context.Background())
-	if counting.calls.Load() != 1 || len(*asked) != 0 || r.Tools[1].Reason == ReasonFoundOnPath {
+	if counting.calls.Load() != 1 || slices.Contains(*asked, "codex") || r.Tools[1].Reason == ReasonFoundOnPath {
 		t.Fatalf("configured codex: calls %d, lookups %v, row %+v", counting.calls.Load(), *asked, r.Tools[1])
 	}
 }
@@ -536,7 +541,7 @@ func TestRealLookupFindsAgentCLIsWithoutStartingThem(t *testing.T) {
 	if r.Tools[1].Reason != ReasonFoundOnPath {
 		t.Fatalf("codex %+v", r.Tools[1])
 	}
-	for _, tool := range r.Tools[2:] {
+	for _, tool := range r.Tools[2:5] {
 		if tool.Status != StatusDetectedNoAdapter || tool.Version != "" || tool.Reason != ReasonNone {
 			t.Fatalf("agent CLI %+v", tool)
 		}
@@ -548,5 +553,65 @@ func TestRealLookupFindsAgentCLIsWithoutStartingThem(t *testing.T) {
 	data, _ := json.Marshal(r)
 	if strings.Contains(string(data), marker) || strings.Contains(string(data), dir) {
 		t.Fatalf("report leaks the lookup: %s", data)
+	}
+}
+
+// shellPresent stands in for a filesystem where /bin/sh is an executable file
+// and nothing else exists, so the shell row does not depend on the test host.
+func shellPresent(path string) (os.FileInfo, error) {
+	if path != "/bin/sh" {
+		return nil, os.ErrNotExist
+	}
+	return fakeFileInfo{mode: 0o755}, nil
+}
+
+type fakeFileInfo struct{ mode os.FileMode }
+
+func (fakeFileInfo) Name() string        { return "sh" }
+func (fakeFileInfo) Size() int64         { return 0 }
+func (f fakeFileInfo) Mode() os.FileMode { return f.mode }
+func (fakeFileInfo) ModTime() time.Time  { return time.Time{} }
+func (fakeFileInfo) IsDir() bool         { return false }
+func (fakeFileInfo) Sys() any            { return nil }
+
+func TestShellRowReportsEachOutcomeWithoutRunningIt(t *testing.T) {
+	notExec := func(string) (os.FileInfo, error) { return fakeFileInfo{mode: 0o644}, nil }
+	denied := func(string) (os.FileInfo, error) { return nil, os.ErrPermission }
+	cases := []struct {
+		name string
+		goos string
+		stat func(string) (os.FileInfo, error)
+		want Tool
+	}{
+		{"available", "linux", shellPresent, Tool{ID: "shell", Kind: "tool", Status: StatusAvailable}},
+		{"missing", "darwin", func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }, Tool{ID: "shell", Kind: "tool", Status: StatusMissing}},
+		{"not executable", "linux", notExec, Tool{ID: "shell", Kind: "tool", Status: StatusError, Reason: ReasonNotExecutable}},
+		{"unreadable", "linux", denied, Tool{ID: "shell", Kind: "tool", Status: StatusError, Reason: ReasonNotExecutable}},
+		{"windows", "windows", shellPresent, Tool{ID: "shell", Kind: "tool", Status: StatusUnsupportedPlatform, Reason: ReasonPlatformNotSupported}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := Detector{GOOS: c.goos, GitPath: absent, Stat: c.stat, LookPath: func(string) (string, error) { return "", exec.ErrNotFound }}.Detect(context.Background())
+			if got := r.Tools[len(r.Tools)-2]; got != c.want {
+				t.Fatalf("got %+v, want %+v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestDockerRowIsOnlyLookedUpAndNeverReportsAPath(t *testing.T) {
+	look, asked := fakeLook("docker")
+	r := Detector{GOOS: "windows", LookPath: look}.Detect(context.Background())
+	got := r.Tools[len(r.Tools)-1]
+	if got != (Tool{ID: "docker", Kind: "tool", Status: StatusAvailable}) || !slices.Contains(*asked, "docker") {
+		t.Fatalf("docker %+v, lookups %v", got, *asked)
+	}
+	data, _ := json.Marshal(r)
+	if strings.Contains(string(data), "LEAKMARKER") {
+		t.Fatalf("report leaks a looked-up path: %s", data)
+	}
+	r = Detector{GOOS: "linux", GitPath: absent, LookPath: func(string) (string, error) { return "", exec.ErrNotFound }}.Detect(context.Background())
+	if got := r.Tools[len(r.Tools)-1]; got.Status != StatusMissing {
+		t.Fatalf("docker %+v", got)
 	}
 }
