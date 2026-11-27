@@ -26,9 +26,13 @@ func checkResult(kind CheckKind) GateCheckPayload {
 func TestRunContextFactsRequireSchema15(t *testing.T) {
 	gate := runContextEvent(SchemaRunContext, checkResult(CheckTestCommand), GateCheck)
 	gate.AttemptID = "att"
+	check := checkResult(CheckTestCommand)
+	envelope := runContextEvent(SchemaRunContext, ReturnEnvelopePayload{Version: 1, UnitID: "a", Verdict: check.Verdict, Reason: check.Reason, Evidence: check.Evidence, IntendedScope: []string{"./"}, AttemptID: "att", CheckID: check.CheckID, SourceRunID: "run", SourceNodeID: "a", SourceNodeRunID: "nr", SourceGraphVersion: "sha256:" + strings.Repeat("a", 64)}, ReturnEnvelope)
+	envelope.AttemptID = "att"
 	facts := map[string]Event{
 		"run_started provenance": runContextEvent(SchemaRunContext, RunStartedPayload{NodeCount: 1, RepoName: "api", RepoBranch: "main", RepoCommit: "abc", RuntimeVersion: "v1"}, RunStarted),
 		"test_command check":     gate,
+		"test_command envelope":  envelope,
 		"executor_abandoned":     runContextEvent(SchemaRunContext, ExecutorAbandonedPayload{Reason: ReasonRunTimeout, BoundMS: 7000}, ExecutorAbandoned),
 	}
 	for name, e := range facts {

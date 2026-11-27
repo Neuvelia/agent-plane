@@ -36,6 +36,11 @@ func (e Event) Validate() error {
 		if len(p.Evidence) > 0 && p.Evidence[0].Kind == EvidenceKind(CheckChangedFilesScope) && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
 			return errors.New("changed-files return envelope requires schema 8")
 		}
+		if len(p.Evidence) > 0 && p.Evidence[0].Kind == EvidenceKind(CheckTestCommand) {
+			if err := requireRunContextSchema(e, "test_command return envelope"); err != nil {
+				return err
+			}
+		}
 		if err := p.Validate(); err != nil {
 			return err
 		}
