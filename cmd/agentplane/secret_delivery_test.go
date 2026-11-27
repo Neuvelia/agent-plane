@@ -109,19 +109,19 @@ func TestRunWithUnresolvedSecretFailsBeforeAnyRunIsStored(t *testing.T) {
 
 func TestExecutorSelectionUsesNodeExecutorOnlyWhenNeeded(t *testing.T) {
 	plain := parseGraphText(t, corpusHead+"inputs: {}\nnodes:\n"+nodeShell("a", "")+"edges: []\noutputs: {}\n")
-	if _, ok := selectExecutor(plain).(shell.Executor); !ok {
-		t.Errorf("a plain shell graph must keep the bare shell executor, got %T", selectExecutor(plain))
+	if _, ok := selectExecutor(plain, cliAgentRemedy).(shell.Executor); !ok {
+		t.Errorf("a plain shell graph must keep the bare shell executor, got %T", selectExecutor(plain, cliAgentRemedy))
 	}
 	assigned := parseGraphText(t, secretGraphText(dumpEnvNode("a", "GH_TOKEN: tok", "/tmp/never")))
-	if _, ok := selectExecutor(assigned).(nodeExecutor); !ok {
-		t.Errorf("a shell graph with secret_env needs the node executor, got %T", selectExecutor(assigned))
+	if _, ok := selectExecutor(assigned, cliAgentRemedy).(nodeExecutor); !ok {
+		t.Errorf("a shell graph with secret_env needs the node executor, got %T", selectExecutor(assigned, cliAgentRemedy))
 	}
 }
 
 func TestExecutorSelectionIgnoresEmptySecretEnv(t *testing.T) {
 	empty := parseGraphText(t, corpusHead+"inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true, secret_env: {}}\nedges: []\noutputs: {}\n")
-	if _, ok := selectExecutor(empty).(shell.Executor); !ok {
-		t.Errorf("an empty secret_env assigns nothing and must keep the bare shell executor, got %T", selectExecutor(empty))
+	if _, ok := selectExecutor(empty, cliAgentRemedy).(shell.Executor); !ok {
+		t.Errorf("an empty secret_env assigns nothing and must keep the bare shell executor, got %T", selectExecutor(empty, cliAgentRemedy))
 	}
 }
 
