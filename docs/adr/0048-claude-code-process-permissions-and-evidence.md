@@ -120,9 +120,9 @@ Consequences recorded as decisions:
 4. **Git control files.** In `acceptEdits`, `Edit` and `Write` can write `<workspace>/.git/config`,
    `.git/hooks/*` and `.git/info/attributes`. `internal/gitstate` snapshots exclude these, so a write there is
    invisible as evidence, yet the user's next plain `git` command can execute it. With Bash off this is a file
-   write leading to code execution outside any sandbox. Mitigation: the adapter hashes `.git/config`,
-   `.git/hooks/**` and `.git/info/attributes` (resolved real git directory for linked worktrees) before and after
-   the run and returns `claude_git` on any change. A deny rule such as `Edit(.git/**)`/`Write(.git/**)` is
+   write leading to code execution outside any sandbox. Mitigation: the adapter hashes `config`,
+   `config.worktree`, `info/exclude`, `info/attributes` and `hooks/**` (following a symlinked `hooks`) of the
+   shared Git directory and, for a linked worktree, of its own Git directory, before and after the run and returns `claude_git` on any change. A deny rule such as `Edit(.git/**)`/`Write(.git/**)` is
    ASSUMED and listed as a spike item for defense in depth.
 5. Network: model traffic is remote by definition (as with Codex); WebFetch, WebSearch, MCP, plugins, telemetry
    and the autoupdater are disabled.

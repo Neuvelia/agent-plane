@@ -75,7 +75,7 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 		pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		b := cliproc.NewLimitedBuffer(maxRecord)
-		err := runProcess(pctx, a.Binary, args, []string{}, "", nil, b, a.Termination)
+		err := runProcess(pctx, cliproc.Spec{Binary: a.Binary, Args: args, Env: []string{}, Stdout: b, Policy: a.Termination})
 		if err != nil || b.Overflow() {
 			return "", fail("detection", "Codex capability probe failed or exceeded bounds", err)
 		}
@@ -187,7 +187,7 @@ func (a Adapter) execute(ctx context.Context, in agent.AgentExecutionInput, log 
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream := progress{log: log, normalized: normalized, cancel: cancel}
-	err = runProcess(pctx, a.Binary, args, env, workspace, strings.NewReader(task), &stream, a.Termination)
+	err = runProcess(pctx, cliproc.Spec{Binary: a.Binary, Args: args, Env: env, Dir: workspace, Stdin: strings.NewReader(task), Stdout: &stream, Policy: a.Termination})
 	if stream.err != nil {
 		return out, stream.err
 	}

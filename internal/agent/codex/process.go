@@ -2,7 +2,6 @@ package codex
 
 import (
 	"context"
-	"io"
 
 	"agentplane/internal/agent"
 	"agentplane/internal/agent/cliproc"
@@ -11,8 +10,8 @@ import (
 
 // runProcess runs the Codex CLI through cliproc and maps its classified
 // failures to Codex diagnostics. The tree is always owned through proctree.
-func runProcess(ctx context.Context, binary string, args, env []string, dir string, stdin io.Reader, stdout io.Writer, policy proctree.Policy) error {
-	err := cliproc.Run(ctx, cliproc.Spec{Binary: binary, Args: args, Env: env, Dir: dir, Stdin: stdin, Stdout: stdout, Policy: policy})
+func runProcess(ctx context.Context, spec cliproc.Spec) error {
+	err := cliproc.Run(ctx, spec)
 	typed, ok := cliproc.AsError(err)
 	if !ok {
 		return err

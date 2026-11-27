@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"agentplane/internal/agent"
+	"agentplane/internal/agent/cliproc"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/proctree"
 )
@@ -20,10 +21,11 @@ import (
 // the final structured result.
 const maxRecord = 1 << 20
 
-// resultSchema is the JSON Schema handed to --json-schema.
+// resultSchema is the JSON Schema handed to --json-schema. It matches
+// parseOutput: nonempty summary and ref, optional artifact name.
 // ASSUMED(spike): the CLI accepts this schema inline and reports a conforming
 // value in the `structured_output` field of the final `result` record.
-const resultSchema = `{"type":"object","additionalProperties":false,"required":["summary","artifacts"],"properties":{"summary":{"type":"string"},"artifacts":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["ref","name"],"properties":{"ref":{"type":"string"},"name":{"type":"string"}}}}}}`
+const resultSchema = `{"type":"object","additionalProperties":false,"required":["summary","artifacts"],"properties":{"summary":{"type":"string","minLength":1},"artifacts":{"type":"array","items":{"type":"object","additionalProperties":false,"required":["ref"],"properties":{"ref":{"type":"string","minLength":1},"name":{"type":"string"}}}}}}`
 
 // Adapter never forwards the ambient environment. Binary must be absolute.
 type Adapter struct {
@@ -109,7 +111,7 @@ func (a Adapter) run(ctx context.Context, inv invocation, normalized func(events
 	pctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stream := newProgress(a.Workspaces, inv.workspace, normalized, cancel)
-	err := runProcess(pctx, a.Binary, arguments(), inv.env, inv.workspace, strings.NewReader(inv.prompt), stream, a.Termination)
+	err := runProcess(pctx, cliproc.Spec{Binary: a.Binary, Args: arguments(), Env: inv.env, Dir: inv.workspace, Stdin: strings.NewReader(inv.prompt), Stdout: stream, Policy: a.Termination})
 	if err = processFailure(ctx, stream, err); err != nil {
 		return out, err
 	}

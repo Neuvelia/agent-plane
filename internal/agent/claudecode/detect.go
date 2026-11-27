@@ -110,7 +110,7 @@ func (a Adapter) probe(ctx context.Context, home string, args ...string) (string
 	pctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
 	b := cliproc.NewLimitedBuffer(maxRecord)
-	err := runProcess(pctx, a.Binary, args, adapterEnvironment(home), home, nil, b, a.Termination)
+	err := runProcess(pctx, cliproc.Spec{Binary: a.Binary, Args: args, Env: adapterEnvironment(home), Dir: home, Stdout: b, Policy: a.Termination})
 	if err != nil || b.Overflow() {
 		return "", fail("detection", "Claude Code capability probe failed or exceeded bounds; script-based installs (for example npm shims using #!/usr/bin/env node) cannot run with the minimal adapter environment, so configure a standalone binary", err)
 	}
