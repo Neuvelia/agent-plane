@@ -8,6 +8,8 @@
 // behavior; the owning validator stays the authority on values.
 package fields
 
+import "reflect"
+
 // Kind is the editing control a field needs.
 type Kind string
 
@@ -178,3 +180,63 @@ func equals(v any, text string) bool {
 
 // IntPtr returns a pointer to v, for Min and Max.
 func IntPtr(v int) *int { return &v }
+
+// ReadsInput reports whether a node whose configuration is described by fs
+// reads its declared input inputID, given config. It is derived from the
+// descriptors alone (#180): an active InputName field whose value is inputID,
+// a List of InputName items that contains it, a Map whose keys are inputs
+// (InputTypes set) with inputID as a key, or a field whose Excludes rule names
+// the input (the input replaces the field, as an Agent's task does).
+func ReadsInput(fs []Field, config map[string]any, inputID string) bool {
+	for _, f := range Active(fs, config) {
+		if excludesInput(f, inputID) || fieldNamesInput(f, config[f.Key], inputID) {
+			return true
+		}
+	}
+	return false
+}
+
+func excludesInput(f Field, inputID string) bool {
+	for _, r := range f.Excludes {
+		if r.Input == inputID {
+			return true
+		}
+	}
+	return false
+}
+
+func fieldNamesInput(f Field, value any, inputID string) bool {
+	switch {
+	case f.Kind == InputName:
+		name, ok := value.(string)
+		return ok && name == inputID
+	case f.Kind == List && f.Item != nil && f.Item.Kind == InputName:
+		return listContains(value, inputID)
+	case f.Kind == Map && len(f.InputTypes) > 0:
+		return mapHasKey(value, inputID)
+	}
+	return false
+}
+
+// listContains and mapHasKey use reflection because a decoded config nests
+// named map and slice types (graph.NodeConfig) that this package cannot name.
+func listContains(value any, item string) bool {
+	list := reflect.ValueOf(value)
+	if list.Kind() != reflect.Slice {
+		return false
+	}
+	for i := range list.Len() {
+		if s, ok := list.Index(i).Interface().(string); ok && s == item {
+			return true
+		}
+	}
+	return false
+}
+
+func mapHasKey(value any, key string) bool {
+	m := reflect.ValueOf(value)
+	if m.Kind() != reflect.Map || m.Type().Key().Kind() != reflect.String {
+		return false
+	}
+	return m.MapIndex(reflect.ValueOf(key).Convert(m.Type().Key())).IsValid()
+}

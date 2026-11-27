@@ -363,8 +363,17 @@ semantic content: they change the semantic version, while name and
 A non-integer value (`1.5`, `"30"`, `true`, `null`) is a parse error and a value
 outside 1..86400, or a timeout on a `human` node, is a validation error. Both
 use code `E_TIMEOUT_INVALID` and name the path (`nodes.<id>.timeout_seconds` or
-`limits.run_timeout_seconds`). This slice only defines, validates and hashes the
-fields; the runtime does not enforce them yet (F3.4 Task 7).
+`limits.run_timeout_seconds`).
+
+The runtime enforces both. A node deadline ends only that attempt: the node
+fails with `failure_kind: timeout` and `reason: node_timeout`; in a loop it
+consumes one attempt and the next attempt gets no feedback. A run deadline ends
+the run `cancelled` with `reason: run_timeout` (CLI exit code 124). The
+executor is cancelled first so it can terminate its process tree gracefully;
+an executor that ignores cancellation is abandoned after a bounded wait and the
+node fails with `failure_kind: shutdown`. Emitted facts: `cancel_requested`,
+`process_terminated` (when the executor reports how its tree ended) and the
+`reason` on `node_finished`, `node_terminated` and `run_finished`.
 
 ## Edge definition
 
@@ -490,6 +499,11 @@ version uses a `sha256-v0:` prefix so a future algorithm can be distinguished.
   YAML documents returns an error and no partial definition.
 - Serialization accepts only schema v0 definitions.
 - YAML formatting may be normalized during serialization.
+- JSON is an equivalent representation (owner decision D15). A `.json` graph is
+  read by the same YAML parser, because YAML is a superset of JSON, and gets the
+  same strictness. A JSON graph and the equivalent YAML graph produce the same
+  `Definition` and the same `graph_version` (a contract test pins this).
+  Serialization still writes YAML.
 
 ## Secrets
 
@@ -586,11 +600,45 @@ Examples:
 - cycle;
 - required input with no source.
 
+An unknown node type is reported with the node ID, the path
+`nodes.<id>.type` and a suggestion listing the allowed types (`shell`,
+`agent`, `gate`, `human`). `graph validate` exits 3 for it, the same as any
+other graph error, rather than failing later at run time.
+
 ### Warnings
 
 F0.2 reports a warning for a declared node output that is not consumed by a
 valid, type-compatible edge or exposed as a graph output. Invalid edges do not
 count as consumers. This warning does not block execution.
+
+`W_EDGE_INPUT_UNUSED` (F0.2/F2.3) reports a valid edge whose target node does
+not read the input it receives. The location is the edge's `to` path
+(`edges[<n>].to`). Whether a node reads an input comes from the field
+descriptors its validator owns (`internal/fields`):
+
+- an input-name field (a Gate's `input`, `left_input` or `right_input`);
+- a list of input names (a Human node's `context_inputs`);
+- a map keyed by inputs (a Shell node's `input_env`);
+- a field the input replaces (an Agent's `task`);
+- a loop binding whose source is `node.inputs.<id>`.
+
+Two kinds of edge are exempt, because the edge itself is the contract
+(ADR-0043):
+
+- an edge from a human node's `decision` output. It makes the target wait for
+  approval.
+- an edge into a human node. The approval panel shows every input.
+
+Graph input bindings are not checked. The warning does not block execution.
+`graph validate`, `run`, `serve` and the editor all report it. This rule is a
+gap-closing choice for the roadmap's "unused edge" warnings (owner decision
+Q17).
+
+A human node with `on_reject: continue` needs its `decision` to reach a
+deterministic check: a graph output, a Gate that reads it, or a loop that
+forwards it to its Gate. Otherwise validation reports `E_HUMAN_REJECT_UNROUTED`
+(ADR-0043). A Gate node of kind `test_command` outside a loop is
+`E_GATE_KIND_LOOP_ONLY` (ADR-0042).
 
 Unreachable-node analysis and parallelism suggestions are later work.
 
@@ -615,6 +663,7 @@ below. Only `verdict: {type: string}` may be declared as an output.
 | --- | --- |
 | `command` | `command: /usr/bin/diff`, canonical absolute `cwd`, `left_input` and `right_input` name required string ports containing relative file paths |
 | `json_predicate` | `input` names a required JSON object port; `field` is a nonempty list of literal object keys, `operator: eq` or `ne`, exactly one of `expected` scalar/null or `expected_json` containing a JSON scalar/null literal string |
+| `test_command` | Loop-embedded Gate only (F1.4b, ADR-0042): `command`, optional `args`, canonical absolute `cwd`, optional `env_allowlist`/`env`, required `side_effects` (`none` or `workspace_writes`, a declaration that is recorded but not enforced) and `input` naming a required string or JSON port. Exit 0 is green, any other exit red with bounded evidence; not read-only |
 | `reported_file_scope` | `input` names a required JSON array port of `{path, provenance?}` records, `allowed_paths` is an explicit list of exact file paths or directory prefixes ending in `/` |
 
 Numeric equality is mathematical without float rounding (1 equals 1.0,

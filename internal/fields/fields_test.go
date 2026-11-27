@@ -89,3 +89,21 @@ func TestInputRulesDoNotGateKeys(t *testing.T) {
 		t.Error("an input rule changed which keys are accepted")
 	}
 }
+
+type namedConfig map[string]any
+
+func TestReadsInputFollowsTheDescriptors(t *testing.T) {
+	fs := []Field{
+		{ID: "t.env", Key: "env", Kind: Map, InputTypes: []string{"string"}},
+		{ID: "t.ctx", Key: "ctx", Kind: List, Item: &Field{ID: "t.ctx.item", Kind: InputName}},
+		{ID: "t.in", Key: "in", Kind: InputName},
+		{ID: "t.task", Key: "task", Kind: Text, Excludes: []Rule{{Input: "task"}}},
+		{ID: "t.plain", Key: "plain", Kind: Map},
+	}
+	config := map[string]any{"env": namedConfig{"a": "A"}, "ctx": []any{"b"}, "in": "c", "plain": map[string]any{"d": "D"}}
+	for input, want := range map[string]bool{"a": true, "b": true, "c": true, "task": true, "d": false, "e": false} {
+		if got := ReadsInput(fs, config, input); got != want {
+			t.Errorf("ReadsInput(%q) = %v, want %v", input, got, want)
+		}
+	}
+}

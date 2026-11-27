@@ -51,9 +51,12 @@ var corpus = map[string]string{
 		"edges:\n  - {from: a.outputs.o, to: b.inputs.i}\n  - {from: c.outputs.o, to: b.inputs.i}\noutputs: {}\n",
 	"E_GRAPH_CYCLE": corpusHead + "inputs: {}\nnodes:\n" + nodeShell("a", "    inputs:\n      i: {type: string}\n    outputs:\n      o: {type: string}\n") + nodeShell("b", "    inputs:\n      i: {type: string}\n    outputs:\n      o: {type: string}\n") +
 		"edges:\n  - {from: a.outputs.o, to: b.inputs.i}\n  - {from: b.outputs.o, to: a.inputs.i}\noutputs: {}\n",
+	"W_EDGE_INPUT_UNUSED":      corpusHead + "inputs: {}\nnodes:\n" + nodeShell("a", "    outputs:\n      o: {type: string}\n") + nodeShell("b", "    inputs:\n      i: {type: string}\n") + "edges:\n  - {from: a.outputs.o, to: b.inputs.i}\noutputs: {}\n",
 	"W_DECLARED_OUTPUT_UNUSED": corpusHead + "inputs: {}\nnodes:\n" + nodeShell("a", "    outputs:\n      o: {type: string}\n") + "edges: []\noutputs: {}\n",
 	"E_UNIT_INVALID":           corpusHead + "inputs: {}\nunits: [a]\nnodes:\n" + nodeShell("a", "") + "edges: []\noutputs: {}\n",
 	"E_HUMAN_INVALID":          corpusHead + "inputs: {}\nnodes:\n  h:\n    type: human\nedges: []\noutputs: {}\n",
+	"E_HUMAN_REJECT_UNROUTED":  corpusHead + "inputs: {}\nnodes:\n  h:\n    type: human\n    config: {on_reject: continue}\n    outputs: {decision: {type: string, required: true}}\nedges: []\noutputs: {}\n",
+	"E_GATE_KIND_LOOP_ONLY":    corpusHead + "inputs: {}\nnodes:\n  t:\n    type: gate\n    config: {check_id: tests, kind: test_command, command: /usr/bin/true, cwd: /tmp, side_effects: none, input: c}\n    inputs: {c: {type: string, required: true}}\nedges: []\noutputs: {}\n",
 	"E_LOOP_INVALID":           corpusHead + "inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    loop:\n      max_attempts: 2\n      gate:\n        config: {check_id: c, kind: json_predicate}\n      bindings: []\nedges: []\noutputs: {}\n",
 	"E_NODE_CONFIG_INVALID":    corpusHead + "inputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: \"\"}\nedges: []\noutputs: {}\n",
 	"E_TIMEOUT_INVALID":        corpusHead + "inputs: {}\nlimits: {run_timeout_seconds: 0}\nnodes:\n" + nodeShell("a", "") + "edges: []\noutputs: {}\n",

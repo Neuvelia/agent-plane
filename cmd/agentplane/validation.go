@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"agentplane/internal/domain/graph"
+	"agentplane/internal/fields"
 )
 
 // nodeTypeUnknownCode is the diagnostic for a node whose type no executor
@@ -23,7 +24,7 @@ const nodeConfigCode = "E_NODE_CONFIG_INVALID"
 // The executors' checks are side-effect free (nothing runs, nothing is read). Configuration diagnostics follow the graph ones in node-id
 // order, so the result is deterministic.
 func validateGraph(def *graph.Definition) graph.ValidationResult {
-	result := graph.Validate(def)
+	result := graph.ValidateWith(def, catalogueInputUse())
 	executor := nodeExecutor{}
 	ids := sortedNodeIDs(def)
 	result.Diagnostics = append(result.Diagnostics, nodeTypeDiagnostics(def, ids)...)
@@ -51,7 +52,7 @@ func validateGraph(def *graph.Definition) graph.ValidationResult {
 // graph rules and the node types. Node configuration is left to the executors,
 // which report it as a run failure.
 func validateForRun(def *graph.Definition) graph.ValidationResult {
-	result := graph.Validate(def)
+	result := graph.ValidateWith(def, catalogueInputUse())
 	result.Diagnostics = append(result.Diagnostics, nodeTypeDiagnostics(def, sortedNodeIDs(def))...)
 	return result
 }
@@ -146,4 +147,21 @@ func graphIDText(id string) string {
 		return id
 	}
 	return graph.InvalidIdentifierText
+}
+
+// catalogueInputUse judges, from the node catalogue's field descriptors, which
+// inputs a node's configuration reads (#180). A node type outside the
+// catalogue reads every input: E_NODE_TYPE_UNKNOWN already reports it.
+func catalogueInputUse() graph.InputUse {
+	descriptors := map[string][]fields.Field{}
+	for _, t := range nodeCatalogue() {
+		descriptors[t.Type] = t.Config
+	}
+	return func(node graph.NodeDefinition, inputID string) bool {
+		fs, known := descriptors[node.Type]
+		if !known {
+			return true
+		}
+		return fields.ReadsInput(fs, node.Config, inputID)
+	}
 }

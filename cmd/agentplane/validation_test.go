@@ -247,3 +247,126 @@ func mustJSON(t *testing.T, v any) string {
 	}
 	return string(b)
 }
+
+// inputUseGraph is a graph whose edges exercise W_EDGE_INPUT_UNUSED: one per
+// way a node reads an input, two the target ignores, and the two approval
+// edges that are exempt (ADR-0043).
+const inputUseGraph = `schema_version: 0
+id: input-use
+inputs: {}
+nodes:
+  src:
+    type: shell
+    config: {command: /usr/bin/true}
+    outputs: {stdout: {type: string}}
+  ignores:
+    type: shell
+    config: {command: /usr/bin/true}
+    inputs: {text: {type: string, required: true}}
+  reads:
+    type: shell
+    config: {command: /usr/bin/true, input_env: {text: TEXT}}
+    inputs: {text: {type: string, required: true}}
+  looped:
+    type: shell
+    config: {command: /usr/bin/true, stdout_json: true}
+    inputs: {text: {type: string, required: true}}
+    outputs: {json: {type: json, required: true}}
+    loop:
+      max_attempts: 2
+      gate:
+        inputs: {seen: {type: string, required: true}, candidate: {type: json, required: true}}
+        config: {check_id: c, kind: json_predicate, input: candidate, field: [ok], operator: eq, expected: true}
+      bindings:
+        - {from: node.inputs.text, to: gate.inputs.seen}
+        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+  check:
+    type: gate
+    config: {check_id: same, kind: command, command: /usr/bin/diff, left_input: a, right_input: b}
+    inputs: {a: {type: string, required: true}, b: {type: string, required: true}, extra: {type: string, required: true}}
+  ask:
+    type: human
+    config: {prompt: "go?"}
+    inputs: {shown: {type: string, required: true}}
+    outputs: {decision: {type: string, required: true}}
+  agent:
+    type: agent
+    config: {adapter: codex, workspace: /tmp}
+    inputs: {task: {type: string, required: true}, start: {type: string, required: true}}
+edges:
+  - {from: src.outputs.stdout, to: ignores.inputs.text}
+  - {from: src.outputs.stdout, to: reads.inputs.text}
+  - {from: src.outputs.stdout, to: looped.inputs.text}
+  - {from: src.outputs.stdout, to: check.inputs.a}
+  - {from: src.outputs.stdout, to: check.inputs.b}
+  - {from: src.outputs.stdout, to: check.inputs.extra}
+  - {from: src.outputs.stdout, to: ask.inputs.shown}
+  - {from: src.outputs.stdout, to: agent.inputs.task}
+  - {from: ask.outputs.decision, to: agent.inputs.start}
+outputs:
+  out: {from: looped.outputs.json}
+`
+
+// The warning is derived from the field descriptors, never blocks, and spares
+// the approval edges: the decision edge that makes an Agent wait for approval
+// and the edges that feed an approval panel (#180, ADR-0043).
+func TestEdgeIntoAnInputTheTargetDoesNotReadWarns(t *testing.T) {
+	result := validateGraph(parseGraph(t, inputUseGraph))
+	var warned []string
+	for _, d := range result.Diagnostics {
+		if d.Code != "W_EDGE_INPUT_UNUSED" {
+			continue
+		}
+		if d.Severity != graph.SeverityWarning {
+			t.Fatalf("W_EDGE_INPUT_UNUSED must be a warning: %+v", d)
+		}
+		warned = append(warned, d.Location.Path)
+		if strings.Contains(d.Message, "ignores") && !strings.Contains(d.Suggestion, "input_env") {
+			t.Fatalf("a shell suggestion names input_env: %q", d.Suggestion)
+		}
+	}
+	if want := []string{"edges[0].to", "edges[5].to"}; strings.Join(warned, ",") != strings.Join(want, ",") {
+		t.Fatalf("warned at %v, want %v (diagnostics %+v)", warned, want, result.Diagnostics)
+	}
+}
+
+// With descriptors available, on_reject: continue also needs the Gate to read
+// the decision input; an input the Gate ignores judges nothing (ADR-0043).
+//
+// roadmap: F2.10-AC2
+func TestOnRejectContinueNeedsAGateThatReadsTheDecision(t *testing.T) {
+	const doc = `schema_version: 0
+id: reject-route
+inputs: {}
+nodes:
+  ask:
+    type: human
+    config: {prompt: "ship?", on_reject: continue}
+    outputs: {decision: {type: string, required: true}}
+  check:
+    type: gate
+    config: {check_id: approved, kind: command, command: /usr/bin/diff, left_input: %s, right_input: %s}
+    inputs: {decision: {type: string, required: true}, other: {type: string, required: true}}
+  src:
+    type: shell
+    config: {command: /usr/bin/true}
+    outputs: {stdout: {type: string}}
+edges:
+  - {from: ask.outputs.decision, to: check.inputs.decision}
+  - {from: src.outputs.stdout, to: check.inputs.other}
+outputs: {}
+`
+	for _, tc := range []struct {
+		left, right string
+		routed      bool
+	}{{"decision", "other", true}, {"other", "other", false}} {
+		result := validateGraph(parseGraph(t, strings.Replace(strings.Replace(doc, "%s", tc.left, 1), "%s", tc.right, 1)))
+		unrouted := false
+		for _, d := range result.Diagnostics {
+			unrouted = unrouted || d.Code == "E_HUMAN_REJECT_UNROUTED"
+		}
+		if unrouted == tc.routed {
+			t.Fatalf("left_input %s: unrouted=%v, diagnostics %+v", tc.left, unrouted, result.Diagnostics)
+		}
+	}
+}
