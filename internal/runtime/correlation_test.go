@@ -40,7 +40,7 @@ func (p *combinedProbe) ExecuteNodeWithLogs(_ context.Context, _ string, _ graph
 }
 
 func TestSchedulerExecutorCorrelationCompatibility(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"one": {Type: "test"}, "two": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"one": {Type: "shell"}, "two": {Type: "shell"}})
 	legacyCalls := 0
 	legacy := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		legacyCalls++
@@ -72,7 +72,7 @@ func TestSchedulerExecutorCorrelationCompatibility(t *testing.T) {
 }
 func TestSchedulerExistingLogsTakePrecedenceOverCorrelation(t *testing.T) {
 	p := &combinedProbe{correlationProbe: &correlationProbe{received: map[string]run.ExecutionCorrelation{}}}
-	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "test"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
+	result, err := Run(context.Background(), definition(map[string]graph.NodeDefinition{"one": {Type: "shell"}}), nil, p, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunSucceeded || p.logs != 1 || p.legacy != 0 || len(p.received) != 0 {
 		t.Fatalf("precedence=%+v %+v %v", p, result, err)
 	}

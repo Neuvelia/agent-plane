@@ -44,6 +44,20 @@ func (r unitRegistry) begin(id string, aid events.AttemptID) error {
 	u.published = false
 	return nil
 }
+
+// closeUnchecked ends the current attempt of unit id without a Return Envelope.
+// Only an attempt that produced no Check Result (a node deadline, F3.4) ends
+// this way: there is no verdict to publish, nothing is accepted, and the next
+// attempt may begin (ADR-0044).
+func (r unitRegistry) closeUnchecked(id string, aid events.AttemptID) error {
+	u := r[id]
+	if u == nil || aid == "" || u.current != aid || u.published || u.accepted != "" {
+		return fmt.Errorf("unit %q can close only its current unpublished attempt", id)
+	}
+	u.published = true
+	return nil
+}
+
 func (r unitRegistry) envelope(id string, aid events.AttemptID, check events.CheckResult) (events.ReturnEnvelopePayload, error) {
 	u := r[id]
 	if u == nil {

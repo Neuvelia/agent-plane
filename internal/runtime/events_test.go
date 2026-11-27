@@ -27,7 +27,7 @@ func (f streamingExecutorFunc) ExecuteNodeWithLogs(ctx context.Context, id strin
 }
 
 func TestRunRedactsSplitSecretsBeforeLogEvents(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	exec := streamingExecutorFunc(func(_ context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
 		observe("stdout", []byte("before sec"))
 		observe("stderr", []byte("error sec"))
@@ -67,7 +67,7 @@ func TestRunRejectsRedactionsWithoutSafeMarkerBeforeStart(t *testing.T) {
 	for i := range allBytes {
 		allBytes[i] = byte(i)
 	}
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		t.Fatal("executor called")
 		return nil, nil
@@ -79,7 +79,7 @@ func TestRunRejectsRedactionsWithoutSafeMarkerBeforeStart(t *testing.T) {
 }
 
 func TestConcurrentRunLogCorrelation(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	started := make(chan struct{}, 2)
 	release := make(chan struct{})
 	exec := streamingExecutorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
@@ -130,7 +130,7 @@ func TestConcurrentRunLogCorrelation(t *testing.T) {
 }
 
 func TestLateLogCallbackDoesNotChangeFinishedRun(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	var late func(string, []byte)
 	exec := streamingExecutorFunc(func(_ context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
 		observe("stdout", []byte("during"))
@@ -160,7 +160,7 @@ func TestLateLogCallbackDoesNotChangeFinishedRun(t *testing.T) {
 
 // roadmap: F0.6-AC1
 func TestRunEmitsCorrelatedLifecycleAndUniqueIDs(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
@@ -196,7 +196,7 @@ func TestRunEmitsCorrelatedLifecycleAndUniqueIDs(t *testing.T) {
 }
 
 func TestRunDeliversLiveEventsInSequence(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	started := make(chan struct{})
 	release := make(chan struct{})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
@@ -232,7 +232,7 @@ func TestRunDeliversLiveEventsInSequence(t *testing.T) {
 }
 
 func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
 		if id == "a" {
 			return nil, errors.New("private error")
@@ -267,7 +267,7 @@ func TestUnstartedTerminalsNeverEmitNodeFinished(t *testing.T) {
 
 // roadmap: F0.6-AC2
 func TestConcurrentRunEventsHaveUniqueMonotonicSequence(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	started := make(chan struct{}, 2)
 	release := make(chan struct{})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
@@ -305,8 +305,8 @@ func TestConcurrentRunEventsHaveUniqueMonotonicSequence(t *testing.T) {
 
 func TestBindingFailureEmitsTerminalWithoutStart(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
-		"source": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
-		"target": {Type: "test", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"source": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"target": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 	}, graph.EdgeDefinition{From: "source.outputs.value", To: "target.inputs.value"})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
@@ -334,7 +334,7 @@ func TestBindingFailureEmitsTerminalWithoutStart(t *testing.T) {
 }
 
 func TestCancelledRunHasOneFinalEvent(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	exec := executorFunc(func(ctx context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
@@ -368,7 +368,7 @@ func TestCancelledRunHasOneFinalEvent(t *testing.T) {
 }
 
 func TestPreflightFailureHasNoRunIdentityOrEvents(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	def.ID = "INVALID"
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		t.Fatal("executor called")
@@ -381,7 +381,7 @@ func TestPreflightFailureHasNoRunIdentityOrEvents(t *testing.T) {
 }
 
 func TestGraphOutputFailureFinishesAfterSuccessfulNode(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}}})
 	def.Outputs["answer"] = graph.OutputDefinition{From: "worker.outputs.value"}
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil

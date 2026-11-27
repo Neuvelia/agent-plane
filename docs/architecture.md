@@ -352,6 +352,23 @@ value. The runtime does not emit `policy_evaluated` or `policy_violation` yet (F
 `secret_in_workspace` Check Result, one per granted node run, as an audit fact that changes no outcome
 (F3.8 requirement 13, ADR-0029).
 
+## Run provenance, test commands and abandoned executors (schema 15)
+
+Event schema 15 (ADR-0044) adds three facts. A reader rejects each of them below
+schema 15, so a schema-14 reader reports a newer log as an unsupported schema
+instead of failing on an unknown field.
+
+- **`run_started` provenance (F2.9, F3.6).** Optional fields `repo_name`,
+  `repo_id`, `repo_branch`, `repo_commit` and `runtime_version`:
+  - `repo_name` is a base name, never a path.
+  - `repo_id` is a 16-hex-digit hash of the work-tree path, which keeps two
+    repositories with the same name apart.
+  - Collection is best effort and bounded at 2 seconds before `run_started`.
+- **Gate check kind `test_command` (F1.4b, ADR-0042).** Valid only in a loop.
+  Graph validation and the Gate executor both refuse it standalone.
+- **`executor_abandoned` (F3.4).** Emitted when an executor ignored a timeout
+  past the abandon bound. It precedes the node's terminal event.
+
 ## Workspace isolation facts (F3.1)
 
 Event schema 11 adds five typed, bounded facts for isolated Agent units:

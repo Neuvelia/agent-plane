@@ -136,3 +136,25 @@ func storeFixture(t *testing.T, s Store, log []byte) {
 		t.Fatal(err)
 	}
 }
+
+func TestSummaryCarriesRunStartedProvenance(t *testing.T) {
+	s := Store{Dir: t.TempDir()}
+	now := time.Now().UTC()
+	write(t, s, runA,
+		ev(runA, 1, events.RunStarted, events.RunStartedPayload{NodeCount: 1, RepoName: "r", RepoBranch: "main", RepoCommit: "abc", RuntimeVersion: "1.2"}, now),
+		finished(runA, 2, "succeeded", now))
+	rec, err := s.Read(runA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := rec.Summary
+	if got.RepoName != "r" || got.RepoBranch != "main" || got.RepoCommit != "abc" || got.RuntimeVersion != "1.2" {
+		t.Fatalf("summary = %#v", got)
+	}
+	// A log written before the fields existed decodes with them empty.
+	write(t, s, runB, started(runB, now), finished(runB, 2, "succeeded", now))
+	old, err := s.Read(runB)
+	if err != nil || old.Summary.RepoBranch != "" || old.Summary.RuntimeVersion != "" {
+		t.Fatalf("old summary = %#v, %v", old.Summary, err)
+	}
+}

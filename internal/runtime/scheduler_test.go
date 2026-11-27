@@ -84,7 +84,7 @@ func recordPeak(peak *atomic.Int32, active int32) {
 }
 
 func TestRunRejectsOptionsBeforeGraphValidationWithoutStarting(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	def.ID = "INVALID"
 	var executed, persisted atomic.Bool
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
@@ -105,9 +105,9 @@ func TestRunRejectsOptionsBeforeGraphValidationWithoutStarting(t *testing.T) {
 
 func TestRunLinearDAGResolvesBoundInputs(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
-		"a": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
-		"b": {Type: "test", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
-		"c": {Type: "test", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"a": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"b": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"c": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 	},
 		graph.EdgeDefinition{From: "a.outputs.value", To: "b.inputs.value"},
 		graph.EdgeDefinition{From: "b.outputs.value", To: "c.inputs.value"},
@@ -141,9 +141,9 @@ func TestRunLinearDAGResolvesBoundInputs(t *testing.T) {
 // roadmap: F0.3-AC2, F0.4-AC1, F0.4-AC2
 func TestRunDiamondWaitsForBothBranchesAndAllowsOverlap(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
-		"left":  {Type: "test", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString}}},
-		"right": {Type: "test", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString}}},
-		"merge": {Type: "test", Inputs: map[string]graph.PortDefinition{
+		"left":  {Type: "shell", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString}}},
+		"right": {Type: "shell", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString}}},
+		"merge": {Type: "shell", Inputs: map[string]graph.PortDefinition{
 			"left": {Type: graph.ValueTypeString, Required: true}, "right": {Type: graph.ValueTypeString, Required: true},
 		}},
 	},
@@ -198,7 +198,7 @@ func TestRunDiamondWaitsForBothBranchesAndAllowsOverlap(t *testing.T) {
 }
 
 func TestRunConcurrencyLimitOneSerializesDisconnectedNodes(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	started := make(chan string, 2)
 	release := make(chan struct{})
 	var active, peak atomic.Int32
@@ -229,7 +229,7 @@ func TestRunConcurrencyLimitOneSerializesDisconnectedNodes(t *testing.T) {
 }
 
 func TestRunConcurrencyLimitTwoDoesNotStartThirdNode(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}, "c": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}, "c": {Type: "shell"}})
 	started := make(chan string, 3)
 	release := make(chan struct{})
 	var active, peak atomic.Int32
@@ -262,10 +262,10 @@ func TestRunConcurrencyLimitTwoDoesNotStartThirdNode(t *testing.T) {
 
 func TestRunFailFastSkipsDownstreamAndQueuedIndependentWork(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
-		"a": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
-		"b": {Type: "test"},
-		"c": {Type: "test", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}},
-		"d": {Type: "test"},
+		"a": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"b": {Type: "shell"},
+		"c": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString, Required: true}}},
+		"d": {Type: "shell"},
 	}, graph.EdgeDefinition{From: "a.outputs.value", To: "c.inputs.value"})
 	failure := errors.New("a failed")
 	started := make(chan string, 2)
@@ -312,7 +312,7 @@ func TestRunFailFastSkipsDownstreamAndQueuedIndependentWork(t *testing.T) {
 }
 
 func TestRunCancellationDoesNotMaskIndependentFailure(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	failure := errors.New("independent failure")
@@ -336,7 +336,7 @@ func TestRunCancellationDoesNotMaskIndependentFailure(t *testing.T) {
 }
 
 func TestRunChoosesLowestNodeIDWhenConcurrentNodesFail(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	started := make(chan string, 2)
 	releaseA, releaseB := make(chan struct{}), make(chan struct{})
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
@@ -366,8 +366,8 @@ func TestRunChoosesLowestNodeIDWhenConcurrentNodesFail(t *testing.T) {
 // roadmap: F0.3-AC1
 func TestRunMissingBoundOutputFailsConsumerBeforeExecution(t *testing.T) {
 	def := definition(map[string]graph.NodeDefinition{
-		"source": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
-		"target": {Type: "test", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"source": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"target": {Type: "shell", Inputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 	}, graph.EdgeDefinition{From: "source.outputs.value", To: "target.inputs.value"})
 	calledTarget := false
 	exec := executorFunc(func(_ context.Context, id string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
@@ -398,7 +398,7 @@ func TestRunRejectsInvalidExecutorOutputs(t *testing.T) {
 		{"undeclared", graph.PortDefinition{Type: graph.ValueTypeString}, map[string]graph.Value{"extra": graph.NewStringValue("x")}, "E_NODE_OUTPUT_UNDECLARED"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": test.port}}})
+			def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": test.port}}})
 			exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 				return test.outputs, nil
 			})
@@ -415,7 +415,7 @@ func TestRunRejectsInvalidExecutorOutputs(t *testing.T) {
 }
 
 func TestRunValidatesGraphInputsAndResolvesBeforeExecution(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}}})
 	def.Inputs["message"] = graph.InputDefinition{Type: graph.ValueTypeString, Required: true}
 	def.GraphInputBindings = []graph.GraphInputBindingDefinition{{From: "inputs.message", To: "worker.inputs.text"}}
 	called := false
@@ -436,7 +436,7 @@ func TestRunValidatesGraphInputsAndResolvesBeforeExecution(t *testing.T) {
 }
 
 func TestRunCancellationStopsDispatchAndTerminates(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	exec := executorFunc(func(ctx context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
@@ -458,7 +458,7 @@ func TestRunCancellationStopsDispatchAndTerminates(t *testing.T) {
 }
 
 func TestRunCancellationAcceptsChildContextError(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	ctx, cancel := context.WithCancel(context.Background())
 	started := make(chan struct{})
 	exec := executorFunc(func(ctx context.Context, _ string, _ graph.NodeDefinition, _ map[string]graph.Value) (map[string]graph.Value, error) {
@@ -480,7 +480,7 @@ func TestRunCancellationAcceptsChildContextError(t *testing.T) {
 }
 
 func TestRunDoesNotDispatchAfterCancellationDuringReadiness(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"a": {Type: "test"}, "b": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}, "b": {Type: "shell"}})
 	base, cancel := context.WithCancel(context.Background())
 	ctx := &cancelAfterFirstErr{Context: base, cancel: cancel}
 	called := false
@@ -496,7 +496,7 @@ func TestRunDoesNotDispatchAfterCancellationDuringReadiness(t *testing.T) {
 
 // roadmap: F0.4-AC3
 func TestRunTransitionsAreOrderedAndTerminalExactlyOnce(t *testing.T) {
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test"}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell"}})
 	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
 		return nil, nil
 	})
@@ -528,7 +528,7 @@ func TestRunEmptyGraphAndGraphOutputFailure(t *testing.T) {
 		t.Fatalf("empty run = (%#v, %v), called=%v", result, err, called)
 	}
 
-	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}}})
+	def := definition(map[string]graph.NodeDefinition{"worker": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}}})
 	def.Outputs["answer"] = graph.OutputDefinition{From: "worker.outputs.value"}
 	result, err = Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}})
 	if err != nil || result.State != run.RunFailed || result.Failure == nil || result.Failure.Kind != run.FailureGraphOutput || nodeResult(t, result, "worker").State != run.NodeSucceeded {
@@ -547,8 +547,8 @@ func TestRunResultsAndTransitionsAreStable(t *testing.T) {
 		return result
 	}
 	def := definition(map[string]graph.NodeDefinition{
-		"zeta":  {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
-		"alpha": {Type: "test", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"zeta":  {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
+		"alpha": {Type: "shell", Outputs: map[string]graph.PortDefinition{"value": {Type: graph.ValueTypeString}}},
 	})
 	def.Outputs["last"] = graph.OutputDefinition{From: "zeta.outputs.value"}
 	def.Outputs["first"] = graph.OutputDefinition{From: "alpha.outputs.value"}
@@ -570,5 +570,44 @@ func TestRunResultsAndTransitionsAreStable(t *testing.T) {
 	if !reflect.DeepEqual([]string{first.Nodes[0].NodeID, first.Nodes[1].NodeID}, []string{"alpha", "zeta"}) ||
 		!reflect.DeepEqual([]string{first.Outputs[0].Name, first.Outputs[1].Name}, []string{"first", "last"}) {
 		t.Fatalf("ordered results = %#v / %#v", first.Nodes, first.Outputs)
+	}
+}
+
+func TestRunStartedRecordsOptionalRunMetadata(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	def := definition(map[string]graph.NodeDefinition{"a": {Type: "shell"}})
+	exec := executorFunc(func(context.Context, string, graph.NodeDefinition, map[string]graph.Value) (map[string]graph.Value, error) {
+		return nil, nil
+	})
+	for name, provider := range map[string]func(context.Context) RunMetadata{
+		"recorded": func(context.Context) RunMetadata {
+			return RunMetadata{RepoName: "r", RepoBranch: "main", RepoCommit: "abc123", RuntimeVersion: "9.9"}
+		},
+		"panicking": func(context.Context) RunMetadata { panic("boom") },
+		"absent":    nil,
+		// A provider that ignores its context cannot hold run_started past the
+		// bound (F2.9, F3.6).
+		"ignoring context": func(context.Context) RunMetadata { <-release; return RunMetadata{RepoName: "late"} },
+	} {
+		t.Run(name, func(t *testing.T) {
+			result, err := Run(context.Background(), def, nil, exec, Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, MaxConcurrency: 1, RunMetadata: provider})
+			if err != nil || result.State != run.RunSucceeded {
+				t.Fatalf("Run() = (%#v, %v)", result.State, err)
+			}
+			var got events.RunStartedPayload
+			for _, e := range result.Events {
+				if p, ok := e.Payload.(events.RunStartedPayload); ok {
+					got = p
+				}
+			}
+			want := events.RunStartedPayload{NodeCount: 1}
+			if name == "recorded" {
+				want = events.RunStartedPayload{NodeCount: 1, RepoName: "r", RepoBranch: "main", RepoCommit: "abc123", RuntimeVersion: "9.9"}
+			}
+			if got != want {
+				t.Fatalf("run_started = %#v, want %#v", got, want)
+			}
+		})
 	}
 }

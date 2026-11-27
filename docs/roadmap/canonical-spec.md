@@ -81,7 +81,7 @@ agentplane version
 
 Every event carries:
 
-- `event_schema_version` (currently **14**), `type`, timestamp and `sequence`
+- `event_schema_version` (currently **15**, ADR-0044), `type`, timestamp and `sequence`
   (monotonic per run);
 - `run_id`, `node_run_id` and `attempt_id` where relevant;
 - `graph_version`;
@@ -108,8 +108,17 @@ Readers accept every earlier schema and reject newer ones. The code
 | `value_recorded` | 10 | F2.3-E6 / ADR-0023 | none |
 | `workspace_prepared`, `workspace_integrated`, `workspace_conflict`, `workspace_released`, `source_workspace_changed` | 11 | F3.1 / ADR-0024 | none |
 | `attempt_diff` | 12 | F2.8b / ADR-0026 | none |
-| `cancel_requested`, `process_terminated` | 13 | F3.4 / ADR-0028 (defined, not yet emitted) | none |
+| `cancel_requested`, `process_terminated` | 13 | F3.4 / ADR-0028 | none |
 | `policy_evaluated`, `policy_violation` | 14 | F3.8, F3.9 / ADR-0029 (defined, not yet emitted) | none |
+| `executor_abandoned` | 15 | F3.4 / ADR-0044 | none |
+
+Schema 15 also adds two things to existing types (ADR-0044):
+
+- the optional `run_started` fields `repo_name`, `repo_id`, `repo_branch`,
+  `repo_commit` and `runtime_version` (F2.9, F3.6);
+- the `gate_check` kind `test_command` (F1.4b, ADR-0042).
+
+A reader rejects each of them below schema 15.
 
 The architecture plan's `ArtifactCreated` has no canonical event yet. It
 arrives with F3.5 (artifact store).
@@ -126,8 +135,9 @@ arrives with F3.5 (artifact store).
   `depends_on`, no `foreach`, no `when`. `{{ }}` is never interpolated.
 - **Graph version** is the computed semantic hash `graph_version`. Layout
   metadata does not change it. There is no field for an author-written version.
-- **JSON** files are accepted through the YAML parser; a contract test is
-  pending (#179).
+- **JSON** files are accepted through the YAML parser. A contract test
+  (`TestJSONAndYAMLGraphsAreEquivalent`, #179) proves equal definitions and
+  equal semantic versions.
 - **Node types:** `shell`, `agent`, `gate`, `human`. An unknown type must be a
   validation error; this is not implemented yet (#178).
 

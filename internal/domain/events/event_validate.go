@@ -171,6 +171,11 @@ func (e Event) Validate() error {
 		if p.Kind == CheckChangedFilesScope && e.SchemaVersion != 0 && e.SchemaVersion < 8 {
 			return errors.New("changed-files scope requires schema 8")
 		}
+		if p.Kind == CheckTestCommand {
+			if err := requireRunContextSchema(e, "test_command check"); err != nil {
+				return err
+			}
+		}
 		if isPolicyCheckKind(p.Kind) && e.SchemaVersion != 0 && e.SchemaVersion < SchemaPolicy {
 			return fmt.Errorf("%s check requires schema %d", p.Kind, SchemaPolicy)
 		}
@@ -198,6 +203,14 @@ func (e Event) Validate() error {
 		payloadType = NodeEvidence
 	case RunStartedPayload:
 		payloadType = RunStarted
+		if err := validateRunStarted(e, p); err != nil {
+			return err
+		}
+	case ExecutorAbandonedPayload:
+		payloadType = ExecutorAbandoned
+		if err := validateExecutorAbandoned(e, p); err != nil {
+			return err
+		}
 	case NodeReadyPayload:
 		payloadType = NodeReady
 	case NodeStartedPayload:
