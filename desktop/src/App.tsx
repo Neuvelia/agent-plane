@@ -9,7 +9,8 @@ import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, type NavEntry } from './ui/shell'
 import type { ChosenGraph } from './types'
-import { Approvals, RunConfig, RunInspector, RunsList } from './views'
+import { NewRun } from './NewRun'
+import { Approvals, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
 import { Welcome } from './welcome'
 import { RecentRuns } from './sidebarRecent'
@@ -120,7 +121,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'inbox' })} />}
-          {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
+          {route.name === 'new' && <NewRun key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
     </div>

@@ -148,6 +148,14 @@ outputs: {}
     const template = fs.readFileSync(path.join(root, '.agents', 'templates', 'agent-scoped-approval.yaml'), 'utf8').replace(/^id: agent-scoped-approval$/m, 'id: new-graph')
     write('graph-validate-template-agent-scoped-approval.json', (await call('POST', '/graphs/validate', { text: template })).body)
     if (process.env.AP_RECORD === 'templates') return
+    // F2.5c: New run's answers for a saved graph with an Agent node and a required input
+    // (the fix-issue template with its workspace filled). AP_RECORD=newrun records only this.
+    const fixIssue = path.join(dir, 'fix-issue.yaml')
+    fs.writeFileSync(fixIssue, fs.readFileSync(path.join(root, '.agents', 'templates', 'fix-issue.yaml'), 'utf8').replace(/^(\s*workspace:) "".*$/m, '$1 /work/repo'))
+    const fixGrant = (await call('POST', '/graphs/grants', { path: fixIssue, mode: 'open' })).body.grant
+    write('graph-open-fix-issue.json', (await call('POST', '/graphs/open', { grant: fixGrant })).body)
+    write('graph-validate-fix-issue.json', (await call('POST', '/graphs/validate', { grant: fixGrant })).body)
+    if (process.env.AP_RECORD === 'newrun') return
     // F2.11: this machine's capability report; stories derive the other states from it.
     fs.writeFileSync(path.join(out, 'capabilities-linux.json'), JSON.stringify((await call('GET', '/capabilities')).body, null, 2) + '\n')
     if (process.env.AP_RECORD === 'capabilities') return

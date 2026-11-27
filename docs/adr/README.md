@@ -85,4 +85,5 @@ Follow-ups to the audit (accepted 2026-11-27, implemented; ADR-0042 is listed ab
 [ADR-0045 - Bounded Shell capture and complete declared outputs](0045-shell-declared-output-completeness.md) (F0.5, amends ADR-0005).
 
 Desktop presentation:
-[ADR-0046 - The Inbox triage queue replaces the Dashboard](0046-inbox-replaces-dashboard.md) (F2.5b).
+[ADR-0046 - The Inbox triage queue replaces the Dashboard](0046-inbox-replaces-dashboard.md) (F2.5b),
+[ADR-0047 - New run with a live preflight](0047-new-run-with-preflight.md) (F2.5c).

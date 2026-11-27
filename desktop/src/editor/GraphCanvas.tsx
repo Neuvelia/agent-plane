@@ -67,6 +67,18 @@ const Ctx = createContext<CanvasState>({ selectedNode: null, badges: { nodes: {}
 const portList = (ports: Record<string, { type: string; required?: boolean }> | undefined): PortData[] =>
   Object.entries(ports ?? {}).map(([name, p]) => ({ name, type: p.type, required: p.required === true }))
 
+// With both errors and warnings the header has no room for both sentences next to the id and the
+// type: each pill shows its mark and number, and keeps the sentence for assistive technology.
+function NodeCount({ tone, mark, count, text, compact }: { tone: 'x' | 'w'; mark: string; count: number; text: string; compact: boolean }) {
+  if (!compact) return <Pill tone={tone} small>{`${mark} `}{text}</Pill>
+  return (
+    <Pill tone={tone} small>
+      <span aria-hidden="true">{`${mark} ${count}`}</span>
+      <span className="sr-only">{text}</span>
+    </Pill>
+  )
+}
+
 function EdNode({ data }: NodeProps<Node<EdData>>) {
   const { t } = useI18n()
   const c = useContext(Ctx)
@@ -77,8 +89,8 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
       <div className="ed-node-head">
         <b>{data.id}</b>
         <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-          {n && n.errors > 0 && <Pill tone="x" small>{'✖ '}{t('editor.nodeErrors', { count: n.errors })}</Pill>}
-          {n && n.warnings > 0 && <Pill tone="w" small>{'⚠ '}{t('editor.nodeWarnings', { count: n.warnings })}</Pill>}
+          {n && n.errors > 0 && <NodeCount tone="x" mark="✖" count={n.errors} text={t('editor.nodeErrors', { count: n.errors })} compact={n.warnings > 0} />}
+          {n && n.warnings > 0 && <NodeCount tone="w" mark="⚠" count={n.warnings} text={t('editor.nodeWarnings', { count: n.warnings })} compact={n.errors > 0} />}
           <span className="tag">{data.kind}</span>
         </span>
       </div>
