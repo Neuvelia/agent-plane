@@ -1678,6 +1678,26 @@ features:
     divergences: []
     tasks: []
     note: "Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2."
+  - id: F2.5b
+    name: "Inbox: triage queue (desktop redesign, step 1)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5b-inbox-redesign.md
+    depends_on: ["F2.5a"]
+    evidence:
+      - "docs/features/F2.5b-inbox-redesign.md"
+      - "desktop/test/inbox.test.ts"
+      - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Light theme, redesigned Sidebar, global search, resume of interrupted runs, per-file diff counts."
+    decisions: ["ADR-0039"]
+    divergences: []
+    tasks: []
+    note: "Presentation only; the remaining screens of the Tarmind Dashboard UX canvas follow as separate steps."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

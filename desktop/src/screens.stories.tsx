@@ -1,13 +1,24 @@
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
+import { markWelcomeDone } from './capabilities'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
-import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
+import { agentScopeGraph, asRun, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
-import { Dashboard } from './dashboardView'
+import { Inbox } from './inboxView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import type { ApEvent } from './types'
 
 const meta: Meta = { title: 'Screens' }
+
+// The whole app as a returning user sees it: the first-run welcome was already left, so it opens on the Inbox.
+function ReturningUser() {
+  markWelcomeDone()
+  return (
+    <div style={{ height: 'calc(100vh - 16px)' }}>
+      <App />
+    </div>
+  )
+}
 export default meta
 type S = StoryObj
 
@@ -143,11 +154,7 @@ export const NewRunBlocked: S = {
 
 export const FullAppShell: S = {
   parameters: { bridge: { runs: [run(waitingForHuman, 'running', 'open'), run(exhaustedRetries, 'failed', 'end', false)], approvals: pending } satisfies BridgeData },
-  render: () => (
-    <div style={{ height: '100vh' }}>
-      <App />
-    </div>
-  ),
+  render: () => <ReturningUser />,
 }
 
 export const SettingsLanguage: S = { parameters: { bridge: { runs: [] } }, render: () => <Settings /> }
@@ -157,26 +164,51 @@ export const SettingsRecordingOn: S = { parameters: { bridge: { runs: [], record
 export const SettingsRecordingMissingVariable: S = { parameters: { bridge: { runs: [], recording: { enabled: true, redactEnv: ['GITHUB_TOKEN', 'NPM_TOKEN'], active: false, missing: ['NPM_TOKEN'] } } satisfies BridgeData }, render: () => <Settings /> }
 export const SettingsRecordingSaveFails: S = { parameters: { bridge: { runs: [], recordingSaveFails: true } satisfies BridgeData }, render: () => <Settings /> }
 
-// Dashboard: "now" is pinned just after the recordings so the 7-day window is stable.
+// Inbox (F2.5b): "now" is pinned just after the recordings so ages and the recent-runs strip are stable.
 const afterFixtures = new Date(Math.max(...[demoApprove, demoReject, exhaustedRetries].map((e) => Date.parse(e[0]!.timestamp))) + 3600 * 1000)
-const dashboard = (b: BridgeData): S => ({
+const inbox = (b: BridgeData, play?: S['play']): S => ({
   parameters: { bridge: b },
-  render: () => <Dashboard onOpenRun={noop} onNewRun={noop} onOpenGraph={noop} onAllRuns={noop} nowOverride={afterFixtures} />,
+  // The Inbox fills the height it is given, as it fills the app's content area.
+  render: () => (
+    <div style={{ height: 'calc(100vh - 16px)' }}>
+      <Inbox onOpenRun={noop} onNewRun={noop} onOpenGraph={noop} onAllRuns={noop} nowOverride={afterFixtures} />
+    </div>
+  ),
+  play,
 })
-export const DashboardEmpty: S = dashboard({ runs: [] })
-export const DashboardBusy: S = dashboard({ runs: [run(runningParallel, 'running', 'open'), run(demoReject, 'succeeded', 'end'), run(exhaustedRetries, 'succeeded', 'end', false)] })
-export const DashboardNeedsAttention: S = dashboard({
-  runs: [run(waitingForHuman, 'running', 'open'), run(demoReject, 'failed', 'end'), run(exhaustedRetries, 'interrupted', 'end', false)],
+const clickSelector = (selector: string): S['play'] => async ({ canvasElement }) => {
+  await new Promise((r) => setTimeout(r, 150))
+  canvasElement.querySelector<HTMLButtonElement>(selector)?.click()
+  await new Promise((r) => setTimeout(r, 150))
+}
+// An interrupted run: the demo recording cut while two branches were running, under its own run ID.
+const interrupted = asRun(runningParallel, '7d2e91b4-0c55-4a8e-9f1d-3b6a2c8e5f10')
+const triage: BridgeData = {
+  runs: [run(waitingForHuman, 'running', 'open'), run(demoReject, 'failed', 'end'), run(exhaustedRetries, 'failed', 'end', false), run(interrupted, 'interrupted', 'end'), run(asRun(runningParallel, 'c41f08a2-9b3d-4e7a-8d65-1f2e3a4b5c6d'), 'running', 'open')],
   approvals: pending,
-})
+}
+export const InboxEmpty: S = inbox({ runs: [run(demoApprove, 'succeeded', 'end')] })
+export const InboxNoRuns: S = inbox({ runs: [] })
+export const InboxBusy: S = inbox({ runs: [run(runningParallel, 'running', 'open'), run(demoReject, 'succeeded', 'end'), run(exhaustedRetries, 'succeeded', 'end', false)] })
+export const InboxNeedsAttention: S = inbox(triage)
+export const InboxFailedSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="failed"]'))
+export const InboxRetriesUsedUp: S = inbox({ runs: [run(exhaustedRetries, 'failed', 'end', false)] })
+export const InboxInterruptedSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="interrupted"]'))
+export const InboxRunningSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="running"]'))
+export const InboxFilterStopped: S = inbox(triage, clickSelector('[data-testid="inbox-filter-stopped"]'))
+export const InboxFilterEmpty: S = inbox({ runs: [run(demoReject, 'failed', 'end')] }, clickSelector('[data-testid="inbox-filter-approvals"]'))
+// The list still shows the approval while the stream already carries the decision: the moment right after deciding.
+export const InboxDecided: S = inbox({ runs: [run(demoApprove, 'succeeded', 'end')], approvals: pending })
+export const InboxDecisionError: S = inbox({ runs: [run(waitingForHuman, 'running', 'open')], approvals: pending, decisionFailure: { status: 500, message: 'request failed (500)' } }, clickSelector('[data-testid="inbox-approve"]'))
+export const InboxConnectionLost: S = inbox({ runs: [run(waitingForHuman, 'running', 'lost')], approvals: pending })
 
 // Loading and error states of every screen that reads from the engine.
 const hang: BridgeData = { runs: [], hang: true }
 const down: BridgeData = { runs: [], unreachable: true }
 export const RunsListLoading: S = { parameters: { bridge: hang }, render: () => <RunsList onOpen={noop} /> }
 export const RunsListError: S = { parameters: { bridge: down }, render: () => <RunsList onOpen={noop} /> }
-export const DashboardLoading: S = dashboard(hang)
-export const DashboardError: S = dashboard(down)
+export const InboxLoading: S = inbox(hang)
+export const InboxError: S = inbox(down)
 export const ApprovalsLoading: S = { parameters: { bridge: hang }, render: () => <Approvals onOpen={noop} /> }
 export const ApprovalsError: S = { parameters: { bridge: down }, render: () => <Approvals onOpen={noop} /> }
 export const NewRunValidating: S = {
@@ -186,9 +218,5 @@ export const NewRunValidating: S = {
 }
 export const FullAppShellEngineDown: S = {
   parameters: { bridge: down },
-  render: () => (
-    <div style={{ height: '100vh' }}>
-      <App />
-    </div>
-  ),
+  render: () => <ReturningUser />,
 }

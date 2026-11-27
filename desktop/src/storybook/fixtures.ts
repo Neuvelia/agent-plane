@@ -86,3 +86,8 @@ export function approvalsOf(events: ApEvent[]): PendingApproval[] {
     n.approval && n.nodeRunId && run.runId ? [{ run_id: run.runId, node_id: n.id, node_run_id: n.nodeRunId, prompt: n.approval.prompt, context: n.approval.context }] : [],
   )
 }
+
+/** The same recorded stream under another run ID, so one story can list two runs of the same recording. */
+export function asRun(events: ApEvent[], runId: string): ApEvent[] {
+  return events.map((e) => ({ ...e, run_id: runId }))
+}

@@ -69,4 +69,5 @@ Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
 [ADR-0035 - Runtime stack and repository layout](0035-stack-and-repository-layout.md),
 [ADR-0036 - Roadmap precedence for phase scope; units, blast radius and ordering](0036-roadmap-scope-precedence.md),
 [ADR-0037 - Direction: a test command as a loop check](0037-test-command-check-direction.md),
-[ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md).
+[ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md),
+[ADR-0039 - The Inbox triage queue replaces the Dashboard](0039-inbox-replaces-dashboard.md).

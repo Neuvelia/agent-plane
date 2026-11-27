@@ -4,7 +4,7 @@ import type { ReactNode } from 'react'
 // font, no remote asset). Decorative: the label is always next to the icon, or
 // the button carries an aria-label.
 const G: Record<string, ReactNode> = {
-  dashboard: <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
+  inbox: <path fillRule="evenodd" d="M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zm0 2v7h4.2l1.3 2h3l1.3-2H19V6z" />,
   runs: <path d="M7 4.6v14.8a1 1 0 0 0 1.5.86l12-7.4a1 1 0 0 0 0-1.72l-12-7.4A1 1 0 0 0 7 4.6z" />,
   approvals: <path d="M12 2.5 4.5 5.6v5.6c0 4.7 3.2 8.9 7.5 10.3 4.3-1.4 7.5-5.6 7.5-10.3V5.6z" />,
   new: <path d="M11 4h2v7h7v2h-7v7h-2v-7H4v-2h7z" />,
