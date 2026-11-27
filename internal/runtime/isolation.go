@@ -142,6 +142,9 @@ func preflightIsolation(ctx context.Context, d *graph.Definition, options Option
 	if err != nil {
 		return plan, err
 	}
+	if err := checkIsolatedGateDirs(d, ids, plan.source.Root); err != nil {
+		return plan, err
+	}
 	plan.guard = captureSourceGuard(ctx, plan.source.Root)
 	return plan, nil
 }
@@ -247,53 +250,6 @@ func (m *runMachine) prepareIsolated(ctx context.Context, id string) error {
 	m.worktrees[id] = &isolatedWorkspace{handle: handle, path: handle.Path()}
 	m.appendEvent(events.Event{Type: events.WorkspacePrepared, NodeID: id, NodeRunID: m.nodes[id].NodeRunID, Payload: prepared})
 	return nil
-}
-
-// isolatedNode is the node a worker executes: the same definition with the
-// Agent and its embedded Gate pointed at the worktree. The graph and its
-// semantic version are never modified.
-func isolatedNode(n graph.NodeDefinition, path string) graph.NodeDefinition {
-	n.Config = cloneConfig(n.Config)
-	n.Config["workspace"] = path
-	if n.Loop != nil {
-		loop := *n.Loop
-		loop.Gate.Config = cloneConfig(loop.Gate.Config)
-		for _, key := range []string{"workspace", "cwd"} {
-			if _, ok := loop.Gate.Config[key]; ok {
-				loop.Gate.Config[key] = path
-			}
-		}
-		n.Loop = &loop
-	}
-	return n
-}
-
-func cloneConfig(config graph.NodeConfig) graph.NodeConfig {
-	copied := make(graph.NodeConfig, len(config)+1)
-	for key, value := range config {
-		copied[key] = cloneConfigValue(value)
-	}
-	return copied
-}
-
-func cloneConfigValue(value any) any {
-	switch v := value.(type) {
-	case []string:
-		return append([]string(nil), v...)
-	case []any:
-		copied := make([]any, len(v))
-		for i, item := range v {
-			copied[i] = cloneConfigValue(item)
-		}
-		return copied
-	case map[string]any:
-		copied := make(map[string]any, len(v))
-		for key, item := range v {
-			copied[key] = cloneConfigValue(item)
-		}
-		return copied
-	}
-	return value
 }
 
 // integrateIsolated snapshots an accepted unit and merges it onto the run's

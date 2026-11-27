@@ -44,7 +44,10 @@ Semantics:
 Configuration (static, side-effect free to validate): `check_id`, `kind`,
 `command` (nonempty, run as argv without a shell), `args`, `cwd` (canonical
 absolute), `env_allowlist`, `env`, `side_effects` and `input`. The command,
-args, cwd and environment are literal: bound inputs never reach them. `input`
+args, cwd and environment are literal: bound inputs never reach them. Under
+`isolation: worktree` (ADR-0024) the cwd keeps its place in the repository: a
+cwd of `<repo>/service` runs in `<worktree>/service`, and a cwd outside the
+source repository fails isolation preflight (`E_ISOLATION_PREFLIGHT`). `input`
 names a required string or JSON port and is the checked input; it exists so the
 check is a real data dependency on the candidate. The child environment is empty
 except `env_allowlist` entries present in the runner and explicit `env` values;
