@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"agentplane/internal/domain/events"
@@ -81,6 +82,31 @@ func callBounded(execCtx context.Context, bound time.Duration, fn func() execOut
 		return o, ""
 	case <-timer.C:
 		return execOutcome{err: abandonedError{}}, reason
+	}
+}
+
+// armNodeDeadline starts a node deadline. When it fires while the run is live,
+// it records the node-scoped cancel_requested at that moment and then calls
+// cancel, so the request precedes any process termination, abandonment or
+// terminal fact of the node. The returned settle stops the deadline once the
+// executor call has returned: a deadline that fires later records nothing.
+// settle is idempotent.
+func (m *runMachine) armNodeDeadline(runCtx context.Context, after time.Duration, request events.Event, cancel func()) func() {
+	var mu sync.Mutex
+	settled := false
+	timer := time.AfterFunc(after, func() {
+		mu.Lock()
+		if !settled && runCtx.Err() == nil {
+			m.appendEvent(request)
+		}
+		mu.Unlock()
+		cancel()
+	})
+	return func() {
+		timer.Stop()
+		mu.Lock()
+		settled = true
+		mu.Unlock()
 	}
 }
 

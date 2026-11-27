@@ -267,6 +267,15 @@ func assertAbandoned(t *testing.T, result run.Result, node, reason string) {
 	if count != 1 || terminal < 0 || at > terminal {
 		t.Fatalf("executor_abandoned count=%d at=%d terminal=%d", count, at, terminal)
 	}
+	// The ignored request is recorded when it was made, before the abandonment
+	// (review of #198): node-scoped for a node deadline, run-scoped otherwise.
+	requestNode := node
+	if reason != events.ReasonNodeTimeout {
+		requestNode = ""
+	}
+	if req := eventIndex(result, events.CancelRequested, requestNode); req < 0 || req > at {
+		t.Fatalf("cancel_requested at %d, executor_abandoned at %d", req, at)
+	}
 }
 
 // An abandoned executor is never started a second time for the same node: the

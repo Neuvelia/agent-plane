@@ -717,14 +717,16 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 	var check *events.GateCheckPayload
 	checkInvalid := false
 	runCtx := ctx
+	settleDeadline := func() {}
 	if node.TimeoutSeconds != nil {
 		var cancelNode context.CancelCauseFunc
 		ctx, cancelNode = context.WithCancelCause(runCtx)
-		timer := time.AfterFunc(m.limits.seconds(*node.TimeoutSeconds), func() {
+		defer cancelNode(nil)
+		deadline := events.Event{Type: events.CancelRequested, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeNode, Reason: events.ReasonNodeTimeout, Source: events.CancelSourceDeadline}}
+		settleDeadline = m.armNodeDeadline(runCtx, m.limits.seconds(*node.TimeoutSeconds), deadline, func() {
 			cancelNode(run.CancelCause{Reason: run.CancelNodeTimeout, Node: id})
 		})
-		defer timer.Stop()
-		defer cancelNode(nil)
+		defer settleDeadline()
 	}
 	var ignored run.CancelReason
 	call := func(fn func() execOutcome) {
@@ -890,14 +892,12 @@ func (m *runMachine) invoke(ctx context.Context, executor Executor, id string, n
 			return execOutcome{outputs: o, err: e}
 		})
 	}
+	settleDeadline()
 	abandoned := ignored != ""
 	if abandoned {
 		m.reportAbandoned(id, attemptID, ignored)
 	}
 	timedOut := err != nil && nodeTimedOut(runCtx, ctx)
-	if timedOut {
-		m.appendEvent(events.Event{Type: events.CancelRequested, NodeID: id, NodeRunID: nodeRunID, AttemptID: attemptID, Payload: events.CancelRequestedPayload{Scope: events.CancelScopeNode, Reason: events.ReasonNodeTimeout, Source: events.CancelSourceDeadline}})
-	}
 	if err != nil && !abandoned && (timedOut || runCtx.Err() != nil) {
 		m.requestRunCancel()
 		m.reportProcessTermination(id, attemptID, err)
