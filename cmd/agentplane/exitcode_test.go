@@ -155,7 +155,7 @@ func TestAgentRemedyMatchesTheEntryPoint(t *testing.T) {
 	}
 	// Once --adapter codex registered the adapter, the remedy must not tell the
 	// user to pass the flags they already passed.
-	if got := registeredCodexRemedy("codex"); strings.Contains(got, "--adapter") || !strings.Contains(got, "installed and runs") {
+	if got := registeredAgentRemedy("codex"); strings.Contains(got, "--adapter") || !strings.Contains(got, "installed and runs") {
 		t.Fatalf("registered codex remedy = %q", got)
 	}
 }

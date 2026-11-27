@@ -23,32 +23,43 @@ func selectExecutor(def *graph.Definition, remedy func(agent.AdapterID) string) 
 	return shell.Executor{}
 }
 
-// cliAgentRemedy is the remedy `run` gives for an unavailable adapter: the
-// flags that register it. Only the Codex adapter has such flags.
-func cliAgentRemedy(id agent.AdapterID) string {
-	if id != "codex" {
-		return ""
-	}
-	return "run with --adapter codex --codex-bin ABSOLUTE_PATH of the installed Codex CLI"
+// remedyFrom turns a map of adapter id -> message into the Executor.Remedy
+// callback; an adapter without a message gets no remedy.
+func remedyFrom(messages map[agent.AdapterID]string) func(agent.AdapterID) string {
+	return func(id agent.AdapterID) string { return messages[id] }
 }
 
-// registeredCodexRemedy is the remedy `run` gives once --adapter codex has
+// cliAgentRemedy is the remedy `run` gives for an unavailable adapter: the
+// flags that register it. Only adapters with such flags have a message.
+func cliAgentRemedy(id agent.AdapterID) string {
+	return remedyFrom(map[agent.AdapterID]string{
+		"codex":  "run with --adapter codex --codex-bin ABSOLUTE_PATH of the installed Codex CLI",
+		"claude": "run with --adapter claude --claude-bin ABSOLUTE_PATH of the installed Claude Code CLI",
+	})(id)
+}
+
+// registeredAgentRemedy is the remedy `run` gives once --adapter has
 // registered the adapter: repeating the flags the user already passed would
 // not help, so it points at the binary they named instead.
-func registeredCodexRemedy(id agent.AdapterID) string {
-	if id != "codex" {
-		return ""
-	}
-	return "check that the Codex CLI named by --codex-bin is installed and runs"
+func registeredAgentRemedy(id agent.AdapterID) string {
+	return remedyFrom(map[agent.AdapterID]string{
+		"codex":  "check that the Codex CLI named by --codex-bin is installed and runs",
+		"claude": "check that the Claude Code CLI named by --claude-bin is installed and runs",
+	})(id)
 }
 
 // serveAgentRemedy is the remedy `serve` (the desktop engine) gives: it runs no
 // Agent adapter, so an Agent node runs from the CLI.
 func serveAgentRemedy(id agent.AdapterID) string {
-	if id != "codex" {
-		return "the desktop engine runs no Agent adapter"
+	const prefix = "the desktop engine runs no Agent adapter"
+	messages := map[agent.AdapterID]string{
+		"codex":  prefix + "; run this graph with `agentplane run --adapter codex --codex-bin ABSOLUTE_PATH`",
+		"claude": prefix + "; run this graph with `agentplane run --adapter claude --claude-bin ABSOLUTE_PATH`",
 	}
-	return "the desktop engine runs no Agent adapter; run this graph with `agentplane run --adapter codex --codex-bin ABSOLUTE_PATH`"
+	if message, ok := messages[id]; ok {
+		return message
+	}
+	return prefix
 }
 
 // needsNodeExecutor reports whether the graph needs the composed executor: a

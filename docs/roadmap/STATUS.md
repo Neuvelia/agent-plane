@@ -155,6 +155,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | ID | Name | Kind | Parent | Status | Note |
 | --- | --- | --- | --- | --- | --- |
 | [F1.4b](../../docs/features/F1.4b-test-command-loop-check.md) | Test command as a loop check | derived | F1.4 | done | ADR-0042 zaakceptowany przez właściciela 2026-11-27; nowy rodzaj check od schema 15 (ADR-0044). |
+| [F1.2b](../../docs/features/F1.2b-claude-code-adapter.md) | Adapter Claude Code | derived | F1.2 | in_progress | Protokół CLI (D3-D6, kształt rekordów stream-json) jest założony z claude --help 2.1.332 i niepotwierdzony; spike i smoke nie wykonane. |
 | [F1.6a](../../docs/features/F1.6a-shell-loop.md) | Shell node correction loop | derived | F1.6 | done |  |
 | [F2.3-E6](../../docs/features/F2.3-E6-recorded-run-values.md) | Recorded run values (value_recorded) | derived | F2.3 | done |  |
 | [F2.5a](../../docs/features/F2.5a-desktop-redesign.md) | Desktop redesign (Tarmind design system, PL/EN) | derived | F2.5 | done | Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2. |
@@ -190,6 +191,17 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F3.8-AC1 | Sekret nie pojawia się w YAML, SQLite ani standardowym eksporcie. |  | brak eksportu; nie da się sprawdzić w całości |
 | F3.10-AC2 | Eksport zawiera usage metadata. |  | brak eksportu |
 | F3.11-AC1 | Bundle nie zawiera repo contents ani sekretów domyślnie. |  | jest tylko GET /capabilities; brak bundle'a diagnostycznego |
+| F1.2b-AC1 | Fake CLI zmienia plik w tymczasowym repo; output i trace pokazują ścieżkę z Git. |  |  |
+| F1.2b-AC2 | Ścieżka z tool_use nieobecna w Git nie staje się changed path. |  |  |
+| F1.2b-AC3 | Brudny plik sprzed runu nie daje fałszywej zmiany; pliki konfiguracyjne Claude nie trafiają do workspace. |  |  |
+| F1.2b-AC4 | Brak CLI, zły workspace lub za stara wersja dają błędy węzła bez paniki, z remedy z --claude-bin. |  |  |
+| F1.2b-AC5 | Anulowanie z procesem potomnym nie zostawia procesów. |  |  |
+| F1.2b-AC6 | thinking, treść narzędzi, stderr i tekst taska nie trafiają do zdarzeń. |  |  |
+| F1.2b-AC7 | Za duży opcjonalny rekord jest pomijany; zły lub za duży result daje claude_result bez outputów. |  |  |
+| F1.2b-AC8 | argv nie zawiera flag bypass ani Bash w v1; env to refs plus stałe adaptera. |  |  |
+| F1.2b-AC9 | Pętla korekty przekazuje feedback na stdin. |  |  |
+| F1.2b-AC10 | Smoke z prawdziwym CLI (wersja, run/node ID, changed path, node_evidence, pętla korekty, isolation: worktree). |  | Nie wykonany: brak CLI i klucza API; wymaga spike'u docs/validation/F1.2b-claude-code-spike.md. |
+| F1.2b-AC11 | Shell i Codex bez zmian; make check i go test -race ./... przechodzą. |  |  |
 
 ## Active divergences
 

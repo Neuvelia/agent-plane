@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"regexp"
 	goruntime "runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -119,6 +120,7 @@ type Detector struct {
 	Stat     func(string) (os.FileInfo, error)
 	Readlink func(string) (string, error)
 	// CLIs are reported after the adapters, in this order, from a PATH lookup.
+	// A CLI whose id equals a configured Agent id is skipped (the adapter row wins).
 	CLIs []CLI
 	// LookPath finds a command on PATH without executing it. Default:
 	// exec.LookPath, which stats candidates and checks the execute permission.
@@ -162,8 +164,9 @@ func (d Detector) Detect(ctx context.Context) Report {
 		_, err := lookPath(command)
 		return err == nil
 	}
+	clis := unadaptedCLIs(d.CLIs, agents)
 	// Rows: git, then adapters, then agent CLIs, then the shell and Docker.
-	tail := 1 + len(agents) + len(d.CLIs)
+	tail := 1 + len(agents) + len(clis)
 	tools := make([]Tool, tail+2)
 	var wg sync.WaitGroup
 	run := func(i int, id, kind string, probe func() Tool) {
@@ -204,7 +207,7 @@ func (d Detector) Detect(ctx context.Context) Report {
 	}
 	// The lookup executes nothing and works on every OS, so these rows are
 	// reported on Windows too.
-	for i, c := range d.CLIs {
+	for i, c := range clis {
 		t := Tool{ID: c.ID, Kind: "agent_cli", Status: StatusMissing}
 		if found(c.Command) {
 			t.Status = StatusDetectedNoAdapter
@@ -218,6 +221,19 @@ func (d Detector) Detect(ctx context.Context) Report {
 		Engine:    Engine{Version: d.EngineVersion, OS: goos, Arch: goarch},
 		Tools:     tools,
 	}
+}
+
+// unadaptedCLIs drops the CLIs whose id an adapter row already reports, so one
+// id never appears twice: once an adapter exists for a CLI (for example claude),
+// its agent_adapter row replaces the agent_cli row.
+func unadaptedCLIs(clis []CLI, agents []Agent) []CLI {
+	out := make([]CLI, 0, len(clis))
+	for _, c := range clis {
+		if !slices.ContainsFunc(agents, func(a Agent) bool { return a.ID == c.ID }) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // shellPath is the shell the bundled templates and shell nodes rely on.

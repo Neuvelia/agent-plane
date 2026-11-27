@@ -1,6 +1,6 @@
 //go:build darwin || linux
 
-package codex
+package cliproc
 
 import (
 	"context"
@@ -9,18 +9,19 @@ import (
 	"os/exec"
 	"time"
 
-	"agentplane/internal/agent"
 	"agentplane/internal/proctree"
 )
 
-// Every invocation, including bounded probes, owns its process tree through
-// proctree. A descendant that left the group is out of scope.
-func runProcess(ctx context.Context, binary string, args, env []string, dir string, stdin io.Reader, stdout io.Writer, policy proctree.Policy) error {
-	cmd := exec.Command(binary, args...)
-	cmd.Env = env
-	cmd.Dir = dir
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
+// Run executes spec and waits for it. Every invocation, including bounded
+// probes, owns its process tree through proctree. A descendant that left the
+// group is out of scope. Failures to start, to terminate and cancellation are
+// returned as *Error; any other failure is the child's wait error.
+func Run(ctx context.Context, spec Spec) error {
+	cmd := exec.Command(spec.Binary, spec.Args...)
+	cmd.Env = spec.Env
+	cmd.Dir = spec.Dir
+	cmd.Stdin = spec.Stdin
+	cmd.Stdout = spec.Stdout
 	cmd.Stderr = io.Discard
 	cmd.WaitDelay = time.Second
 	if err := ctx.Err(); err != nil {
@@ -28,16 +29,16 @@ func runProcess(ctx context.Context, binary string, args, env []string, dir stri
 	}
 	tree, err := proctree.Start(cmd)
 	if err != nil {
-		return fail("start", "cannot start Codex CLI", err)
+		return newError(StageStart, err, nil)
 	}
 	exited := make(chan struct{})
-	stopped := watchCancellation(ctx, tree, policy, exited)
+	stopped := watchCancellation(ctx, tree, spec.Policy, exited)
 	waitErr := tree.Wait()
 	close(exited)
 	c := <-stopped
 	if !c.requested {
 		// The leader ended on its own; sweep descendants it left in the group.
-		c.outcome, c.err = tree.Terminate(context.Background(), policy)
+		c.outcome, c.err = tree.Terminate(context.Background(), spec.Policy)
 	}
 	return classify(ctx, waitErr, c)
 }
@@ -48,11 +49,11 @@ func classify(ctx context.Context, waitErr error, c cancellation) error {
 	var leak *proctree.LeakError
 	switch {
 	case errors.As(c.err, &leak):
-		return withTermination(fail("shutdown", "cannot terminate owned process group", errors.Join(ctx.Err(), c.err)), c.outcome)
+		return newError(StageShutdown, errors.Join(ctx.Err(), c.err), &c.outcome)
 	case c.err != nil:
-		return fail("shutdown", "cannot terminate owned process group", c.err)
+		return newError(StageShutdown, c.err, nil)
 	case c.requested && (waitErr != nil || c.outcome.Method != proctree.MethodAlreadyExited):
-		return withTermination(fail("cancelled", "execution cancelled", errors.Join(ctx.Err(), context.Cause(ctx))), c.outcome)
+		return newError(StageCancelled, errors.Join(ctx.Err(), context.Cause(ctx)), &c.outcome)
 	case errors.Is(waitErr, exec.ErrWaitDelay):
 		return nil // leader succeeded; inherited pipes were bounded
 	}
@@ -80,12 +81,4 @@ func watchCancellation(ctx context.Context, tree *proctree.Tree, policy proctree
 		result <- c
 	}()
 	return result
-}
-
-func withTermination(err error, outcome proctree.Outcome) error {
-	var typed *agent.ExecutionError
-	if errors.As(err, &typed) {
-		typed.Termination = &outcome
-	}
-	return err
 }

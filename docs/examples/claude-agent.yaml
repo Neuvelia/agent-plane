@@ -1,0 +1,25 @@
+# Minimal Claude Code Agent node (F1.2b). NOT RUN against a real CLI: the protocol is
+# an unconfirmed assumption (docs/validation/F1.2b-claude-code-spike.md).
+# Replace the quoted __WORKSPACE__ placeholder with an absolute disposable committed
+# repository root, then run
+#   agentplane run FILE --adapter claude --claude-bin /absolute/path/to/claude
+# Authentication is ANTHROPIC_API_KEY, named in environment_refs (ADR-0046 D6).
+# Bash is disabled in v1; only file tools (Read, Edit, Write, Glob, Grep) are enabled.
+schema_version: 0
+id: claude-agent-example
+nodes:
+  edit:
+    type: agent
+    config:
+      adapter: claude
+      workspace: "__WORKSPACE__"
+      environment_refs: [ANTHROPIC_API_KEY, HOME, PATH]
+      allowed_paths: [hello.txt]
+      task: >-
+        Write exactly after followed by one newline to hello.txt. Do not modify
+        other files. Return the structured final result.
+    outputs:
+      summary: {type: string}
+      changed_files: {type: json}
+edges: []
+outputs: {}

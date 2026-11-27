@@ -339,6 +339,23 @@ output declarations. Existing event shapes decode under schema 1 or 2;
 older schema 1/2 facts remain readable (ADR-0011). Failed invocations accept no outputs or
 success evidence. See ADR-0010 for process ownership and protocol limits.
 
+### Installed Claude Code execution (F1.2b)
+
+`adapter: claude` is an existing `adapter` value; the schema is unchanged. CLI selection requires
+`--adapter claude --claude-bin /absolute/path/to/claude`. Authentication is `ANTHROPIC_API_KEY`, which
+must be named in `environment_refs` (ADR-0046 D6); no ambient environment is forwarded. Bash is disabled
+in v1: only the file tools Read, Edit, Write, Glob and Grep are enabled. Changed files come from Git with
+`observed` provenance, as for Codex. The protocol is an unconfirmed assumption until the spike
+(`validation/F1.2b-claude-code-spike.md`) and smoke (`validation/F1.2b-claude-code-smoke.md`) run; both are
+NOT RUN. See [examples/claude-agent.yaml](examples/claude-agent.yaml) and ADR-0046.
+
+```yaml
+    config:
+      adapter: claude
+      workspace: /absolute/path/to/repository
+      environment_refs: ["ANTHROPIC_API_KEY", "HOME", "PATH"]
+```
+
 ### Limits (F3.4, ADR-0028)
 
 Two optional integer fields bound wall-clock time. Both are whole seconds from 1

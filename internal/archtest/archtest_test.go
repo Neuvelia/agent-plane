@@ -42,6 +42,8 @@ var legacyLayers = map[string]layer{
 	"internal/runtime":           layerApp,
 	"internal/agent":             layerAdapter,
 	"internal/agent/codex":       layerAdapter,
+	"internal/agent/claudecode":  layerAdapter,
+	"internal/agent/cliproc":     layerAdapter, // shared CLI process/JSON helpers; same family as agent and codex
 	"internal/shell":             layerAdapter,
 	"internal/gate":              layerAdapter,
 	"internal/gitstate":          layerAdapter,

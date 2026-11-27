@@ -44,11 +44,15 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	var isolation isolationFlags
 	isolation.register(fs)
 	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path, used only for capability detection")
+	claudeBin := fs.String("claude-bin", "", "absolute Claude Code CLI binary path, used only for capability detection")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
 		return usageError("serve", err, false, stdout, stderr)
 	}
 	if *codexBin != "" && !filepath.IsAbs(*codexBin) {
 		return usageError("serve", errors.New("--codex-bin must be an absolute path"), false, stdout, stderr)
+	}
+	if *claudeBin != "" && !filepath.IsAbs(*claudeBin) {
+		return usageError("serve", errors.New("--claude-bin must be an absolute path"), false, stdout, stderr)
 	}
 	if *concurrency < 1 {
 		return usageError("serve", errors.New("--max-concurrency must be at least 1"), false, stdout, stderr)
@@ -89,7 +93,7 @@ func serveCommand(ctx context.Context, args []string, stdout, stderr io.Writer) 
 		ValidateDefinition: diagnosticsFor,
 		NodeTypes:          nodeCatalogue(),
 		Start:              starter(runStore, serveRunOptions{concurrency: *concurrency, redactions: redactions, recordValues: *recordValues, recordDiffs: *recordDiffs, isolation: isolation}),
-		Capabilities:       &capability.Service{Detect: capabilityDetector(*codexBin).Detect},
+		Capabilities:       &capability.Service{Detect: capabilityDetector(*codexBin, *claudeBin).Detect},
 	}
 	if onServe != nil {
 		onServe(server)
@@ -220,15 +224,21 @@ func starter(runStore store.Store, config serveRunOptions) api.StartFunc {
 }
 
 // capabilityDetector composes F2.11 detection: Git at the engine's fixed path
-// and the Codex adapter's own Detect, which runs only when a binary was given,
-// then the agent CLIs without an adapter, looked up on PATH without running them.
-// Agent execution in serve is unchanged by --codex-bin (ADR-0025).
-func capabilityDetector(codexBin string) capability.Detector {
+// and each adapter's own Detect, which runs only when a binary was given, then
+// the agent CLIs without an adapter, looked up on PATH without running them. An
+// agent with a configured binary is reported by its adapter, so capability
+// removes its duplicate agent CLI row. Agent execution in serve is unchanged by
+// --codex-bin and --claude-bin (ADR-0025).
+func capabilityDetector(codexBin, claudeBin string) capability.Detector {
 	codexAgent := capability.Agent{ID: "codex", Command: "codex"}
 	if codexBin != "" {
 		codexAgent.Adapter = codex.Adapter{Binary: codexBin}
 	}
-	return capability.Detector{EngineVersion: version.String(), Agents: []capability.Agent{codexAgent}, CLIs: capability.AgentCLIs}
+	agents := []capability.Agent{codexAgent}
+	if claudeBin != "" {
+		agents = append(agents, capability.Agent{ID: "claude", Command: "claude", Adapter: newClaudeAdapter(claudeBin)})
+	}
+	return capability.Detector{EngineVersion: version.String(), Agents: agents, CLIs: capability.AgentCLIs}
 }
 
 // onServe lets tests reach the running server (for example its Hub) without

@@ -1,4 +1,4 @@
-package codex
+package cliproc
 
 import (
 	"bytes"
@@ -8,9 +8,11 @@ import (
 	"unicode/utf8"
 )
 
-// encoding/json accepts duplicate keys and replaces invalid UTF-8. Neither is
-// appropriate for a strict provider result or private protocol record.
-func uniqueJSON(data []byte) error {
+// UniqueJSON checks that data is exactly one JSON value with valid UTF-8, no
+// duplicate object keys and bounded nesting. encoding/json accepts duplicate
+// keys and replaces invalid UTF-8. Neither is appropriate for a strict
+// provider result or private protocol record.
+func UniqueJSON(data []byte) error {
 	if !utf8.Valid(data) {
 		return errors.New("invalid UTF-8")
 	}

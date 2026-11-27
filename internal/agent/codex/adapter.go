@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
+	"agentplane/internal/agent/cliproc"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/proctree"
 )
@@ -52,27 +53,6 @@ func fail(code, message string, cause error) error {
 	return &agent.ExecutionError{AdapterID: "codex", Kind: agent.ErrorKind("codex_" + code), Cause: &Error{Code: code, Message: message, cause: cause}}
 }
 
-type limitedBuffer struct {
-	buffer   bytes.Buffer
-	limit    int
-	overflow bool
-}
-
-func (b *limitedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	space := b.limit - b.Len()
-	if len(p) > space {
-		b.overflow = true
-		p = p[:space]
-	}
-	_, _ = b.buffer.Write(p)
-	return n, nil
-}
-
-func (b *limitedBuffer) Len() int       { return b.buffer.Len() }
-func (b *limitedBuffer) Bytes() []byte  { return b.buffer.Bytes() }
-func (b *limitedBuffer) String() string { return b.buffer.String() }
-
 var versionPattern = regexp.MustCompile(`^codex-cli ([0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?)\s*$`)
 
 func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
@@ -94,9 +74,9 @@ func (a Adapter) Detect(ctx context.Context) (agent.CapabilityReport, error) {
 	probe := func(args ...string) (string, error) {
 		pctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		b := limitedBuffer{limit: maxRecord}
-		err := runProcess(pctx, a.Binary, args, []string{}, "", nil, &b, a.Termination)
-		if err != nil || b.overflow {
+		b := cliproc.NewLimitedBuffer(maxRecord)
+		err := runProcess(pctx, a.Binary, args, []string{}, "", nil, b, a.Termination)
+		if err != nil || b.Overflow() {
 			return "", fail("detection", "Codex capability probe failed or exceeded bounds", err)
 		}
 		return b.String(), nil
@@ -250,7 +230,7 @@ func readResult(path string) (agent.AgentExecutionOutput, error) {
 	if err != nil || len(data) > maxRecord {
 		return out, fail("result", "cannot read bounded final result", err)
 	}
-	if uniqueJSON(data) != nil {
+	if cliproc.UniqueJSON(data) != nil {
 		return out, fail("result", "final result must be unambiguous valid JSON", nil)
 	}
 	var result map[string]json.RawMessage
@@ -364,7 +344,7 @@ func (p *progress) reject(message string) {
 	}
 }
 func (p *progress) record(line []byte) {
-	if uniqueJSON(line) != nil {
+	if cliproc.UniqueJSON(line) != nil {
 		return
 	}
 	var record map[string]json.RawMessage

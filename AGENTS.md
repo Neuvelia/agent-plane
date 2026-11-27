@@ -31,7 +31,11 @@ open acceptance gaps listed in `docs/roadmap/audit/AUDIT-2026-11-25.md`.
 
 Phase 0: Execution Core is implemented on `main` through F0.7. F1.1 Agent
 Adapter Contract and F1.2 installed-Codex execution are implemented, including
-Git-derived evidence and a verified real CLI smoke. F1.3 adds bounded normalized
+Git-derived evidence and a verified real CLI smoke. F1.2b adds an installed
+Claude Code adapter (ADR-0046; file tools only, no Bash in v1) built and tested
+against a fake CLI only; the spike and real smoke are NOT RUN
+(`docs/validation/F1.2b-claude-code-spike.md`,
+`docs/validation/F1.2b-claude-code-smoke.md`). F1.3 adds bounded normalized
 progress and live delivery (ADR-0011). F1.4 adds deterministic read-only Gates
 (ADR-0012). F1.5 adds versioned Check Results with typed references,
 checked-input scope, duration and typed trace lookup (ADR-0013). F1.6 adds bounded

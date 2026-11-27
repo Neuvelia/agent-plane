@@ -301,7 +301,7 @@ features:
           - "internal/agent/codex/process_test.go::TestOwnedChildCancellationAndOrdinaryExit"
           - "internal/agent/executor_test.go::TestAgentCancellation"
     out_of_scope:
-      - "Drugi adapter jest P1 dopiero po stabilizacji kontraktu."
+      - "Drugi adapter jest P1 dopiero po stabilizacji kontraktu (zrealizowany jako F1.2b)."
     decisions: ["ADR-0010"]
     divergences: []
     tasks: [182]
@@ -1710,6 +1710,64 @@ features:
     divergences: []
     tasks: [183]
     note: "ADR-0042 zaakceptowany przez właściciela 2026-11-27; nowy rodzaj check od schema 15 (ADR-0044)."
+  - id: F1.2b
+    name: "Adapter Claude Code"
+    kind: derived
+    parent: F1.2
+    phase: 1
+    priority: P1
+    status: in_progress
+    owner_package: adapters
+    spec: docs/features/F1.2b-claude-code-adapter.md
+    depends_on: ["F1.1", "F1.2", "F1.3", "F1.6"]
+    acceptance:
+      - id: F1.2b-AC1
+        text: "Fake CLI zmienia plik w tymczasowym repo; output i trace pokazują ścieżkę z Git."
+        status: open
+      - id: F1.2b-AC2
+        text: "Ścieżka z tool_use nieobecna w Git nie staje się changed path."
+        status: open
+      - id: F1.2b-AC3
+        text: "Brudny plik sprzed runu nie daje fałszywej zmiany; pliki konfiguracyjne Claude nie trafiają do workspace."
+        status: open
+      - id: F1.2b-AC4
+        text: "Brak CLI, zły workspace lub za stara wersja dają błędy węzła bez paniki, z remedy z --claude-bin."
+        status: open
+      - id: F1.2b-AC5
+        text: "Anulowanie z procesem potomnym nie zostawia procesów."
+        status: open
+      - id: F1.2b-AC6
+        text: "thinking, treść narzędzi, stderr i tekst taska nie trafiają do zdarzeń."
+        status: open
+      - id: F1.2b-AC7
+        text: "Za duży opcjonalny rekord jest pomijany; zły lub za duży result daje claude_result bez outputów."
+        status: open
+      - id: F1.2b-AC8
+        text: "argv nie zawiera flag bypass ani Bash w v1; env to refs plus stałe adaptera."
+        status: open
+      - id: F1.2b-AC9
+        text: "Pętla korekty przekazuje feedback na stdin."
+        status: open
+      - id: F1.2b-AC10
+        text: "Smoke z prawdziwym CLI (wersja, run/node ID, changed path, node_evidence, pętla korekty, isolation: worktree)."
+        status: open
+        note: "Nie wykonany: brak CLI i klucza API; wymaga spike'u docs/validation/F1.2b-claude-code-spike.md."
+      - id: F1.2b-AC11
+        text: "Shell i Codex bez zmian; make check i go test -race ./... przechodzą."
+        status: open
+    out_of_scope:
+      - "Uruchamianie agentów z desktopu (F2.14)."
+      - "Usage/cost jako dane (F3.10); v1 zwraca Usage nil."
+      - "Budżety --max-budget-usd jako konfiguracja grafu (F5.11)."
+      - "secret_env dla Agentów i keychain (F3.9, dalsze F3.8)."
+      - "Wznawianie sesji, sub-agenci, MCP, pluginy, Claude w chmurze."
+      - "Windows, fail closed jak Codex (razem z F3.4a)."
+      - "Wspólne SDK adapterów (F6.5)."
+      - "Bash i sandbox Claude Code: późniejsza poprawka ADR-0046 po spike'u."
+    decisions: ["ADR-0046"]
+    divergences: []
+    tasks: [202]
+    note: "Protokół CLI (D3-D6, kształt rekordów stream-json) jest założony z claude --help 2.1.332 i niepotwierdzony; spike i smoke nie wykonane."
   - id: F1.6a
     name: "Shell node correction loop"
     kind: derived
