@@ -599,8 +599,12 @@ never reads the input the edge delivers, for example a Shell input with no
 names it, as the type's field descriptors declare (`internal/fields`): Shell
 `input_env` keys, Gate `input`, `left_input` and `right_input`, human
 `context_inputs`, and an Agent's `task` input; or when a loop binding forwards
-it (`from: node.inputs.<id>`). An edge from a human node's `decision` output is
-an approval gate (ADR-0017) and always counts as read. Edges named by a
+it (`from: node.inputs.<id>`). An approval dependency (ADR-0017) always counts
+as read, because schema v0 has no ordering-only edge: an edge into a human node
+makes the approval wait for its source, and an edge from a human node's
+`decision` output makes its target wait for the approval. The suggestion names
+only configuration keys that accept the input's type, and it says that removing
+the edge also removes the dependency on its source. Edges named by a
 blocking diagnostic, edges to an undeclared input or to a node of unknown type,
 and graph input bindings are not checked. The check runs in the one validation
 path of `graph validate`, the API and the editor (ADR-0021), not in

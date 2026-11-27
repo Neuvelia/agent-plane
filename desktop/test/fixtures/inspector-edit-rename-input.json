@@ -137,7 +137,7 @@
     },
     "message": "node \"report\" does not use input \"renamed\", which edge 0 delivers",
     "severity": "warning",
-    "suggestion": "name input \"renamed\" in config.input_env, or remove the edge"
+    "suggestion": "name input \"renamed\" in config.input_env so the node reads it; removing the edge would also remove the node's dependency on its source"
    }
   ],
   "hash": "b6483ee23a440f5304bec92417d027af2d60495894fb42d48a55bafa22dad8ef",

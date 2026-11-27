@@ -64,7 +64,7 @@ func TestEdgeToAnInputTheShellNodeDoesNotMapWarns(t *testing.T) {
 		Message:    `node "b" does not use input "i", which edge 0 delivers`,
 		GraphID:    "edge-input",
 		Location:   graph.DiagnosticLocation{EdgeIndex: &edge, Path: "edges[0].to"},
-		Suggestion: `name input "i" in config.input_env, or remove the edge`,
+		Suggestion: `name input "i" in config.input_env so the node reads it; removing the edge would also remove the node's dependency on its source`,
 	}
 	if len(diags) != 1 || mustJSON(t, diags[0]) != mustJSON(t, want) {
 		t.Fatalf("got %+v\nwant %+v", diags, want)
@@ -99,12 +99,12 @@ func TestUnusedEdgeInputReachesTheEditorAPI(t *testing.T) {
 	}
 }
 
-func TestAgentInputOtherThanTaskWarnsWithoutAConfigKey(t *testing.T) {
+func TestAgentInputOtherThanTaskWarnsAndNamesTask(t *testing.T) {
 	diags := edgeInputDiagnostics(t, `    type: agent
     config: {adapter: codex, workspace: /w, task: do it}
     inputs:
       i: {type: string, required: true}`)
-	if len(diags) != 1 || !strings.Contains(diags[0].Suggestion, "reads no input by that name") {
+	if len(diags) != 1 || !strings.Contains(diags[0].Suggestion, `reads only input "task"`) {
 		t.Errorf("got %+v", diags)
 	}
 }
@@ -196,6 +196,60 @@ func TestEdgeWithABlockingErrorIsNotAlsoWarned(t *testing.T) {
 	for _, d := range result.Diagnostics {
 		if d.Code == edgeInputUnusedCode {
 			t.Errorf("an invalid edge is also warned: %+v", d)
+		}
+	}
+}
+
+// input_env accepts string inputs only, so the suggestion must not offer it for
+// a json input: following it would turn the warning into a config error.
+func TestSuggestionOffersOnlyKeysThatAcceptTheInputType(t *testing.T) {
+	text := strings.Replace(edgeInputGraph, "TARGET", strings.Replace(shellWithoutInputEnv, "i: {type: string", "i: {type: json", 1), 1)
+	text = strings.Replace(text, "config: {command: /usr/bin/printf, args: [x]}", "config: {command: /usr/bin/printf, args: [\"{}\"], stdout_json: true}", 1)
+	text = strings.Replace(text, "o: {type: string}", "o: {type: json}", 1)
+	text = strings.Replace(text, "a.outputs.o", "a.outputs.json", 1)
+	text = strings.Replace(text, "      o: {type: json}", "      json: {type: json}", 1)
+	requireNoErrors(t, text)
+	var diags []graph.Diagnostic
+	for _, d := range validateGraph(parseGraph(t, text)).Diagnostics {
+		if d.Code == edgeInputUnusedCode {
+			diags = append(diags, d)
+		}
+	}
+	if len(diags) != 1 || strings.Contains(diags[0].Suggestion, "input_env") || !strings.Contains(diags[0].Suggestion, "no input of this name or type") {
+		t.Errorf("got %+v", diags)
+	}
+}
+
+// ADR-0017: an edge into a human node makes the approval wait for its source,
+// even when the person is not shown the value (a json input).
+func TestEdgeIntoAHumanNodeIsAnApprovalDependencyAndDoesNotWarn(t *testing.T) {
+	text := strings.Replace(edgeInputGraph, "TARGET", `    type: human
+    config: {prompt: "ok?"}
+    inputs:
+      i: {type: string, required: true}
+    outputs:
+      decision: {type: string, required: true}`, 1)
+	requireNoErrors(t, text)
+	for _, d := range validateGraph(parseGraph(t, text)).Diagnostics {
+		if d.Code == edgeInputUnusedCode {
+			t.Errorf("got %+v", d)
+		}
+	}
+}
+
+// roadmap: F0.2-AC4
+func TestShippedGraphsHaveNoUnusedEdgeInput(t *testing.T) {
+	paths, _ := filepath.Glob("../../.agents/graphs/*.yaml")
+	templates, _ := filepath.Glob("../../.agents/templates/*.yaml")
+	for _, p := range append(paths, templates...) {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, d := range validateGraph(parseGraph(t, string(data))).Diagnostics {
+			if d.Code == edgeInputUnusedCode {
+				t.Errorf("%s: %s", p, d.Message)
+			}
 		}
 	}
 }

@@ -50,6 +50,7 @@ nodes:
       context_inputs: [summary]
     inputs:
       summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
     outputs:
       decision: {type: string, required: true}
   record:
@@ -62,9 +63,9 @@ nodes:
 edges:
   - {from: confirm_start.outputs.decision, to: audit.inputs.start}
   - {from: audit.outputs.summary, to: read_report.inputs.summary}
+  - {from: audit.outputs.changed_files, to: read_report.inputs.changed_files}
   - {from: read_report.outputs.decision, to: record.inputs.decision}
-outputs:
-  changed_files: {from: audit.outputs.changed_files}
+outputs: {}
 metadata:
   layout:
     nodes:

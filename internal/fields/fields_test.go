@@ -128,8 +128,12 @@ func TestNamedInputsIgnoresInactiveGroups(t *testing.T) {
 	}
 }
 
-func TestInputKeysListsTheKeysThatNameInputs(t *testing.T) {
-	if got := InputKeys(inputFields()); !reflect.DeepEqual(got, []string{"env", "list", "input"}) {
-		t.Errorf("got %v", got)
+func TestInputKeysListsTheKeysThatNameInputsOfTheType(t *testing.T) {
+	if got := InputKeys(inputFields(), "string"); !reflect.DeepEqual(got, []string{"env", "list", "input"}) {
+		t.Errorf("string: got %v", got)
+	}
+	// env accepts string inputs only; list and input accept any type.
+	if got := InputKeys(inputFields(), "json"); !reflect.DeepEqual(got, []string{"list", "input"}) {
+		t.Errorf("json: got %v", got)
 	}
 }

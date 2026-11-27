@@ -136,7 +136,7 @@
    },
    "message": "node \"report\" does not use input \"text\", which edge 0 delivers",
    "severity": "warning",
-   "suggestion": "name input \"text\" in config.input_env, or remove the edge"
+   "suggestion": "name input \"text\" in config.input_env so the node reads it; removing the edge would also remove the node's dependency on its source"
   }
  ],
  "hash": "092a6744a543582bbe4e0a56ae82634a40d1a56f90fe4d35e2ca171b72fe0fa9",

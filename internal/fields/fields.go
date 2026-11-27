@@ -200,9 +200,10 @@ func NamedInputs(fs []Field, config map[string]any) map[string]bool {
 	return named
 }
 
-// InputKeys returns the keys of fs whose values or keys can name an input, in
-// descriptor order. Rules are not consulted.
-func InputKeys(fs []Field) []string {
+// InputKeys returns the keys of fs whose values or keys can name an input of
+// type inputType, in descriptor order. A field without InputTypes accepts any
+// type. Rules are not consulted.
+func InputKeys(fs []Field, inputType string) []string {
 	var keys []string
 	seen := map[string]bool{}
 	var walk func([]Field)
@@ -212,7 +213,7 @@ func InputKeys(fs []Field) []string {
 				walk(f.Fields)
 				continue
 			}
-			if namesInputs(f) && !seen[f.Key] {
+			if namesInputs(f) && acceptsType(f, inputType) && !seen[f.Key] {
 				seen[f.Key] = true
 				keys = append(keys, f.Key)
 			}
@@ -220,6 +221,24 @@ func InputKeys(fs []Field) []string {
 	}
 	walk(fs)
 	return keys
+}
+
+// acceptsType reports whether f may name an input of inputType: a list of
+// input names carries the types on its item.
+func acceptsType(f Field, inputType string) bool {
+	types := f.InputTypes
+	if f.Kind == List && f.Item != nil {
+		types = f.Item.InputTypes
+	}
+	if len(types) == 0 {
+		return true
+	}
+	for _, t := range types {
+		if t == inputType {
+			return true
+		}
+	}
+	return false
 }
 
 func namesInputs(f Field) bool {

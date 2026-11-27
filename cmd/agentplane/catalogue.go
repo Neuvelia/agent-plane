@@ -21,7 +21,7 @@ func nodeCatalogue() []api.NodeType {
 	return []api.NodeType{
 		{Type: "agent", Config: agent.ConfigFields(), Outputs: agent.OutputPorts(), Loop: loopType("agent")},
 		{Type: "gate", Config: gateFields(standaloneGateKinds), Outputs: gate.OutputPorts(), Loop: loopType("gate")},
-		{Type: "human", Config: graph.HumanConfigFields(), Outputs: graph.HumanOutputPorts(), OutputsLocked: true, Loop: loopType("human")},
+		{Type: humanNodeType, Config: graph.HumanConfigFields(), Outputs: graph.HumanOutputPorts(), OutputsLocked: true, Loop: loopType(humanNodeType)},
 		{Type: "shell", Config: shell.ConfigFields(), Outputs: shell.OutputPorts(), Loop: loopType("shell")},
 	}
 }

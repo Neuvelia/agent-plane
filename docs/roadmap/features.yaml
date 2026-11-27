@@ -78,8 +78,9 @@ features:
           - "cmd/agentplane/edge_input_test.go::TestEdgeToAnInputTheShellNodeDoesNotMapWarns"
           - "cmd/agentplane/edge_input_test.go::TestUnusedEdgeInputDoesNotBlockValidateOrRun"
           - "cmd/agentplane/edge_input_test.go::TestInputsTheTargetReadsDoNotWarn"
+          - "cmd/agentplane/edge_input_test.go::TestShippedGraphsHaveNoUnusedEdgeInput"
         issue: 180
-        note: "Z zakresu roadmapy F0.2 (luka #180, decyzja Q17). Krawędź z decision node'a human to bramka zatwierdzenia (ADR-0017) i nie jest zgłaszana."
+        note: "Z zakresu roadmapy F0.2 (luka #180, decyzja właściciela Q17 w docs/roadmap/audit/AUDIT-2026-11-25.md). Krawędzie do node'a human i z jego decision to zależności zatwierdzenia (ADR-0017) i nie są zgłaszane."
     out_of_scope:
       - "Autofix i inteligentne sugestie z LLM pozostają poza fazą."
     decisions: ["ADR-0002"]

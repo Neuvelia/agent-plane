@@ -53,6 +53,7 @@ nodes:
       context_inputs: [summary]
     inputs:
       summary: {type: string, required: true}
+      changed_files: {type: json, required: true}
     outputs:
       decision: {type: string, required: true}
   record:
@@ -68,9 +69,9 @@ graph_input_bindings:
 edges:
   - {from: confirm_start.outputs.decision, to: review.inputs.start}
   - {from: review.outputs.summary, to: read_findings.inputs.summary}
+  - {from: review.outputs.changed_files, to: read_findings.inputs.changed_files}
   - {from: read_findings.outputs.decision, to: record.inputs.decision}
-outputs:
-  changed_files: {from: review.outputs.changed_files}
+outputs: {}
 metadata:
   layout:
     nodes:

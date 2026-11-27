@@ -21,6 +21,9 @@ const nodeConfigCode = "E_NODE_CONFIG_INVALID"
 // the input the edge delivers (#180, F0.2 and F2.3).
 const edgeInputUnusedCode = "W_EDGE_INPUT_UNUSED"
 
+// humanNodeType is the node type of a local approval (ADR-0017).
+const humanNodeType = "human"
+
 // validateGraph is the one validation path of the CLI, the API and the editor
 // (ADR-0021): the graph rules, then each node's type against the node
 // catalogue, then each shell, gate and agent node's static configuration,
@@ -57,11 +60,11 @@ func validateGraph(def *graph.Definition) graph.ValidationResult {
 // unusedEdgeInputDiagnostics warns, in edge order, about each edge whose
 // target node never reads the input it delivers. A node reads an input that a
 // field of its type's catalogue descriptors names (fields.NamedInputs) or that
-// a loop binding forwards (node.inputs.X); an edge carrying a human decision
-// is an approval gate and always counts as used. An edge with an unknown
-// target, an undeclared input or an unknown node type, and an edge that an
-// error in reported names, is left to the blocking diagnostics. Graph input
-// bindings are not checked. The warning never blocks a run.
+// a loop binding forwards (node.inputs.X). An approval dependency always counts
+// as used (isApprovalDependency). An edge with an unknown target, an
+// undeclared input or an unknown node type, and an edge that an error in
+// reported names, is left to the blocking diagnostics. Graph input bindings
+// are not checked. The warning never blocks a run.
 func unusedEdgeInputDiagnostics(def *graph.Definition, reported []graph.Diagnostic) []graph.Diagnostic {
 	configFields := map[string][]fields.Field{}
 	for _, t := range nodeCatalogue() {
@@ -76,14 +79,15 @@ func unusedEdgeInputDiagnostics(def *graph.Definition, reported []graph.Diagnost
 		}
 		n, exists := def.Nodes[nodeID]
 		descriptors, known := configFields[n.Type]
-		_, declared := n.Inputs[inputID]
+		port, declared := n.Inputs[inputID]
 		if !exists || !known || !declared {
 			continue
 		}
-		if nodeReadsInput(n, descriptors, inputID) || isApprovalGate(def, edge) {
+		if nodeReadsInput(n, descriptors, inputID) || isApprovalDependency(def, edge, n) {
 			continue
 		}
-		out = append(out, unusedEdgeInputDiagnostic(def.ID, index, nodeID, inputID, fields.InputKeys(descriptors)))
+		suggestion := unusedEdgeInputSuggestion(inputID, fields.InputKeys(descriptors, string(port.Type)), alwaysReadInputs(descriptors))
+		out = append(out, unusedEdgeInputDiagnostic(def.ID, edgeInput{index: index, nodeID: nodeID, inputID: inputID}, suggestion))
 	}
 	return out
 }
@@ -99,17 +103,54 @@ func invalidEdges(diagnostics []graph.Diagnostic) map[int]bool {
 	return invalid
 }
 
-// isApprovalGate reports whether edge carries a human node's decision. ADR-0017
-// makes that data edge the way a node waits for approval (there is no
-// ordering-only edge), so the target is gated by it whether or not it reads
-// the value.
-func isApprovalGate(def *graph.Definition, edge graph.EdgeDefinition) bool {
+// isApprovalDependency reports whether edge is part of a human approval
+// (ADR-0017), where the dependency itself is the point and schema v0 has no
+// ordering-only edge: an edge into a human node makes the approval wait for
+// its source, and an edge from a human node's decision makes the target wait
+// for the approval, whether or not either node reads the value.
+func isApprovalDependency(def *graph.Definition, edge graph.EdgeDefinition, target graph.NodeDefinition) bool {
+	if target.Type == humanNodeType {
+		return true
+	}
 	parts := strings.Split(string(edge.From), ".")
 	if len(parts) != 3 || parts[1] != "outputs" || parts[2] != "decision" {
 		return false
 	}
 	source, exists := def.Nodes[parts[0]]
-	return exists && source.Type == "human"
+	return exists && source.Type == humanNodeType
+}
+
+// alwaysReadInputs returns, sorted, the inputs a node type reads with an
+// empty configuration (an Agent's task).
+func alwaysReadInputs(descriptors []fields.Field) []string {
+	var names []string
+	for name := range fields.NamedInputs(descriptors, map[string]any{}) {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// unusedEdgeInputSuggestion names the config keys that accept an input of
+// this type, or else the inputs the node type always reads. It never advises
+// removing the edge without saying that the edge is also the dependency.
+func unusedEdgeInputSuggestion(inputID string, inputKeys, alwaysRead []string) string {
+	const dependency = "; removing the edge would also remove the node's dependency on its source"
+	if len(inputKeys) > 0 {
+		return fmt.Sprintf("name input %q in config.%s so the node reads it%s", inputID, strings.Join(inputKeys, " or config."), dependency)
+	}
+	if len(alwaysRead) > 0 {
+		return fmt.Sprintf("this node type reads only input %s; deliver the value there%s", strings.Join(quoteAll(alwaysRead), ", "), dependency)
+	}
+	return "this node type reads no input of this name or type" + dependency
+}
+
+func quoteAll(names []string) []string {
+	quoted := make([]string, len(names))
+	for i, name := range names {
+		quoted[i] = fmt.Sprintf("%q", name)
+	}
+	return quoted
 }
 
 // edgeTarget splits an edge's NODE.inputs.PORT target. Text outside the
@@ -139,20 +180,23 @@ func nodeReadsInput(n graph.NodeDefinition, descriptors []fields.Field, inputID 
 	return false
 }
 
-// unusedEdgeInputDiagnostic names the edge, its target node and input (all in
-// the identifier grammar) and the config keys that could read the input.
-func unusedEdgeInputDiagnostic(graphID string, edgeIndex int, nodeID, inputID string, inputKeys []string) graph.Diagnostic {
-	suggestion := "this node type reads no input by that name: remove the edge, or connect it to an input the node reads"
-	if len(inputKeys) > 0 {
-		suggestion = fmt.Sprintf("name input %q in config.%s, or remove the edge", inputID, strings.Join(inputKeys, " or config."))
-	}
-	index := edgeIndex
+// edgeInput identifies an edge by index and its target node and input, all
+// in the identifier grammar.
+type edgeInput struct {
+	index   int
+	nodeID  string
+	inputID string
+}
+
+// unusedEdgeInputDiagnostic reports the edge and its target node and input.
+func unusedEdgeInputDiagnostic(graphID string, edge edgeInput, suggestion string) graph.Diagnostic {
+	index := edge.index
 	return graph.Diagnostic{
 		Severity:   graph.SeverityWarning,
 		Code:       edgeInputUnusedCode,
-		Message:    fmt.Sprintf("node %q does not use input %q, which edge %d delivers", nodeID, inputID, edgeIndex),
+		Message:    fmt.Sprintf("node %q does not use input %q, which edge %d delivers", edge.nodeID, edge.inputID, edge.index),
 		GraphID:    shownGraphID(graphID),
-		Location:   graph.DiagnosticLocation{EdgeIndex: &index, Path: fmt.Sprintf("edges[%d].to", edgeIndex)},
+		Location:   graph.DiagnosticLocation{EdgeIndex: &index, Path: fmt.Sprintf("edges[%d].to", edge.index)},
 		Suggestion: suggestion,
 	}
 }
