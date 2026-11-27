@@ -151,18 +151,29 @@ func runDiff(ctx context.Context, cmd *exec.Cmd) (int, error) {
 // The process tree it starts never outlives the call: cancellation terminates
 // it, and a leader that exits on its own has its group swept.
 func runDiffTree(ctx context.Context, cmd *exec.Cmd, policy proctree.Policy) (int, error) {
+	waitErr, err := runOwned(ctx, cmd, policy, "diff")
+	if err != nil {
+		return 0, err
+	}
+	return diffExit(waitErr)
+}
+
+// runOwned runs cmd as an owned process tree with bounded evidence pipes and
+// returns the leader's wait error for the caller to classify. what names the
+// process in errors.
+func runOwned(ctx context.Context, cmd *exec.Cmd, policy proctree.Policy, what string) (waitErr, err error) {
 	// Own the pipes: exec.Cmd.Wait can otherwise hide copy errors behind exit 1.
 	targets := []io.Writer{cmd.Stdout, cmd.Stderr}
 	readers, writers, err := evidencePipes()
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer closeAll(readers)
 	cmd.Stdout, cmd.Stderr = writers[0], writers[1]
-	tree, err := startOwned(ctx, cmd)
+	tree, err := startOwned(ctx, cmd, what)
 	closeAll(writers)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	drained := make(chan error, 2)
 	for i, r := range readers {
@@ -173,17 +184,17 @@ func runDiffTree(ctx context.Context, cmd *exec.Cmd, policy proctree.Policy) (in
 		go func(r *os.File, w io.Writer) { defer r.Close(); _, e := io.Copy(w, r); drained <- e }(r, target)
 	}
 	waitErr, termErr := waitOwned(ctx, tree, policy)
-	drainErr := awaitDrain(readers, drained)
+	drainErr := awaitDrain(readers, drained, what)
 	if termErr != nil {
-		return 0, fmt.Errorf("terminate diff process tree: %w", errors.Join(ctx.Err(), termErr))
+		return nil, fmt.Errorf("terminate %s process tree: %w", what, errors.Join(ctx.Err(), termErr))
 	}
 	if ctx.Err() != nil {
-		return 0, ctx.Err()
+		return nil, ctx.Err()
 	}
 	if drainErr != nil {
-		return 0, fmt.Errorf("drain diff evidence: %w", drainErr)
+		return nil, fmt.Errorf("drain %s evidence: %w", what, drainErr)
 	}
-	return diffExit(waitErr)
+	return waitErr, nil
 }
 
 func evidencePipes() (readers, writers []*os.File, err error) {
@@ -207,13 +218,13 @@ func closeAll(files []*os.File) {
 	}
 }
 
-func startOwned(ctx context.Context, cmd *exec.Cmd) (*proctree.Tree, error) {
+func startOwned(ctx context.Context, cmd *exec.Cmd, what string) (*proctree.Tree, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	tree, err := proctree.Start(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("start diff: %w", err)
+		return nil, fmt.Errorf("start %s: %w", what, err)
 	}
 	return tree, nil
 }
@@ -232,7 +243,7 @@ func waitOwned(ctx context.Context, tree *proctree.Tree, policy proctree.Policy)
 	return waitErr, c.err
 }
 
-func awaitDrain(readers []*os.File, drained <-chan error) error {
+func awaitDrain(readers []*os.File, drained <-chan error, what string) error {
 	timer := time.NewTimer(time.Second)
 	defer timer.Stop()
 	var drainErr error
@@ -247,7 +258,7 @@ func awaitDrain(readers []*os.File, drained <-chan error) error {
 			for ; remaining > 0; remaining-- {
 				<-drained
 			}
-			drainErr = errors.New("diff evidence drain exceeded one second")
+			drainErr = fmt.Errorf("%s evidence drain exceeded one second", what)
 		}
 	}
 	return drainErr

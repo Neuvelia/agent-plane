@@ -338,3 +338,12 @@ func TestAmbientBypassNamesAValidIdentifier(t *testing.T) {
 		t.Errorf("a valid identifier is still named: %+v", d)
 	}
 }
+
+func TestValidateSecretAmbientBypassCoversATestCommandLoopGate(t *testing.T) {
+	loop := "  a:\n    type: shell\n    inputs: {}\n    outputs: {out: {type: string, required: true}}\n    config:\n      command: /bin/true\n      cwd: /w\n" +
+		"    loop:\n      max_attempts: 2\n      gate:\n        inputs: {candidate: {type: string, required: true}}\n        config:\n          check_id: t\n          kind: test_command\n          command: /bin/true\n          cwd: /w\n          side_effects: none\n          input: candidate\n          env_allowlist: [GITHUB_TOKEN]\n"
+	result := validateText(t, secretsGraph(oneSecret, loop))
+	if !hasDiagnosticCode(result, "E_SECRET_AMBIENT_BYPASS") {
+		t.Fatalf("a loop Gate naming a secret's backing variable must be rejected: %+v", result.Diagnostics)
+	}
+}

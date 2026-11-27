@@ -28,6 +28,11 @@ type config struct {
 	Allowed      []string        `json:"allowed_paths"`
 	Mode         string          `json:"mode"`
 	Workspace    string          `json:"workspace"`
+	// Keys of kind test_command (ADR-0042).
+	Args         []string          `json:"args"`
+	EnvAllowlist []string          `json:"env_allowlist"`
+	Env          map[string]string `json:"env"`
+	SideEffects  string            `json:"side_effects"`
 }
 
 func parse(n graph.NodeDefinition) (config, error) {
@@ -135,6 +140,8 @@ func parse(n graph.NodeDefinition) (config, error) {
 		if c.Input == "" || !ok || !candidate.Required || (candidate.Type != graph.ValueTypeString && candidate.Type != graph.ValueTypeJSON) {
 			return c, fmt.Errorf("changed_files_scope input %q must be a required string or JSON port", c.Input)
 		}
+	case KindTestCommand:
+		err = validateTestCommand(c, n)
 	default:
 		return c, fmt.Errorf("unsupported gate kind %q", c.Kind)
 	}

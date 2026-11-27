@@ -2,6 +2,7 @@
 
 **Status:** accepted for F1.4 implementation
 **Date:** 2026-10-19
+**Amended by:** ADR-0042 (proposed): the Gate kind `test_command` runs an author-chosen command inside a loop only; the standalone Gate and the `command` kind stay read-only as decided here.
 
 ## Context
 

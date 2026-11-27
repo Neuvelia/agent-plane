@@ -32,6 +32,11 @@ func (v *definitionValidator) validateSecrets() {
 			assigned = nil
 		}
 		channels = append(channels, secrets.NodeChannels{NodeID: nodeID, Assigned: assigned, Names: nodeEnvNames(node)})
+		if node.Loop != nil {
+			// A test_command loop Gate builds its own environment (ADR-0042) and
+			// is never assigned secrets, so every name it lists is a channel.
+			channels = append(channels, secrets.NodeChannels{NodeID: nodeID, Names: nodeEnvNames(node.Loop.GateNode())})
+		}
 	}
 	for _, b := range secrets.AmbientBypasses(refs, channels) {
 		v.error("E_SECRET_AMBIENT_BYPASS",
