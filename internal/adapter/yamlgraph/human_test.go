@@ -3,6 +3,7 @@ package yamlgraph_test
 import (
 	"agentplane/internal/adapter/yamlgraph"
 	"agentplane/internal/domain/graph"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -131,5 +132,21 @@ nodes:
 				t.Fatalf("ok=%v diagnostics=%v", tt.ok, result.Diagnostics)
 			}
 		})
+	}
+}
+
+// Several E_HUMAN_INVALID errors share the node's path, so they must come out
+// in the same order on every validation (deterministic diagnostics, F0.2).
+func TestHumanConfigErrorsHaveAStableOrder(t *testing.T) {
+	body := "    config: {prompt: 5, on_reject: retry, context_inputs: 7}\n    outputs: {decision: {type: string}}\n"
+	d, err := yamlgraph.Parse([]byte(humanDoc(body)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := fmt.Sprint(graph.Validate(d).Diagnostics)
+	for range 100 {
+		if got := fmt.Sprint(graph.Validate(d).Diagnostics); got != first {
+			t.Fatalf("diagnostics changed order:\n%s\n%s", first, got)
+		}
 	}
 }

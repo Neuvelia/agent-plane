@@ -67,6 +67,18 @@ describe('approval context model', () => {
     expect(u!.moreFiles).toBe(2)
   })
 
+  it('shows the node-level changed files of an upstream node without attempts', () => {
+    const fastStarted = waiting.find((e) => e.type === 'node_started' && e.node_id === 'fast')!
+    const evidence = {
+      ...fastStarted,
+      type: 'node_evidence',
+      sequence: 1000,
+      payload: { changed_files: [{ path: 'b.go' }, { path: 'a.go' }] },
+    } as unknown as ApEvent
+    const [u] = approvalContext(reduceAll([...waiting.slice(0, -1), evidence]), ['fast'])
+    expect(u!.files).toEqual(['a.go', 'b.go'])
+  })
+
   it('never shows the files of an earlier, rejected attempt next to the accepted check', () => {
     const evidence = {
       ...attemptStarts[0]!,

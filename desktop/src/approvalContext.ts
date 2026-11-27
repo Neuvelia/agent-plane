@@ -11,22 +11,24 @@ export interface UpstreamContext {
   nodeId: string
   /** The check result of the node's last attempt, or of the node as a standalone Gate. */
   check?: CheckView
-  /** Sorted Git-observed paths of that same last attempt, bounded. Undefined: not observed. */
+  /** Sorted Git-observed paths of that same last attempt (or of a node without attempts), bounded. Undefined: not observed. */
   files?: string[]
   /** Observed paths beyond MAX_CONTEXT_FILES. */
   moreFiles: number
 }
 
 /**
- * Context for each direct dependency of a human node, in the graph's edge order without duplicates.
+ * Context for each direct dependency of a human node, in the order of `upstream` without duplicates.
  * The check and the changed files come from the same attempt, the node's last one: an earlier,
- * rejected attempt never lends its files or its check to the attempt being approved.
+ * rejected attempt never lends its files or its check to the attempt being approved. A node
+ * without attempts (a non-loop Agent) uses its node-level evidence.
  */
 export function approvalContext(run: RunView, upstream: readonly string[]): UpstreamContext[] {
   return [...new Set(upstream)].map((id) => {
     const n = nodeView(run, id)
     const last = n.attempts[n.attempts.length - 1]
-    const all = last?.changedFiles && [...last.changedFiles].sort()
+    const observed = last ? last.changedFiles : n.changedFiles
+    const all = observed && [...observed].sort()
     return {
       nodeId: id,
       check: last ? last.check : n.check,

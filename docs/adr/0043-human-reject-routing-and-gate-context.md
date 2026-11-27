@@ -100,13 +100,13 @@ unknown key with `E_HUMAN_INVALID`). Event schema unchanged.
 
 ## Validation
 
-- `internal/adapter/yamlgraph/human_test.go`: the values, and the check rule
-  (a Shell consumer is rejected; a Gate or a graph output is accepted).
-- `cmd/agentplane/validation_test.go`: the descriptor-based checks, a Gate that
-  ignores the decision, and the approval-edge exemptions of
-  `W_EDGE_INPUT_UNUSED`.
-- `internal/runtime/human_test.go`: a rejection with `continue` reaches its
-  check as `"rejected"`; the default still fails.
+- `internal/adapter/yamlgraph/human_test.go`: the values, and the routing rule
+  (a graph output is accepted; a Shell, Gate or loop consumer, alone or beside
+  a graph output, is rejected).
+- `cmd/agentplane/validation_test.go`: a Gate that reads the decision is still
+  rejected, and the approval-edge exemptions of `W_EDGE_INPUT_UNUSED`.
+- `internal/runtime/human_test.go`: a rejection with `continue` publishes
+  `"rejected"` on the decision; the default still fails.
 - desktop `approval-context.test.tsx`.
 
 **Owner action:** this ADR stays `proposed` until the owner accepts it. The

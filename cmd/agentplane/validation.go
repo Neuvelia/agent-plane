@@ -174,8 +174,10 @@ func nodeReadsInput(n graph.NodeDefinition, configFields map[string][]fields.Fie
 	if n.Loop == nil {
 		return false
 	}
+	// The embedded Gate offers the loop-only kinds (test_command,
+	// changed_files_scope) that the standalone catalogue entry drops.
 	gate := n.Loop.GateNode()
-	gateReads := fields.NamedInputs(configFields[gate.Type], gate.Config)
+	gateReads := fields.NamedInputs(gateFields(graph.LoopGateKinds(n.Type)), gate.Config)
 	for _, binding := range n.Loop.Bindings {
 		gateInput, forwarded := strings.CutPrefix(binding.To, "gate.inputs.")
 		if binding.From == "node.inputs."+inputID && forwarded && gateReads[gateInput] {

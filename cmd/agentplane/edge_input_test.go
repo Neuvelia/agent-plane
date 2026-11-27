@@ -144,6 +144,24 @@ func TestInputsTheTargetReadsDoNotWarn(t *testing.T) {
       bindings:
         - {from: candidate.outputs.stdout, to: gate.inputs.candidate}
         - {from: node.inputs.i, to: gate.inputs.expected}`,
+		// A loop-only Gate kind (ADR-0042) is read through the loop's Gate
+		// descriptors, not the standalone Gate catalogue entry.
+		"loop binding to a test_command Gate input": `    type: shell
+    config: {command: /usr/bin/printf, args: ["x"]}
+    inputs:
+      i: {type: string, required: true}
+    outputs:
+      stdout: {type: string}
+    loop:
+      max_attempts: 2
+      gate:
+        inputs:
+          spec: {type: string, required: true}
+          candidate: {type: string, required: true}
+        config: {check_id: t, kind: test_command, command: /usr/bin/true, cwd: /tmp, side_effects: none, input: spec}
+      bindings:
+        - {from: candidate.outputs.stdout, to: gate.inputs.candidate}
+        - {from: node.inputs.i, to: gate.inputs.spec}`,
 	}
 	for name, target := range cases {
 		requireNoErrors(t, strings.Replace(edgeInputGraph, "TARGET", target, 1))

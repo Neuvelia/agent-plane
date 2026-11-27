@@ -41,7 +41,10 @@ func (v *definitionValidator) validateHumanNodes() {
 			fail("human node must declare exactly one output \"decision\" of type string", "declare outputs: {decision: {type: string, required: true}}")
 		}
 		allowed := fields.AllowedKeys(HumanConfigFields(), n.Config)
-		for key, value := range n.Config {
+		// Sorted keys: several E_HUMAN_INVALID errors share one path, so map
+		// order would reorder them between runs.
+		for _, key := range sortedKeys(n.Config) {
+			value := n.Config[key]
 			if !allowed[key] {
 				fail(fmt.Sprintf("unsupported human config key %s", quotedKey(key)), "use only prompt, context_inputs and on_reject")
 				continue
