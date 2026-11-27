@@ -24,8 +24,9 @@ func sizedNode(stdoutBytes, stderrBytes int) graph.NodeDefinition {
 func TestCaptureBeyondLimitKeepsPrefixWithMarkerAndStreamsEverything(t *testing.T) {
 	var mu sync.Mutex
 	observed := map[string]int{}
-	executor := Executor{CaptureLimit: 1000}
-	_, err := executor.Run(context.Background(), Request{NodeID: "worker", Node: sizedNode(5000, 1200), Observe: func(stream string, data []byte) {
+	// One process run proves both: the observer sees every byte while the
+	// retained result is cut.
+	result, err := (Executor{CaptureLimit: 1000}).execute(context.Background(), Request{NodeID: "worker", Node: sizedNode(5000, 1200), Observe: func(stream string, data []byte) {
 		mu.Lock()
 		defer mu.Unlock()
 		observed[stream] += len(data)
@@ -35,10 +36,6 @@ func TestCaptureBeyondLimitKeepsPrefixWithMarkerAndStreamsEverything(t *testing.
 	}
 	if observed["stdout"] != 5000 || observed["stderr"] != 1200 {
 		t.Fatalf("observer lost bytes: %v", observed)
-	}
-	result, err := executor.Execute(context.Background(), "worker", sizedNode(5000, 1200), nil)
-	if err != nil {
-		t.Fatal(err)
 	}
 	wantStdout := strings.Repeat("o", 1000) + "\n[agentplane: 4000 bytes of stdout omitted; capture limit 1000 bytes]\n"
 	wantStderr := strings.Repeat("e", 1000) + "\n[agentplane: 200 bytes of stderr omitted; capture limit 1000 bytes]\n"
@@ -144,7 +141,8 @@ func TestSecretCutByTheCaptureLimitIsMaskedInTheRunResult(t *testing.T) {
 		t.Fatalf("run = %v, %v", result.State, err)
 	}
 	var presented *ExecutionError
-	if !errors.As(result.Failure.Err, &presented) {
+	var limitErr *CaptureLimitError
+	if !errors.As(result.Failure.Err, &presented) || !errors.As(result.Failure.Err, &limitErr) {
 		t.Fatalf("failure = %v", result.Failure.Err)
 	}
 	retained, _, found := strings.Cut(presented.Result.Stdout, omissionMarkerPrefix)

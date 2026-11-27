@@ -40,7 +40,8 @@ retained capture. There is no artifact store yet (F3.5).
    trailing proper prefix of any redacted form with the marker
    (`ExecutionError.RedactedWithCut`, `logRedactor.FlushCut`). Complete
    streams are masked as before. Live `log_chunk` events are unaffected: they
-   see the whole stream.
+   see the whole stream. The `CaptureLimitError` cause holds no process text
+   and stays reachable with `errors.As` in the redacted result.
 7. Until this ADR is accepted, F0.5 stays `partial` with issue #181 open; it
    moves to `diverged` only when the owner accepts the decision.
 

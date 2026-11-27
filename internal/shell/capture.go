@@ -17,13 +17,19 @@ const CaptureDiagnostic = "E_SHELL_OUTPUT_TRUNCATED"
 // CaptureLimitError reports that a declared output port reads a stream whose
 // capture was truncated. Its value would be incomplete, so the node produces no
 // outputs instead of passing a prefix downstream as if it were complete.
+// Its fields hold no process output, so it survives result redaction intact.
 type CaptureLimitError struct {
-	Output  string
-	Stream  string
-	Limit   int
+	// Output is the declared output port that needed the stream.
+	Output string
+	// Stream is the truncated stream the port reads: "stdout" or "stderr".
+	Stream string
+	// Limit is the capture limit in bytes that applied to the stream.
+	Limit int
+	// Omitted is the number of bytes dropped beyond Limit.
 	Omitted int64
 }
 
+// Error names the output, the stream and the byte counts, never output text.
 func (e *CaptureLimitError) Error() string {
 	return fmt.Sprintf("output %q needs the complete %s, but %d bytes beyond the %d-byte capture limit were omitted; write large output to a file instead", e.Output, e.Stream, e.Omitted, e.Limit)
 }

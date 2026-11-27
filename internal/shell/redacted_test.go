@@ -37,3 +37,17 @@ func TestExecutionErrorRedactedWithCutMasksOnlyTruncatedRetainedText(t *testing.
 		t.Fatalf("copy = %#v", copied.Result)
 	}
 }
+
+func TestExecutionErrorRedactedKeepsTheCaptureLimitCause(t *testing.T) {
+	limit := &CaptureLimitError{Output: "stdout", Stream: "stdout", Limit: 1000, Omitted: 500}
+	original := &ExecutionError{NodeID: "n", Kind: FailureOutput, Cause: limit}
+	redacted := original.Redacted(func(string) string { return "***" })
+	var kept *CaptureLimitError
+	if !errors.As(redacted, &kept) || *kept != *limit || kept == limit {
+		t.Fatalf("cause = %#v", kept)
+	}
+	var diagnostic interface{ DiagnosticCode() string }
+	if !errors.As(redacted, &diagnostic) || diagnostic.DiagnosticCode() != CaptureDiagnostic {
+		t.Fatal("the diagnostic code must survive redaction")
+	}
+}

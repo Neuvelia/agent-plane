@@ -241,8 +241,8 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 }
 
 // ExecuteNodeWithLogs streams every byte in bounded chunks while retaining
-// stdout and stderr evidence up to the capture limit. The observer must tolerate concurrent
-// calls from the two output-copy goroutines.
+// stdout and stderr evidence up to the capture limit. The observer must
+// tolerate concurrent calls from the two output-copy goroutines.
 func (e Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
 	return e.ExecuteNodeAttempt(ctx, nodeID, node, inputs, observe, 0)
 }

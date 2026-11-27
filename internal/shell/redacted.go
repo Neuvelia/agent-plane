@@ -9,10 +9,10 @@ type maskedCause struct{ message string }
 func (c maskedCause) Error() string { return c.message }
 
 // Redacted returns a copy for run results (F3.8, ADR-0029): process output and
-// cause text pass through mask, while NodeID, Kind, exit code, timestamps and
-// termination stay typed for callers that branch on them. The receiver is not
-// modified. It cannot mask a partial secret at a capture cut; callers that can
-// use RedactedWithCut.
+// cause text pass through mask, while NodeID, Kind, exit code, timestamps,
+// termination and a CaptureLimitError cause stay typed for callers that branch
+// on them. The receiver is not modified. It cannot mask a partial secret at a
+// capture cut; callers that can use RedactedWithCut.
 func (e *ExecutionError) Redacted(mask func(string) string) error {
 	return e.RedactedWithCut(mask, mask)
 }
@@ -24,10 +24,21 @@ func (e *ExecutionError) RedactedWithCut(mask, cut func(string) string) error {
 	copied := *e
 	copied.Result.Stdout = maskStream(e.Result.Stdout, e.Result.StdoutOmitted, mask, cut)
 	copied.Result.Stderr = maskStream(e.Result.Stderr, e.Result.StderrOmitted, mask, cut)
-	if e.Cause != nil {
-		copied.Cause = maskedCause{message: mask(e.Cause.Error())}
-	}
+	copied.Cause = redactedCause(e.Cause, mask)
 	return &copied
+}
+
+// redactedCause keeps a CaptureLimitError, which carries no process text, so
+// callers can still branch on it; any other cause becomes masked text.
+func redactedCause(cause error, mask func(string) string) error {
+	if cause == nil {
+		return nil
+	}
+	if limit, ok := cause.(*CaptureLimitError); ok {
+		copied := *limit
+		return &copied
+	}
+	return maskedCause{message: mask(cause.Error())}
 }
 
 func maskStream(text string, omitted int64, mask, cut func(string) string) string {
