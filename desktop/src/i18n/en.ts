@@ -328,6 +328,7 @@ export const en = {
   'inbox.lede.retrying': 'Attempt {number} of {max} at {node}. Only this node reruns; accepted siblings stay as they are.',
   'inbox.lede.running': 'Nothing needs you while it runs.',
   'inbox.sec.changed': 'What changed',
+  'inbox.sec.decision': 'Decision',
   'inbox.sec.evidence': 'Evidence',
   'inbox.sec.attemptsAt': 'Attempts at',
   'inbox.sec.lastFailure': 'Last failure',

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import approve from './fixtures/demo-approve.json'
 import reject from './fixtures/demo-reject.json'
 import exhausted from './fixtures/exhausted.json'
-import { ageMs, filterQueue, formatAge, inboxQueue, newestRuns, nextItem, queueCounts, recentOutcomes, RECENT_RUNS, selectItem, withDecided } from '../src/inbox'
+import { ageMs, filterQueue, formatAge, inboxQueue, newestRuns, queueCounts, recentOutcomes, RECENT_RUNS, withDecided } from '../src/inbox'
+import { currentItem, heldInQueue, markDecidedHere, nextKey, noDecisions, recordDecision, shownDecision } from '../src/inboxDecisions'
 import { acceptedNodes, activeNode, failureText, FAILURE_LINES, nodeRows, stopNode } from '../src/inboxRun'
 import { reduceAll, settle } from '../src/reducer'
 import type { ApEvent, GraphSummary, PendingApproval, RunSummary } from '../src/types'
@@ -28,7 +29,7 @@ describe('inboxQueue', () => {
     run('e', 'cancelled', '2026-11-14T13:00:00Z'),
     run('f', 'running', '2026-11-14T08:00:00Z'),
   ]
-  it('queues approvals, then failed or interrupted runs, then running runs, newest first in each group', () => {
+  it('queues approvals, then failed or interrupted runs, then running runs, newest first in each group [F2.5b-AC1]', () => {
     const items = inboxQueue(runs, [approval('c')])
     expect(items.map((i) => `${i.group}:${i.kind}:${i.key}`)).toEqual(['waiting:approval:c-approve', 'stopped:failed:b', 'stopped:interrupted:d', 'running:running:f'])
   })
@@ -50,20 +51,21 @@ describe('inboxQueue', () => {
 
 describe('filters and selection', () => {
   const items = inboxQueue([run('b', 'failed', '2026-11-14T11:00:00Z'), run('c', 'running', '2026-11-14T12:00:00Z'), run('d', 'running', '2026-11-14T10:00:00Z')], [approval('c')])
-  it('counts every group and filters to one', () => {
+  it('counts every group and filters to one [F2.5b-AC1]', () => {
     expect(queueCounts(items)).toEqual({ all: 3, approvals: 1, stopped: 1, running: 1 })
     expect(filterQueue(items, 'stopped').map((i) => i.key)).toEqual(['b'])
     expect(filterQueue(items, 'running').map((i) => i.key)).toEqual(['d'])
     expect(filterQueue(items, 'all')).toHaveLength(3)
   })
-  it('selects the picked item while it is queued, else the first', () => {
-    expect(selectItem(items, 'b')?.key).toBe('b')
-    expect(selectItem(items, 'gone')?.key).toBe('c-approve')
-    expect(selectItem([], null)).toBeUndefined()
+  it('shows the picked item while it is in view, else the first', () => {
+    expect(currentItem(items, items, 'b', noDecisions, 'all')?.key).toBe('b')
+    expect(currentItem(items, items, 'gone', noDecisions, 'all')?.key).toBe('c-approve')
+    expect(currentItem([], [], null, noDecisions, 'all')).toBeUndefined()
   })
-  it('moves on to the first other item after a decision', () => {
-    expect(nextItem(items, 'c-approve')?.key).toBe('b')
-    expect(nextItem(items, 'b')?.key).toBe('c-approve')
+  it('keeps the picked item when a newer one arrives first in the queue [F2.5b-AC6]', () => {
+    const newer = inboxQueue([run('n', 'failed', '2026-11-14T13:00:00Z')], []).concat(items)
+    expect(newer[0]!.key).not.toBe('b')
+    expect(currentItem(newer, newer, 'b', noDecisions, 'all')?.key).toBe('b')
   })
 })
 
@@ -79,21 +81,41 @@ describe('decided approvals', () => {
   })
 })
 
-describe('selection after a decision', () => {
+describe('decisions taken in the Inbox', () => {
   const b = inboxQueue([], [approval('b')])
   const a = inboxQueue([], [approval('a')])[0]!
-  it('stays on the decided approval once the list drops it and its decision is recorded', () => {
-    const queue = withDecided(b, [a])
-    expect(selectItem(queue, 'a-approve')?.key).toBe('a-approve')
+  const decidedA = recordDecision(markDecidedHere(noDecisions, a), a.key, 'approved')
+  it('stays on the decided approval once the list drops it, and keeps it queued once its decision is recorded [F2.5b-AC6]', () => {
+    const queue = withDecided(b, heldInQueue(decidedA))
+    expect(currentItem(queue, queue, 'a-approve', decidedA, 'all')?.key).toBe('a-approve')
     expect(queueCounts(queue).approvals).toBe(2)
+    expect(shownDecision(decidedA, 'a-approve')).toBe('approved')
   })
-  it('stays on the decided approval while its decision has not arrived yet, without queueing it', () => {
-    expect(selectItem(b, 'a-approve', a)?.key).toBe('a-approve')
-    expect(b.map((i) => i.key)).toEqual(['b-approve'])
+  it('stays on the decided approval while its decision is on its way, without queueing it as pending', () => {
+    const waiting = markDecidedHere(noDecisions, a)
+    const queue = withDecided(b, heldInQueue(waiting))
+    expect(queue.map((i) => i.key)).toEqual(['b-approve'])
+    expect(currentItem(queue, queue, 'a-approve', waiting, 'all')?.key).toBe('a-approve')
   })
-  it('falls back to the first item when nothing decided here is picked', () => {
-    expect(selectItem(b, null, a)?.key).toBe('b-approve')
-    expect(selectItem(b, 'gone')?.key).toBe('b-approve')
+  it('keeps a decision whose event arrived before the request answered [F2.5b-AC6]', () => {
+    const early = markDecidedHere(recordDecision(noDecisions, a.key, 'rejected'), a)
+    expect(heldInQueue(early).map((i) => i.key)).toEqual(['a-approve'])
+    expect(shownDecision(early, 'a-approve')).toBe('rejected')
+  })
+  it('does not hold a decision taken elsewhere [F2.5b-AC6]', () => {
+    const elsewhere = recordDecision(noDecisions, a.key, 'approved')
+    expect(heldInQueue(elsewhere)).toEqual([])
+    expect(shownDecision(elsewhere, 'a-approve')).toBeUndefined()
+  })
+  it('lets the filter win over a dropped decided approval [F2.5b-AC6]', () => {
+    const failedRun = inboxQueue([run('f', 'failed', '2026-11-14T11:00:00Z')], [])
+    const stopped = filterQueue(failedRun, 'stopped')
+    expect(currentItem(stopped, failedRun, 'a-approve', markDecidedHere(noDecisions, a), 'stopped')?.key).toBe('f')
+  })
+  it('moves Next to an item not decided here, and offers none when nothing is left [F2.5b-AC6]', () => {
+    const queue = withDecided(b, heldInQueue(decidedA))
+    expect(nextKey(queue, 'a-approve', decidedA)).toBe('b-approve')
+    expect(nextKey(withDecided([], heldInQueue(decidedA)), 'a-approve', decidedA)).toBeUndefined()
   })
 })
 
@@ -134,7 +156,7 @@ describe('age', () => {
 })
 
 describe('detail selectors over recorded runs', () => {
-  it('finds the node a failed loop stopped at and the output of its last check', () => {
+  it('finds the node a failed loop stopped at and the output of its last check [F2.5b-AC2]', () => {
     const r = reduceAll(exhaustedRetries)
     const node = stopNode(r)
     expect(node?.id).toBe('flaky')
@@ -146,7 +168,7 @@ describe('detail selectors over recorded runs', () => {
   it('finds the human node a rejected run stopped at', () => {
     expect(stopNode(reduceAll(demoReject))?.id).toBe('approve')
   })
-  it('lists what an interrupted run kept and where it stopped', () => {
+  it('lists what an interrupted run kept and where it stopped [F2.5b-AC2]', () => {
     const cut = settle(reduceAll(upTo(demoApprove, (e) => e.type === 'approval_requested')), false)
     expect(cut.status).toBe('interrupted')
     expect(acceptedNodes(cut).sort()).toEqual(['fast', 'flaky'])

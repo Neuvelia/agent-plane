@@ -450,6 +450,7 @@ main:has(>.inbox){padding:0}
 .inbox-bar{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-8);padding:var(--space-12) 40px;border-top:1px solid var(--hairline);background:var(--bg)}
 .inbox-bar input{flex:1 1 200px;min-width:0;height:var(--size-control);padding:0 var(--space-12);border:1px solid var(--card-line);border-radius:var(--radius-8);background:transparent}
 .inbox-bar-gap{flex:1}
+.inbox-decided{display:inline-flex;align-items:center;gap:var(--space-8)}
 .inbox-bar-note{flex-basis:100%;font-size:var(--type-small-size)}
 /* Canvas buttons (tm.css): flat, 8px radius; one silver primary per screen. */
 .ib-btn{display:inline-flex;align-items:center;justify-content:center;gap:var(--space-8);height:var(--size-control);padding:0 var(--space-12);border:1px solid var(--card-line);border-radius:var(--radius-8);background:var(--raised);color:var(--fg);font:inherit;font-weight:500;white-space:nowrap;cursor:pointer;transition:background-color .15s}
@@ -466,6 +467,7 @@ main:has(>.inbox){padding:0}
 .inbox-empty h2{margin:0;font-size:var(--type-card-title-size)}
 .inbox-empty p{margin:0;max-width:44ch}
 .inbox-empty-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:var(--space-8)}
+@media (max-width:1100px){.inbox{grid-template-columns:minmax(280px,340px) minmax(0,1fr)}.inbox-body,.inbox-bar{padding-left:24px;padding-right:24px}}
 @media (max-width:900px){.inbox{grid-template-columns:minmax(0,1fr);height:auto}.inbox-queue{border-right:0;border-bottom:1px solid var(--hairline)}.inbox-list{max-height:40vh}.inbox-body,.inbox-bar{padding-left:24px;padding-right:24px}}
 
 /* F2.5c: New run with preflight (Tarmind canvas, artboard "New run with preflight").

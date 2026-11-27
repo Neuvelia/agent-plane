@@ -146,6 +146,7 @@ async function startDemo(app, page) {
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid="inbox"]')
     assert.equal(await page.evaluate(() => localStorage.getItem('agentplane.welcome.v1')), 'done')
+    // roadmap: F2.5b-AC5
     // F2.5b: with nothing queued, the Inbox offers Open graph; it lands on New run with the file chosen.
     await page.waitForSelector('[data-testid="inbox-empty"]')
     await stubOpenDialog(app, graph)
@@ -935,6 +936,7 @@ async function startDemo(app, page) {
     assert.doesNotMatch(await page.textContent('[data-testid="event-log"]'), /node_started/)
     await page.click('[data-testid="events-all"]')
 
+    // roadmap: F2.5b-AC5
     // The Approvals screen lists the pending gate too; the decision is taken in the Inbox.
     await page.click('[data-testid="nav-approvals"]')
     await page.waitForSelector('[data-testid="approval-card"]')
@@ -942,7 +944,7 @@ async function startDemo(app, page) {
     // The Inbox queues the pending approval and offers the decision in place.
     await page.click('[data-testid="nav-inbox"]')
     await page.waitForSelector('[data-testid="inbox-item"][data-kind="approval"]')
-    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count() >= 1, true)
+    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count(), 1)
     // The run is running, but it waits for that approval, so it is queued once: as the approval.
     assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="running"]').count(), 0)
     assert.equal(await page.locator('[data-testid="inbox-recent"] .s-b').count() >= 1, true)
@@ -955,6 +957,12 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="inbox-decided"]')
     assert.match(await page.textContent('[data-testid="inbox-decided"]'), /Approved/)
     await page.waitForSelector('[data-testid="inbox-item"].done')
+    // The row survives the poll that drops the approval from GET /approvals (the badge goes with it).
+    await page.waitForFunction(async () => (await window.agentplane.request('GET', '/approvals')).body.approvals.length === 0)
+    // Held: the Inbox's own list no longer has it, the row stays because its decision was taken and recorded here.
+    await page.waitForSelector('[data-testid="inbox-item"].done[data-held="true"]', { timeout: 10000 })
+    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count(), 1)
+    assert.match(await page.textContent('[data-testid="inbox-item"][data-held="true"]'), /Approved/)
     await shot(page, '3b-inbox-decided')
     await page.click('[data-testid="nav-approvals"]')
     await page.waitForSelector('[data-testid="no-approvals"]')
