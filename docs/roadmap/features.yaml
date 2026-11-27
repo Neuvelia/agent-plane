@@ -149,7 +149,7 @@ features:
     kind: roadmap
     phase: 0
     priority: P0
-    status: diverged
+    status: partial
     owner_package: adapters
     spec: docs/features/F0.5-shell-node.md
     depends_on: ["F0.4"]
@@ -176,11 +176,11 @@ features:
       - "Zaawansowany sandbox i Docker dopiero po stabilizacji podstawowego runtime."
     decisions: ["ADR-0005", "ADR-0008", "ADR-0028", "ADR-0039"]
     divergences:
-      - text: "Limit przechwyconego logu jest zaimplementowany (1 MiB na strumień, marker pominięcia, E_SHELL_OUTPUT_TRUNCATED); pełny log jako artifact odroczony."
+      - text: "Brak pełnego logu jako artifactu: zachowywany jest tylko początek każdego strumienia do limitu 1 MiB (ADR-0039, proposed)."
         adr: ADR-0039
         issue: 181
         deferred_to: F3.5
-    tasks: []
+    tasks: [181]
   - id: F0.6
     name: "Event Model i Run/Node IDs"
     kind: roadmap

@@ -262,8 +262,9 @@ trace collector), but it is not retained; the retained text then ends with
 incomplete, so the node fails with an output error and the diagnostic code
 `E_SHELL_OUTPUT_TRUNCATED` instead of passing a prefix downstream. An
 `exit_code` output, or no declared output, is unaffected. Write large output
-to a file and pass its path instead. Keeping the complete log as an artifact
-is deferred to F3.5.
+to a file and pass its path instead. When the run result is redacted, a
+secret cut in two by the limit is masked as well. Keeping the complete log as
+an artifact is deferred to F3.5.
 
 ### Agent node configuration (F1.1 contract)
 

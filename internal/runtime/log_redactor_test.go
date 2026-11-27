@@ -98,3 +98,36 @@ func TestLogRedactorRejectsValuesCoveringEveryByte(t *testing.T) {
 		t.Fatal("redactor accepted values with no safe marker byte")
 	}
 }
+
+func TestLogRedactorFlushCutMasksATailThatCouldBeginASecret(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, want string
+		secrets           []string
+	}{
+		{name: "partial secret at the cut", secrets: []string{"secret"}, input: "log secr", want: "log ***"},
+		{name: "complete secret at the cut", secrets: []string{"secret"}, input: "log secret", want: "log ***"},
+		{name: "tail that begins no secret", secrets: []string{"secret"}, input: "log sex", want: "log sex"},
+		{name: "longer secret continues past a shorter match", secrets: []string{"abc", "abcdef"}, input: "x abcd", want: "x ***"},
+		{name: "partial secret split across writes", secrets: []string{"secret"}, input: "log se|cr", want: "log ***"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			redactor := mustLogRedactor(t, tc.secrets)
+			var got []byte
+			for _, part := range strings.Split(tc.input, "|") {
+				got = append(got, redactor.Write(events.Stdout, []byte(part))...)
+			}
+			got = append(got, redactor.FlushCut(events.Stdout)...)
+			if string(got) != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestLogRedactorFlushKeepsATailThatOnlyBeginsASecret(t *testing.T) {
+	redactor := mustLogRedactor(t, []string{"secret"})
+	got := append(redactor.Write(events.Stdout, []byte("log secr")), redactor.Flush(events.Stdout)...)
+	if string(got) != "log secr" {
+		t.Fatalf("a complete stream has no hidden continuation; got %q", got)
+	}
+}

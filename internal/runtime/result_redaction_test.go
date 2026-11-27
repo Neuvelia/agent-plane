@@ -366,3 +366,26 @@ func TestResultRedactionIsRaceFree(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// cutEvidenceError models a typed error whose Stdout ends at a capture cut.
+type cutEvidenceError struct{ Stdout string }
+
+func (*cutEvidenceError) Error() string { return "cut evidence" }
+
+func (e *cutEvidenceError) Redacted(mask func(string) string) error {
+	return &cutEvidenceError{Stdout: mask(e.Stdout)}
+}
+
+func (e *cutEvidenceError) RedactedWithCut(_, cut func(string) string) error {
+	return &cutEvidenceError{Stdout: cut(e.Stdout)}
+}
+
+func TestResultRedactorMasksASecretCutByTheCaptureLimit(t *testing.T) {
+	r := testResultRedactor(t, []string{resultSecret}, nil)
+	cutAt := len(resultSecret) / 2
+	got := r.failure(&run.Failure{Kind: run.FailureExecutor, Err: &cutEvidenceError{Stdout: "out " + resultSecret[:cutAt]}})
+	var target *cutEvidenceError
+	if !errors.As(got.Err, &target) || target.Stdout != "out ***" {
+		t.Fatalf("typed copy = %#v", target)
+	}
+}

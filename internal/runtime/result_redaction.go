@@ -109,6 +109,18 @@ func (r *resultRedactor) text(s string) string {
 	return string(append(masked, c.Flush(events.Stdout)...))
 }
 
+// cutText is text for a string that ends where a capture was cut (ADR-0039):
+// a trailing partial secret is masked too, because the bytes that would
+// complete it were never retained.
+func (r *resultRedactor) cutText(s string) string {
+	if r == nil {
+		return s
+	}
+	c := r.template.clone()
+	masked := append([]byte{}, c.Write(events.Stdout, []byte(s))...)
+	return string(append(masked, c.FlushCut(events.Stdout)...))
+}
+
 // failure returns a copy whose error text is redacted, or in itself when it
 // has no error to present. Diagnostics describe
 // graph structure and carry no values, so they are shared unchanged.
@@ -130,6 +142,13 @@ type redactableError interface {
 	Redacted(mask func(string) string) error
 }
 
+// cutRedactableError is a redactableError whose text fields may end at a
+// capture cut (ADR-0039). The copy masks such fields with cut and all other
+// text with mask; presentedError prefers it over Redacted.
+type cutRedactableError interface {
+	RedactedWithCut(mask, cut func(string) string) error
+}
+
 // presentedError returns cause itself when it holds no secret. A typed error
 // that carries raw text is always replaced: its fields, not only Error(), may
 // spell a secret.
@@ -142,7 +161,9 @@ func (r *resultRedactor) presentedError(cause error) error {
 		return cause
 	}
 	presented := &redactedError{message: masked, cause: cause}
-	if hasTyped {
+	if cutTyped, ok := typed.(cutRedactableError); ok {
+		presented.typed = cutTyped.RedactedWithCut(r.text, r.cutText)
+	} else if hasTyped {
 		presented.typed = typed.Redacted(r.text)
 	}
 	return presented

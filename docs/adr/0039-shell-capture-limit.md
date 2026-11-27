@@ -33,6 +33,16 @@ retained capture. There is no artifact store yet (F3.5).
    unaffected.
 5. Keeping the complete log as an artifact is deferred to F3.5. F0.5 records
    this as a divergence with `deferred_to: F3.5`.
+6. A cut can split a secret: the retained text then ends with a prefix of it
+   that whole-value redaction does not match. When the run result is
+   presented with a redaction set (F3.8, ADR-0029), the retained text of a
+   truncated stream is masked with a cut-aware redactor that also replaces a
+   trailing proper prefix of any redacted form with the marker
+   (`ExecutionError.RedactedWithCut`, `logRedactor.FlushCut`). Complete
+   streams are masked as before. Live `log_chunk` events are unaffected: they
+   see the whole stream.
+7. Until this ADR is accepted, F0.5 stays `partial` with issue #181 open; it
+   moves to `diverged` only when the owner accepts the decision.
 
 ## Alternatives considered
 
@@ -41,6 +51,11 @@ retained capture. There is no artifact store yet (F3.5).
 Cons: a downstream node would accept an incomplete value as if it were the
 process output, breaking "accepted output is correct and immutable" and making
 `stdout_json` fail with a misleading JSON error.
+
+This is the approach of the #181 part of PR #194 (marker passed through in
+`stdout`, only `json` fails). The two are mutually exclusive; if this ADR is
+accepted, the #181 changes in `internal/shell` and `docs/features/F0.5-shell-node.md`
+must be dropped from PR #194, together with its `closes #181`.
 
 ### Keep the tail instead of the head
 
@@ -77,4 +92,7 @@ whose declared stream outputs stay under 1 MiB behave as before.
 the observer receiving every byte, no marker at exactly the limit, the default
 limit, the output failure for `stdout`, `stderr` and `json`, success for
 outputs that read no truncated stream, and the diagnostic code on
-`node_finished` through the scheduler.
+`node_finished` through the scheduler, and a secret cut by the limit masked in
+the presented run result (`TestSecretCutByTheCaptureLimitIsMaskedInTheRunResult`).
+`internal/shell/redacted_test.go` and `internal/runtime/log_redactor_test.go`,
+`result_redaction_test.go` cover the cut-aware masking on its own.

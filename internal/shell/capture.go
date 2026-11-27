@@ -67,6 +67,11 @@ func (c *boundedCapture) text(stream string) (string, int64) {
 	return string(c.data) + omissionMarker(stream, c.omitted, c.limit), c.omitted
 }
 
+// omissionMarkerPrefix starts every omission marker. The marker is always the
+// last thing in a truncated stream's text, so its last occurrence splits the
+// retained bytes from it.
+const omissionMarkerPrefix = "\n[agentplane: "
+
 func omissionMarker(stream string, omitted int64, limit int) string {
-	return fmt.Sprintf("\n[agentplane: %d bytes of %s omitted; capture limit %d bytes]\n", omitted, stream, limit)
+	return fmt.Sprintf("%s%d bytes of %s omitted; capture limit %d bytes]\n", omissionMarkerPrefix, omitted, stream, limit)
 }

@@ -23,3 +23,17 @@ func TestExecutionErrorRedactedMasksEvidenceAndKeepsTypedFields(t *testing.T) {
 		t.Fatal("original mutated or cause still raw")
 	}
 }
+
+func TestExecutionErrorRedactedWithCutMasksOnlyTruncatedRetainedText(t *testing.T) {
+	mask := func(s string) string { return "mask(" + s + ")" }
+	cut := func(s string) string { return "cut(" + s + ")" }
+	marker := omissionMarker("stdout", 7, 4)
+	original := &ExecutionError{NodeID: "n", Kind: FailureOutput, Result: Result{Stdout: "head" + marker, StdoutOmitted: 7, Stderr: "complete"}}
+	var copied *ExecutionError
+	if !errors.As(original.RedactedWithCut(mask, cut), &copied) {
+		t.Fatal("RedactedWithCut must return an *ExecutionError")
+	}
+	if copied.Result.Stdout != "cut(head)"+marker || copied.Result.Stderr != "mask(complete)" || copied.Result.StdoutOmitted != 7 {
+		t.Fatalf("copy = %#v", copied.Result)
+	}
+}

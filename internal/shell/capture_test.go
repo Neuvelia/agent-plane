@@ -131,3 +131,24 @@ func TestTruncatedDeclaredOutputFailsTheRunWithDiagnosticCode(t *testing.T) {
 	}
 	t.Fatal("no node_finished event")
 }
+
+// A secret that straddles the capture limit must not survive as a prefix in the
+// presented run result: the redactor never sees the bytes that complete it.
+func TestSecretCutByTheCaptureLimitIsMaskedInTheRunResult(t *testing.T) {
+	const secret = "TOPSECRET-4821"
+	node := helperNode("json", strings.Repeat("x", 990)+secret+" tail")
+	node.Outputs = map[string]graph.PortDefinition{"stdout": {Type: graph.ValueTypeString}}
+	def := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "shell-capture-secret", Inputs: map[string]graph.InputDefinition{}, Nodes: map[string]graph.NodeDefinition{"worker": node}, Edges: []graph.EdgeDefinition{}, Outputs: map[string]graph.OutputDefinition{}}
+	result, err := runtime.Run(context.Background(), def, nil, Executor{CaptureLimit: 1000}, runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, LogRedactions: []string{secret}})
+	if err != nil || result.State != run.RunFailed || result.Failure == nil {
+		t.Fatalf("run = %v, %v", result.State, err)
+	}
+	var presented *ExecutionError
+	if !errors.As(result.Failure.Err, &presented) {
+		t.Fatalf("failure = %v", result.Failure.Err)
+	}
+	retained, _, found := strings.Cut(presented.Result.Stdout, omissionMarkerPrefix)
+	if !found || strings.Contains(retained, secret[:4]) || !strings.HasSuffix(retained, "***") {
+		t.Fatalf("retained stdout ends with %q", retained[max(len(retained)-20, 0):])
+	}
+}

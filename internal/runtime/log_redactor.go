@@ -106,32 +106,66 @@ func (r *logRedactor) resolve(stream events.Stream, final bool) []byte {
 	var output []byte
 	i := 0
 	for i < len(data) && (final || r.eager || len(data)-i >= r.maxLen) {
-		if r.eager && !final {
-			undecidable := false
-			for _, secret := range r.secrets {
-				if len(data)-i < len(secret) && bytes.HasPrefix(secret, data[i:]) {
-					undecidable = true
-					break
-				}
-			}
-			if undecidable {
-				break
-			}
+		if r.eager && !final && r.startsPartialSecret(data[i:]) {
+			break
 		}
-		matched := false
-		for _, secret := range r.secrets {
-			if bytes.HasPrefix(data[i:], secret) {
-				output = append(output, r.marker...)
-				i += len(secret)
-				matched = true
-				break
-			}
+		if n := r.secretAt(data[i:]); n > 0 {
+			output = append(output, r.marker...)
+			i += n
+			continue
 		}
-		if !matched {
-			output = append(output, data[i])
-			i++
-		}
+		output = append(output, data[i])
+		i++
 	}
 	r.pending[stream] = append([]byte(nil), data[i:]...)
 	return output
+}
+
+// FlushCut is Flush for a stream whose capture was cut (ADR-0039): the bytes
+// after the cut were never seen, so a tail that could begin a secret is
+// replaced by the marker instead of being released as harmless text.
+func (r *logRedactor) FlushCut(stream events.Stream) []byte {
+	if len(r.secrets) == 0 {
+		return nil
+	}
+	data := r.pending[stream]
+	r.pending[stream] = nil
+	var output []byte
+	for i := 0; i < len(data); {
+		// A longer secret may continue past the cut even where a shorter one
+		// matches here, so the partial check comes first.
+		if r.startsPartialSecret(data[i:]) {
+			return append(output, r.marker...)
+		}
+		if n := r.secretAt(data[i:]); n > 0 {
+			output = append(output, r.marker...)
+			i += n
+			continue
+		}
+		output = append(output, data[i])
+		i++
+	}
+	return output
+}
+
+// secretAt returns the length of the longest secret at the start of data, or 0.
+// Secrets are sorted longest first.
+func (r *logRedactor) secretAt(data []byte) int {
+	for _, secret := range r.secrets {
+		if bytes.HasPrefix(data, secret) {
+			return len(secret)
+		}
+	}
+	return 0
+}
+
+// startsPartialSecret reports whether data is a proper prefix of a secret, so
+// only bytes after it decide whether a secret is present.
+func (r *logRedactor) startsPartialSecret(data []byte) bool {
+	for _, secret := range r.secrets {
+		if len(data) < len(secret) && bytes.HasPrefix(secret, data) {
+			return true
+		}
+	}
+	return false
 }
