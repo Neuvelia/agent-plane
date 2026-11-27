@@ -57,26 +57,20 @@ function saveDrawer(open: boolean) {
   }
 }
 
-export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDocument; onRun?: (runId: string) => void; startWithPicker?: boolean }) {
+export function EditorScreen({ g, onRun }: { g: GraphDocument; onRun?: (runId: string) => void }) {
   const { t } = useI18n()
   const { doc } = g
-  // "New graph" first offers Blank or a template (F2.12); the welcome screen can open it directly.
-  const [picker, setPicker] = useState(startWithPicker)
+  // "New graph" first offers Blank or a template (F2.12); setup creates its pick directly.
+  const [picker, setPicker] = useState(false)
   const newGraph = () => setPicker(true)
-  // When the picker was opened from the welcome screen its opener is gone, so a cancel lands on "New graph".
-  const cancelled = useRef(false)
-  const sectionRef = useRef<HTMLElement>(null)
-  useEffect(() => {
-    if (picker || !cancelled.current) return
-    cancelled.current = false
-    sectionRef.current?.querySelector<HTMLElement>('[data-testid="editor-new"],[data-testid="graph-menu"]')?.focus()
-  }, [picker])
 
   // Ctrl/Cmd+S saves from anywhere on the screen; inside the editor CodeMirror has already handled it.
+  // Not while a modal dialog (command palette, template picker) is open over the editor.
   useEffect(() => {
     if (!doc) return
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 's') return
+      if (document.querySelector('dialog[open]')) return
       e.preventDefault()
       void g.save()
     }
@@ -85,15 +79,12 @@ export function EditorScreen({ g, onRun, startWithPicker = false }: { g: GraphDo
   }, [doc, g])
 
   return (
-    <section ref={sectionRef} className={`editor ev2${doc ? ' open' : ''}`} data-testid="editor">
+    <section className={`editor ev2${doc ? ' open' : ''}`} data-testid="editor">
       <h1 className="sr-only">{doc ? doc.label : t('editor.title')}</h1>
       {doc ? <Open key={doc.grant} g={g} doc={doc} onRun={onRun} onNew={newGraph} /> : <Start g={g} onNew={newGraph} />}
       {picker && (
         <TemplatePicker
-          onCancel={() => {
-            cancelled.current = true
-            setPicker(false)
-          }}
+          onCancel={() => setPicker(false)}
           onChoose={(draft) => {
             setPicker(false)
             g.create(draft)
@@ -213,6 +204,7 @@ function Open({ g, doc, onRun, onNew }: { g: GraphDocument; doc: DocState; onRun
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented) return
+      if (document.querySelector('dialog[open]')) return
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && block === null && g.busy === null) {
         e.preventDefault()
         run()

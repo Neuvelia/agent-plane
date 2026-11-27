@@ -176,18 +176,19 @@ interface ItemProps {
   soon?: boolean
   disabled?: boolean
   current?: boolean
-  role?: 'menuitem' | 'menuitemradio'
+  /** `radio` for a choice among items (the current graph, a step to select). */
+  kind?: 'action' | 'radio'
   testId?: string
 }
 
-export function MenuItem({ icon, label, keys, hint, onSelect, danger, soon, disabled, current, role = 'menuitem', testId }: ItemProps) {
+export function MenuItem({ icon, label, keys, hint, onSelect, danger, soon, disabled, current, kind = 'action', testId }: ItemProps) {
   const { t } = useI18n()
   const off = soon || disabled
   return (
     <button
       type="button"
-      role={role}
-      aria-checked={role === 'menuitemradio' ? !!current : undefined}
+      role={kind === 'radio' ? 'menuitemradio' : 'menuitem'}
+      aria-checked={kind === 'radio' ? !!current : undefined}
       aria-disabled={off || undefined}
       className={`v2-mi${danger ? ' bad' : ''}${current ? ' cur' : ''}${off ? ' off' : ''}`}
       onClick={off ? undefined : onSelect}

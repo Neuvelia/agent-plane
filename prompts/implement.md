@@ -55,4 +55,6 @@ Final report:
 - the registry changes;
 - known limitations;
 - follow-up work outside this feature (with issue numbers if you created any).
+  Label every issue you create `claude-ready` or `needs-owner` by
+  docs/roadmap/issue-triage.md.
 ```

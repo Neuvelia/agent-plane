@@ -17,6 +17,7 @@ import { edgeTypes, type StepEdgeData } from './StepEdge'
 import { StepMenu, type StepMenuAnchor } from './StepMenu'
 import type { Definition, Op, QueryResult } from './types'
 import type { GraphDocument } from './useGraphDocument'
+import { useResolvedTheme } from '../theme'
 
 // The canvas (graph editor v2) draws the definition the engine returned and turns
 // gestures into ADR-0020 operations. Whether a connection is allowed is the
@@ -71,6 +72,7 @@ export function GraphCanvas(props: CanvasProps) {
 
 function Inner({ g, doc, focusReq, selection, onYaml }: CanvasProps) {
   const { t } = useI18n()
+  const theme = useResolvedTheme()
   const def = doc.analysis.definition
   // A text that does not parse is also reported read-only by the engine; the parse error is the useful reason.
   const block: CanvasBlock = doc.analysis.parseError ? 'parse' : doc.analysis.readonlyReasons?.length ? 'anchors' : null
@@ -325,6 +327,7 @@ function Inner({ g, doc, focusReq, selection, onYaml }: CanvasProps) {
             onConnect={onConnect}
             onConnectEnd={onConnectEnd}
             isValidConnection={isValidConnection}
+            colorMode={theme}
           >
             <Background variant={BackgroundVariant.Dots} gap={20} size={1.2} />
             {minimap && <MiniMap className="v2-minimap" pannable zoomable ariaLabel={t('editor.v2.minimap')} nodeBorderRadius={6} />}

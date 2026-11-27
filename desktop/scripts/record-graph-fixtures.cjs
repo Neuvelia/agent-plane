@@ -190,7 +190,7 @@ edges:
   - {from: a.outputs.stdout, to: b.inputs.text}
 outputs: {}
 `,
-  // F2.5b: the graph of the "Graph editor v2" artboards: shell -> agent -> gate -> human.
+  // F2.5e: the graph of the "Graph editor v2" artboards: shell -> agent -> gate -> human.
   'fix-issue': FIX_ISSUE,
   // the same graph with fix's required input left unconnected (the "error blocks run" artboard)
   'fix-issue-error': FIX_ISSUE.replace('  - {from: read-issue.outputs.issue, to: fix.inputs.issue}\n', ''),
@@ -226,7 +226,7 @@ outputs: {}
     // F2.11: this machine's capability report; stories derive the other states from it.
     if (process.env.AP_RECORD !== 'editor-v2') fs.writeFileSync(path.join(out, 'capabilities-linux.json'), JSON.stringify((await call('GET', '/capabilities')).body, null, 2) + '\n')
     if (process.env.AP_RECORD === 'capabilities') return
-    // AP_RECORD=editor-v2 records only the graphs of the editor v2 artboards (F2.5b).
+    // AP_RECORD=editor-v2 records only the graphs of the editor v2 artboards (F2.5e).
     const only = process.env.AP_RECORD === 'editor-v2' ? ['fix-issue', 'fix-issue-error'] : null
     for (const [name, text] of Object.entries(GRAPHS).filter(([n]) => !only || only.includes(n))) {
       const file = path.join(dir, `${name}.yaml`)

@@ -38,6 +38,8 @@ changing behavior; verify older roadmap statements against current code.
 - `src/design/tokens.json` is the copied design-token source and
   `src/design/tokens.css` is committed generated output. After changing the
   JSON, run `npm run tokens`, inspect the CSS diff and keep both files in sync.
+  Every colour token needs a `light` value too (ADR-0047); the contrast test
+  checks both themes.
   Preserve the documented overrides, local font files and licences. UI copy
   belongs in both PL/EN catalogues; machine values and engine messages stay
   untranslated. Use existing tests for token, catalogue and contrast parity.
@@ -67,8 +69,8 @@ changing behavior; verify older roadmap statements against current code.
 - `npm run check` builds Storybook but does not run browser story smoke.
   For changes to stories, shared UI, localisation or accessibility, run
   `make desktop-stories` when Chromium is available. It renders every story
-  in EN and PL (dark) and EN (light) with accessibility and no-external-request
-  checks, and fails a story whose play function throws or never finishes.
+  in EN and PL, in the dark and light themes, with accessibility and
+  no-external-request checks, and drives the profile menu (F2.5c).
 - For changes to Electron IPC, sidecar lifecycle, graph-file boundaries or
   end-to-end run flows, run `make desktop-e2e` when the required display is
   available. It uses a real Electron window and Go sidecar; on macOS and

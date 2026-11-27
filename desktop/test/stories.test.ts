@@ -25,17 +25,40 @@ describe('stories', () => {
       expect(text, f).not.toMatch(/nodes:\s*\{[^}]*status:/)
     }
   })
+  it('render in both languages and both themes, with the profile menu states and its interaction check [F2.5c-AC10]', () => {
+    const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+    expect(smoke).toContain("(process.env.AP_STORIES_THEMES || 'dark,light')")
+    expect(smoke).toContain("['en', 'pl'].flatMap")
+    expect(smoke).toContain('await checkProfileMenu(browser, origin')
+    for (const id of ['ui-shell--profile-menu-open', 'ui-shell--profile-menu-language', 'ui-shell--profile-menu-appearance', 'ui-shell--profile-menu-open-light', 'ui-shell--keyboard-shortcuts', 'ui-shell--about-tarmind']) expect(smoke).toContain(`'${id}'`)
+    const preview = readFileSync(fileURLToPath(new URL('../.storybook/preview.tsx', import.meta.url)), 'utf8')
+    expect(preview).toContain('<ThemeProvider key={theme} initialChoice={theme}>')
+  })
 })
 
-describe('the browser story smoke (scripts/stories-smoke.cjs)', () => {
+describe('graph editor v2 stories (F2.5e)', () => {
   const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
-  it('renders every story in English and Polish dark and English light, and fails a broken play function [F2.5b-AC5]', () => {
-    expect(smoke).toContain("[['en', 'dark'], ['pl', 'dark'], ['en', 'light']]")
-    expect(smoke).toContain('globals=locale:${locale};theme:${theme}')
-    expect(smoke).toContain('__STORYBOOK_PREVIEW__?.currentRender?.phase')
-    expect(smoke).toContain('fail(`play function ${phase}`)')
-  })
-  it('requires the graph editor v2 artboard stories', () => {
-    for (const id of ['design-step-cards-light', 'design-step-cards-dark', 'design-error-blocks-run', 'design-graph-menu', 'design-step-menu', 'design-empty-graph']) expect(smoke).toContain(`'screens-editor--${id}'`)
+  it('the story smoke requires the graph editor v2 artboard stories, in every theme, with menus checked by axe [F2.5e-AC5]', () => {
+    for (const id of ['design-step-cards-light', 'design-step-cards', 'design-error-blocks-run', 'design-graph-menu', 'design-step-menu', 'design-empty-graph']) expect(smoke).toContain(`'screens-editor--${id}'`)
+    expect(smoke).toContain("'dark,light'")
+    expect(smoke).toMatch(/currentRender\?\.phase/)
+    expect(smoke).toContain(".v2-menu")
   })
 })
+
+describe('Inbox stories (F2.5b)', () => {
+  // The smoke renders each required story in EN and PL, waits for its play function (which
+  // asserts the state it drives: decided rows, pinning, focus) and fails on a play error or axe.
+  it('the story smoke requires every Inbox and Sidebar state [F2.5b-AC3]', () => {
+    const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+    const required = [
+      'needs-attention', 'failed-selected', 'retries-used-up', 'interrupted-selected', 'running-selected', 'filter-stopped', 'filter-empty',
+      'decided', 'decided-here', 'run-not-found', 'decision-error', 'connection-lost', 'stays-on-shown-item', 'keyboard-focus',
+      'empty', 'no-runs', 'loading', 'error',
+    ].map((s) => `screens--inbox-${s}`)
+    for (const id of [...required, 'ui-shell--sidebar-recent-runs', 'ui-shell--sidebar-recent-unavailable', 'ui-shell--sidebar-no-runs']) expect(smoke, id).toContain(`'${id}'`)
+    expect(smoke).toMatch(/playFunctionThrewException/)
+    expect(smoke).toMatch(/currentRender\?\.phase/)
+  })
+})
+

@@ -404,7 +404,7 @@ export const HintUnboundInputOptions: S = story(hinted(mixedOpen), async (root) 
   await wait(200)
 })
 
-// ---- Graph editor v2 (F2.5b): the artboards, on the recorded graph they show ----------
+// ---- Graph editor v2 (F2.5e): the artboards, on the recorded graph they show ----------
 const fixIssue: GraphStory = { ...base, opened: fixIssueOpen as unknown as OpenResponse, validate: () => fixIssueValidate as unknown as ValidateResponse, recent: [{ id: 'r1', label: 'fix-issue.yaml' }, { id: 'r2', label: 'code-review.yaml' }] }
 const fixIssueError: GraphStory = { ...fixIssue, opened: fixIssueErrorOpen as unknown as OpenResponse, validate: () => fixIssueErrorValidate as unknown as ValidateResponse }
 /** The artboards show the agent step selected and the graph unsaved. */
@@ -416,8 +416,8 @@ const artboard = async (root: Element) => {
 }
 
 export const DesignStepCardsLight: S = story(fixIssue, artboard, 'light')
-export const DesignStepCardsDark: S = story(fixIssue, artboard, 'dark')
-export const DesignErrorBlocksRun: S = story(fixIssueError, artboard, 'light')
+export const DesignStepCards: S = story(fixIssue, artboard)
+export const DesignErrorBlocksRun: S = story(fixIssueError, artboard)
 export const DesignGraphMenu: S = story(
   fixIssue,
   async (root) => {
@@ -426,7 +426,6 @@ export const DesignGraphMenu: S = story(
     await until(document.body, '[data-testid="graph-menu-list"]')
     await wait(200)
   },
-  'dark',
 )
 export const DesignStepMenu: S = story(
   fixIssue,
@@ -436,7 +435,6 @@ export const DesignStepMenu: S = story(
     await until(document.body, '[data-testid="step-menu"]')
     await wait(200)
   },
-  'light',
 )
 export const DesignAddStepMenu: S = story(fixIssue, async (root) => {
   await artboard(root)
@@ -458,7 +456,6 @@ export const DesignEmptyGraph: S = story(
     await until(root, '[data-testid="empty-graph"]')
     await wait(400)
   },
-  'light',
 )
 export const DesignProblemsOpen: S = story(fixIssue, async (root) => {
   await open(root)

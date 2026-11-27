@@ -15,7 +15,7 @@ const model = (open: unknown, id: string) => {
 }
 
 describe('step card model', () => {
-  it('shows the prompt, path lists before required values, and at most two settings [F2.5b-AC2]', () => {
+  it('shows the prompt, path lists before required values, and at most two settings [F2.5e-AC2]', () => {
     const fix = model(fixIssue, 'fix')
     expect(fix.prompt).toBe('Fix the issue below. Change only files under src/. Run the tests before you finish.')
     expect(fix.settings.map((s) => [s.key, s.value])).toEqual([
@@ -25,7 +25,7 @@ describe('step card model', () => {
     expect(fix.retries).toBe(3)
   })
 
-  it('says where each input comes from [F2.5b-AC2]', () => {
+  it('says where each input comes from [F2.5e-AC2]', () => {
     expect(model(fixIssue, 'fix').inputs).toEqual([{ name: 'issue', required: true, source: { kind: 'node', node: 'read-issue', port: 'issue' }, error: false }])
     expect(model(fixIssue, 'review').inputs.map((i) => i.source)).toEqual([
       { kind: 'node', node: 'fix', port: 'summary' },

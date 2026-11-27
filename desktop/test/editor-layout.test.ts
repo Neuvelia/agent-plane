@@ -63,7 +63,7 @@ describe('helpers', () => {
   })
 })
 
-describe('a new step never covers another one (F2.5b)', () => {
+describe('a new step never covers another one (F2.5e)', () => {
   it('takes the centre when it is free', () => {
     expect(clearSpot({ x: 500, y: 300 }, [], { w: 200, h: 100 })).toEqual({ x: 400, y: 250 })
   })

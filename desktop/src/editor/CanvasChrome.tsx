@@ -111,7 +111,7 @@ export function Dock({ tool, onTool, nodes, selected, onPick, onAdd, readOnly }:
           {shown.map((n) => (
             <MenuItem
               key={n.id}
-              role="menuitemradio"
+              kind="radio"
               current={selected === n.id}
               icon={<KindGlyph type={n.type} size={14} />}
               label={<span className="mono">{n.id}</span>}

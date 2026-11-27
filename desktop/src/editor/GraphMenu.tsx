@@ -77,9 +77,9 @@ export function GraphMenu({ g, doc, onNew }: { g: GraphDocument; doc: DocState; 
       >
         <MenuHeading>{dir ? t('editor.v2.graphsIn', { dir: dir.replace(/[\\/]$/, '') }) : t('editor.recent')}</MenuHeading>
         <div role="group" aria-label={t('editor.recent')}>
-          {showCurrent && <MenuItem role="menuitemradio" current icon="check" label={<span className="mono">{name}</span>} hint={t('editor.v2.steps', { count: steps })} onSelect={() => close()} testId="graph-current" />}
+          {showCurrent && <MenuItem kind="radio" current icon="check" label={<span className="mono">{name}</span>} hint={t('editor.v2.steps', { count: steps })} onSelect={() => close()} testId="graph-current" />}
           {others.map((r) => (
-            <MenuItem key={r.id} role="menuitemradio" icon="file" label={<span className="mono">{splitLabel(r.label).name}</span>} onSelect={act(() => g.openRecent(r.id))} testId="graph-recent" />
+            <MenuItem key={r.id} kind="radio" icon="file" label={<span className="mono">{splitLabel(r.label).name}</span>} onSelect={act(() => g.openRecent(r.id))} testId="graph-recent" />
           ))}
           <MenuItem icon="plus" label={t('editor.new')} onSelect={act(onNew)} testId="editor-new" />
           <MenuItem icon="folder" label={t('editor.open')} keys={[MOD, 'O']} onSelect={act(g.open)} testId="editor-open" />

@@ -83,6 +83,8 @@ const story = (runs: BridgeRun[], edge: Edge, state: string, more?: (root: Eleme
     await pick(canvasElement, edge)
     await until(canvasElement, `[data-testid="edge-value-state"][data-state="${state}"]`)
     await more?.(canvasElement)
+    // The inspector sits below the canvas; bring the state this story is about into view.
+    canvasElement.querySelector('[data-testid="edge-inspector"]')?.scrollIntoView({ block: 'start' })
     await wait(150)
   },
 })

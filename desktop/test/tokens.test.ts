@@ -11,9 +11,15 @@ describe('design tokens', () => {
     expect(css).toBe(buildTokensCss(json))
   })
 
+  const block = (selector: string) => {
+    const at = css.indexOf(`${selector} {`)
+    expect(at, selector).toBeGreaterThan(-1)
+    const body = css.slice(at, css.indexOf('}', at))
+    return new Map([...body.matchAll(/^\s*--([\w-]+): (.+);$/gm)].map((m) => [m[1]!, m[2]!]))
+  }
+
   it('every colour, spacing, radius, size and shadow token exists with the same value', () => {
-    const base = css.slice(0, css.indexOf('}'))
-    const declared = new Map([...base.matchAll(/^\s*--([\w-]+): (.+);$/gm)].map((m) => [m[1]!, m[2]!]))
+    const declared = block(':root')
     const theme = json.color.themes[0].id
     for (const t of json.color.tokens) expect(declared.get(t.name), t.name).toBe(t.value[theme])
     for (const fam of ['spacing', 'radius', 'size', 'shadow']) {
@@ -21,14 +27,11 @@ describe('design tokens', () => {
     }
   })
 
-  it('every colour token has a light value, declared under [data-theme="light"] [F2.5b-AC4]', () => {
-    const at = css.indexOf(':root[data-theme="light"]')
-    expect(at).toBeGreaterThan(0)
-    const light = new Map([...css.slice(at).matchAll(/^\s*--([\w-]+): (.+);$/gm)].map((m) => [m[1]!, m[2]!]))
-    for (const t of json.color.tokens) {
-      expect(t.value.light, t.name).toBeTruthy()
-      expect(light.get(t.name), t.name).toBe(t.value.light)
-    }
+  it('has a light value for every colour token, declared under :root[data-theme="light"] (F2.5c) [F2.5c-AC7]', () => {
+    expect(json.color.themes.map((t: { id: string }) => t.id)).toEqual(['dark', 'light'])
+    const light = block(':root[data-theme="light"]')
+    expect(light.size).toBe(json.color.tokens.length)
+    for (const t of json.color.tokens) expect(light.get(t.name), t.name).toBe(t.value.light)
   })
 
   it('declares both font families and the text styles the app uses', () => {

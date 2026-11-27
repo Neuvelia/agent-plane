@@ -26,6 +26,10 @@ const RUN: Record<RunStatus | 'unsupported', [MessageKey, Tone]> = {
   interrupted: ['status.run.interrupted', 'n'],
   unsupported: ['status.run.unsupported', 'x'],
 }
+/** The catalogue key for a run status as the store reports it; undefined for a status this build does not know. */
+export function runStatusKey(status: string): MessageKey | undefined {
+  return Object.hasOwn(RUN, status) ? RUN[status as RunStatus | 'unsupported'][0] : undefined
+}
 const GATE: Record<string, [MessageKey, Tone]> = {
   green: ['status.gate.green', 'p'],
   red: ['status.gate.red', 'x'],

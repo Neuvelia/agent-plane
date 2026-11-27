@@ -34,7 +34,8 @@ Return exactly these sections:
    divergences (each with adr, issue or deferred_to) and tasks.
 8. Risks: concurrency, compatibility, security, process lifecycle, scope.
 9. needs_decision: every ambiguity or conflict with the spec, the canonical spec
-   or the roadmap. Do not choose silently.
+   or the roadmap. Do not choose silently. An issue opened for one of them is
+   `needs-owner` (docs/roadmap/issue-triage.md).
 10. Definition of done: the checks you will run (make roadmap, make check, and
     narrower ones).
 
