@@ -8,7 +8,7 @@ import { useI18n } from '../i18n/context'
 /** A titled group: heading, optional one-line description, its rows, then notes below them. */
 export function Group({ id, title, description, flash, onFlashEnd, children, footer, testId }: { id: string; title: ReactNode; description?: ReactNode; flash?: boolean; onFlashEnd?: () => void; children: ReactNode; footer?: ReactNode; testId?: string }) {
   return (
-    <section className={flash ? 'st-grp flash' : 'st-grp'} id={`st-${id}`} aria-labelledby={`st-${id}-h`} data-group={id} data-testid={testId} onAnimationEnd={onFlashEnd}>
+    <section className={flash ? 'st-grp flash' : 'st-grp'} id={`st-${id}`} aria-labelledby={`st-${id}-h`} data-group={id} data-testid={testId} onAnimationEnd={(e) => e.animationName === 'st-flash' && onFlashEnd?.()}>
       <h2 id={`st-${id}-h`}>{title}</h2>
       {description && <p className="st-desc">{description}</p>}
       <div className="st-list">{children}</div>
@@ -62,12 +62,30 @@ export interface SegmentOption<T extends string> {
  * DOM) the picked button draws its own background, so nothing depends on it.
  */
 export function Segmented<T extends string>({ label, value, options, onChange, disabled = false }: { label: string; value: T; options: SegmentOption<T>[]; onChange?: (v: T) => void; disabled?: boolean }) {
+  const keys = options.map((o) => o.value).join('|')
   const group = useRef<HTMLDivElement>(null)
   const [thumb, setThumb] = useState<{ left: number; width: number } | null>(null)
+  // Re-measured when the value changes, when the group resizes (a label that
+  // changes width) and once the bundled font has loaded.
   useLayoutEffect(() => {
-    const picked = group.current?.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
-    if (picked && picked.offsetWidth > 0) setThumb({ left: picked.offsetLeft, width: picked.offsetWidth })
-  }, [value, label, options.length])
+    const el = group.current
+    if (!el) return
+    const measure = () => {
+      const picked = el.querySelector<HTMLButtonElement>('button[aria-pressed="true"]')
+      if (!picked || picked.offsetWidth === 0) return
+      const next = { left: picked.offsetLeft, width: picked.offsetWidth }
+      setThumb((t) => (t && t.left === next.left && t.width === next.width ? t : next))
+    }
+    measure()
+    let alive = true
+    void document.fonts?.ready.then(() => alive && measure())
+    const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measure)
+    el.querySelectorAll('button').forEach((b) => resize?.observe(b))
+    return () => {
+      alive = false
+      resize?.disconnect()
+    }
+  }, [value, keys])
   return (
     <div ref={group} className={thumb ? 'st-seg measured' : 'st-seg'} role="group" aria-label={label}>
       {thumb && <span className="st-seg-thumb" aria-hidden="true" style={{ transform: `translateX(${thumb.left}px)`, width: thumb.width }} />}

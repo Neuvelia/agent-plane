@@ -178,6 +178,8 @@ table.runs{width:100%;border-collapse:collapse}
 .fine{font-size:12px}
 
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+/* `*` does not match pseudo-elements, which draw the Settings switch thumb. */
+@media (prefers-reduced-motion:reduce){*::before,*::after{transition:none!important;animation:none!important}}
 .rail-item{position:relative}.rail-badge{position:absolute;top:-2px;right:-2px;min-width:16px;height:16px;font-size:10px}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 
@@ -382,7 +384,8 @@ main:focus{outline:none}
 .st-nav>button,.st-nav-off{position:relative;z-index:1;display:flex;align-items:center;gap:var(--space-10);height:var(--size-nav);padding:0 var(--space-12);border:0;border-radius:9px;background:transparent;color:var(--muted);font:inherit;font-weight:500;text-align:left;cursor:pointer;transition:color .2s,background-color .2s}
 .st-nav>button:hover{color:var(--fg);background:var(--fill-6)}
 .st-nav>button.on{color:var(--fg);background:transparent}
-.st-nav-off{opacity:.5;cursor:default}
+.st-nav-off{cursor:default}
+.st-nav-off .st-nav-label{opacity:.5}
 .st-nav-off .st-soon{margin-left:auto}
 .st-nav-mark{position:absolute;top:0;left:0;right:0;height:var(--size-nav);border-radius:9px;background:var(--fill-8);transition:transform .32s cubic-bezier(.23,1,.32,1)}
 .st-pane{flex:999 1 440px;min-width:0;animation:st-in .28s cubic-bezier(.23,1,.32,1)}
@@ -434,6 +437,7 @@ main:focus{outline:none}
 .st .btn.sm{height:var(--size-control-sm);padding:0 10px;font-size:12px}
 .st .btn:hover:not(:disabled){filter:none;background:var(--raised-hover)}
 .st-names{display:flex;gap:var(--space-8);align-items:center;flex:1 1 260px;max-width:340px}
+.st-unsaved{flex-basis:100%;text-align:right;color:var(--warn);font-size:12px}
 .st-names input{height:var(--size-control-sm);border:1px solid var(--card-line);border-radius:var(--radius-8);background:transparent;font:400 12px/1 var(--font-mono);padding:0 var(--space-10)}
 .st-foot{display:flex;flex-direction:column;gap:6px;margin-top:10px;font-size:12.5px}
 .st-foot p{margin:0}

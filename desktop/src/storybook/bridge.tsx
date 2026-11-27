@@ -57,6 +57,8 @@ export interface BridgeData {
   recordingLoadFails?: boolean
   /** Saving the recording preference fails as when user data cannot be written. */
   recordingSaveFails?: boolean
+  /** Saving the recording preference rejects, as when the main process does not answer. */
+  recordingSaveThrows?: boolean
   /** F2.11 capability routes: the report both routes answer, an HTTP failure, or a check that never answers. */
   capabilities?: { report?: unknown; status?: number; checkHangs?: boolean; getHangs?: boolean }
 }
@@ -142,6 +144,7 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
       return structuredClone(data.recording ?? { enabled: false, redactEnv: [], active: false, missing: [] })
     },
     setRecordingSettings: async (s) => {
+      if (data.recordingSaveThrows) throw new Error('the main process did not answer')
       if (data.recordingSaveFails) return { ok: false, code: 'save_failed' }
       const bad = s.redactEnv.find((n) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))
       if (bad !== undefined) return { ok: false, code: 'invalid', name: bad }

@@ -43,7 +43,8 @@ function Shell({ lost }: { lost: boolean }) {
   // The open graph lives here so it survives moving to another screen and back.
   const editor = useGraphDocument()
   // Settings reports which of its panes shows, for the breadcrumb.
-  // Choosing Settings in the sidebar always opens its main pane, also from one of its own panes.
+  // Choosing Settings in the sidebar always opens its main pane, also from one of its own panes
+  // (`visit`), without remounting it, so a save in flight and a typed draft are kept.
   const [settingsPane, setSettingsPane] = useState<SettingsPane>('main')
   const [settingsVisit, setSettingsVisit] = useState(0)
   useConnectionReport('badge', polled.status === 'error')
@@ -120,7 +121,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'runs' && <RunsList onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'settings' && <Settings key={settingsVisit} onPaneChange={setSettingsPane} />}
+          {route.name === 'settings' && <Settings visit={settingsVisit} onPaneChange={setSettingsPane} />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}

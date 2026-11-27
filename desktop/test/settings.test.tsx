@@ -9,7 +9,7 @@ import { SECTIONS, Settings } from '../src/settings'
 import { diagnosticsText } from '../src/settings/about'
 import { AgentsPane, agentRows } from '../src/settings/agents'
 import { EngineGroup } from '../src/settings/groups'
-import { noticeOf, sessionKey } from '../src/settings/recording'
+import { namesDirty, noticeOf, sessionKey } from '../src/settings/recording'
 import type { CapabilityView } from '../src/welcome'
 
 const linux = recorded as CapabilityReport
@@ -64,6 +64,13 @@ describe('record run values', () => {
     expect(noticeOf({ ok: false, code: 'invalid', name: 'A=B' })).toEqual({ kind: 'invalid', name: 'A=B' })
     expect(noticeOf({ ok: false, code: 'save_failed' })).toEqual({ kind: 'failed' })
     expect(noticeOf(null)).toEqual({ kind: 'failed' })
+  })
+  it('tells a typed names draft from the saved list, so a toggle keeps an unsaved draft [F2.5b-AC3]', () => {
+    expect(namesDirty('GITHUB_TOKEN', ['GITHUB_TOKEN'])).toBe(false)
+    expect(namesDirty(' GITHUB_TOKEN, ', ['GITHUB_TOKEN'])).toBe(false)
+    expect(namesDirty('GITHUB_TOKEN NPM_TOKEN', ['GITHUB_TOKEN'])).toBe(true)
+    expect(namesDirty('NPM_TOKEN GITHUB_TOKEN', ['GITHUB_TOKEN', 'NPM_TOKEN'])).toBe(true)
+    expect(namesDirty('', [])).toBe(false)
   })
   it('reports the session the running engine has', () => {
     expect(sessionKey({ enabled: true, redactEnv: [], active: true, missing: [] })).toBe('settings.values.sessionOn')

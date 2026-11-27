@@ -1786,6 +1786,7 @@ features:
         status: met
         evidence:
           - "desktop/test/settings.test.tsx::F2.5b-AC3"
+          - "desktop/e2e/demo.cjs"
       - id: F2.5b-AC4
         text: "Agents shows only agent rows, in the design's order with unknown agents last, and an available agent lists its probe checks."
         status: met
@@ -1801,7 +1802,7 @@ features:
       - "Light theme; paths in the renderer; Secrets and Policy sections."
     decisions: ["ADR-0023", "ADR-0025"]
     divergences: []
-    tasks: []
+    tasks: [220]
     note: "Rows without a contract are visible but disabled; enabling them needs F2.8b (diffs), F2.14 (Codex path) and a desktop engine-options preference."
   - id: F2.8a
     name: "Attempt compare (desktop)"

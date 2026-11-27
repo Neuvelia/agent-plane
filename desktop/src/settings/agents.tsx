@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { reasonKey, rowText, type CapabilityReport, type CapabilityTool, type RowText } from '../capabilities'
 import { formatDateTime } from '../i18n'
 import { useI18n } from '../i18n/context'
@@ -64,7 +65,8 @@ function AgentCard({ tool, checkedAt, busy, onCheck }: { tool: CapabilityTool; c
   const { t, locale } = useI18n()
   const r = rowText(tool)
   const reason = tool.reason ? reasonKey(tool.reason) : undefined
-  const headId = `st-agent-${tool.id}`
+  // The id comes from the engine and may hold any character: not used in an element id.
+  const headId = useId()
   const available = tool.status === 'available'
   return (
     <section className="st-agent" aria-labelledby={headId} data-testid={`agent-${tool.id}`} data-status={tool.status}>
@@ -74,7 +76,7 @@ function AgentCard({ tool, checkedAt, busy, onCheck }: { tool: CapabilityTool; c
           <span aria-hidden="true">{r.glyph}</span>
           {word(t, r.status)}
         </span>
-        {available && tool.version && <span className="st-tg">{t('welcome.version', { version: tool.version })}</span>}
+        {tool.version && <span className="st-tg">{t('welcome.version', { version: tool.version })}</span>}
         {tool.reason && <span className="st-tg">{t('welcome.reason', { reason: tool.reason })}</span>}
         <span className="st-sp" />
         <Button size="sm" onClick={onCheck} disabled={busy} data-testid={`agent-check-${tool.id}`}>

@@ -950,9 +950,29 @@ async function startDemo(app, page) {
     assert.match(await page.textContent('[data-testid="decision"]'), /approved.*ship it/i)
     await shot(page, '4-succeeded')
     const finishedEvents = await page.textContent('[data-testid="event-count"]')
+
+    // roadmap: F2.5b-AC3
+    // F2.3 E6 through the Settings switch: it saves at once to the main-process file
+    // read at start, keeps an unsaved names draft as typed, and keeps keyboard focus.
+    // The runs above were not recorded; the ones after the restart below are.
+    const recordingFile = path.join(work, 'user', 'recording.json')
+    await page.click('[data-testid="nav-settings"]')
+    await page.waitForSelector('[data-testid="values-record"]:not([disabled])')
+    await page.fill('[data-testid="values-redact-env"]', 'NOT_SAVED_YET')
+    assert.equal(await page.isVisible('[data-testid="values-unsaved"]'), true)
+    await page.focus('[data-testid="values-record"]')
+    await page.keyboard.press('Space')
+    await page.waitForSelector('[data-testid="values-saved"]')
+    assert.equal(await page.isChecked('[data-testid="values-record"]'), true)
+    assert.deepEqual(JSON.parse(fs.readFileSync(recordingFile, 'utf8')), { version: 1, enabled: true, redactEnv: [] })
+    assert.equal(await page.inputValue('[data-testid="values-redact-env"]'), 'NOT_SAVED_YET', 'a toggle must not discard a typed draft')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'values-record', 'focus stays on the switch')
+    await page.fill('[data-testid="values-redact-env"]', 'not a name!')
+    await page.click('[data-testid="values-save"]')
+    await page.waitForSelector('[data-testid="values-invalid"]')
+    assert.deepEqual(JSON.parse(fs.readFileSync(recordingFile, 'utf8')).redactEnv, [], 'an invalid name is not saved')
+    await page.fill('[data-testid="values-redact-env"]', '')
     await app.close()
-    // F2.3 E6: the switch is a main-process file read at start. The runs above were not recorded; the ones below are.
-    fs.writeFileSync(path.join(work, 'user', 'recording.json'), JSON.stringify({ version: 1, enabled: true, redactEnv: [] }))
 
     // roadmap: F2.9-AC1, F2.5-AC2
     // 4. History survives an application restart and the map is rebuilt from events.

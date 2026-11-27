@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import type { MessageKey } from '../i18n'
 import { useI18n } from '../i18n/context'
 import type { RecordingSaveResult, RecordingSettings } from '../types'
@@ -25,45 +25,61 @@ export function sessionKey(s: RecordingSettings): MessageKey {
   return s.missing.length > 0 ? 'settings.values.sessionMissing' : 'settings.values.sessionOff'
 }
 
+/** True when the names typed differ from the saved list (order and spacing aside from parsing). */
+export function namesDirty(draft: string, saved: readonly string[]): boolean {
+  const typed = parseNames(draft)
+  return typed.length !== saved.length || typed.some((n, i) => n !== saved[i])
+}
+
+export interface Recording {
+  current: RecordingSettings | null
+  loadFailed: boolean
+  /** The switch position while its save is in flight. */
+  pending: boolean | null
+  names: string
+  setNames: (text: string) => void
+  busy: boolean
+  notice: Notice | null
+  toggle: (enabled: boolean) => void
+  saveNames: () => void
+}
+
 // F2.3 E6 "Record run values" (ADR-0023), held by the main process. The switch
-// saves at once with the saved names; the names row saves with the saved switch.
-// "Record file diffs" has no desktop setting yet (F2.8b): shown, disabled.
-export function RecordingGroup({ flash, onFlashEnd }: { flash: boolean; onFlashEnd: () => void }) {
-  const { t } = useI18n()
-  const switchId = useId()
-  const hintId = useId()
-  const namesId = useId()
+// saves at once with the saved names and leaves an unsaved names draft as typed;
+// the names row saves the draft with the saved switch. The state lives above
+// the Settings panes, so a save in flight and a draft survive switching panes.
+export function useRecording(): Recording {
   const [current, setCurrent] = useState<RecordingSettings | null>(null)
   const [loadFailed, setLoadFailed] = useState(false)
   const [pending, setPending] = useState<boolean | null>(null)
   const [names, setNames] = useState('')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
+  const alive = useRef(true)
 
   useEffect(() => {
-    let alive = true
+    alive.current = true
     window.agentplane
       .recordingSettings()
       .then((s) => {
-        if (!alive) return
+        if (!alive.current) return
         setCurrent(s)
         setNames(s.redactEnv.join(' '))
       })
-      .catch(() => {
-        if (alive) setLoadFailed(true)
-      })
+      .catch(() => alive.current && setLoadFailed(true))
     return () => {
-      alive = false
+      alive.current = false
     }
   }, [])
 
-  const save = async (next: { enabled: boolean; redactEnv: string[] }) => {
+  const save = async (next: { enabled: boolean; redactEnv: string[] }, onSaved: (saved: string[]) => void) => {
     setBusy(true)
     setNotice(null)
     const result = await window.agentplane.setRecordingSettings(next).catch(() => null)
+    if (!alive.current) return
     if (result?.ok) {
       setCurrent((c) => (c ? { ...c, ...result.settings } : c))
-      setNames(result.settings.redactEnv.join(' '))
+      onSaved(result.settings.redactEnv)
     }
     setNotice(noticeOf(result))
     setPending(null)
@@ -71,16 +87,32 @@ export function RecordingGroup({ flash, onFlashEnd }: { flash: boolean; onFlashE
   }
 
   const toggle = (enabled: boolean) => {
-    if (!current) return
+    if (!current || busy) return
+    const before = current.redactEnv
     setPending(enabled)
-    void save({ enabled, redactEnv: current.redactEnv })
+    // A draft equal to the saved names follows the saved list; a different draft stays as typed.
+    void save({ enabled, redactEnv: before }, (saved) => setNames((draft) => (namesDirty(draft, before) ? draft : saved.join(' '))))
   }
-  const saveNames = () => current && void save({ enabled: current.enabled, redactEnv: parseNames(names) })
-  const checked = pending ?? current?.enabled ?? false
+  const saveNames = () => {
+    if (!current || busy) return
+    void save({ enabled: current.enabled, redactEnv: parseNames(names) }, (saved) => setNames(saved.join(' ')))
+  }
+  return { current, loadFailed, pending, names, setNames, busy, notice, toggle, saveNames }
+}
 
+// While a save runs the controls are aria-disabled, not disabled, so keyboard
+// focus stays on the control that was used; input before the first read is disabled.
+export function RecordingGroup({ recording, flash, onFlashEnd }: { recording: Recording; flash: boolean; onFlashEnd: () => void }) {
+  const { t } = useI18n()
+  const switchId = useId()
+  const hintId = useId()
+  const namesId = useId()
+  const { current, busy, names } = recording
+  const checked = recording.pending ?? current?.enabled ?? false
+  const dirty = current ? namesDirty(names, current.redactEnv) : false
   return (
-    <Group id="recording" title={t('settings.nav.recording')} description={t('settings.recording.desc')} flash={flash} onFlashEnd={onFlashEnd} footer={<RecordingFoot current={current} notice={notice} />} testId="settings-values">
-      {loadFailed ? (
+    <Group id="recording" title={t('settings.nav.recording')} description={t('settings.recording.desc')} flash={flash} onFlashEnd={onFlashEnd} footer={<RecordingFoot current={current} notice={recording.notice} />} testId="settings-values">
+      {recording.loadFailed ? (
         <div className="st-row">
           <p className="err" role="alert" data-testid="values-load-failed">
             {t('settings.values.loadFailed')}
@@ -89,15 +121,20 @@ export function RecordingGroup({ flash, onFlashEnd }: { flash: boolean; onFlashE
       ) : (
         <>
           <Row title={<label htmlFor={switchId}>{t('settings.values.record')}</label>} hint={t('settings.values.recordHint')} hintId={hintId}>
-            <Switch id={switchId} checked={checked} disabled={!current || busy} onChange={(e) => toggle(e.target.checked)} aria-describedby={hintId} data-testid="values-record" />
+            <Switch id={switchId} checked={checked} disabled={!current} aria-disabled={busy || undefined} onChange={(e) => recording.toggle(e.target.checked)} aria-describedby={hintId} data-testid="values-record" />
           </Row>
           <Row title={<label htmlFor={namesId}>{t('settings.values.redactEnv')}</label>} hint={t('settings.values.redactEnvHint')}>
             <div className="st-names">
-              <input id={namesId} value={names} disabled={!current || busy} onChange={(e) => setNames(e.target.value)} placeholder="GITHUB_TOKEN" spellCheck={false} autoComplete="off" data-testid="values-redact-env" />
-              <Button size="sm" onClick={saveNames} disabled={!current || busy} data-testid="values-save">
+              <input id={namesId} value={names} disabled={!current} readOnly={busy} onChange={(e) => recording.setNames(e.target.value)} placeholder="GITHUB_TOKEN" spellCheck={false} autoComplete="off" data-testid="values-redact-env" />
+              <Button size="sm" onClick={recording.saveNames} disabled={!current} aria-disabled={busy || undefined} data-testid="values-save">
                 {t('settings.values.save')}
               </Button>
             </div>
+            {dirty && (
+              <span className="st-unsaved" role="status" data-testid="values-unsaved">
+                {t('settings.values.unsaved')}
+              </span>
+            )}
           </Row>
           <Row title={t('settings.diffs.record')} hint={t('settings.diffs.recordHint')} soon testId="settings-diffs">
             <Switch checked={false} disabled aria-label={t('settings.diffs.record')} />

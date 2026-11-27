@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react'
 import type { MessageKey } from '../i18n'
 import { useI18n } from '../i18n/context'
 import { AboutPane } from './about'
 import { AgentsPane } from './agents'
 import { EngineGroup, ExecutionGroup, GeneralGroup } from './groups'
 import { SoonTag } from './parts'
-import { RecordingGroup } from './recording'
+import { RecordingGroup, useRecording } from './recording'
 import { useEngineReport } from './useEngineReport'
 
 export { parseNames } from './recording'
@@ -38,47 +38,73 @@ export const SECTIONS: readonly Section[] = [
   { id: 'about', label: 'settings.nav.about', pane: 'about' },
 ]
 
-/** Height of one section row plus the gap between rows; the active marker moves by this. */
-const NAV_STEP = 36
 const reducedMotion = () => typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-export function Settings({ onPaneChange }: { onPaneChange?: (pane: SettingsPane) => void }) {
-  const { t } = useI18n()
+/**
+ * `visit` changes when Settings is chosen again in the sidebar: the main pane
+ * opens, without remounting, so a save in flight and a typed draft are kept.
+ */
+export function Settings({ onPaneChange, visit = 0 }: { onPaneChange?: (pane: SettingsPane) => void; visit?: number }) {
+  const { t, locale } = useI18n()
   const [pane, setPane] = useState<SettingsPane>('main')
   const [active, setActive] = useState<SectionId>('general')
   const [target, setTarget] = useState<GroupId | null>(null)
   const [flash, setFlash] = useState<GroupId | null>(null)
   const engine = useEngineReport()
+  const recording = useRecording()
   const spyLock = useRef(0)
+  const root = useRef<HTMLDivElement>(null)
+  const nav = useRef<HTMLElement>(null)
+
+  const show = useCallback(
+    (next: SettingsPane) => {
+      setPane(next)
+      onPaneChange?.(next)
+      // The page scrolls inside the app's main area: a new pane starts at its heading.
+      root.current?.scrollIntoView?.({ block: 'start' })
+    },
+    [onPaneChange],
+  )
 
   const select = (s: Section) => {
     if (!s.pane) return
     setActive(s.id)
-    if (s.pane !== pane) {
-      setPane(s.pane)
-      onPaneChange?.(s.pane)
-    }
+    if (s.pane !== pane) show(s.pane)
     if (s.pane === 'main') setTarget(s.id as GroupId)
   }
 
-  // Scroll to the chosen group after the main pane is on screen, then mark it briefly.
+  const firstVisit = useRef(visit)
+  useEffect(() => {
+    if (visit === firstVisit.current) return
+    firstVisit.current = visit
+    setActive('general')
+    show('main')
+  }, [visit, show])
+
+  // Scroll to the chosen group after the main pane is on screen, then ring it once.
+  // Under reduced motion the jump is instant and there is no ring to wait for.
   useEffect(() => {
     if (!target || pane !== 'main') return
+    const still = reducedMotion()
     spyLock.current = performance.now() + 800
-    document.getElementById(`st-${target}`)?.scrollIntoView({ behavior: reducedMotion() ? 'auto' : 'smooth', block: 'start' })
-    setFlash(target)
+    document.getElementById(`st-${target}`)?.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' })
     setTarget(null)
+    if (still) return
+    // Cleared first so choosing the same group again rings it again.
+    setFlash(null)
+    const frame = requestAnimationFrame(() => setFlash(target))
+    return () => cancelAnimationFrame(frame)
   }, [target, pane])
 
   useScrollSpy(pane === 'main', spyLock, setActive)
+  const markY = useMarker(nav, active, locale)
   const endFlash = useCallback(() => setFlash(null), [])
   const groupProps = (id: GroupId) => ({ flash: flash === id, onFlashEnd: endFlash })
-  const index = SECTIONS.findIndex((s) => s.id === active)
 
   return (
-    <div className="st" data-testid="settings">
-      <nav className="st-nav" aria-label={t('settings.nav.label')}>
-        <span className="st-nav-mark" aria-hidden="true" style={{ transform: `translateY(${index * NAV_STEP}px)` }} />
+    <div className="st" ref={root} data-testid="settings">
+      <nav className="st-nav" ref={nav} aria-label={t('settings.nav.label')}>
+        <span className="st-nav-mark" aria-hidden="true" style={{ transform: `translateY(${markY}px)` }} />
         {SECTIONS.map((s) =>
           s.pane ? (
             <button key={s.id} type="button" className={s.id === active ? 'on' : undefined} aria-current={s.id === active ? 'true' : undefined} onClick={() => select(s)} data-testid={`settings-nav-${s.id}`}>
@@ -86,7 +112,7 @@ export function Settings({ onPaneChange }: { onPaneChange?: (pane: SettingsPane)
             </button>
           ) : (
             <div key={s.id} className="st-nav-off" aria-disabled="true" data-testid={`settings-nav-${s.id}`}>
-              {t(s.label)}
+              <span className="st-nav-label">{t(s.label)}</span>
               <SoonTag />
             </div>
           ),
@@ -97,7 +123,7 @@ export function Settings({ onPaneChange }: { onPaneChange?: (pane: SettingsPane)
           <div className="st-body">
             <h1>{t('settings.title')}</h1>
             <GeneralGroup {...groupProps('general')} />
-            <RecordingGroup {...groupProps('recording')} />
+            <RecordingGroup recording={recording} {...groupProps('recording')} />
             <ExecutionGroup {...groupProps('execution')} />
             <EngineGroup view={engine.view} {...groupProps('engine')} />
           </div>
@@ -109,30 +135,40 @@ export function Settings({ onPaneChange }: { onPaneChange?: (pane: SettingsPane)
   )
 }
 
+/** The marker's offset: measured from the active entry, so it follows the real row height and gap. */
+function useMarker(nav: RefObject<HTMLElement | null>, active: SectionId, locale: string): number {
+  const [y, setY] = useState(0)
+  useLayoutEffect(() => {
+    const entry = nav.current?.querySelector<HTMLElement>(`[data-testid="settings-nav-${active}"]`)
+    if (entry) setY(entry.offsetTop)
+  }, [nav, active, locale])
+  return y
+}
+
 /**
- * While the main pane shows, the group nearest the top of the view becomes the
- * active section. Paused briefly after a click so a smooth scroll does not
- * flicker through the groups it passes. Without IntersectionObserver it does nothing.
+ * While the main pane shows, the visible group nearest the top of the view is
+ * the active section. Positions are read when the observer reports, not when a
+ * group first crossed, so they are current. Paused briefly after a click so a
+ * smooth scroll does not flicker through the groups it passes. Without
+ * IntersectionObserver it does nothing.
  */
 function useScrollSpy(enabled: boolean, lock: RefObject<number>, setActive: (id: SectionId) => void) {
   useEffect(() => {
     if (!enabled || typeof IntersectionObserver === 'undefined') return
-    const groups = [...document.querySelectorAll<HTMLElement>('.st [data-group]')]
-    const visible = new Map<string, number>()
+    const visible = new Set<HTMLElement>()
     const observer = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
-          const id = (e.target as HTMLElement).dataset.group ?? ''
-          if (e.isIntersecting) visible.set(id, e.boundingClientRect.top)
-          else visible.delete(id)
+          if (e.isIntersecting) visible.add(e.target as HTMLElement)
+          else visible.delete(e.target as HTMLElement)
         }
         if (performance.now() < (lock.current ?? 0) || visible.size === 0) return
-        const top = [...visible.entries()].sort((a, b) => a[1] - b[1])[0]![0]
-        setActive(top as SectionId)
+        const top = [...visible].map((g) => ({ g, y: g.getBoundingClientRect().top })).sort((a, b) => a.y - b.y)[0]!.g
+        setActive((top.dataset.group ?? 'general') as SectionId)
       },
       { rootMargin: '0px 0px -55% 0px' },
     )
-    groups.forEach((g) => observer.observe(g))
+    document.querySelectorAll<HTMLElement>('.st [data-group]').forEach((g) => observer.observe(g))
     return () => observer.disconnect()
   }, [enabled, lock, setActive])
 }

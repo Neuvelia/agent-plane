@@ -7,7 +7,7 @@ import { Group, Row, Segmented, Stepper } from './parts'
 const NAME: Record<(typeof LOCALES)[number], string> = { en: 'English', pl: 'Polski' }
 
 /** Values the desktop engine runs with today: `agentplane serve` defaults and the loop default (internal/domain/graph). */
-export const ENGINE_DEFAULTS = Object.freeze({ maxConcurrency: 2, maxAttempts: 3 })
+const ENGINE_DEFAULTS = Object.freeze({ maxConcurrency: 2, maxAttempts: 3 })
 
 interface Flash {
   flash: boolean
@@ -25,7 +25,7 @@ export function GeneralGroup({ flash, onFlashEnd }: Flash) {
       </Row>
       {/* No folder preference exists and the renderer never sees paths. */}
       <Row title={t('settings.graphFolder')} hint={t('settings.graphFolderHint')} soon testId="settings-graph-folder">
-        <Button size="sm" disabled>
+        <Button size="sm" disabled aria-label={`${t('settings.change')}: ${t('settings.graphFolder')}`}>
           {t('settings.change')}
         </Button>
       </Row>
@@ -76,7 +76,7 @@ export function EngineGroup({ view, flash, onFlashEnd }: Flash & { view: Capabil
         </span>
       </Row>
       <Row title={t('settings.engine.store')} hint={t('settings.engine.storeHint')} soon testId="settings-store">
-        <Button size="sm" disabled>
+        <Button size="sm" disabled aria-label={`${t('settings.engine.showFolder')}: ${t('settings.engine.store')}`}>
           {t('settings.engine.showFolder')}
         </Button>
       </Row>
