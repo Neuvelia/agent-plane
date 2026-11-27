@@ -194,7 +194,6 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F3.10-AC2 | Eksport zawiera usage metadata. |  | brak eksportu |
 | F3.11-AC1 | Bundle nie zawiera repo contents ani sekretów domyślnie. |  | jest tylko GET /capabilities; brak bundle'a diagnostycznego |
 | F1.2b-AC10 | Smoke z prawdziwym CLI (wersja, run/node ID, changed path, node_evidence, pętla korekty, isolation: worktree). |  | Nie wykonany: brak CLI i klucza API; wymaga spike'u docs/validation/F1.2b-claude-code-spike.md. |
-| F1.2b-AC11 | Shell i Codex bez zmian; make check i go test -race ./... przechodzą. |  |  |
 
 ## Active divergences
 

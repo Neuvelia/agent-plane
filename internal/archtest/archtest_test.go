@@ -340,6 +340,7 @@ func TestRootOnlyPackagesExist(t *testing.T) {
 	}
 }
 
+// roadmap: F1.2b-AC11
 // TestClaudeAndCodexAdaptersAreIndependent forbids production imports between
 // the two CLI adapters in either direction. Shared code belongs in
 // internal/agent/cliproc. It is checked separately from the baseline-driven

@@ -1777,7 +1777,12 @@ features:
         note: "Nie wykonany: brak CLI i klucza API; wymaga spike'u docs/validation/F1.2b-claude-code-spike.md."
       - id: F1.2b-AC11
         text: "Shell i Codex bez zmian; make check i go test -race ./... przechodzą."
-        status: open
+        status: met
+        evidence:
+          - "internal/archtest/archtest_test.go::TestClaudeAndCodexAdaptersAreIndependent"
+          - "internal/agent/codex/process_test.go::TestOwnedChildCancellationAndOrdinaryExit"
+          - "internal/agent/cliproc/run_unix_test.go::TestRunCancellationTerminatesTree"
+        note: "make check i go test -race ./... przeszły na Linuksie 2026-11-27 (po merge main i poprawkach z review); testy Codex i Shell bez zmian zachowania."
     out_of_scope:
       - "Uruchamianie agentów z desktopu (F2.14)."
       - "Usage/cost jako dane (F3.10); v1 zwraca Usage nil."
