@@ -1,4 +1,4 @@
-import { displayStatus, nodeView, type Attempt, type CheckView, type NodeStatus, type NodeView, type RunView } from './reducer'
+import { displayStatus, nodeView, type Attempt, type NodeStatus, type NodeView, type RunView } from './reducer'
 import type { GraphSummary } from './types'
 
 // Pure selectors for the Inbox detail pane (F2.5b) over one reduced run. They
@@ -30,27 +30,6 @@ export const lastAttempt = (n: NodeView): Attempt | undefined => n.attempts[n.at
 /** Node IDs whose output was accepted, in the order the run reached them. */
 export function acceptedNodes(run: RunView): string[] {
   return run.order.filter((id) => nodeView(run, id).status === 'succeeded')
-}
-
-/** The newest check of every node that recorded one: a loop's last checked attempt, or a standalone Gate's check. */
-export function latestChecks(run: RunView): { nodeId: string; check: CheckView }[] {
-  const out: { nodeId: string; check: CheckView }[] = []
-  for (const id of run.order) {
-    const n = nodeView(run, id)
-    const check = [...n.attempts].reverse().find((a) => a.check)?.check ?? n.check
-    if (check) out.push({ nodeId: id, check })
-  }
-  return out
-}
-
-/** Git-observed paths of each node's newest observed attempt, merged and sorted. Empty when nothing was observed. */
-export function changedFiles(run: RunView): string[] {
-  const paths = new Set<string>()
-  for (const id of run.order) {
-    const observed = [...nodeView(run, id).attempts].reverse().find((a) => a.changedFiles !== undefined)
-    for (const p of observed?.changedFiles ?? []) paths.add(p)
-  }
-  return [...paths].sort()
 }
 
 function tail(text: string, lines: number): string {

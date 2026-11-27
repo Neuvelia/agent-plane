@@ -53,6 +53,16 @@ export function inboxQueue(runs: RunSummary[], approvals: PendingApproval[]): In
   return items.sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group) || time(b.at) - time(a.at))
 }
 
+/**
+ * The live queue plus approvals already decided on this screen that the list no longer
+ * holds: each keeps its group, after the live items of that group.
+ */
+export function withDecided(live: InboxItem[], decided: InboxItem[]): InboxItem[] {
+  const keys = new Set(live.map((i) => i.key))
+  const gone = decided.filter((i) => !keys.has(i.key))
+  return GROUP_ORDER.flatMap((g) => [...live.filter((i) => i.group === g), ...gone.filter((i) => i.group === g)])
+}
+
 const FILTER_GROUP: Record<Exclude<InboxFilter, 'all'>, InboxGroup> = { approvals: 'waiting', stopped: 'stopped', running: 'running' }
 
 export function filterQueue(items: InboxItem[], filter: InboxFilter): InboxItem[] {

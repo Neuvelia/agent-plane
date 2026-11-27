@@ -7,7 +7,7 @@ import { useI18n } from './i18n/context'
 import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
-import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
+import { GlobalBar, Sidebar, type NavEntry } from './ui/shell'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -104,8 +104,7 @@ function Shell({ lost }: { lost: boolean }) {
         footer={footer}
       />
       <div className="col">
-        <GlobalBar lost={lost} />
-        <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
+        <GlobalBar lost={lost} crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
         <main id="content" ref={mainRef} tabIndex={-1}>
           {route.name === 'inbox' && (
             <Inbox

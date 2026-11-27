@@ -1,21 +1,23 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { decide } from './api'
+import { approvalContext } from './approvalContext'
 import { useConnectionReport } from './connection'
 import { useRunStream } from './hooks'
 import type { InboxItem, InboxKind } from './inbox'
-import { acceptedNodes, activeNode, changedFiles, failureText, lastAttempt, latestChecks, nodeRows, stopNode } from './inboxRun'
+import { acceptedNodes, activeNode, failureText, lastAttempt, nodeRows, stopNode } from './inboxRun'
 import type { MessageKey } from './i18n'
 import { useI18n } from './i18n/context'
 import { formatDuration } from './insight'
 import { nodeView, type RunView } from './reducer'
 import { LoadingState } from './states'
-import { ApprovalPill, OutcomePill } from './status'
+import { ApprovalPill } from './status'
 import type { GraphSummary } from './types'
 import { Glyph, nodeGlyph, type GlyphKind } from './ui/glyphs'
-import { Button, Pill } from './ui/primitives'
+import { Pill } from './ui/primitives'
 
-// F2.5b: the selected Inbox item. Everything below the headline is read from
-// the run's own event stream (src/reducer.ts); the lists only say what to show.
+// F2.5b: the selected Inbox item, as on the Tarmind Dashboard UX canvas. Everything
+// below the headline is read from the run's own event stream (src/reducer.ts);
+// the lists only say what to show.
 
 type T = ReturnType<typeof useI18n>['t']
 
@@ -24,17 +26,17 @@ export const KIND_GLYPH: Record<InboxKind, GlyphKind> = { approval: 'approval', 
 function Section({ title, children, testId }: { title: ReactNode; children: ReactNode; testId?: string }) {
   return (
     <section className="inbox-sec" data-testid={testId}>
-      <h3 className="lb">{title}</h3>
+      <h3 className="inbox-label">{title}</h3>
       {children}
     </section>
   )
 }
 
-function Line({ glyph, name, children }: { glyph?: ReactNode; name: ReactNode; children?: ReactNode }) {
+function Line({ glyph, name, muted = false, children }: { glyph?: ReactNode; name: ReactNode; muted?: boolean; children?: ReactNode }) {
   return (
     <li className="inbox-line">
       <span className="inbox-line-glyph">{glyph}</span>
-      <span className="inbox-line-name mono">{name}</span>
+      <span className={muted ? 'inbox-line-name mono mu' : 'inbox-line-name mono'}>{name}</span>
       {children}
     </li>
   )
@@ -65,35 +67,42 @@ function headline(item: InboxItem, run: RunView, t: T): { title: string; lede: s
   return { title: t('inbox.head.failedAt', { graph, node: stopped.id }), lede }
 }
 
-function ApprovalBody({ item, run }: { item: InboxItem; run: RunView }) {
+const verdictGlyph = (verdict: string): GlyphKind => (verdict === 'green' ? 'ok' : verdict === 'red' ? 'bad' : 'idle')
+
+/** What the gate depends on (F2.10 approval context): the changed files and the check of each direct dependency's last attempt. */
+function ApprovalBody({ item, run, graph }: { item: InboxItem; run: RunView; graph: GraphSummary | null }) {
   const { t } = useI18n()
+  const node = item.approval?.node_id ?? ''
+  const upstream = approvalContext(run, graph ? graph.edges.filter((e) => e.to === node).map((e) => e.from) : [])
+  const observed = upstream.filter((u) => u.files && u.files.length > 0)
   const context = item.approval?.context ?? []
-  const checks = latestChecks(run)
-  const files = changedFiles(run)
   return (
     <>
+      {observed.length > 0 && (
+        <Section title={t('inbox.sec.changed')} testId="inbox-changed">
+          <ul className="inbox-lines">
+            {observed.flatMap((u) => (u.files ?? []).map((f) => <Line key={`${u.nodeId}:${f}`} name={f}><span className="inbox-line-value mu">{u.nodeId}</span></Line>))}
+            {observed.filter((u) => u.moreFiles > 0).map((u) => <Line key={`${u.nodeId}:more`} name={u.nodeId} muted><span className="inbox-line-value mu">{t('approval.context.more', { count: u.moreFiles })}</span></Line>)}
+          </ul>
+        </Section>
+      )}
+      {upstream.length > 0 && (
+        <Section title={t('inbox.sec.evidence')} testId="inbox-evidence">
+          <ul className="inbox-lines">
+            {upstream.map((u) => (
+              <Line key={u.nodeId} glyph={<Glyph kind={u.check ? verdictGlyph(u.check.verdict) : 'idle'} />} name={u.check ? `${u.nodeId} · ${u.check.checkId}` : u.nodeId}>
+                <span className="inbox-line-value mu">{u.check ? u.check.reason : t('approval.context.noCheck')}</span>
+              </Line>
+            ))}
+          </ul>
+        </Section>
+      )}
       {context.length > 0 && (
         <Section title={t('approvals.context')} testId="inbox-context">
           <ul className="inbox-lines">
             {context.map((c) => (
               <Line key={c.name} name={c.name}>
                 <span className="inbox-line-value">{c.value}{c.truncated ? '…' : ''}</span>
-              </Line>
-            ))}
-          </ul>
-        </Section>
-      )}
-      {files.length > 0 && (
-        <Section title={t('inbox.sec.changed')} testId="inbox-changed">
-          <ul className="inbox-lines">{files.map((f) => <Line key={f} name={f} />)}</ul>
-        </Section>
-      )}
-      {checks.length > 0 && (
-        <Section title={t('inbox.sec.evidence')} testId="inbox-evidence">
-          <ul className="inbox-lines">
-            {checks.map(({ nodeId, check }) => (
-              <Line key={nodeId} glyph={<Glyph kind={check.verdict === 'green' ? 'ok' : check.verdict === 'red' ? 'bad' : 'idle'} />} name={`${nodeId} · ${check.checkId}`}>
-                <span className="inbox-line-value mu">{check.reason}</span>
               </Line>
             ))}
           </ul>
@@ -111,21 +120,24 @@ function FailedBody({ run }: { run: RunView }) {
   return (
     <>
       {node.attempts.length > 0 && (
-        <Section title={t('inbox.sec.attempts', { node: node.id })} testId="inbox-attempts">
+        <Section title={<>{t('inbox.sec.attemptsAt')} <span className="mono">{node.id}</span></>} testId="inbox-attempts">
           <ul className="inbox-lines">
             {node.attempts.map((a) => (
-              <Line key={a.id} name={a.number}>
+              <li key={a.id} className="inbox-line">
+                <span className="inbox-attempt-no mono mu">{a.number}</span>
                 <span className="inbox-line-value">{a.check?.reason ?? ''}</span>
-                <OutcomePill outcome={a.outcome} />
-              </Line>
+                {a.outcome && <span className="mono mu">{a.outcome.replace('_', ' ')}</span>}
+              </li>
             ))}
           </ul>
         </Section>
       )}
       {(failure.reason || failure.output) && (
         <Section title={t('inbox.sec.lastFailure')} testId="inbox-failure">
-          {failure.reason && <p className="inbox-reason">{failure.reason}</p>}
-          {failure.output && <pre className="inbox-code">{failure.output}</pre>}
+          <pre className="inbox-code">
+            {failure.reason && <span className="r">{failure.reason}</span>}
+            {failure.output}
+          </pre>
         </Section>
       )}
     </>
@@ -141,14 +153,14 @@ function InterruptedBody({ run }: { run: RunView }) {
         <ul className="inbox-lines">
           {acceptedNodes(run).map((id) => (
             <Line key={id} glyph={<Glyph kind="ok" />} name={id}>
-              <span className="inbox-line-value mu">{t('inbox.kept')}</span>
+              <span className="mu">{t('inbox.kept')}</span>
             </Line>
           ))}
           {stopped.map((n) => {
             const last = lastAttempt(n)
             return (
               <Line key={n.id} glyph={<Glyph kind="paused" />} name={n.id}>
-                <span className="inbox-line-value mu">{last ? t('inbox.stoppedAt', { number: last.number }) : t('inbox.stopped')}</span>
+                <span className="mu">{last ? t('inbox.stoppedAt', { number: last.number }) : t('inbox.stopped')}</span>
               </Line>
             )
           })}
@@ -165,25 +177,29 @@ function RunningBody({ run, graph }: { run: RunView; graph: GraphSummary | null 
   return (
     <Section title={t('inbox.sec.nodes')} testId="inbox-nodes">
       <ul className="inbox-lines">
-        {nodeRows(run, graph).map((r) => (
-          <Line key={r.id} glyph={<Glyph kind={nodeGlyph(r.status)} />} name={r.id}>
-            <span className="inbox-line-value mu">{r.waitsFor.length > 0 ? t('inbox.waitsFor', { nodes: r.waitsFor.join(', ') }) : t(`status.node.${r.status}` as MessageKey)}</span>
-            {r.status === 'retrying' && r.attempt && <Pill tone="w" small>{t('inbox.attemptOf', r.attempt)}</Pill>}
-            {r.durationMs !== undefined && r.status !== 'waiting_human' && <span className="mono mu">{formatDuration(r.durationMs, locale)}</span>}
-          </Line>
-        ))}
+        {nodeRows(run, graph).map((r) => {
+          const started = r.durationMs !== undefined
+          const glyph = nodeGlyph(r.status)
+          return (
+            <Line key={r.id} glyph={glyph === 'idle' ? undefined : <Glyph kind={glyph} />} name={r.id} muted={!started}>
+              <span className="sr-only">{t(`status.node.${r.status}` as MessageKey)}</span>
+              {r.waitsFor.length > 0 && <span className="mu">{t('inbox.waitsFor', { nodes: r.waitsFor.join(', ') })}</span>}
+              {r.status === 'retrying' && r.attempt && <Pill tone="w" small>{t('inbox.retryOf', r.attempt)}</Pill>}
+              {started && r.status !== 'waiting_human' && <span className="mono mu">{formatDuration(r.durationMs!, locale)}</span>}
+            </Line>
+          )
+        })}
       </ul>
     </Section>
   )
 }
 
-function DecisionBar({ item, run, lost, onDecided, onNext, onOpenRun }: { item: InboxItem; run: RunView; lost: boolean; onDecided: () => void; onNext: () => void; onOpenRun: () => void }) {
+function DecisionBar({ item, decision, lost, onDecided, onNext }: { item: InboxItem; decision?: string; lost: boolean; onDecided: () => void; onNext: () => void }) {
   const { t } = useI18n()
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const a = item.approval
-  const decision = a ? nodeView(run, a.node_id).approval?.decision : undefined
   async function submit(approve: boolean) {
     if (!a) return
     setBusy(true)
@@ -198,54 +214,87 @@ function DecisionBar({ item, run, lost, onDecided, onNext, onOpenRun }: { item: 
     return (
       <div className="inbox-bar" data-testid="inbox-decided">
         <ApprovalPill decision={decision} />
-        <span className="mu">{t('inbox.decided')}</span>
+        <span className="mu inbox-small">{t('inbox.decided')}</span>
         <span className="inbox-bar-gap" />
-        <Button onClick={onOpenRun} data-testid="inbox-open-run">{t('approval.openRun')}</Button>
-        <Button variant="primary" onClick={onNext} data-testid="inbox-next">{t('inbox.next')}</Button>
+        <button type="button" className="ib-btn pr" onClick={onNext} data-testid="inbox-next">{t('inbox.next')}</button>
       </div>
     )
   return (
     <div className="inbox-bar" data-testid="inbox-decide">
       <input type="text" aria-label={t('inbox.reason')} placeholder={t('inbox.reasonPlaceholder')} value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
-      <Button variant="danger" disabled={busy || lost} onClick={() => void submit(false)} data-testid="inbox-reject">{t('approval.reject')}</Button>
-      <Button variant="primary" disabled={busy || lost} onClick={() => void submit(true)} data-testid="inbox-approve">{t('approval.approve')}</Button>
+      <button type="button" className="ib-btn bad" disabled={busy || lost} onClick={() => void submit(false)} data-testid="inbox-reject">{t('approval.reject')}</button>
+      <button type="button" className="ib-btn pr" disabled={busy || lost} onClick={() => void submit(true)} data-testid="inbox-approve">{t('approval.approve')}</button>
       {lost && <div className="mu inbox-bar-note">{t('approval.disabledLost')}</div>}
       {error && <div className="err inbox-bar-note" role="alert">{error}</div>}
     </div>
   )
 }
 
-export function InboxDetail({ item, age, onOpenRun, onDecided, onNext }: { item: InboxItem; age: string; onOpenRun: (id: string) => void; onDecided: () => void; onNext: () => void }) {
+function OpenBar({ summary, onOpen }: { summary: string; onOpen: () => void }) {
+  const { t } = useI18n()
+  const [copy, setCopy] = useState<'idle' | 'done' | 'failed'>('idle')
+  async function copySummary() {
+    try {
+      await navigator.clipboard.writeText(summary)
+      setCopy('done')
+    } catch {
+      setCopy('failed')
+    }
+  }
+  return (
+    <div className="inbox-bar">
+      <button type="button" className="ib-btn ghost" onClick={() => void copySummary()} data-testid="inbox-copy">
+        {copy === 'done' ? t('inbox.copied') : t('inbox.copySummary')}
+      </button>
+      {copy === 'failed' && <span className="err inbox-small" role="alert">{t('inbox.copyFailed')}</span>}
+      <span className="inbox-bar-gap" />
+      <button type="button" className="ib-btn pr" onClick={onOpen} data-testid="inbox-open-run">{t('approval.openRun')}</button>
+    </div>
+  )
+}
+
+export interface InboxDetailProps {
+  item: InboxItem
+  age: string
+  onOpenRun: (id: string) => void
+  onDecided: () => void
+  /** The decision as the run's events recorded it (approval_decided), once it arrives. */
+  onSettled: (decision: string) => void
+  onNext: () => void
+}
+
+export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext }: InboxDetailProps) {
   const { t } = useI18n()
   const { run, graph, lost, notFound } = useRunStream(item.runId)
   useConnectionReport('inbox-run', lost !== null)
   const { title, lede } = headline(item, run, t)
-  const open = () => onOpenRun(item.runId)
+  const kind = t(`inbox.kind.${item.kind}` as MessageKey)
+  const decision = item.approval ? nodeView(run, item.approval.node_id).approval?.decision : undefined
+  useEffect(() => {
+    if (decision) onSettled(decision)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [decision])
   return (
     <article className="inbox-item" data-testid="inbox-detail" data-kind={item.kind}>
       <div className="inbox-body">
         <header>
           <div className={`inbox-kind k-${item.kind}`}>
-            <Glyph kind={KIND_GLYPH[item.kind]} />
-            <span>{t(`inbox.kind.${item.kind}` as MessageKey)}</span>
-            <span className="mu">· {item.graphId}{age ? ` · ${age}` : ''}</span>
+            <span>{kind}</span>
+            {age && <span className="mu">· {age}</span>}
           </div>
           <h2>{title}</h2>
           <p className="inbox-lede">{lede}</p>
         </header>
         {notFound && <p className="mu">{t('run.notFound')}</p>}
-        {item.kind === 'approval' && <ApprovalBody item={item} run={run} />}
+        {item.kind === 'approval' && <ApprovalBody item={item} run={run} graph={graph} />}
         {item.kind === 'failed' && <FailedBody run={run} />}
         {item.kind === 'interrupted' && <InterruptedBody run={run} />}
         {item.kind === 'running' && <RunningBody run={run} graph={graph} />}
       </div>
       {item.kind === 'approval' ? (
-        <DecisionBar item={item} run={run} lost={lost !== null} onDecided={onDecided} onNext={onNext} onOpenRun={open} />
+        <DecisionBar item={item} decision={decision} lost={lost !== null} onDecided={onDecided} onNext={onNext} />
       ) : (
-        <div className="inbox-bar">
-          <span className="inbox-bar-gap" />
-          <Button variant="primary" onClick={open} data-testid="inbox-open-run">{t('approval.openRun')}</Button>
-        </div>
+        <OpenBar summary={`${kind}: ${title}\n${lede}\n${item.graphId} · ${item.runId}`} onOpen={() => onOpenRun(item.runId)} />
       )}
     </article>
   )

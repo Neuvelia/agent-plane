@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import approve from './fixtures/demo-approve.json'
 import reject from './fixtures/demo-reject.json'
 import exhausted from './fixtures/exhausted.json'
-import { ageMs, filterQueue, formatAge, inboxQueue, nextItem, queueCounts, recentOutcomes, RECENT_RUNS, selectItem } from '../src/inbox'
-import { acceptedNodes, activeNode, changedFiles, failureText, FAILURE_LINES, latestChecks, nodeRows, stopNode } from '../src/inboxRun'
+import { ageMs, filterQueue, formatAge, inboxQueue, newestRuns, nextItem, queueCounts, recentOutcomes, RECENT_RUNS, selectItem, withDecided } from '../src/inbox'
+import { acceptedNodes, activeNode, failureText, FAILURE_LINES, nodeRows, stopNode } from '../src/inboxRun'
 import { reduceAll, settle } from '../src/reducer'
 import type { ApEvent, GraphSummary, PendingApproval, RunSummary } from '../src/types'
 
@@ -67,6 +67,25 @@ describe('filters and selection', () => {
   })
 })
 
+describe('decided approvals', () => {
+  it('stay in their group after the live items once the list no longer holds them', () => {
+    const live = inboxQueue([run('b', 'failed', '2026-11-14T11:00:00Z')], [approval('c')])
+    const decided = inboxQueue([], [approval('x')])
+    expect(withDecided(live, decided).map((i) => i.key)).toEqual(['c-approve', 'x-approve', 'b'])
+  })
+  it('are not repeated while the list still holds them', () => {
+    const live = inboxQueue([], [approval('c')])
+    expect(withDecided(live, live).map((i) => i.key)).toEqual(['c-approve'])
+  })
+})
+
+describe('newestRuns', () => {
+  it('keeps the five newest runs, newest first', () => {
+    const runs = Array.from({ length: 7 }, (_, i) => run(`r${i}`, 'succeeded', new Date(Date.UTC(2026, 10, 14, i)).toISOString()))
+    expect(newestRuns(runs).map((r) => r.run_id)).toEqual(['r6', 'r5', 'r4', 'r3', 'r2'])
+  })
+})
+
 describe('recentOutcomes', () => {
   it('keeps the newest runs, oldest first, each with the tone of its status', () => {
     const runs = [run('new', 'failed', '2026-11-14T12:00:00Z'), run('old', 'succeeded', '2026-11-14T08:00:00Z'), run('live', 'running', '2026-11-14T13:00:00Z'), run('odd', 'cancelled', '2026-11-14T10:00:00Z')]
@@ -122,10 +141,5 @@ describe('detail selectors over recorded runs', () => {
     expect(rows.map((x) => x.id)).toEqual(['fast', 'flaky', 'approve', 'apply'])
     expect(rows.find((x) => x.id === 'apply')?.waitsFor).toEqual(['approve'])
     expect(rows.find((x) => x.id === 'apply')?.durationMs).toBeUndefined()
-  })
-  it('keeps the newest check per node and reports no changed files when Git observed none', () => {
-    const r = reduceAll(demoApprove)
-    expect(latestChecks(r).map((c) => c.nodeId)).toContain('flaky')
-    expect(changedFiles(r)).toEqual([])
   })
 })

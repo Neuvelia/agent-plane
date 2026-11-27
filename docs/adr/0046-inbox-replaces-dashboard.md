@@ -22,7 +22,8 @@ a triage queue with the selected item's evidence and action beside it.
    already decided, disabled while the stream is lost).
 3. The Sidebar follows the canvas: the name without the logo, New run as a button, Recent runs
    (the five newest, from `GET /runs`), a Later group for the disabled surfaces and the profile in its
-   footer; the global bar keeps only the connection indicator. On macOS the traffic lights move
+   footer; the global bar keeps only the connection indicator and becomes the single 44px page
+   header with the page title (the separate breadcrumb row is folded into it). On macOS the traffic lights move
    2px up to sit centred in the 44px brand strip.
 4. The 7-day Outcomes dot chart gives way to a strip of the newest 14 runs; Quick actions stay as
    two always-visible buttons.

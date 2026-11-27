@@ -119,10 +119,11 @@ export const PROFILE_INITIALS = 'KW'
 /** Bar above the page content: connection state at the right (the profile sits in the sidebar footer, F2.5b).
  *  On macOS the window has no native title bar, so this bar (with the sidebar's
  *  brand strip) is the drag area (see styles.css `.mac`). */
-export function GlobalBar({ lost }: { lost: boolean }) {
+export function GlobalBar({ lost, crumbs }: { lost: boolean; crumbs?: ReactNode[] }) {
   const { t } = useI18n()
   return (
     <header className="global-bar">
+      {crumbs ? <TopBar crumbs={crumbs} /> : <span />}
       <div className="g-right">
         <span className={`conn ${lost ? 'bad' : 'ok'}`} data-testid="connection-indicator">
           <span className="dot sm" aria-hidden="true" />
