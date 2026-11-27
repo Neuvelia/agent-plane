@@ -10,9 +10,12 @@ import type { ApEvent } from './types'
 
 const meta: Meta = { title: 'Screens' }
 
-// The whole app as a returning user sees it: the first-run welcome was already left, so it opens on the Inbox.
-function ReturningUser() {
+// The whole app as a returning user sees it: the first-run welcome was already left (recorded in
+// `beforeEach`, not during render), so it opens on the Inbox.
+const returning = () => {
   markWelcomeDone()
+}
+function ReturningUser() {
   return (
     <div style={{ height: 'calc(100vh - 16px)' }}>
       <App />
@@ -173,6 +176,7 @@ export const NewRunBlocked: S = {
 
 export const FullAppShell: S = {
   parameters: { bridge: { runs: [run(waitingForHuman, 'running', 'open'), run(exhaustedRetries, 'failed', 'end', false)], approvals: pending } satisfies BridgeData },
+  beforeEach: returning,
   render: () => <ReturningUser />,
 }
 
@@ -195,10 +199,19 @@ const inbox = (b: BridgeData, play?: S['play']): S => ({
   ),
   play,
 })
-const clickSelector = (selector: string): S['play'] => async ({ canvasElement }) => {
-  await new Promise((r) => setTimeout(r, 150))
-  canvasElement.querySelector<HTMLButtonElement>(selector)?.click()
-  await new Promise((r) => setTimeout(r, 150))
+/** Waits until `selector` matches (the bridge answers asynchronously); a story whose element never appears fails. */
+async function waitFor(root: HTMLElement, selector: string, timeoutMs = 3000): Promise<HTMLElement> {
+  const end = Date.now() + timeoutMs
+  for (;;) {
+    const found = root.querySelector<HTMLElement>(selector)
+    if (found) return found
+    if (Date.now() > end) throw new Error(`story: ${selector} never appeared`)
+    await new Promise((r) => setTimeout(r, 25))
+  }
+}
+const clickSelector = (selector: string, then?: string): S['play'] => async ({ canvasElement }) => {
+  ;(await waitFor(canvasElement, selector)).click()
+  if (then) await waitFor(canvasElement, then)
 }
 // An interrupted run: the demo recording cut while two branches were running, under its own run ID.
 const interrupted = asRun(runningParallel, '7d2e91b4-0c55-4a8e-9f1d-3b6a2c8e5f10')
@@ -210,15 +223,27 @@ export const InboxEmpty: S = inbox({ runs: [run(demoApprove, 'succeeded', 'end')
 export const InboxNoRuns: S = inbox({ runs: [] })
 export const InboxBusy: S = inbox({ runs: [run(runningParallel, 'running', 'open'), run(demoReject, 'succeeded', 'end'), run(exhaustedRetries, 'succeeded', 'end', false)] })
 export const InboxNeedsAttention: S = inbox(triage)
-export const InboxFailedSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="failed"]'))
+export const InboxFailedSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="failed"]', '[data-testid="inbox-detail"][data-kind="failed"]'))
 export const InboxRetriesUsedUp: S = inbox({ runs: [run(exhaustedRetries, 'failed', 'end', false)] })
-export const InboxInterruptedSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="interrupted"]'))
-export const InboxRunningSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="running"]'))
-export const InboxFilterStopped: S = inbox(triage, clickSelector('[data-testid="inbox-filter-stopped"]'))
-export const InboxFilterEmpty: S = inbox({ runs: [run(demoReject, 'failed', 'end')] }, clickSelector('[data-testid="inbox-filter-approvals"]'))
+export const InboxInterruptedSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="interrupted"]', '[data-testid="inbox-detail"][data-kind="interrupted"]'))
+export const InboxRunningSelected: S = inbox(triage, clickSelector('[data-testid="inbox-item"][data-kind="running"]', '[data-testid="inbox-nodes"]'))
+export const InboxFilterStopped: S = inbox(triage, clickSelector('[data-testid="inbox-filter-stopped"]', '[data-testid="inbox-filter-stopped"][aria-pressed="true"]'))
+export const InboxFilterEmpty: S = inbox({ runs: [run(demoReject, 'failed', 'end')] }, clickSelector('[data-testid="inbox-filter-approvals"]', '[data-testid="inbox-filter-empty"]'))
+// Decided here: the request succeeds, the recorded approval_decided arrives, the list drops the approval; the row stays dimmed with its decision.
+export const InboxDecidedHere: S = inbox(
+  {
+    runs: [{ ...run(waitingForHuman, 'running', 'open'), afterDecision: demoApprove.slice(waitingForHuman.length) }, run(demoReject, 'failed', 'end')],
+    approvals: pending,
+  },
+  clickSelector('[data-testid="inbox-approve"]', '[data-testid="inbox-item"].done'),
+)
+// The listed run cannot be read: the detail says so and deciding is off with the reason.
+export const InboxRunNotFound: S = inbox({ runs: [{ ...run(waitingForHuman, 'running', 'open'), unreadable: true }], approvals: pending }, async ({ canvasElement }) => {
+  await waitFor(canvasElement, '[data-testid="inbox-run-not-found"]')
+})
 // The list still shows the approval while the stream already carries the decision: the moment right after deciding.
 export const InboxDecided: S = inbox({ runs: [run(demoApprove, 'succeeded', 'end')], approvals: pending })
-export const InboxDecisionError: S = inbox({ runs: [run(waitingForHuman, 'running', 'open')], approvals: pending, decisionFailure: { status: 500, message: 'request failed (500)' } }, clickSelector('[data-testid="inbox-approve"]'))
+export const InboxDecisionError: S = inbox({ runs: [run(waitingForHuman, 'running', 'open')], approvals: pending, decisionFailure: { status: 500, message: 'request failed (500)' } }, clickSelector('[data-testid="inbox-approve"]', '[data-testid="inbox-decide"] [role="alert"]'))
 export const InboxConnectionLost: S = inbox({ runs: [run(waitingForHuman, 'running', 'lost')], approvals: pending })
 
 // Loading and error states of every screen that reads from the engine.
@@ -237,5 +262,6 @@ export const NewRunValidating: S = {
 }
 export const FullAppShellEngineDown: S = {
   parameters: { bridge: down },
+  beforeEach: returning,
   render: () => <ReturningUser />,
 }

@@ -942,7 +942,7 @@ async function startDemo(app, page) {
     // The Inbox queues the pending approval and offers the decision in place.
     await page.click('[data-testid="nav-inbox"]')
     await page.waitForSelector('[data-testid="inbox-item"][data-kind="approval"]')
-    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count() >= 1, true)
+    assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="approval"]').count(), 1)
     // The run is running, but it waits for that approval, so it is queued once: as the approval.
     assert.equal(await page.locator('[data-testid="inbox-item"][data-kind="running"]').count(), 0)
     assert.equal(await page.locator('[data-testid="inbox-recent"] .s-b').count() >= 1, true)
@@ -955,6 +955,11 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="inbox-decided"]')
     assert.match(await page.textContent('[data-testid="inbox-decided"]'), /Approved/)
     await page.waitForSelector('[data-testid="inbox-item"].done')
+    // The row survives the poll that drops the approval from GET /approvals (the badge goes with it).
+    await page.waitForFunction(async () => (await window.agentplane.request('GET', '/approvals')).body.approvals.length === 0)
+    await page.waitForSelector('[data-testid="approvals-badge"]', { state: 'detached' })
+    assert.equal(await page.locator('[data-testid="inbox-item"].done').count(), 1)
+    assert.match(await page.textContent('[data-testid="inbox-item"].done'), /Approved/)
     await shot(page, '3b-inbox-decided')
     await page.click('[data-testid="nav-approvals"]')
     await page.waitForSelector('[data-testid="no-approvals"]')

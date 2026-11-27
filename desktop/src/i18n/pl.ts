@@ -328,6 +328,7 @@ export const pl: Record<MessageKey, string> = {
   'inbox.lede.retrying': 'Próba {number} z {max} w węźle {node}. Ponawiany jest tylko ten węzeł; zaakceptowane węzły obok zostają bez zmian.',
   'inbox.lede.running': 'Nic nie wymaga Twojej uwagi, dopóki trwa.',
   'inbox.sec.changed': 'Co się zmieniło',
+  'inbox.sec.decision': 'Decyzja',
   'inbox.sec.evidence': 'Dowody',
   'inbox.sec.attemptsAt': 'Próby w węźle',
   'inbox.sec.lastFailure': 'Ostatni błąd',

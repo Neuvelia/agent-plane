@@ -1780,7 +1780,7 @@ features:
     decisions: ["ADR-0046"]
     divergences: []
     tasks: []
-    note: "Presentation only; the remaining screens of the Tarmind Dashboard UX canvas follow as separate steps."
+    note: "Presentation only; the remaining screens of the Tarmind Dashboard UX canvas follow as separate steps. F2.10 is partial only for its own panel gaps (no blast radius or diff content, #187; on_reject continue limits); the Inbox uses the F2.10 decision rules and approval context that are met and inherits those gaps, it adds none. ADR-0046 awaits owner acceptance."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

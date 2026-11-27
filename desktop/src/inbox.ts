@@ -74,20 +74,6 @@ export function queueCounts(items: InboxItem[]): Record<InboxFilter, number> {
   return { all: items.length, approvals: count('waiting'), stopped: count('stopped'), running: count('running') }
 }
 
-/**
- * The item to show: the one the person picked while it is still queued; else `held`, an
- * approval decided on this screen that the list dropped before its decision arrived, while
- * it is the picked one; else the first.
- */
-export function selectItem(items: InboxItem[], picked: string | null, held?: InboxItem): InboxItem | undefined {
-  return items.find((i) => i.key === picked) ?? (held && held.key === picked ? held : undefined) ?? items[0]
-}
-
-/** The next item after a decision: the first queued item that is not the one just handled. */
-export function nextItem(items: InboxItem[], current: string): InboxItem | undefined {
-  return items.find((i) => i.key !== current)
-}
-
 export const RECENT_RUNS = 14
 
 export type OutcomeTone = 'p' | 'x' | 'b' | 'n'
