@@ -19,6 +19,8 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
 | Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
+| Profile menu, Keyboard shortcuts and About (F2.5b) | `ui/profileMenu.tsx`, `ui/menuKeys.ts`, `ui/presence.ts`, `ui/dialogs.tsx` |
+| Theme choice (System/Light/Dark) and `data-theme` (F2.5b, ADR-0046) | `theme.tsx`; light tokens in `design/tokens.json` |
 | Recorded run values and "Show values from run" (F2.3 E5b.1) | `values.ts`, `valuePicker.ts`, `useRunValues.ts`, `ValuePickerView.tsx` |
 | Edge inspector: states, safe value text, Copy, session recording hint (F2.3 E5b.2) | `editor/edgeValue.ts`, `editor/EdgeInspector.tsx`, `editor/EdgeValueBox.tsx`, `editor/valueText.ts`, `useSessionRecording.ts` |
 | Welcome screen, capability rows and first-run flag (F2.11) | `welcome.tsx`, `capabilities.ts` |
@@ -98,6 +100,9 @@ as implemented merely because the full spec describes it.
 - For rejected canvas connections, inspect `editor/GraphCanvas.tsx` and
   `editor/editor.stories.tsx`; add a focused behavior test when changing that
   path. The static no-graph-rules test does not test refusal UI behavior.
+- Profile menu, theme and language preferences, shortcuts and About (F2.5b):
+  `desktop/test/profile-menu.test.tsx`, `desktop/test/shell-dialogs.test.tsx`;
+  the menu's keyboard model runs in a real browser in `npm run stories:test`.
 - Language, design, accessibility and stories: `desktop/test/i18n.test.ts`,
   `desktop/test/tokens.test.ts`, `desktop/test/contrast.test.ts`,
   `desktop/test/a11y-static.test.ts`, `desktop/test/stories.test.ts`.

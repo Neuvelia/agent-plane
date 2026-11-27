@@ -11,3 +11,8 @@
    The solid `brand` colour (5.6:1 on the ground) is used instead.
    (Verified by test/contrast.test.ts.) */
 :root{--bad-text:#FF6961;--focus:#0A84FF}
+
+/* Light theme (F2.5b, ADR-0046). --bad-text is the token `bad` itself (it passes
+   4.5:1 on its soft wash over white); the focus ring is solid `brand` for the
+   same 3:1 reason as in dark; the selection ring follows the light `brand`. */
+:root[data-theme="light"]{--bad-text:#B00018;--focus:#0066CC;--ring-selected:0 0 0 2px #0066CC;--ring-swatch:inset 0 0 0 1px rgba(0,0,0,0.08)}

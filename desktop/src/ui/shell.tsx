@@ -40,7 +40,8 @@ function Entry({ e }: { e: NavEntry }) {
   )
 }
 
-export function Sidebar({ entries, deferred, footer = [] }: { entries: NavEntry[]; deferred: NavEntry[]; footer?: NavEntry[] }) {
+/** `profile` is the profile row (F2.5b), last in the sidebar's foot below a hairline. */
+export function Sidebar({ entries, deferred, footer = [], profile }: { entries: NavEntry[]; deferred: NavEntry[]; footer?: NavEntry[]; profile?: ReactNode }) {
   const { t } = useI18n()
   return (
     <nav className="side" aria-label={t('nav.main')}>
@@ -57,9 +58,14 @@ export function Sidebar({ entries, deferred, footer = [] }: { entries: NavEntry[
       {deferred.map((e) => (
         <Entry key={e.id} e={{ ...e, disabled: true }} />
       ))}
-      {footer.map((e) => (
-        <Entry key={e.id} e={e} />
-      ))}
+      {(footer.length > 0 || profile) && (
+        <div className="side-foot">
+          {footer.map((e) => (
+            <Entry key={e.id} e={e} />
+          ))}
+          {profile}
+        </div>
+      )}
     </nav>
   )
 }
@@ -84,10 +90,8 @@ export function IconRail({ entries }: { entries: NavEntry[] }) {
   )
 }
 
-/** Placeholder identity until accounts exist (F2.5a): initials are hard-coded. */
-export const PROFILE_INITIALS = 'KW'
-
-/** Bar above the page content: connection state and profile at the right.
+/** Bar above the page content: connection state at the right. The profile
+ *  lives at the foot of the sidebar (F2.5b profile menu).
  *  On macOS the window has no native title bar, so this bar (with the sidebar's
  *  brand strip) is the drag area (see styles.css `.mac`). */
 export function GlobalBar({ lost }: { lost: boolean }) {
@@ -98,9 +102,6 @@ export function GlobalBar({ lost }: { lost: boolean }) {
         <span className={`conn ${lost ? 'bad' : 'ok'}`} data-testid="connection-indicator">
           <span className="dot sm" aria-hidden="true" />
           {lost ? t('topbar.lost') : t('topbar.connected')}
-        </span>
-        <span className="avatar" role="img" aria-label={`${t('topbar.profile')}: ${PROFILE_INITIALS}`} data-testid="profile">
-          {PROFILE_INITIALS}
         </span>
       </div>
     </header>

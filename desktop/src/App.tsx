@@ -8,6 +8,9 @@ import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
+import { AboutDialog, ShortcutsDialog } from './ui/dialogs'
+import { commandHeld } from './ui/menuKeys'
+import { ProfileMenu } from './ui/profileMenu'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -46,6 +49,20 @@ function Shell({ lost }: { lost: boolean }) {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
+  // F2.5b: the profile menu's two windows, and their shortcuts (Ctrl or Cmd with , and /).
+  const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.shiftKey || e.altKey || !commandHeld(e, navigator.platform || navigator.userAgent)) return
+      if (e.key === ',') setRoute({ name: 'settings' })
+      else if (e.key === '/') setDialog('shortcuts')
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+  const appVersion = typeof window.agentplane?.appVersion === 'string' ? window.agentplane.appVersion : ''
 
   // After navigating, move focus to the content so keyboard and screen-reader users start there.
   const mainRef = useRef<HTMLElement>(null)
@@ -94,7 +111,7 @@ function Shell({ lost }: { lost: boolean }) {
       >
         {t('a11y.skip')}
       </a>
-      <Sidebar entries={main} deferred={deferred} footer={footer} />
+      <Sidebar entries={main} deferred={deferred} footer={footer} profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />} />
       <div className="col">
         <GlobalBar lost={lost} />
         <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
@@ -116,6 +133,8 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
+      {dialog === 'shortcuts' && <ShortcutsDialog onClose={() => setDialog(null)} />}
+      {dialog === 'about' && <AboutDialog appVersion={appVersion} onClose={() => setDialog(null)} />}
     </div>
   )
 }

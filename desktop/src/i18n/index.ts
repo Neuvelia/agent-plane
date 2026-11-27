@@ -35,6 +35,15 @@ export function saveLocale(locale: Locale, storage: Pick<Storage, 'setItem'> | u
   }
 }
 
+/** Forgets the saved choice so the system language applies again (profile menu "System", F2.5b). */
+export function clearLocale(storage: Pick<Storage, 'removeItem'> | undefined = safeStorage()): void {
+  try {
+    storage?.removeItem(STORAGE_KEY)
+  } catch {
+    // Unavailable storage: nothing was saved.
+  }
+}
+
 function safeStorage(): Storage | undefined {
   try {
     return typeof localStorage === 'undefined' ? undefined : localStorage

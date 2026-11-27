@@ -158,6 +158,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | [F1.6a](../../docs/features/F1.6a-shell-loop.md) | Shell node correction loop | derived | F1.6 | done |  |
 | [F2.3-E6](../../docs/features/F2.3-E6-recorded-run-values.md) | Recorded run values (value_recorded) | derived | F2.3 | done |  |
 | [F2.5a](../../docs/features/F2.5a-desktop-redesign.md) | Desktop redesign (Tarmind design system, PL/EN) | derived | F2.5 | done | Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2. |
+| [F2.5b](../../docs/features/F2.5b-profile-menu-and-light-theme.md) | Profile menu, light theme, Keyboard shortcuts and About (desktop) | derived | F2.5 | done | Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon. |
 | F2.8a | Attempt compare (desktop) | derived | F2.8 | done |  |
 | F2.8b | Attempt diff capture and display | derived | F2.8 | in_progress | Silnik (--record-diffs, attempt_diff) gotowy; panel w desktopie nie. |
 | [F3.4a](../../docs/features/F3.4a-windows-process-tree-termination.md) | Windows process-tree termination | derived | F3.4 | in_progress | proctree_windows.go istnieje, nigdy nie uruchomiony na Windows. |

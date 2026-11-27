@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { I18nProvider } from '../src/i18n/context'
-import { GlobalBar, PROFILE_INITIALS, Sidebar, type NavEntry } from '../src/ui/shell'
+import { GlobalBar, Sidebar, type NavEntry } from '../src/ui/shell'
 
 const active: NavEntry[] = [{ id: 'runs', icon: 'runs', label: 'nav.runs', active: true, onSelect: () => undefined }]
 const footer: NavEntry[] = [{ id: 'settings', icon: 'settings', label: 'nav.settings', onSelect: () => undefined }]
@@ -61,10 +61,9 @@ describe('GlobalBar', () => {
     expect(out).not.toContain('<img')
     expect(out).not.toContain('>Tarmind<')
   })
-  it('shows the hard-coded profile initials with an accessible name', () => {
-    expect(PROFILE_INITIALS).toBe('KW')
-    expect(bar(false)).toMatch(/role="img" aria-label="Profile: KW"[^>]*>KW</)
-    expect(bar(false, 'pl')).toContain('aria-label="Profil: KW"')
+  it('no longer carries the profile: it moved to the foot of the sidebar (F2.5b)', () => {
+    expect(bar(false)).not.toContain('data-testid="profile"')
+    expect(bar(false, 'pl')).not.toContain('KW')
   })
   it('reports the connection state', () => {
     expect(bar(false)).toContain('Engine connected')
