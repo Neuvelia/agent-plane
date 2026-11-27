@@ -216,7 +216,7 @@ function Preflight({ s }: { s: ReturnType<typeof useNewRun> }) {
           <DiagnosticRow key={i} d={d} />
         ))}
         {checks.slice(1).map((c) => (
-          <CheckRow key={c.id} tone={c.tone} title={t(c.title)} detail={checkDetail(t, c)} mono={!!c.detail && 'raw' in c.detail && c.detail.mono} testId={`check-${c.id}`} />
+          <CheckRow key={c.id} tone={c.tone} title={t(c.title, c.titleParams)} detail={checkDetail(t, c)} mono={!!c.detail && 'raw' in c.detail && c.detail.mono} testId={`check-${c.id}`} />
         ))}
         {s.startError && <CheckRow tone="bad" title={t('newrun.check.start.failed')} detail={s.startError.message} testId="start-error" />}
         {s.startError?.diagnostics.map((d, i) => (

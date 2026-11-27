@@ -22,25 +22,37 @@ const bridgePorts = (): NewRunPorts => ({
   capabilities: getCapabilities,
 })
 
+/** The window's focus events, as attachSession uses them. */
+export interface FocusSource {
+  addEventListener(type: 'focus', listener: () => void): void
+  removeEventListener(type: 'focus', listener: () => void): void
+}
+
+/**
+ * Binds a session to one mount of the screen and returns the cleanup. StrictMode
+ * unmounts and remounts synchronously, so the session is disposed (its grant
+ * released) only when no mount is left once the current task ends. Coming back
+ * to the window (for example after saving the file elsewhere) checks the graph again.
+ */
+export function attachSession(session: Pick<NewRunSession, 'start' | 'recheck' | 'dispose'>, target: FocusSource, mounts: { current: number }): () => void {
+  mounts.current += 1
+  session.start()
+  const recheck = () => session.recheck()
+  target.addEventListener('focus', recheck)
+  return () => {
+    mounts.current -= 1
+    target.removeEventListener('focus', recheck)
+    queueMicrotask(() => {
+      if (mounts.current === 0) session.dispose()
+    })
+  }
+}
+
 export function useNewRun(initialGraph: ChosenGraph | undefined, onStarted: (runId: string) => void) {
   const [session] = useState(() => new NewRunSession(bridgePorts(), initialGraph))
   const state = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot)
   const mounts = useRef(0)
-  // StrictMode unmounts and remounts synchronously, so only a real unmount disposes the session.
-  useEffect(() => {
-    mounts.current += 1
-    session.start()
-    // Coming back to the window (for example after saving the file elsewhere) checks the graph again.
-    const recheck = () => session.recheck()
-    window.addEventListener('focus', recheck)
-    return () => {
-      mounts.current -= 1
-      window.removeEventListener('focus', recheck)
-      queueMicrotask(() => {
-        if (mounts.current === 0) session.dispose()
-      })
-    }
-  }, [session])
+  useEffect(() => attachSession(session, window, mounts), [session])
   return {
     ...state,
     setValue: (name: string, value: string) => session.setValue(name, value),

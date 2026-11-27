@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { listApprovals, listRuns, type ApiFailure } from './api'
+import { useEffect, useMemo, useState } from 'react'
+import { listApprovals, listRuns } from './api'
 import { useConnectionReport } from './connection'
 import { EngineErrorState, LoadingState } from './states'
 import { GraphMap } from './GraphMap'
@@ -15,9 +15,9 @@ import { matchingNodes, type NodeFilter } from './nodeFilter'
 import { clockTime, NodeFilterBar, OutcomeCard, RunIdentity, RunSummaryCard } from './overview'
 import { NodeTimeline } from './timelineView'
 import { RunPill } from './status'
-import type { ChosenGraph, Diagnostic, GraphSummary } from './types'
+import type { GraphSummary } from './types'
 import { CodeView, EventLog, type EventRow } from './ui/data'
-import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
+import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Tag } from './ui/primitives'
 
 // R1: Run Inspector and Approvals on the design system (New run is NewRun.tsx, F2.5c). Behaviour and
 // data are unchanged from F2.5; the Dashboard is redesigned in R2.

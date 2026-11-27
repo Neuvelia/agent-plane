@@ -53,6 +53,7 @@ export class NewRunSession {
   private state: NewRunState
   private readonly listeners = new Set<() => void>()
   private pick = 0
+  private inspection = 0
   private disposed = false
   private started = false
 
@@ -143,8 +144,9 @@ export class NewRunSession {
       return
     }
     if ('canceled' in picked) return
-    if (pick !== this.pick || this.disposed) {
-      if (picked.ok) this.release(picked.grant) // an older pick, or the screen is gone
+    // An older pick, the screen is gone, or a run started while the dialog was open: the graph stays.
+    if (pick !== this.pick || this.disposed || this.state.busy) {
+      if (picked.ok) this.release(picked.grant)
       return
     }
     if (!picked.ok) {
@@ -163,9 +165,11 @@ export class NewRunSession {
   }
 
   private async inspect(g: ChosenGraph, quiet: boolean): Promise<void> {
+    const inspection = ++this.inspection
     if (!quiet) this.set({ validation: null, validationError: null, startError: null, def: null, validating: true })
     const [checked, def] = await Promise.all([this.ports.validate(g.grant).catch(unreachable), this.ports.definition(g.grant).catch(() => null)])
-    if (!this.isCurrent(g)) return // another graph was chosen meanwhile, or the screen was left
+    // Another graph was chosen meanwhile, the screen was left, or a newer check of this graph is under way.
+    if (!this.isCurrent(g) || inspection !== this.inspection) return
     this.set({ validating: false, validation: 'message' in checked ? null : checked, validationError: 'message' in checked ? checked.message : null, def })
     if (agentWorkspace(def).agents > 0 && this.state.capabilities === null) void this.readCapabilities()
   }

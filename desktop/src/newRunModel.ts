@@ -68,6 +68,7 @@ export interface Check {
   id: 'graph' | 'agent' | 'inputs' | 'workspace'
   tone: Tone
   title: MessageKey
+  titleParams?: Record<string, number>
   detail?: { key: MessageKey; params?: Record<string, string | number> } | { raw: string; mono?: boolean }
 }
 
@@ -108,12 +109,15 @@ function inputsCheck(def: Definition, values: PreflightFacts['values']): Check |
   if (required.length === 0) return null
   const filled = required.filter((i) => (values[i.name] ?? '') !== '').length
   const detail = { key: 'newrun.check.inputs.count' as const, params: { filled, required: required.length } }
-  return filled === required.length ? { id: 'inputs', tone: 'ok', title: 'newrun.check.inputs.filled', detail } : { id: 'inputs', tone: 'warn', title: 'newrun.check.inputs.missing', detail }
+  if (filled === required.length) return { id: 'inputs', tone: 'ok', title: 'newrun.check.inputs.filled', detail }
+  return { id: 'inputs', tone: 'warn', title: 'newrun.check.inputs.missing', titleParams: { count: required.length - filled }, detail }
 }
 
-function workspaceCheck(def: Definition): Check | null {
+// Shown only once the engine accepts the graph: whether `isolation: worktree` applies to a
+// node (F3.1) is the engine's rule, so before that the row would claim more than is known.
+function workspaceCheck(def: Definition, valid: boolean): Check | null {
   const { agents, isolated } = agentWorkspace(def)
-  if (agents === 0) return null
+  if (agents === 0 || !valid) return null
   if (isolated === agents) return { id: 'workspace', tone: 'ok', title: 'newrun.check.ws.worktree', detail: { key: 'newrun.check.ws.worktreeDetail' } }
   return { id: 'workspace', tone: 'warn', title: 'newrun.check.ws.shared', detail: { key: 'newrun.check.ws.sharedDetail' } }
 }
@@ -121,9 +125,11 @@ function workspaceCheck(def: Definition): Check | null {
 /** The preflight rows, in the artboard's order: graph, agent CLI, inputs, workspace. */
 export function preflightChecks(f: PreflightFacts): Check[] {
   const graph = graphCheck(f)
-  if (!f.chosen || !f.def) return [graph]
+  if (!f.chosen || f.validating) return [graph]
+  // Accepted by the engine, but its document could not be read: the inputs, node kinds and Agent rows are unknown, never "fine".
+  if (!f.def) return f.validation?.status === 'valid' ? [graph, { id: 'inputs', tone: 'warn', title: 'newrun.check.inputs.unreadable', detail: { key: 'newrun.check.inputs.unreadableDetail' } }] : [graph]
   const agents = agentWorkspace(f.def).agents > 0
-  return [graph, agents ? agentCheck(f.capabilities) : null, inputsCheck(f.def, f.values), workspaceCheck(f.def)].filter((c): c is Check => c !== null)
+  return [graph, agents ? agentCheck(f.capabilities) : null, inputsCheck(f.def, f.values), workspaceCheck(f.def, f.validation?.status === 'valid')].filter((c): c is Check => c !== null)
 }
 
 /** Checks that did not fail count as passed; warnings are counted on their own, engine warnings included. */

@@ -124,3 +124,21 @@ describe('preflight rows and headline', () => {
     expect(headline('idle', lost, 0, 0).key).toBe('newrun.head.unchecked')
   })
 })
+
+describe('preflight rows after the second review', () => {
+  it('a checked graph whose document cannot be read warns instead of looking ready', () => {
+    const f = facts({ def: null })
+    expect(tones(f)).toEqual(['graph:ok', 'inputs:warn'])
+    expect(headline(preflightState(f.validation), f, tally(preflightChecks(f), []).warnings, 0)).toEqual({ key: 'newrun.head.warnings', params: { count: 1 } })
+  })
+
+  it('the workspace row waits for the engine to accept the graph', () => {
+    const f = facts({ def: isolated(fixIssue), validation: configErrorValidate })
+    expect(preflightChecks(f).map((c) => c.id)).not.toContain('workspace')
+  })
+
+  it('counts missing required inputs in the title', () => {
+    const def: Definition = { ...fixIssue, inputs: { issue: { type: 'string', required: true }, repo: { type: 'string', required: true } } }
+    expect(preflightChecks(facts({ def, values: {} })).find((c) => c.id === 'inputs')).toMatchObject({ title: 'newrun.check.inputs.missing', titleParams: { count: 2 } })
+  })
+})

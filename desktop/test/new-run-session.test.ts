@@ -7,6 +7,7 @@ import type { CapabilityReport, CapabilityResult } from '../src/capabilities'
 import type { Definition } from '../src/editor/types'
 import { preflightChecks } from '../src/newRunModel'
 import { NewRunSession, type NewRunPorts } from '../src/newRunSession'
+import { attachSession } from '../src/useNewRun'
 import type { Diagnostic, GraphGrantResult } from '../src/types'
 
 // F2.5c requirement 2 and the failure behavior: ordering and grant rules of New run,
@@ -168,11 +169,15 @@ describe('New run session: starting', () => {
 describe('New run session: checks', () => {
   it('an unavailable capability report makes the Codex row warn', async () => {
     const bridge = new FakeBridge()
-    bridge.capabilityAnswer = Promise.resolve({ kind: 'failed', status: 500 })
+    const report = deferred<CapabilityResult>()
+    bridge.capabilityAnswer = report.promise
     const session = new NewRunSession(bridge)
     await chosen(bridge, session, 'A')
     bridge.validation('A').resolve(fixIssueValidate)
     await flush()
+    expect(session.snapshot().capabilities).toBe('loading')
+    report.resolve({ kind: 'failed', status: 500 })
+    await report.promise
     await flush()
     const s = session.snapshot()
     const agent = preflightChecks({ chosen: true, validating: false, validation: s.validation, validationError: null, def: s.def, capabilities: s.capabilities, values: {} }).find((c) => c.id === 'agent')
@@ -201,5 +206,90 @@ describe('New run session: checks', () => {
     bridge.validation('A').reject(new Error('the agentplane sidecar is not running'))
     await flush()
     expect(session.snapshot()).toMatchObject({ validation: null, validationError: 'the agentplane sidecar is not running', validating: false })
+  })
+})
+
+describe('New run session: review findings', () => {
+  it('a pick that resolves while a run is starting keeps the graph and releases the new grant', async () => {
+    const bridge = new FakeBridge()
+    const session = new NewRunSession(bridge)
+    await chosen(bridge, session, 'A')
+    bridge.validation('A').resolve(valid)
+    await flush()
+    session.setValue('issue', '#142')
+    const pick = session.chooseRecent({ id: 'r1', label: 'a.yaml' }) // the dialog is still open
+    const start = deferred<{ runId: string }>()
+    bridge.start = async (grant, inputs) => {
+      bridge.started.push({ grant, inputs })
+      return start.promise
+    }
+    const running = session.run(() => undefined)
+    bridge.picks.at(-1)!.resolve(granted('B'))
+    await pick
+    expect(session.snapshot()).toMatchObject({ graph: { grant: 'A' }, values: { issue: '#142' }, busy: true })
+    expect(bridge.closed).toEqual(['B'])
+    start.resolve({ runId: 'run-1' })
+    await running
+    expect(bridge.started).toEqual([{ grant: 'A', inputs: ['issue=#142'] }])
+  })
+
+  it('an older check of the same graph that answers last does not replace a newer one', async () => {
+    const bridge = new FakeBridge()
+    const session = new NewRunSession(bridge)
+    await chosen(bridge, session, 'A')
+    bridge.validation('A').resolve(valid)
+    await flush()
+    const older = deferred<Validation>()
+    const newer = deferred<Validation>()
+    const answers = [older, newer]
+    bridge.validate = () => answers.shift()!.promise
+    session.recheck()
+    session.recheck()
+    newer.resolve(valid)
+    await flush()
+    older.resolve({ status: 'invalid', diagnostics: [{ severity: 'error', code: 'E', message: 'old file' }] })
+    await flush()
+    expect(session.snapshot().validation).toEqual(valid)
+  })
+})
+
+describe('New run lifetime (attachSession)', () => {
+  class Target {
+    listeners = new Set<() => void>()
+    addEventListener = (_: string, l: () => void) => void this.listeners.add(l)
+    removeEventListener = (_: string, l: () => void) => void this.listeners.delete(l)
+  }
+  const microtask = () => new Promise<void>((r) => queueMicrotask(r))
+
+  it('a StrictMode remount keeps the session; a real unmount releases the chosen grant', async () => {
+    const bridge = new FakeBridge()
+    const session = new NewRunSession(bridge, { grant: 'A', label: 'a.yaml' })
+    const mounts = { current: 0 }
+    const target = new Target()
+    attachSession(session, target, mounts)() // StrictMode: mount, unmount...
+    const cleanup = attachSession(session, target, mounts) // ...and mount again at once
+    await microtask()
+    expect(bridge.closed).toEqual([])
+    cleanup()
+    await microtask()
+    expect(bridge.closed).toEqual(['A'])
+    expect(target.listeners.size).toBe(0)
+  })
+
+  it('coming back to the window checks the chosen graph again', async () => {
+    const bridge = new FakeBridge()
+    const session = new NewRunSession(bridge, { grant: 'A', label: 'a.yaml' })
+    const target = new Target()
+    attachSession(session, target, { current: 0 })
+    bridge.validation('A').resolve(valid)
+    await flush()
+    let checks = 0
+    bridge.validate = async () => {
+      checks += 1
+      return valid
+    }
+    for (const l of target.listeners) l()
+    await flush()
+    expect(checks).toBe(1)
   })
 })

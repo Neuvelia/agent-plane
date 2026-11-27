@@ -87,7 +87,7 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
   return (
     <div className={`ed-node${c.selectedNode === data.id ? ' sel' : ''}`} style={{ width: size.w, height: size.h }} data-testid={`node-${data.id}`}>
       <div className="ed-node-head">
-        <b>{data.id}</b>
+        <b title={data.id}>{data.id}</b>
         <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
           {n && n.errors > 0 && <NodeCount tone="x" mark="✖" count={n.errors} text={t('editor.nodeErrors', { count: n.errors })} compact={n.warnings > 0} />}
           {n && n.warnings > 0 && <NodeCount tone="w" mark="⚠" count={n.warnings} text={t('editor.nodeWarnings', { count: n.warnings })} compact={n.errors > 0} />}
