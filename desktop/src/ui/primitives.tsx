@@ -32,10 +32,10 @@ export function Tag({ children }: { children: ReactNode }) {
   return <span className="tag">{children}</span>
 }
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger'; size?: 'sm' | 'md' }
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'danger' | 'ghost'; size?: 'sm' | 'md' }
 
 export function Button({ variant = 'default', size = 'md', className = '', type = 'button', ...rest }: ButtonProps) {
-  const v = variant === 'primary' ? ' primary' : variant === 'danger' ? ' danger' : ''
+  const v = variant === 'default' ? '' : ` ${variant}`
   return <button type={type} className={`btn${v}${size === 'sm' ? ' sm' : ''} ${className}`.trim()} {...rest} />
 }
 

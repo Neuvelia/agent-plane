@@ -3,6 +3,7 @@ import logo from '../design/tarmind-logo.png'
 import { useI18n } from '../i18n/context'
 import type { MessageKey } from '../i18n'
 import { Icon, type IconName } from './icons'
+import { Button } from './primitives'
 
 export interface NavEntry {
   id: string
@@ -87,10 +88,19 @@ export function IconRail({ entries }: { entries: NavEntry[] }) {
 /** Placeholder identity until accounts exist (F2.5a): initials are hard-coded. */
 export const PROFILE_INITIALS = 'KW'
 
-/** Bar above the page content: connection state and profile at the right.
+/** The command palette trigger: its shortcut as written on screen and for assistive technology. */
+export interface SearchTrigger {
+  onOpen: () => void
+  /** "Ctrl K" or "⌘ K". */
+  keys: string
+  /** aria-keyshortcuts value, e.g. "Control+K". */
+  ariaKeys: string
+}
+
+/** Bar above the page content: connection state, Search (F2.5b) and profile at the right.
  *  On macOS the window has no native title bar, so this bar (with the sidebar's
  *  brand strip) is the drag area (see styles.css `.mac`). */
-export function GlobalBar({ lost }: { lost: boolean }) {
+export function GlobalBar({ lost, search }: { lost: boolean; search?: SearchTrigger }) {
   const { t } = useI18n()
   return (
     <header className="global-bar">
@@ -99,6 +109,11 @@ export function GlobalBar({ lost }: { lost: boolean }) {
           <span className="dot sm" aria-hidden="true" />
           {lost ? t('topbar.lost') : t('topbar.connected')}
         </span>
+        {search && (
+          <Button variant="ghost" size="sm" onClick={search.onOpen} aria-label={t('palette.triggerLabel')} aria-keyshortcuts={search.ariaKeys} aria-haspopup="dialog" title={`${t('palette.triggerLabel')} (${search.keys})`} data-testid="palette-open">
+            {t('palette.trigger')}
+          </Button>
+        )}
         <span className="avatar" role="img" aria-label={`${t('topbar.profile')}: ${PROFILE_INITIALS}`} data-testid="profile">
           {PROFILE_INITIALS}
         </span>

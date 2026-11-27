@@ -95,6 +95,21 @@ node or run state by hand. A decorator installs an in-memory `window.agentplane`
 switches language (EN/PL); viewport is Storybook's built-in toolbar. Storybook is
 a dev dependency and is never part of the packaged app.
 
+`make desktop-stories` (or `npm run stories:test` after a build) renders every
+story in EN and PL. It waits for each story's play function and for finite
+animations (a dialog's entrance, a fade) before running axe, so the checked frame
+is the state the story ends in.
+
+## Command palette (F2.5b)
+
+Ctrl K (Cmd K on macOS) or the global bar's Search button opens the palette:
+actions (New run Ctrl N, Open graph… Ctrl O, Review approvals Ctrl Shift A),
+recent runs read from `GET /runs` when it opens, and screens (Dashboard G D,
+Settings Ctrl ,). Type `>` for actions only, `#` for runs by ID prefix; Tab cycles
+those scopes, arrows move, Enter opens, Escape closes. The shortcuts also work
+outside the palette (G D only when no text field has focus). Spec:
+`docs/features/F2.5b-command-palette.md`; stories: `Screens/Command palette`.
+
 ## Design system and localisation (F2.5a)
 
 - `src/design/tokens.json` is a copy of the Tarmind design system's `tokens.json`;

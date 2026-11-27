@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { listApprovals } from './api'
 import { ConnectionProvider, useConnectionReport } from './connection'
 import { Dashboard } from './dashboardView'
@@ -8,6 +8,10 @@ import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
 import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
+import { CommandPalette, isMac, usePaletteRuns, type PaletteCommand } from './ui/CommandPalette'
+import { runEntries, SHORTCUTS, shortcutText, type GlobalCommand } from './palette'
+import { useGlobalShortcuts } from './useShortcuts'
+import type { MessageKey } from './i18n'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
@@ -62,6 +66,34 @@ function Shell({ lost }: { lost: boolean }) {
   }, [routeKey])
 
   const go = (name: Route['name']) => () => setRoute({ name } as Route)
+
+  // F2.5b command palette and global shortcuts: they only navigate or open what the shell offers.
+  const mac = useMemo(isMac, [])
+  const [palette, setPalette] = useState(false)
+  const paletteRuns = usePaletteRuns(palette)
+  const perform: Record<Exclude<GlobalCommand, 'palette'>, () => void> = {
+    newRun: go('new'),
+    openGraph: () => {
+      setRoute({ name: 'editor' })
+      editor.open()
+    },
+    approvals: go('approvals'),
+    settings: go('settings'),
+    dashboard: go('dashboard'),
+  }
+  useGlobalShortcuts(mac, (c) => (c === 'palette' ? setPalette(true) : perform[c]()))
+  const statusText = (s: string) => (RUN_STATUSES.includes(s) ? t(`status.run.${s}` as MessageKey).toLowerCase() : s)
+  const commands: PaletteCommand[] = [
+    { id: 'new-run', group: 'actions', label: t('nav.new'), hint: '', shortcut: SHORTCUTS.newRun, icon: 'runs', perform: perform.newRun },
+    { id: 'open-graph', group: 'actions', label: t('palette.openGraph'), hint: '', shortcut: SHORTCUTS.openGraph, icon: 'file', perform: perform.openGraph },
+    { id: 'approvals', group: 'actions', label: t('palette.reviewApprovals'), hint: pending ? t('palette.waiting', { count: pending }) : '', shortcut: SHORTCUTS.approvals, icon: 'approvals', perform: perform.approvals },
+    ...runEntries(paletteRuns.runs, statusText).map((e) => ({ ...e, icon: 'runs' as const, perform: () => setRoute({ name: 'run', id: e.runId! }) })),
+    { id: 'go-dashboard', group: 'goto', label: t('nav.dashboard'), hint: '', shortcut: SHORTCUTS.dashboard, icon: 'dashboard', perform: perform.dashboard },
+    { id: 'go-runs', group: 'goto', label: t('nav.runs'), hint: '', icon: 'runs', perform: go('runs') },
+    { id: 'go-editor', group: 'goto', label: t('nav.editor'), hint: '', icon: 'editor', perform: go('editor') },
+    { id: 'go-welcome', group: 'goto', label: t('nav.welcome'), hint: '', icon: 'welcome', perform: go('welcome') },
+    { id: 'go-settings', group: 'goto', label: t('nav.settings'), hint: '', shortcut: SHORTCUTS.settings, icon: 'settings', perform: perform.settings },
+  ]
   const main: NavEntry[] = [
     { id: 'dashboard', icon: 'dashboard', label: 'nav.dashboard', active: route.name === 'dashboard', onSelect: go('dashboard') },
     { id: 'runs', icon: 'runs', label: 'nav.runs', active: route.name === 'runs' || route.name === 'run', onSelect: go('runs') },
@@ -96,7 +128,7 @@ function Shell({ lost }: { lost: boolean }) {
       </a>
       <Sidebar entries={main} deferred={deferred} footer={footer} />
       <div className="col">
-        <GlobalBar lost={lost} />
+        <GlobalBar lost={lost} search={{ onOpen: () => setPalette(true), keys: shortcutText(SHORTCUTS.palette, mac), ariaKeys: mac ? 'Meta+K' : 'Control+K' }} />
         <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
         <main id="content" ref={mainRef} tabIndex={-1}>
           {route.name === 'dashboard' && (
@@ -116,6 +148,9 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>
+      {palette && <CommandPalette commands={commands} runs={paletteRuns.status} mac={mac} onClose={() => setPalette(false)} />}
     </div>
   )
 }
+
+const RUN_STATUSES: readonly string[] = ['running', 'succeeded', 'failed', 'cancelled', 'interrupted', 'unsupported']

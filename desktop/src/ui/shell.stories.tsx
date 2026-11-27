@@ -21,4 +21,5 @@ export const SidebarWithDeferredEntries: S = { render: () => <div style={{ width
 export const Rail: S = { render: () => <div style={{ width: 52, height: 320 }}><IconRail entries={main} /></div> }
 export const GlobalBarConnected: S = { render: () => <GlobalBar lost={false} /> }
 export const GlobalBarLost: S = { render: () => <GlobalBar lost /> }
+export const GlobalBarWithSearch: S = { render: () => <GlobalBar lost={false} search={{ onOpen: () => undefined, keys: 'Ctrl K', ariaKeys: 'Control+K' }} /> }
 export const Breadcrumbs: S = { render: () => <TopBar crumbs={['Runs', '4af0e02b']} /> }

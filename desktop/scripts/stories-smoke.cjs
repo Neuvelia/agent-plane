@@ -21,7 +21,8 @@ const types = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/ja
 const REQUIRED = [
   'ui-primitives--pills', 'ui-primitives--buttons', 'ui-primitives--card-with-header', 'ui-primitives--segmented', 'ui-primitives--kpis', 'ui-primitives--fields',
   'ui-data--outcomes', 'ui-data--events', 'ui-data--timeline', 'ui-data--yaml',
-  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--breadcrumbs',
+  'ui-shell--sidebar-with-deferred-entries', 'ui-shell--rail', 'ui-shell--global-bar-connected', 'ui-shell--global-bar-lost', 'ui-shell--global-bar-with-search', 'ui-shell--breadcrumbs',
+  'screens-command-palette--open', 'screens-command-palette--keyboard-navigation', 'screens-command-palette--filtered', 'screens-command-palette--actions-only', 'screens-command-palette--run-ids', 'screens-command-palette--nothing-matches', 'screens-command-palette--runs-loading', 'screens-command-palette--runs-unavailable',
   'screens--runs-list-empty', 'screens--runs-list-busy', 'screens--dashboard-empty', 'screens--dashboard-busy', 'screens--dashboard-needs-attention',
   'screens--inspector-running', 'screens--inspector-waiting-for-human', 'screens--inspector-failed-after-retries', 'screens--inspector-succeeded', 'screens--inspector-yaml-view', 'screens--inspector-split-view', 'screens--inspector-first-attempt', 'screens--inspector-compare-shell-attempts', 'screens--inspector-compare-agent-scope', 'screens--inspector-compare-scope-indeterminate','screens--inspector-connection-lost', 'screens--inspector-run-not-found',
   'screens--approvals-empty', 'screens--approvals-one-pending', 'screens--approvals-many-pending', 'screens--approvals-decision-error',
@@ -103,6 +104,14 @@ const server = http.createServer((req, res) => {
 async function checkStory(page, origin, id, locale, fail) {
   await page.goto(`${origin}/iframe.html?id=${id}&viewMode=story&globals=locale:${locale}`)
   await page.waitForSelector('#storybook-root > *', { timeout: 15000 }).catch(() => fail('story did not render'))
+  // Check the state a story ends in: wait for its play function, then for finite
+  // animations (a dialog's entrance, a fade) so axe never measures a half-faded frame.
+  await page
+    .waitForFunction(() => ['played', 'completing', 'completed', 'finished', 'errored', 'aborted'].includes(window.__STORYBOOK_PREVIEW__?.currentRender?.phase), null, { timeout: 15000 })
+    .catch(() => fail('story play did not finish'))
+  await page
+    .waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getComputedTiming().iterations === Infinity), null, { timeout: 5000 })
+    .catch(() => fail('animations did not settle'))
   // Only React Flow views fade in after fit-view; other stories are ready once rendered.
   if (await page.$('#storybook-root .react-flow')) await page.waitForTimeout(900)
   await page.addScriptTag({ content: axeSource })

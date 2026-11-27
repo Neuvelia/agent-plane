@@ -1760,6 +1760,45 @@ features:
     divergences: []
     tasks: []
     note: "Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2."
+  - id: F2.5b
+    name: "Command palette and global shortcuts (desktop)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5b-command-palette.md
+    depends_on: ["F2.5a", "F2.9"]
+    acceptance:
+      - id: F2.5b-AC1
+        text: "Ctrl/Cmd+K i przycisk Search otwierają paletę z każdego ekranu."
+        status: met
+        evidence:
+          - "desktop/test/palette.test.ts::F2.5b-AC1"
+          - "desktop/test/palette-view.test.tsx::F2.5b-AC1"
+      - id: F2.5b-AC2
+        text: "Nawigacja klawiaturą (strzałki, Enter) i semantyka combobox/listbox."
+        status: met
+        evidence:
+          - "desktop/test/palette.test.ts::F2.5b-AC2"
+          - "desktop/test/palette-view.test.tsx::F2.5b-AC2"
+      - id: F2.5b-AC3
+        text: "Prefiksy > (akcje) i # (id uruchomień) oraz Tab przełączający typ."
+        status: met
+        evidence:
+          - "desktop/test/palette.test.ts::F2.5b-AC3"
+      - id: F2.5b-AC4
+        text: "Stany: brak wyników, wczytywanie i błąd listy uruchomień (nigdy pusta lista zamiast błędu)."
+        status: met
+        evidence:
+          - "desktop/test/palette-view.test.tsx::F2.5b-AC4"
+    out_of_scope:
+      - "Wyszukiwanie w plikach grafów, YAML i zdarzeniach; uruchamianie lub decyzje z palety."
+      - "Jasny motyw, arkusz skrótów (Ctrl /), okno About."
+    decisions: []
+    divergences: []
+    tasks: []
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

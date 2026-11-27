@@ -1,0 +1,129 @@
+import { describe, expect, it } from 'vitest'
+import { cycleScope, filterEntries, matchShortcut, MAX_RUNS, moveActive, parseQuery, RECENT_RUNS, runEntries, SHORTCUTS, shortcutText, type KeyPress, type PaletteEntry, type PaletteGroup } from '../src/palette'
+
+const label = (g: PaletteGroup) => ({ actions: 'Actions', runs: 'Runs', goto: 'Go to' })[g]
+const runs = (n: number) => runEntries(Array.from({ length: n }, (_, i) => ({ run_id: `${String(i).padStart(2, '0')}c1f40a2-0000`, graph_id: `graph-${i}`, started_at: `2026-11-${String(10 + (i % 20)).padStart(2, '0')}T10:00:${String(i).padStart(2, '0')}Z`, status: 'failed' })), (s) => s)
+const entries: PaletteEntry[] = [
+  { id: 'new-run', group: 'actions', label: 'New run', hint: '' },
+  { id: 'approvals', group: 'actions', label: 'Review approvals', hint: '2 waiting' },
+  ...runEntries(
+    [
+      { run_id: '51b8c6f0-aaaa', graph_id: 'fix-issue', started_at: '2026-11-20T10:00:00Z', status: 'failed' },
+      { run_id: '8c1f40a2-bbbb', graph_id: 'release-notes', started_at: '2026-11-21T10:00:00Z', status: 'running' },
+    ],
+    (s) => s,
+  ),
+  { id: 'go-dashboard', group: 'goto', label: 'Dashboard', hint: '' },
+  { id: 'go-settings', group: 'goto', label: 'Settings', hint: '' },
+]
+const ids = (q: string, list = entries) => filterEntries(list, q, label).map((e) => e.id)
+
+describe('palette filtering', () => {
+  // roadmap: F2.5b-AC2
+  it('shows every group in order with an empty query', () => {
+    expect(ids('')).toEqual(['new-run', 'approvals', 'run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa', 'go-dashboard', 'go-settings'])
+  })
+  it('matches label, hint and group name, ignoring case', () => {
+    expect(ids('SETT')).toEqual(['go-settings'])
+    expect(ids('waiting')).toEqual(['approvals'])
+    expect(ids('go to')).toEqual(['go-dashboard', 'go-settings'])
+    expect(ids('51b8')).toEqual(['run:51b8c6f0-aaaa'])
+  })
+  // roadmap: F2.5b-AC3
+  it('narrows to actions with ">" and to runs by id prefix with "#"', () => {
+    expect(ids('>')).toEqual(['new-run', 'approvals'])
+    expect(ids('> review')).toEqual(['approvals'])
+    expect(ids('#')).toEqual(['run:8c1f40a2-bbbb', 'run:51b8c6f0-aaaa'])
+    expect(ids('#8c1f')).toEqual(['run:8c1f40a2-bbbb'])
+    // A run id is matched from its start, not anywhere inside it.
+    expect(ids('#1f40')).toEqual([])
+  })
+  it('returns nothing when nothing matches', () => {
+    expect(ids('zzz')).toEqual([])
+  })
+  it('bounds the runs: a few recent ones without a query, more with one', () => {
+    const many = [...entries.filter((e) => e.group !== 'runs'), ...runs(40)]
+    expect(filterEntries(many, '', label).filter((e) => e.group === 'runs')).toHaveLength(RECENT_RUNS)
+    expect(filterEntries(many, 'graph', label)).toHaveLength(MAX_RUNS)
+    expect(filterEntries(many, '#', label)).toHaveLength(MAX_RUNS)
+  })
+})
+
+describe('palette scope', () => {
+  it('parses the prefix and trims the text', () => {
+    expect(parseQuery('  > New ')).toEqual({ scope: 'actions', text: 'new' })
+    expect(parseQuery('#8C1F')).toEqual({ scope: 'runs', text: '8c1f' })
+    expect(parseQuery('runs')).toEqual({ scope: 'all', text: 'runs' })
+  })
+  // roadmap: F2.5b-AC3
+  it('Tab cycles all -> actions -> runs -> all, keeping the typed text; Shift+Tab goes back', () => {
+    expect(cycleScope('fix', 1)).toBe('>fix')
+    expect(cycleScope('>fix', 1)).toBe('#fix')
+    expect(cycleScope('#fix', 1)).toBe('fix')
+    expect(cycleScope('fix', -1)).toBe('#fix')
+    expect(cycleScope('', 1)).toBe('>')
+  })
+})
+
+describe('palette active row', () => {
+  // roadmap: F2.5b-AC2
+  it('moves with the arrows and wraps around', () => {
+    expect(moveActive(0, 3, 'ArrowDown')).toBe(1)
+    expect(moveActive(2, 3, 'ArrowDown')).toBe(0)
+    expect(moveActive(0, 3, 'ArrowUp')).toBe(2)
+    expect(moveActive(-1, 3, 'ArrowDown')).toBe(0)
+    expect(moveActive(-1, 3, 'ArrowUp')).toBe(2)
+  })
+  it('has no active row in an empty list', () => {
+    expect(moveActive(0, 0, 'ArrowDown')).toBe(-1)
+  })
+})
+
+describe('run entries', () => {
+  it('lists newest first with the graph as label and short id and status as hint', () => {
+    const [first] = runEntries(
+      [
+        { run_id: 'aaaaaaaa1111', graph_id: 'old', started_at: '2026-11-01T00:00:00Z', status: 'succeeded' },
+        { run_id: 'bbbbbbbb2222', graph_id: 'new', started_at: '2026-11-02T00:00:00Z', status: 'running' },
+      ],
+      (s) => s.toUpperCase(),
+    )
+    expect(first).toMatchObject({ id: 'run:bbbbbbbb2222', group: 'runs', label: 'new', hint: 'bbbbbbbb · RUNNING', runId: 'bbbbbbbb2222' })
+  })
+})
+
+const press = (key: string, o: Partial<KeyPress> = {}): KeyPress => ({ key, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, typing: false, ...o })
+
+describe('global shortcuts', () => {
+  const idle = { pending: null }
+  // roadmap: F2.5b-AC1
+  it('Ctrl+K opens the palette on Windows and Linux, Cmd+K on macOS, even while typing', () => {
+    expect(matchShortcut(idle, press('k', { ctrlKey: true, typing: true }), false).command).toBe('palette')
+    expect(matchShortcut(idle, press('k', { metaKey: true }), true).command).toBe('palette')
+    expect(matchShortcut(idle, press('k', { metaKey: true }), false).command).toBeNull()
+    expect(matchShortcut(idle, press('k', { ctrlKey: true }), true).command).toBeNull()
+  })
+  it('maps the chords shown in the palette', () => {
+    expect(matchShortcut(idle, press('n', { ctrlKey: true }), false).command).toBe('newRun')
+    expect(matchShortcut(idle, press('o', { ctrlKey: true }), false).command).toBe('openGraph')
+    expect(matchShortcut(idle, press('A', { ctrlKey: true, shiftKey: true }), false).command).toBe('approvals')
+    expect(matchShortcut(idle, press(',', { ctrlKey: true }), false).command).toBe('settings')
+    // Shift must match exactly; Alt never combines.
+    expect(matchShortcut(idle, press('a', { ctrlKey: true }), false).command).toBeNull()
+    expect(matchShortcut(idle, press('k', { ctrlKey: true, altKey: true }), false).command).toBeNull()
+  })
+  it('G then D goes to the dashboard, but never while typing', () => {
+    const g = matchShortcut(idle, press('g'), false)
+    expect(g).toEqual({ state: { pending: 'G' }, command: null })
+    expect(matchShortcut(g.state, press('d'), false).command).toBe('dashboard')
+    expect(matchShortcut(g.state, press('x'), false)).toEqual({ state: { pending: null }, command: null })
+    expect(matchShortcut(idle, press('g', { typing: true }), false).state.pending).toBeNull()
+    expect(matchShortcut(g.state, press('d', { typing: true }), false).command).toBeNull()
+  })
+  it('writes shortcuts the way the operating system names them', () => {
+    expect(shortcutText(SHORTCUTS.approvals, false)).toBe('Ctrl Shift A')
+    expect(shortcutText(SHORTCUTS.approvals, true)).toBe('⌘ ⇧ A')
+    expect(shortcutText(SHORTCUTS.settings, false)).toBe('Ctrl ,')
+    expect(shortcutText(SHORTCUTS.dashboard, true)).toBe('G D')
+  })
+})

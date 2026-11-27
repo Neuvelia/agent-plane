@@ -23,6 +23,7 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Edge inspector: states, safe value text, Copy, session recording hint (F2.3 E5b.2) | `editor/edgeValue.ts`, `editor/EdgeInspector.tsx`, `editor/EdgeValueBox.tsx`, `editor/valueText.ts`, `useSessionRecording.ts` |
 | Welcome screen, capability rows and first-run flag (F2.11) | `welcome.tsx`, `capabilities.ts` |
 | New graph picker, bundled templates, draft and notices (F2.12) | `editor/TemplatePicker.tsx`, `templates.ts` |
+| Command palette and global shortcuts (F2.5b) | `palette.ts` (pure model), `ui/CommandPalette.tsx`, `useShortcuts.ts`, wiring in `App.tsx` |
 | Story fixtures and bridge substitute | `screens.stories.tsx`, `storybook/bridge.tsx`, `storybook/fixtures.ts` |
 
 ## Preserve these contracts
@@ -89,6 +90,7 @@ as implemented merely because the full spec describes it.
 - Welcome screen, capability text and first-run flag: `desktop/test/capabilities.test.tsx`.
 - Template picker, draft (only the `id` line changes), notices and EN/PL keys: `desktop/test/templates.test.tsx`; no YAML parsing or graph rule in the picker: `desktop/test/no-graph-rules.test.ts`.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
+- Command palette (F2.5b: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, stories `ui/palette.stories.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
   `desktop/test/preflight.test.ts`.
 - Dashboard, timeline and bounded event detail: `desktop/test/dashboard.test.ts`,
