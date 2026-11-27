@@ -18,7 +18,7 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Dashboard and event-derived insight | `dashboard.ts`, `dashboardView.tsx`, `insight.ts` |
 | Graph draft, canvas and YAML presentation | `editor/doc.ts`, `editor/useGraphDocument.ts`, `editor/GraphCanvas.tsx` |
 | Shared controls, design and language | `ui/`, `design/`, `i18n/` |
-| Settings: language and the opt-in "Record run values" switch | `settings.tsx` (preference held by Electron main) |
+| Settings (F2.5b): section list, groups, Agents and About panes; language and the opt-in "Record run values" switch | `settings/` (recording preference held by Electron main; capability report via `settings/useEngineReport.ts`) |
 | Recorded run values and "Show values from run" (F2.3 E5b.1) | `values.ts`, `valuePicker.ts`, `useRunValues.ts`, `ValuePickerView.tsx` |
 | Edge inspector: states, safe value text, Copy, session recording hint (F2.3 E5b.2) | `editor/edgeValue.ts`, `editor/EdgeInspector.tsx`, `editor/EdgeValueBox.tsx`, `editor/valueText.ts`, `useSessionRecording.ts` |
 | Welcome screen, capability rows and first-run flag (F2.11) | `welcome.tsx`, `capabilities.ts` |
@@ -82,7 +82,9 @@ as implemented merely because the full spec describes it.
 - Event reduction, replay and stream loss: `desktop/test/reducer.test.ts`;
   schema-10 `value_recorded` streams leave run views unchanged:
   `desktop/test/schema10.test.ts`.
-- Settings recording switch: `desktop/test/recording.test.tsx`.
+- Settings recording preference and serve flags: `desktop/test/recording.test.tsx`;
+  Settings sections, Soon rows, save notices, Agents order and diagnostics (F2.5b):
+  `desktop/test/settings.test.tsx`, stories `settings/settings.stories.tsx`.
 - Run overview selectors and views (F2.6: waits, critical path, outcome, node filters, timeline segments): `desktop/test/overview.test.ts`, `desktop/test/overview.test.tsx`.
 - Recorded values (F2.3 E5b.1: `values.ts` reducer, `valuePicker.ts` picker rules, `useRunValues.ts`, `ValuePickerView.tsx`; values stay out of `reducer.ts` and never touch storage or console): `desktop/test/edge-values.test.ts`, `desktop/test/edge-values-view.test.tsx`.
 - Edge inspector (F2.3 E5b.2: the ten states and their precedence, `\uXXXX` marks for control and bidirectional characters, JSON formatting that never changes a literal, Copy only on click, text only, no link or storage): `desktop/test/edge-inspector.test.tsx`, stories `editor/edgeValue.stories.tsx`.

@@ -854,10 +854,10 @@ async function startDemo(app, page) {
     assert.equal(await page.textContent('[data-testid="profile"]'), 'KW')
     assert.equal(await page.isVisible('[data-testid="nav-approvals"]'), true)
     await page.click('[data-testid="nav-settings"]')
-    await page.click('button:has-text("PL ·")')
+    await page.click('[data-testid="language-pl"]')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Uruchomienia/)
     assert.equal(await page.evaluate(() => document.documentElement.lang), 'pl')
-    await page.click('button:has-text("EN ·")')
+    await page.click('[data-testid="language-en"]')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
     await page.click('[data-testid="nav-runs"]')
 

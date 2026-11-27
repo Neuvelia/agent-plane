@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from '@storybook/react-vite'
 import App from './App'
 import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
 import { agentScopeGraph, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
-import { Settings } from './settings'
 import { Dashboard } from './dashboardView'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import type { ApEvent } from './types'
@@ -168,13 +167,6 @@ export const FullAppShell: S = {
     </div>
   ),
 }
-
-export const SettingsLanguage: S = { parameters: { bridge: { runs: [] } }, render: () => <Settings /> }
-// "Record run values" (ADR-0023): off by default, on for this session, and off
-// because a configured variable is not set; saving can fail.
-export const SettingsRecordingOn: S = { parameters: { bridge: { runs: [], recording: { enabled: true, redactEnv: ['GITHUB_TOKEN'], active: true, missing: [] } } satisfies BridgeData }, render: () => <Settings /> }
-export const SettingsRecordingMissingVariable: S = { parameters: { bridge: { runs: [], recording: { enabled: true, redactEnv: ['GITHUB_TOKEN', 'NPM_TOKEN'], active: false, missing: ['NPM_TOKEN'] } } satisfies BridgeData }, render: () => <Settings /> }
-export const SettingsRecordingSaveFails: S = { parameters: { bridge: { runs: [], recordingSaveFails: true } satisfies BridgeData }, render: () => <Settings /> }
 
 // Dashboard: "now" is pinned just after the recordings so the 7-day window is stable.
 const afterFixtures = new Date(Math.max(...[demoApprove, demoReject, exhaustedRetries].map((e) => Date.parse(e[0]!.timestamp))) + 3600 * 1000)

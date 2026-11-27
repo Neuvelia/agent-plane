@@ -53,6 +53,8 @@ export interface BridgeData {
   decisionFailure?: { status: number; message: string }
   /** The "Record run values" preference and engine session. Default: off. */
   recording?: RecordingSettings
+  /** Reading the recording preference fails as when the main process cannot answer. */
+  recordingLoadFails?: boolean
   /** Saving the recording preference fails as when user data cannot be written. */
   recordingSaveFails?: boolean
   /** F2.11 capability routes: the report both routes answer, an HTTP failure, or a check that never answers. */
@@ -135,7 +137,10 @@ export function createBridge(data: BridgeData): Window['agentplane'] {
     openRecentGraph: async () => (data.graph?.opened ? { ok: true, grant: 'story-grant', label: data.graph.opened.label, exists: true } : { ok: false, code: 'not_found', message: 'that graph is no longer in the list' }),
     touchRecent: async () => true,
     closeGraph: async () => true,
-    recordingSettings: async () => structuredClone(data.recording ?? { enabled: false, redactEnv: [], active: false, missing: [] }),
+    recordingSettings: async () => {
+      if (data.recordingLoadFails) throw new Error('the recording preference could not be read')
+      return structuredClone(data.recording ?? { enabled: false, redactEnv: [], active: false, missing: [] })
+    },
     setRecordingSettings: async (s) => {
       if (data.recordingSaveFails) return { ok: false, code: 'save_failed' }
       const bad = s.redactEnv.find((n) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(n))

@@ -1760,6 +1760,49 @@ features:
     divergences: []
     tasks: []
     note: "Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2."
+  - id: F2.5b
+    name: "Settings redesign (design canvas, dark)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5b-settings-redesign.md
+    depends_on: ["F2.5a", "F2.3-E6", "F2.11"]
+    acceptance:
+      - id: F2.5b-AC1
+        text: "The section list has the design's eight entries in order; Secrets and Policy are inert Soon entries."
+        status: met
+        evidence:
+          - "desktop/test/settings.test.tsx::F2.5b-AC1"
+      - id: F2.5b-AC2
+        text: "Rows without a backing contract render disabled with Soon; the retry budget shows the engine default."
+        status: met
+        evidence:
+          - "desktop/test/settings.test.tsx::F2.5b-AC2"
+      - id: F2.5b-AC3
+        text: "Record run values is a native, labelled checkbox; save results map to saved, invalid and failed, never saved on failure."
+        status: met
+        evidence:
+          - "desktop/test/settings.test.tsx::F2.5b-AC3"
+      - id: F2.5b-AC4
+        text: "Agents shows only agent rows, in the design's order with unknown agents last, and an available agent lists its probe checks."
+        status: met
+        evidence:
+          - "desktop/test/settings.test.tsx::F2.5b-AC4"
+      - id: F2.5b-AC5
+        text: "Diagnostics contain versions and statuses only."
+        status: met
+        evidence:
+          - "desktop/test/settings.test.tsx::F2.5b-AC5"
+    out_of_scope:
+      - "New Electron preferences or serve flags (graph folder, record file diffs, max concurrency, workspace default, Codex path): drawn disabled with Soon."
+      - "Light theme; paths in the renderer; Secrets and Policy sections."
+    decisions: ["ADR-0023", "ADR-0025"]
+    divergences: []
+    tasks: []
+    note: "Rows without a contract are visible but disabled; enabling them needs F2.8b (diffs), F2.14 (Codex path) and a desktop engine-options preference."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

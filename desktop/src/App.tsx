@@ -6,7 +6,7 @@ import { usePoll } from './hooks'
 import { useI18n } from './i18n/context'
 import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
-import { Settings } from './settings'
+import { Settings, type SettingsPane } from './settings'
 import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
 import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
@@ -42,6 +42,10 @@ function Shell({ lost }: { lost: boolean }) {
   const pending = polled.data?.length ?? 0
   // The open graph lives here so it survives moving to another screen and back.
   const editor = useGraphDocument()
+  // Settings reports which of its panes shows, for the breadcrumb.
+  // Choosing Settings in the sidebar always opens its main pane, also from one of its own panes.
+  const [settingsPane, setSettingsPane] = useState<SettingsPane>('main')
+  const [settingsVisit, setSettingsVisit] = useState(0)
   useConnectionReport('badge', polled.status === 'error')
   useEffect(() => {
     document.documentElement.lang = locale
@@ -61,7 +65,13 @@ function Shell({ lost }: { lost: boolean }) {
     mainRef.current?.focus({ preventScroll: true })
   }, [routeKey])
 
-  const go = (name: Route['name']) => () => setRoute({ name } as Route)
+  const go = (name: Route['name']) => () => {
+    if (name === 'settings') {
+      setSettingsPane('main')
+      setSettingsVisit((n) => n + 1)
+    }
+    setRoute({ name } as Route)
+  }
   const main: NavEntry[] = [
     { id: 'dashboard', icon: 'dashboard', label: 'nav.dashboard', active: route.name === 'dashboard', onSelect: go('dashboard') },
     { id: 'runs', icon: 'runs', label: 'nav.runs', active: route.name === 'runs' || route.name === 'run', onSelect: go('runs') },
@@ -97,7 +107,7 @@ function Shell({ lost }: { lost: boolean }) {
       <Sidebar entries={main} deferred={deferred} footer={footer} />
       <div className="col">
         <GlobalBar lost={lost} />
-        <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
+        <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : []), ...(route.name === 'settings' && settingsPane !== 'main' ? [t(settingsPane === 'agents' ? 'settings.nav.agents' : 'settings.nav.about')] : [])]} />
         <main id="content" ref={mainRef} tabIndex={-1}>
           {route.name === 'dashboard' && (
             <Dashboard
@@ -110,7 +120,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'runs' && <RunsList onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'run' && <RunInspector key={route.id} runId={route.id} onBack={go('runs')} />}
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'settings' && <Settings />}
+          {route.name === 'settings' && <Settings key={settingsVisit} onPaneChange={setSettingsPane} />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
