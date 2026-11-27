@@ -2,6 +2,7 @@
 
 **Status:** accepted
 **Date:** 2026-10-07
+**Amended by:** ADR-0039 (captured output is bounded per stream)
 
 ## Context
 
@@ -41,8 +42,8 @@ the scheduler independent of operating-system process details.
 - The scheduler and generic node result do not gain process-specific fields.
 - Failure evidence is available through `errors.As` on the generic runtime
   failure's `Err` field.
-- Captured output was unbounded in memory; ADR-0039 bounds it per stream.
-  Keeping the full log as an artifact belongs to F3.5.
+- Captured output is currently unbounded in memory; larger log/artifact
+  handling belongs to a later feature.
 - Shell nodes cannot yet consume bound inputs as process arguments or
   environment values; a future explicit mapping contract is required.
 

@@ -12,7 +12,7 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 
 | Phase | Name | P0 done | P1 done | P2 done | Exit criterion |
 | --- | --- | --- | --- | --- | --- |
-| 0 | Execution Core | 5/7 (71%) | - | - | met |
+| 0 | Execution Core | 5/7 (71%) +1 diverged | - | - | met |
 | 1 | Agent Loop | 3/7 (42%) +3 diverged | 1/1 (100%) | - | met |
 | 2 | Local IDE | 4/9 (44%) | 1/3 (33%) | - | partial |
 | 3 | Local Production Ready | 1/9 (11%) | 0/2 (0%) | - | not_met |
@@ -30,7 +30,7 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 | [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | done | 4/4 | #180 |
 | [F0.3](../../docs/features/F0.3-data-bindings.md) | Data bindings na edge'ach | P0 | done | 2/2 |  |
 | [F0.4](../../docs/features/F0.4-dag-scheduler.md) | DAG Scheduler in-memory | P0 | done | 3/3 |  |
-| [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | partial | 3/3 | #181 |
+| [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | diverged | 3/3 |  |
 | [F0.6](../../docs/features/F0.6-event-model.md) | Event Model i Run/Node IDs | P0 | done | 3/3 |  |
 | [F0.7](../../docs/features/F0.7-cli-runner.md) | CLI Runner | P0 | done | 2/2 |  |
 
@@ -84,7 +84,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | [F3.2](../../docs/features/F3.2-durable-run-state.md) | Durable Run State / Append-only Event Store | P0 | done | 2/2 |  |
 | F3.3 | Resume / Recovery | P0 | not_started | 0/2 |  |
 | [F3.4](../../docs/features/F3.4-cancellation-and-timeouts.md) | Cancellation i Timeouts | P0 | in_progress | 1/2 | #190 |
-| F3.5 | Artifact Store Local | P0 | not_started | 0/2 |  |
+| F3.5 | Artifact Store Local | P0 | not_started | 0/2 | #200 |
 | F3.6 | Graph Versioning i Run Reproducibility | P0 | partial | 1/2 | #186 |
 | F3.7 | Export JSON/CSV | P0 | not_started | 0/2 |  |
 | [F3.8](../../docs/features/F3.8-secrets-references.md) | Secrets References | P0 | partial | 1/2 |  |
@@ -192,7 +192,7 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | --- | --- | --- | --- | --- |
 | F0.1 | JSON tylko przez parser YAML; brak testu kontraktowego. | ADR-0033 | #179 |  |
 | F0.1 | Wersja grafu to obliczany hash graph_version, bez pola autorskiego. | ADR-0033 |  |  |
-| F0.5 | Brak pełnego logu jako artifactu: zachowywany jest tylko początek każdego strumienia do limitu 1 MiB (ADR-0039, proposed). | ADR-0039 | #181 | F3.5 |
+| F0.5 | Brak pełnego logu jako artifactu: zachowywany jest tylko początek każdego strumienia do limitu 1 MiB (ADR-0039). | ADR-0039 | #200 | F3.5 |
 | F0.6 | Wykrycie przerwanego runa działa przez opcjonalny store (F2.9/F3.2). | ADR-0027 |  |  |
 | F1.3 | Surowy event providera nie jest dołączany jako debug payload; limity pamięci dotyczą progressu, nie logów Shell. | ADR-0011 |  |  |
 | F1.4 | Gate command ograniczony do diff; test command jako check w pętli to luka do zamknięcia. | ADR-0037 | #183 | F1.4b |

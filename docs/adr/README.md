@@ -71,5 +71,5 @@ Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
 [ADR-0037 - Direction: a test command as a loop check](0037-test-command-check-direction.md),
 [ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md).
 
-F0.5 Shell capture limit (proposed, issue #181):
+F0.5 Shell capture limit (accepted 2026-11-27, issue #181; full log as artifact: #200, F3.5):
 [ADR-0039 - Bounded Shell output capture](0039-shell-capture-limit.md).

@@ -1,6 +1,6 @@
 # ADR-0039 - Bounded Shell output capture
 
-**Status:** proposed
+**Status:** accepted (owner, 2026-11-27)
 **Date:** 2026-11-27
 **Source:** issue #181, roadmap audit 2026-11-25 (Q10, Q17); amends ADR-0005
 
@@ -42,8 +42,10 @@ retained capture. There is no artifact store yet (F3.5).
    streams are masked as before. Live `log_chunk` events are unaffected: they
    see the whole stream. The `CaptureLimitError` cause holds no process text
    and stays reachable with `errors.As` in the redacted result.
-7. Until this ADR is accepted, F0.5 stays `partial` with issue #181 open; it
-   moves to `diverged` only when the owner accepts the decision.
+7. F0.5 is `diverged`: every criterion is met, and this ADR narrows its
+   roadmap scope ("log size limit, full log optionally as an artifact") to the
+   limit. Issue #181 is closed by the implementation; the artifact part is
+   tracked by issue #200 under F3.5.
 
 ## Alternatives considered
 
@@ -54,9 +56,9 @@ process output, breaking "accepted output is correct and immutable" and making
 `stdout_json` fail with a misleading JSON error.
 
 This is the approach of the #181 part of PR #194 (marker passed through in
-`stdout`, only `json` fails). The two are mutually exclusive; if this ADR is
+`stdout`, only `json` fails). The two are mutually exclusive; with this ADR
 accepted, the #181 changes in `internal/shell` and `docs/features/F0.5-shell-node.md`
-must be dropped from PR #194, together with its `closes #181`.
+are to be dropped from PR #194, together with its `closes #181`.
 
 ### Keep the tail instead of the head
 

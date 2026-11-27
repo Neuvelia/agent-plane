@@ -149,7 +149,7 @@ features:
     kind: roadmap
     phase: 0
     priority: P0
-    status: partial
+    status: diverged
     owner_package: adapters
     spec: docs/features/F0.5-shell-node.md
     depends_on: ["F0.4"]
@@ -176,11 +176,11 @@ features:
       - "Zaawansowany sandbox i Docker dopiero po stabilizacji podstawowego runtime."
     decisions: ["ADR-0005", "ADR-0008", "ADR-0028", "ADR-0039"]
     divergences:
-      - text: "Brak pełnego logu jako artifactu: zachowywany jest tylko początek każdego strumienia do limitu 1 MiB (ADR-0039, proposed)."
+      - text: "Brak pełnego logu jako artifactu: zachowywany jest tylko początek każdego strumienia do limitu 1 MiB (ADR-0039)."
         adr: ADR-0039
-        issue: 181
+        issue: 200
         deferred_to: F3.5
-    tasks: [181]
+    tasks: []
   - id: F0.6
     name: "Event Model i Run/Node IDs"
     kind: roadmap
@@ -917,9 +917,9 @@ features:
         evidence: []
     out_of_scope:
       - "Cloud object storage dopiero F4.10."
-    decisions: []
+    decisions: ["ADR-0039"]
     divergences: []
-    tasks: []
+    tasks: [200]
   - id: F3.6
     name: "Graph Versioning i Run Reproducibility"
     kind: roadmap

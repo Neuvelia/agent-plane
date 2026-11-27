@@ -16,7 +16,7 @@ tracking process. Their combined result is `docs/roadmap/canonical-spec.md`.
 | D11 | JSONL run store instead of SQLite | [ADR-0027](../../adr/0027-durable-run-state.md) (accepted 2026-11-26) |
 | D12 | Test command as a loop check (gap to close) | [ADR-0037](../../adr/0037-test-command-check-direction.md) |
 | Q2-Q10, Q17 | Tracking harness, status vocabulary, traceability | [ADR-0038](../../adr/0038-roadmap-tracking-harness.md) |
-| Q10, Q17 (#181) | F0.5 Shell capture limit; full log as artifact deferred to F3.5 | [ADR-0039](../../adr/0039-shell-capture-limit.md) (proposed) |
+| Q10, Q17 (#181) | F0.5 Shell capture limit; full log as artifact deferred to F3.5 | [ADR-0039](../../adr/0039-shell-capture-limit.md) (accepted 2026-11-27) |
 | Q13 | ADR-0027 and ADR-0029 accepted; ADR-0028 stays proposed until F3.4 closes | ADR-0027, ADR-0029 |
 
 New roadmap decisions: create an ADR with `scripts/new-adr.sh <slug>`, then add a
