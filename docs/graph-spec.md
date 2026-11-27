@@ -253,6 +253,18 @@ an otherwise successful direct-child exit, the node fails with an output error
 and preserves any output captured before the deadline. A nonzero direct-child
 exit remains an exit failure. This does not terminate that other process.
 
+Captured evidence is bounded (ADR-0039): the executor retains at most the
+first 1 MiB of stdout and, separately, of stderr. Excess output is still
+drained and still streamed as `log_chunk` events (themselves bounded by the
+trace collector), but it is not retained; the retained text then ends with
+`[agentplane: N bytes of <stream> omitted; capture limit L bytes]`. A declared
+`stdout`, `stderr` or `json` output whose stream was truncated would be
+incomplete, so the node fails with an output error and the diagnostic code
+`E_SHELL_OUTPUT_TRUNCATED` instead of passing a prefix downstream. An
+`exit_code` output, or no declared output, is unaffected. Write large output
+to a file and pass its path instead. Keeping the complete log as an artifact
+is deferred to F3.5.
+
 ### Agent node configuration (F1.1 contract)
 
 `type: agent` uses the existing schema-v0 `config` mapping. F1.1 implements

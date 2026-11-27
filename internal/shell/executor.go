@@ -3,7 +3,6 @@
 package shell
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -27,19 +26,29 @@ type Executor struct {
 	// value selects proctree's defaults.
 	Policy proctree.Policy
 
+	// CaptureLimit is the number of leading bytes of each stream a Result
+	// retains (ADR-0039). Zero selects DefaultCaptureLimit. It does not limit
+	// what the log observer receives.
+	CaptureLimit int
+
 	// terminate replaces tree termination in tests to make a leak deterministic.
 	terminate func(*proctree.Tree, context.Context, proctree.Policy) (proctree.Outcome, error)
 }
 
 // Result is the process evidence retained by Execute and ExecutionError.
 // ExitCode is -1 if no OS exit code is available. A canceled process may
-// report an OS-specific termination code.
+// report an OS-specific termination code. Each stream keeps at most the
+// capture limit of leading bytes; StdoutOmitted and StderrOmitted count the
+// bytes dropped beyond it, and a truncated stream's text ends with an omission
+// marker (ADR-0039).
 type Result struct {
-	Stdout    string
-	Stderr    string
-	ExitCode  int
-	StartedAt time.Time
-	EndedAt   time.Time
+	Stdout        string
+	Stderr        string
+	StdoutOmitted int64
+	StderrOmitted int64
+	ExitCode      int
+	StartedAt     time.Time
+	EndedAt       time.Time
 }
 
 // FailureKind distinguishes configuration, start, exit, cancellation, and
@@ -123,9 +132,9 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 	// A descendant may inherit stdout or stderr after the direct child exits.
 	// Bound the pipe drain so Wait can finish even if a descendant escapes.
 	cmd.WaitDelay = time.Second
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &logWriter{capture: &stdout, stream: "stdout", observe: request.Observe}
-	cmd.Stderr = &logWriter{capture: &stderr, stream: "stderr", observe: request.Observe}
+	stdout, stderr := newBoundedCapture(e.captureLimit()), newBoundedCapture(e.captureLimit())
+	cmd.Stdout = &logWriter{capture: stdout, stream: "stdout", observe: request.Observe}
+	cmd.Stderr = &logWriter{capture: stderr, stream: "stderr", observe: request.Observe}
 	tree, err := proctree.Start(cmd)
 	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureStart, Result: result, Cause: err}
@@ -138,7 +147,8 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 	close(exited)
 	cancellation := <-stopped
 	result.EndedAt = time.Now()
-	result.Stdout, result.Stderr = stdout.String(), stderr.String()
+	result.Stdout, result.StdoutOmitted = stdout.text("stdout")
+	result.Stderr, result.StderrOmitted = stderr.text("stderr")
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
@@ -148,6 +158,13 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 	}
 	failure.NodeID, failure.Result, failure.Termination = nodeID, result, cancellation.record()
 	return result, failure
+}
+
+func (e Executor) captureLimit() int {
+	if e.CaptureLimit > 0 {
+		return e.CaptureLimit
+	}
+	return DefaultCaptureLimit
 }
 
 // newCommand builds the child with an explicit environment: configured values,
@@ -223,8 +240,8 @@ func (e Executor) ExecuteNode(ctx context.Context, nodeID string, node graph.Nod
 	return e.ExecuteNodeWithLogs(ctx, nodeID, node, inputs, nil)
 }
 
-// ExecuteNodeWithLogs streams bounded chunks while retaining F0.5's complete
-// stdout and stderr result evidence. The observer must tolerate concurrent
+// ExecuteNodeWithLogs streams every byte in bounded chunks while retaining
+// stdout and stderr evidence up to the capture limit. The observer must tolerate concurrent
 // calls from the two output-copy goroutines.
 func (e Executor) ExecuteNodeWithLogs(ctx context.Context, nodeID string, node graph.NodeDefinition, inputs map[string]graph.Value, observe func(string, []byte)) (map[string]graph.Value, error) {
 	return e.ExecuteNodeAttempt(ctx, nodeID, node, inputs, observe, 0)
@@ -275,7 +292,7 @@ func checkOutputs(node graph.NodeDefinition, cfg config) ([]string, error) {
 const maxLogChunk = 16 * 1024
 
 type logWriter struct {
-	capture *bytes.Buffer
+	capture *boundedCapture
 	stream  string
 	observe func(string, []byte)
 }

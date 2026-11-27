@@ -70,3 +70,6 @@ Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
 [ADR-0036 - Roadmap precedence for phase scope; units, blast radius and ordering](0036-roadmap-scope-precedence.md),
 [ADR-0037 - Direction: a test command as a loop check](0037-test-command-check-direction.md),
 [ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md).
+
+F0.5 Shell capture limit (proposed, issue #181):
+[ADR-0039 - Bounded Shell output capture](0039-shell-capture-limit.md).

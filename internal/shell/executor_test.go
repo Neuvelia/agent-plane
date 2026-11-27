@@ -80,6 +80,12 @@ func TestHelperProcess(t *testing.T) {
 	case "touch":
 		_ = os.WriteFile(args[1], []byte("ran"), 0600)
 	case "empty":
+	case "sized":
+		// Writes args[1] bytes of 'o' to stdout and args[2] bytes of 'e' to stderr.
+		stdoutBytes, _ := strconv.Atoi(args[1])
+		stderrBytes, _ := strconv.Atoi(args[2])
+		fmt.Fprint(os.Stdout, strings.Repeat("o", stdoutBytes))
+		fmt.Fprint(os.Stderr, strings.Repeat("e", stderrBytes))
 	case "bulk":
 		data := strings.Repeat("x", 1<<20)
 		fmt.Fprint(os.Stdout, data)

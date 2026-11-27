@@ -44,7 +44,28 @@ func (e Executor) Run(ctx context.Context, request Request) (map[string]graph.Va
 	if err != nil {
 		return nil, err
 	}
+	if truncated := checkComplete(names, result, e.captureLimit()); truncated != nil {
+		return nil, &ExecutionError{NodeID: nodeID, Kind: FailureOutput, Result: result, Cause: truncated}
+	}
 	return collectOutputs(nodeID, node, names, result)
+}
+
+// checkComplete returns a CaptureLimitError for the first declared output, in
+// sorted order, whose source stream was truncated. exit_code reads no stream.
+func checkComplete(names []string, result Result, limit int) error {
+	for _, name := range names {
+		stream, omitted := "stdout", result.StdoutOmitted
+		switch name {
+		case "stderr":
+			stream, omitted = "stderr", result.StderrOmitted
+		case "exit_code":
+			continue
+		}
+		if omitted > 0 {
+			return &CaptureLimitError{Output: name, Stream: stream, Limit: limit, Omitted: omitted}
+		}
+	}
+	return nil
 }
 
 // collectOutputs maps a finished process to the declared output ports.
