@@ -193,15 +193,6 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F3.8-AC1 | Sekret nie pojawia się w YAML, SQLite ani standardowym eksporcie. |  | brak eksportu; nie da się sprawdzić w całości |
 | F3.10-AC2 | Eksport zawiera usage metadata. |  | brak eksportu |
 | F3.11-AC1 | Bundle nie zawiera repo contents ani sekretów domyślnie. |  | jest tylko GET /capabilities; brak bundle'a diagnostycznego |
-| F1.2b-AC1 | Fake CLI zmienia plik w tymczasowym repo; output i trace pokazują ścieżkę z Git. |  |  |
-| F1.2b-AC2 | Ścieżka z tool_use nieobecna w Git nie staje się changed path. |  |  |
-| F1.2b-AC3 | Brudny plik sprzed runu nie daje fałszywej zmiany; pliki konfiguracyjne Claude nie trafiają do workspace. |  |  |
-| F1.2b-AC4 | Brak CLI, zły workspace lub za stara wersja dają błędy węzła bez paniki, z remedy z --claude-bin. |  |  |
-| F1.2b-AC5 | Anulowanie z procesem potomnym nie zostawia procesów. |  |  |
-| F1.2b-AC6 | thinking, treść narzędzi, stderr i tekst taska nie trafiają do zdarzeń. |  |  |
-| F1.2b-AC7 | Za duży opcjonalny rekord jest pomijany; zły lub za duży result daje claude_result bez outputów. |  |  |
-| F1.2b-AC8 | argv nie zawiera flag bypass ani Bash w v1; env to refs plus stałe adaptera. |  |  |
-| F1.2b-AC9 | Pętla korekty przekazuje feedback na stdin. |  |  |
 | F1.2b-AC10 | Smoke z prawdziwym CLI (wersja, run/node ID, changed path, node_evidence, pętla korekty, isolation: worktree). |  | Nie wykonany: brak CLI i klucza API; wymaga spike'u docs/validation/F1.2b-claude-code-spike.md. |
 | F1.2b-AC11 | Shell i Codex bez zmian; make check i go test -race ./... przechodzą. |  |  |
 

@@ -1723,31 +1723,54 @@ features:
     acceptance:
       - id: F1.2b-AC1
         text: "Fake CLI zmienia plik w tymczasowym repo; output i trace pokazują ścieżkę z Git."
-        status: open
+        status: met
+        evidence:
+          - "cmd/agentplane/claude_adapter_test.go::TestCLIExplicitClaudeAdapterAgentAndShell"
+          - "internal/agent/claudecode/adapter_test.go::TestFakeExecutionGitEvidenceAndSafeProgress"
       - id: F1.2b-AC2
         text: "Ścieżka z tool_use nieobecna w Git nie staje się changed path."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/adapter_test.go::TestReportedPathNotInGitIsNotObserved"
       - id: F1.2b-AC3
         text: "Brudny plik sprzed runu nie daje fałszywej zmiany; pliki konfiguracyjne Claude nie trafiają do workspace."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/adapter_test.go::TestDirtyBaseline"
+          - "internal/agent/claudecode/adapter_test.go::TestPrivateConfigDirLeavesWorkspaceClean"
+          - "internal/agent/claudecode/gitguard_test.go::TestGitControlFileWritesAreRejected"
       - id: F1.2b-AC4
         text: "Brak CLI, zły workspace lub za stara wersja dają błędy węzła bez paniki, z remedy z --claude-bin."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/adapter_test.go::TestDetectMissingAndUnsupported"
+          - "internal/agent/claudecode/detect_test.go::TestDetectProbesRunInAPrivateHome"
       - id: F1.2b-AC5
         text: "Anulowanie z procesem potomnym nie zostawia procesów."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/process_test.go::TestOwnedChildCancellationAndOrdinaryExit"
       - id: F1.2b-AC6
         text: "thinking, treść narzędzi, stderr i tekst taska nie trafiają do zdarzeń."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/progress_test.go::TestPrivateRecordsNeverProjected"
       - id: F1.2b-AC7
         text: "Za duży opcjonalny rekord jest pomijany; zły lub za duży result daje claude_result bez outputów."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/adapter_test.go::TestBadFinalResultNeverAccepted"
+          - "internal/agent/claudecode/progress_test.go::TestOversizedOptionalRecordIsSkipped"
       - id: F1.2b-AC8
         text: "argv nie zawiera flag bypass ani Bash w v1; env to refs plus stałe adaptera."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/adapter_test.go::TestArgvAndEnvironment"
       - id: F1.2b-AC9
         text: "Pętla korekty przekazuje feedback na stdin."
-        status: open
+        status: met
+        evidence:
+          - "internal/agent/claudecode/adapter_test.go::TestCorrectionFeedbackOnStdin"
       - id: F1.2b-AC10
         text: "Smoke z prawdziwym CLI (wersja, run/node ID, changed path, node_evidence, pętla korekty, isolation: worktree)."
         status: open
