@@ -82,7 +82,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | --- | --- | --- | --- | --- | --- |
 | [F3.1](../../docs/features/F3.1-workspace-isolation.md) | Workspace Isolation / Git Worktrees | P0 | partial | 2/2 | #189 |
 | [F3.2](../../docs/features/F3.2-durable-run-state.md) | Durable Run State / Append-only Event Store | P0 | done | 2/2 |  |
-| F3.3 | Resume / Recovery | P0 | not_started | 0/2 |  |
+| [F3.3](../../docs/features/F3.3-resume-recovery.md) | Resume / Recovery | P0 | not_started | 0/2 | #207 |
 | [F3.4](../../docs/features/F3.4-cancellation-and-timeouts.md) | Cancellation i Timeouts | P0 | partial | 2/2 | #190 |
 | F3.5 | Artifact Store Local | P0 | not_started | 0/2 |  |
 | F3.6 | Graph Versioning i Run Reproducibility | P0 | partial | 1/2 | #186 |
@@ -165,6 +165,10 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | F3.1b | Downstream file visibility | derived | F3.1 | not_started | Baza = baza runu + zaakceptowane unity upstream (ADR-0024, decyzja 5); bez speca. |
 | [F3.1c](../../docs/features/F3.1c-shell-workspace-isolation.md) | Workspace isolation for Shell loop producers | derived | F3.1 | not_started | Spec i ADR-0041 proposed. |
 | [F3.9c](../../docs/features/F3.9c-requested-permissions-ui.md) | Requested permissions in the desktop | derived | F3.9 | not_started | Spec i ADR-0039 proposed; zablokowane przez F3.9. |
+| [F1.6b](../../docs/features/F1.6b-tiered-model-ladder.md) | Tiered model ladder with a tool-less edit adapter | derived | F1.6 | not_started | Z analizy adopcji vs agent-control-plane; spec i ADR-0047 proposed. |
+| [F1.4c](../../docs/features/F1.4c-baseline-and-golden-preflight.md) | Baseline and golden preflight for loop checks | derived | F1.4 | not_started | Z analizy adopcji vs agent-control-plane; spec i ADR-0048 proposed. |
+| [F3.9d](../../docs/features/F3.9d-check-confinement.md) | Fail-closed confinement for test_command checks | derived | F3.9 | not_started | Z analizy adopcji vs agent-control-plane; spec i ADR-0049 proposed; dzieli helper z F3.9. |
+| [F0.1a](../../docs/features/F0.1a-agentctl-graph-import.md) | Import agentctl YAML v1 graphs | derived | F0.1 | not_started | Z analizy adopcji vs agent-control-plane; spec i ADR-0050 proposed. |
 | F2.13 | Repository list and manual folder add | future |  | deferred | Dostarcza ścieżkę, której potrzebuje workspace szablonu; bez speca. |
 | F2.14 | Agent nodes in the desktop engine | future |  | deferred | Usuwa AGENTPLANE_CODEX_BIN i ręczny workspace; bez speca. |
 | F2.15 | Desktop runner self-check | future |  | deferred | CLI agentplane self-check istnieje; brak trasy i przycisku w desktopie. |

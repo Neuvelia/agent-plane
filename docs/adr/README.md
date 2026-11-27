@@ -83,3 +83,10 @@ Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
 Follow-ups to the audit (accepted 2026-11-27, implemented; ADR-0042 is listed above):
 [ADR-0044 - Event schema 15: run provenance, test_command checks and abandoned executors](0044-event-schema-15-run-context.md) (F2.9, F3.6, F1.4b, F3.4),
 [ADR-0045 - Bounded Shell capture and complete declared outputs](0045-shell-declared-output-completeness.md) (F0.5, amends ADR-0005).
+
+Adoption analysis against `agent-control-plane` (2026-11-27; all proposed, none implemented; ADR-0046 is reserved for F1.2b, #202):
+[ADR-0047 - Tool-less model adapter and tier ladder in the correction loop](0047-tool-less-model-adapter-and-tier-ladder.md) (F1.6b, #203),
+[ADR-0048 - Baseline and golden preflight for loop checks](0048-baseline-and-golden-check-preflight.md) (F1.4c, #204),
+[ADR-0049 - Fail-closed confinement for test_command checks](0049-fail-closed-check-confinement.md) (F3.9d, #205),
+[ADR-0050 - Importing agentctl YAML v1 graphs into schema v0](0050-agentctl-v1-graph-import-mapping.md) (F0.1a, #206),
+[ADR-0051 - Resume and recovery semantics for interrupted runs](0051-resume-and-recovery-semantics.md) (F3.3, #207).
