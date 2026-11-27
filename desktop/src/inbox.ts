@@ -104,9 +104,19 @@ const MINUTE = 60_000
 const HOUR = 60 * MINUTE
 const DAY = 24 * HOUR
 
-/** "14 min", "3 h", "2 d" in the active locale; undefined under a minute (the view says "just now"). */
-export function formatAge(ms: number, locale: string): string | undefined {
+/**
+ * "14 min", "3 h", "2 d" in the active locale ("14m", "3h" with `narrow`, as in the
+ * sidebar); undefined under a minute (the view says "just now").
+ */
+export function formatAge(ms: number, locale: string, display: 'short' | 'narrow' = 'short'): string | undefined {
   if (ms < MINUTE) return undefined
   const [unit, size] = ms < HOUR ? (['minute', MINUTE] as const) : ms < DAY ? (['hour', HOUR] as const) : (['day', DAY] as const)
-  return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: 'short' }).format(Math.floor(ms / size))
+  return new Intl.NumberFormat(locale, { style: 'unit', unit, unitDisplay: display }).format(Math.floor(ms / size))
+}
+
+export const SIDEBAR_RECENT = 5
+
+/** The newest `count` runs, newest first (the sidebar's recent list). */
+export function newestRuns(runs: RunSummary[], count = SIDEBAR_RECENT): RunSummary[] {
+  return [...runs].sort((a, b) => time(b.started_at) - time(a.started_at)).slice(0, count)
 }

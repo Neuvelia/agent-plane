@@ -2,7 +2,7 @@
 
 **Status:** proposed
 **Date:** 2026-11-27
-**Amends:** F2.5a requirement 11 (Dashboard) and requirement 4 (the Sidebar entry name)
+**Amends:** F2.5a requirement 11 (Dashboard) and requirement 4 (Sidebar and global bar)
 **Feature:** F2.5b (`docs/features/F2.5b-inbox-redesign.md`)
 
 ## Context
@@ -20,7 +20,11 @@ a triage queue with the selected item's evidence and action beside it.
    same per-run event stream and reducer as the run inspector; it decides approvals through the
    existing decision endpoint with the F2.10 rules (applied only on `approval_decided`, `409` is
    already decided, disabled while the stream is lost).
-3. The 7-day Outcomes dot chart gives way to a strip of the newest 14 runs; Quick actions stay as
+3. The Sidebar follows the canvas: the name without the logo, New run as a button, Recent runs
+   (the five newest, from `GET /runs`), a Later group for the disabled surfaces and the profile in its
+   footer; the global bar keeps only the connection indicator. On macOS the traffic lights move
+   2px up to sit centred in the 44px brand strip.
+4. The 7-day Outcomes dot chart gives way to a strip of the newest 14 runs; Quick actions stay as
    two always-visible buttons.
 
 ## Alternatives considered
