@@ -15,7 +15,7 @@ behavior.
 | Typed failure categories and safe diagnostic codes | `errors.go` |
 | Reusable conformance fixture and deterministic mock | `adaptertest/contract.go`, `adaptertest/mock.go` |
 | Installed Codex process, Git evidence and progress translation | `codex/` |
-| Installed Claude Code process, Git evidence and progress translation (ADR-0046) | `claudecode/` |
+| Installed Claude Code process, Git evidence and progress translation (ADR-0048) | `claudecode/` |
 | Shared CLI process launch, bounded capture buffer and strict JSON check | `cliproc/` |
 | Runtime scheduling, accepted outputs, feedback and event emission | `internal/runtime/AGENTS.md` |
 

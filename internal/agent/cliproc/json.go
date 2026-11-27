@@ -13,7 +13,7 @@ import (
 // keys and replaces invalid UTF-8. Neither is appropriate for a strict
 // provider result or private protocol record.
 //
-//nolint:gocognit,gocyclo,funlen // moved verbatim from internal/agent/codex (ADR-0046 D2); refactor out of scope
+//nolint:gocognit,gocyclo,funlen // moved verbatim from internal/agent/codex (ADR-0048 D2); refactor out of scope
 func UniqueJSON(data []byte) error {
 	if !utf8.Valid(data) {
 		return errors.New("invalid UTF-8")

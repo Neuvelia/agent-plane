@@ -3,7 +3,7 @@
 # Replace the quoted __WORKSPACE__ placeholder with an absolute disposable committed
 # repository root, then run
 #   agentplane run FILE --adapter claude --claude-bin /absolute/path/to/claude
-# Authentication is ANTHROPIC_API_KEY, named in environment_refs (ADR-0046 D6).
+# Authentication is ANTHROPIC_API_KEY, named in environment_refs (ADR-0048 D6).
 # HOME is reserved by the adapter (a private HOME is always supplied) and must not be listed.
 # Bash is disabled in v1; only file tools (Read, Edit, Write, Glob, Grep) are enabled.
 schema_version: 0
