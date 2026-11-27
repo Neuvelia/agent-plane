@@ -16,7 +16,7 @@ const def: Definition = {
 const d = (severity: string, code: string, location: Diagnostic['location'], message = code): Diagnostic => ({ severity, code, message, location })
 
 describe('locate', () => {
-  it('finds nodes, ports, edges and bindings, and falls back to the graph', () => {
+  it('finds nodes, ports, edges and bindings, and falls back to the graph [F2.4-AC2]', () => {
     expect(locate(d('error', 'X', { node_id: 'a' }), def).target).toEqual({ kind: 'node', id: 'a' })
     expect(locate(d('warning', 'X', { node_id: 'a', path: 'nodes.a.outputs.out' }), def).target).toEqual({ kind: 'port', node: 'a', side: 'outputs', port: 'out' })
     expect(locate(d('error', 'X', { edge_index: 0, path: 'edges[0]' }), def).target).toEqual({ kind: 'edge', index: 0, from: 'a.outputs.out', to: 'b.inputs.in' })

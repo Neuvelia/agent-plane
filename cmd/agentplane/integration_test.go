@@ -44,6 +44,7 @@ func executableSuffix() string {
 	return ""
 }
 
+// roadmap: F0.4-AC2, F0.7-AC1
 func TestBuiltCLIPhase0DataFlow(t *testing.T) {
 	inRepositoryRoot(t)
 	binary := filepath.Join(t.TempDir(), "agentplane"+executableSuffix())
@@ -257,6 +258,7 @@ func TestInvalidGraphDoesNotStartShellProcess(t *testing.T) {
 	}
 }
 
+// roadmap: F0.7-AC2
 func TestBuiltBinaryExitAndJSON(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "agentplane"+executableSuffix())
 	build := exec.Command("go", "build", "-o", binary, ".")
@@ -395,6 +397,7 @@ func TestBuiltBinaryWatchOutputFailureCancelsShellChild(t *testing.T) {
 	}
 }
 
+// roadmap: F0.3-AC2, F0.4-AC1
 func TestBuiltCLIStartsIndependentShellProcessesBeforeEitherFinishes(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "agentplane"+executableSuffix())
 	if output, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {

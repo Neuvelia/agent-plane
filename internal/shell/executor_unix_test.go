@@ -62,6 +62,7 @@ func init() {
 // processAlive ignores zombies: see testenv.ProcessAlive.
 func processAlive(pid int) bool { return testenv.ProcessAlive(pid) }
 
+// roadmap: F0.5-AC3, F3.4-AC1
 func TestExecuteCancellationKillsGrandchild(t *testing.T) {
 	dir := t.TempDir()
 	pidFile, ready := filepath.Join(dir, "grandchild.pid"), filepath.Join(dir, "ready")

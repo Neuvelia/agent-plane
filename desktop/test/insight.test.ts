@@ -41,7 +41,7 @@ describe('runKpis on recorded runs', () => {
     expect(runKpis(reduceAll(approve)).retries).toBe(1)
     expect(runKpis(reduceAll(exhausted)).retries).toBe(2)
   })
-  it('reports node time as unknown, not 0, when no node has finished', () => {
+  it('reports node time as unknown, not 0, when no node has finished [F3.10-AC1]', () => {
     const run = reduceAll(upTo(approve, 'node_started'))
     expect(Object.values(run.nodes).some((n) => n.durationMs !== undefined)).toBe(false)
     expect(runKpis(run).nodeTimeMs).toBeUndefined()

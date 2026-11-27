@@ -7,6 +7,7 @@ import (
 	"agentplane/internal/domain/graph"
 )
 
+// roadmap: F2.1-AC2, F3.6-AC2
 func TestSemanticVersionIgnoresPresentationAndMapInsertionOrder(t *testing.T) {
 	first := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "version-test", Name: "First", Metadata: graph.Metadata{"layout": "left"}, Nodes: map[string]graph.NodeDefinition{"z": {Type: "shell", Config: graph.NodeConfig{"command": "echo", "args": []any{"hi"}}}, "a": {Type: "shell", Config: graph.NodeConfig{"command": "true"}}}, Edges: []graph.EdgeDefinition{{From: "a.outputs.x", To: "z.inputs.x"}, {From: "a.outputs.y", To: "z.inputs.y"}}, GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.x", To: "a.inputs.x"}, {From: "inputs.y", To: "a.inputs.y"}}}
 	second := &graph.Definition{SchemaVersion: graph.SchemaVersionV0, ID: "version-test", Name: "Second", Metadata: graph.Metadata{"layout": "right"}, Nodes: map[string]graph.NodeDefinition{"a": {Type: "shell", Config: graph.NodeConfig{"command": "true"}}, "z": {Type: "shell", Config: graph.NodeConfig{"args": []any{"hi"}, "command": "echo"}}}, Edges: []graph.EdgeDefinition{{From: "a.outputs.y", To: "z.inputs.y"}, {From: "a.outputs.x", To: "z.inputs.x"}}, GraphInputBindings: []graph.GraphInputBindingDefinition{{From: "inputs.y", To: "a.inputs.y"}, {From: "inputs.x", To: "a.inputs.x"}}}

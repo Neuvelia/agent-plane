@@ -1,6 +1,6 @@
 # ADR-0031 - Public roadmap status feed and landing synchronization
 
-**Status:** proposed
+**Status:** proposed; decision 2 amended by ADR-0038 (status comes from `docs/roadmap/features.yaml`)
 **Date:** 2026-11-16
 
 ## Context

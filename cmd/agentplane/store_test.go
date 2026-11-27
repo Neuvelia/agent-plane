@@ -95,6 +95,7 @@ func TestStoredRunListsAndShowsIdenticallyFromAFreshInvocation(t *testing.T) {
 	}
 }
 
+// roadmap: F0.6-AC3
 func TestKilledRunIsInterruptedAndEarlierEventsStayReadable(t *testing.T) {
 	dir := t.TempDir()
 	id := storedRun(t, dir)

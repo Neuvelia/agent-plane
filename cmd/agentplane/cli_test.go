@@ -119,6 +119,7 @@ func invoke(t *testing.T, ctx context.Context, args ...string) (int, string, str
 	return code, out.String(), errOut.String()
 }
 
+// roadmap: F0.7-AC1
 func TestGraphValidateAndErrors(t *testing.T) {
 	valid := graphFile(t, oneNode)
 	if code, _, _ := invoke(t, context.Background(), "graph", "validate", valid); code != 0 {

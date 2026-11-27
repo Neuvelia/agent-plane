@@ -261,6 +261,7 @@ func readBaseline(t *testing.T) map[string]bool {
 	return baseline
 }
 
+// roadmap: F1.1-AC2
 func TestDependencyRules(t *testing.T) {
 	baseline := readBaseline(t)
 	current := collect(t)

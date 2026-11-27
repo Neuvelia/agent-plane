@@ -155,6 +155,7 @@ func TestAgentDetectionAndExecutionErrors(t *testing.T) {
 	}
 }
 
+// roadmap: F1.2-AC3
 func TestAgentCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	workspace := t.TempDir()

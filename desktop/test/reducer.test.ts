@@ -115,7 +115,7 @@ describe('rejected run', () => {
 })
 
 describe('reducer properties', () => {
-  it('is idempotent under replay and reconnect (duplicate events are ignored)', () => {
+  it('is idempotent under replay and reconnect (duplicate events are ignored) [F2.5-AC1]', () => {
     const once = reduceAll(approve)
     const twice = reduceAll([...approve, ...approve])
     expect(twice).toEqual(once)
@@ -208,7 +208,7 @@ describe('interrupted runs (F3.2)', () => {
     expect(presentRun(open, true, false).status).toBe('interrupted')
   })
 
-  it('reduces the stored sequence and the same sequence delivered as a stream to the same state', () => {
+  it('reduces the stored sequence and the same sequence delivered as a stream to the same state [F2.5-AC2]', () => {
     const stored = reduceAll(approve)
     // a stream replays what the client already has and delivers in batches
     let streamed = initialRun()

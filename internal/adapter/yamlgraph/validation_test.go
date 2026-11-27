@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// roadmap: F0.1-AC3
 func TestValidateParallelExample(t *testing.T) {
 	data, err := os.ReadFile("../../../.agents/graphs/hello-parallel.yaml")
 	if err != nil {
@@ -24,6 +25,7 @@ func TestValidateParallelExample(t *testing.T) {
 	}
 }
 
+// roadmap: F0.2-AC3
 func TestValidateReportsMissingSourceAndTargetNodes(t *testing.T) {
 	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
@@ -68,6 +70,7 @@ outputs: {}
 	assertDiagnostic(t, result, "E_EDGE_TARGET_INPUT_NOT_FOUND", "edges[0].to")
 }
 
+// roadmap: F0.2-AC3
 func TestValidateRejectsIncompatibleBindingTypes(t *testing.T) {
 	result := graph.Validate(parseDefinition(t, `
 schema_version: 0
@@ -89,6 +92,7 @@ outputs: {}
 	assertDiagnostic(t, result, "E_BINDING_TYPE_MISMATCH", "edges[0]")
 }
 
+// roadmap: F0.2-AC3
 func TestValidateDetectsTwoNodeCycle(t *testing.T) {
 	result := graph.Validate(parseDefinition(t, `
 schema_version: 0

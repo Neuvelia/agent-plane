@@ -552,6 +552,7 @@ outputs: {}
 	}
 }
 
+// roadmap: F0.1-AC2
 func TestRoundTripPreservesDefinition(t *testing.T) {
 	data, err := os.ReadFile("../../../.agents/graphs/hello-parallel.yaml")
 	if err != nil {

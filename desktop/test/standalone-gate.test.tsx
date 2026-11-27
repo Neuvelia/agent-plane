@@ -26,7 +26,7 @@ describe('standalone gate check', () => {
     expect(red.some((e) => e.type === 'attempt_started')).toBe(false)
   })
 
-  it('keeps the verdict, reason and evidence on the node', () => {
+  it('keeps the verdict, reason and evidence on the node [F2.7-AC1]', () => {
     const accept = reduceAll(red).nodes.accept!
     const p = event.payload as Record<string, unknown>
     expect(accept.status).toBe('failed')

@@ -14,6 +14,7 @@ import (
 	"agentplane/internal/testenv"
 )
 
+// roadmap: F1.8-AC1
 func TestCLIChangedFilesScopeDenyUsesGitNotProviderOutput(t *testing.T) {
 	workspace := t.TempDir()
 	for _, args := range [][]string{{"init", "-q"}, {"-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-qm", "base"}} {

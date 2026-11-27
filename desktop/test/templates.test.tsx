@@ -65,7 +65,7 @@ describe('bundled templates', () => {
 })
 
 describe('template draft', () => {
-  it('equals the template text with only the id line changed', () => {
+  it('equals the template text with only the id line changed [F2.12-AC1]', () => {
     for (const t of TEMPLATES) {
       const draft = templateDraft(t, 'my-flow.yaml')!
       const before = t.text.split('\n')

@@ -222,6 +222,7 @@ func TestOpenRefusesNonTextAndHugeFiles(t *testing.T) {
 	}
 }
 
+// roadmap: F2.4-AC1
 func TestFullValidationIsUsedForDocuments(t *testing.T) {
 	s, ts, dir := docServer(t)
 	s.ValidateDefinition = func(d *graph.Definition) []graph.Diagnostic {
