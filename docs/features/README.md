@@ -18,6 +18,8 @@ Implementation should not begin for a non-trivial roadmap feature until its spec
 - `F0.6-event-model.md`
 - `F0.7-cli-runner.md`
 
+Derived draft: `F0.1a-agentctl-graph-import.md` (ADR-0050 proposed; one-way import of agentctl YAML v1 graphs, #206).
+
 ## Phase 1 - Agent Loop
 
 F1.1 is implemented with a test-only mock and generic runtime dispatch; its
@@ -42,6 +44,8 @@ feature contract.
 | `F1.7-return-envelope-scoped-retry.md` | Implemented; ADR-0015 |
 | `F1.8-changed-files-scope-check.md` | Implemented; ADR-0016 |
 | `F1.4b-test-command-loop-check.md` | Implemented; ADR-0042 (accepted) |
+| `F1.4c-baseline-and-golden-preflight.md` | Draft; ADR-0048 proposed; zero-attempt baseline and golden-patch classification of `test_command` checks (#204) |
+| `F1.6b-tiered-model-ladder.md` | Draft; ADR-0047 proposed; loop tiers and the tool-less `model` adapter (#203) |
 
 ## Phase 2 - Local IDE and vertical slice
 
@@ -72,6 +76,8 @@ feature contract.
 | `F3.4-cancellation-and-timeouts.md` (+ `F3.4a-windows-process-tree-termination.md`) | In progress: tasks 1-6 merged (process-tree termination on Unix, cancel/timeout event types, `timeout_seconds` parsed); runtime enforcement and cancel/timeout events not emitted yet; ADR-0028 proposed |
 | `F3.8-secrets-references.md` | Implemented for the `env` provider and Shell nodes (event schema 14; Linux only verified); Agent `secret_env`, keychain provider and F3.9 policy not included; 15 of 17 acceptance criteria ticked, two partly covered (7, 15), the enforce variant of 10 waits for F3.9; ADR-0029 accepted (shared with F3.9) |
 | `F3.9-execution-policy-v0.md` | Draft; event types `policy_evaluated`/`policy_violation` (schema 14) exist but are not emitted; ADR-0029 accepted (shared with F3.8) |
+| `F3.3-resume-recovery.md` | Draft; ADR-0051 proposed; resumable runs persist accepted values outside events (#207) |
+| `F3.9d-check-confinement.md` | Draft; ADR-0049 proposed; fail-closed confinement for `test_command` checks, widens F3.9 v0 with credential masking (#205) |
 | `F3.9c-requested-permissions-ui.md` | Draft; ADR-0039 proposed; blocked on F3.9; closes the permissions-UI gap of F2.2/F3.9 (#184) |
 | `F3.1c-shell-workspace-isolation.md` | Draft; ADR-0041 proposed; extends ADR-0024 to loop Shell producers (#189) |
 | `F2.3b-json-field-selection.md` | Draft; ADR-0040 proposed (needs owner choice vs. future Code node; #185) |
@@ -85,7 +91,7 @@ feature contract.
 
 ## Later phases
 
-F3.3, F3.5, F3.6, F3.7, F3.10, F3.11 and all of F4-F6 have no spec yet. Their
+F3.5, F3.6, F3.7, F3.10, F3.11 and all of F4-F6 have no spec yet. Their
 IDs and priorities are tracked in `docs/roadmap.md`; implementation specs are
 created when a feature becomes active.
 

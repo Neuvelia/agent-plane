@@ -874,7 +874,8 @@ features:
     priority: P0
     status: not_started
     owner_package: execution-core
-    depends_on: ["F3.1", "F3.2"]
+    spec: docs/features/F3.3-resume-recovery.md
+    depends_on: ["F3.1", "F3.2", "F2.10"]
     acceptance:
       - id: F3.3-AC1
         text: "Po restarcie run z trzema zakończonymi node'ami nie wykonuje ich drugi raz."
@@ -886,9 +887,10 @@ features:
         evidence: []
     out_of_scope:
       - "Exactly-once side effects nie są obiecywane; celem jest jawna semantyka recovery."
-    decisions: []
+    decisions: ["ADR-0051"]
     divergences: []
-    tasks: []
+    tasks: [207]
+    note: "Spec i ADR-0051 proposed (analiza adopcji vs agent-control-plane)."
   - id: F3.4
     name: "Cancellation i Timeouts"
     kind: roadmap
@@ -1863,6 +1865,178 @@ features:
     divergences: []
     tasks: [184]
     note: "Spec i ADR-0039 proposed; zablokowane przez F3.9."
+  - id: F1.6b
+    name: "Tiered model ladder with a tool-less edit adapter"
+    kind: derived
+    parent: F1.6
+    phase: 1
+    priority: P1
+    status: not_started
+    owner_package: adapters
+    spec: docs/features/F1.6b-tiered-model-ladder.md
+    depends_on: ["F1.1", "F1.6", "F1.8", "F3.8", "F3.10"]
+    acceptance:
+      - id: F1.6b-AC1
+        text: "Tiery [model x2, fake-agent x1] przy stale czerwonym Gate dają dokładnie 3 attempty na tierach 1, 1, 2 i needs_intervention."
+        status: open
+        evidence: []
+      - id: F1.6b-AC2
+        text: "Dwa kolejne red z identycznym evidence eskalują do następnego tieru z powodem identical_evidence."
+        status: open
+        evidence: []
+      - id: F1.6b-AC3
+        text: "Edycja poza allowed_paths lub nieparsowalna odpowiedź nie zapisuje pliku i daje red edit_out_of_scope / edit_format."
+        status: open
+        evidence: []
+      - id: F1.6b-AC4
+        text: "Zdalny endpoint bez data_egress: remote kończy preflight błędem; fake serwer nie dostaje żadnego żądania."
+        status: open
+        evidence: []
+      - id: F1.6b-AC5
+        text: "Sekret w plikach scope przy zdalnym endpoincie zatrzymuje node przed żądaniem; wartość nie trafia do eventów."
+        status: open
+        evidence: []
+      - id: F1.6b-AC6
+        text: "Usage od providera jest zapisane per attempt; brak usage nie jest zapisany jako zero."
+        status: open
+        evidence: []
+      - id: F1.6b-AC7
+        text: "URL z poświadczeniami, klucz API, prompt i treść plików nie występują w eventach ani summary.json."
+        status: open
+        evidence: []
+      - id: F1.6b-AC8
+        text: "Grafy bez loop.tiers zachowują semantic hash i zachowanie F1.6."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Scoreboard i automatyczny wybór modelu, repair-from-best, darmowy retry formatu, budżety (F5.11), providery inne niż OpenAI-compatible."
+    decisions: ["ADR-0047"]
+    divergences: []
+    tasks: [203]
+    note: "Z analizy adopcji vs agent-control-plane; spec i ADR-0047 proposed."
+  - id: F1.4c
+    name: "Baseline and golden preflight for loop checks"
+    kind: derived
+    parent: F1.4
+    phase: 1
+    priority: P1
+    status: not_started
+    owner_package: execution-core
+    spec: docs/features/F1.4c-baseline-and-golden-preflight.md
+    depends_on: ["F1.4b", "F1.6", "F3.1"]
+    acceptance:
+      - id: F1.4c-AC1
+        text: "Zielony baseline kończy node jako baseline_green z exit 4 i zerem startów producenta."
+        status: open
+        evidence: []
+      - id: F1.4c-AC2
+        text: "Baseline z exit 127 kończy się check_broken bez startu producenta, z podpowiedzią w reason."
+        status: open
+        evidence: []
+      - id: F1.4c-AC3
+        text: "Czerwony baseline pozwala na attempt 1 i nie zużywa max_attempts."
+        status: open
+        evidence: []
+      - id: F1.4c-AC4
+        text: "Golden patch daje przejście, check_unproven albo golden_broken; źródłowy workspace i index bez zmian, brak pozostałego worktree."
+        status: open
+        evidence: []
+      - id: F1.4c-AC5
+        text: "Bez baseline testy F1.4b przechodzą bez zmian, a semantic hash jest identyczny."
+        status: open
+        evidence: []
+      - id: F1.4c-AC6
+        text: "Evidence baseline jest ograniczone i redagowane jak w F1.4b."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Baseline dla innych rodzajów Gate, sukces typu already satisfied, wykrywanie flaky checków."
+    decisions: ["ADR-0048"]
+    divergences: []
+    tasks: [204]
+    note: "Z analizy adopcji vs agent-control-plane; spec i ADR-0048 proposed."
+  - id: F3.9d
+    name: "Fail-closed confinement for test_command checks"
+    kind: derived
+    parent: F3.9
+    phase: 3
+    priority: P1
+    status: not_started
+    owner_package: workspace-manager
+    spec: docs/features/F3.9d-check-confinement.md
+    depends_on: ["F1.4b"]
+    acceptance:
+      - id: F3.9d-AC1
+        text: "Przy confinement: required check nie łączy się z listenerem loopback testu; przy none się łączy."
+        status: open
+        evidence: []
+      - id: F3.9d-AC2
+        text: "Zapis poza cwd się nie udaje i plik nie istnieje; zapis do cwd i TMPDIR działa."
+        status: open
+        evidence: []
+      - id: F3.9d-AC3
+        text: "Pliki z listy poświadczeń (np. HOME/.ssh, HOME/.netrc) są dla checka nieczytelne i pozostają niezmienione poza nim."
+        status: open
+        evidence: []
+      - id: F3.9d-AC4
+        text: "Brak user namespaces daje E_CONFINEMENT_UNAVAILABLE w preflight i komenda nie startuje."
+        status: open
+        evidence: []
+      - id: F3.9d-AC5
+        text: "Raport capabilities pokazuje check_confinement jako prevented po selftest albo unenforceable z powodem."
+        status: open
+        evidence: []
+      - id: F3.9d-AC6
+        text: "Grafy bez confinement zachowują zachowanie F1.4b i semantic hash."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Konfigurowalne profile, macOS i Windows, seccomp, limity zasobów, confinement producentów Shell i Agent (F3.9)."
+    decisions: ["ADR-0049"]
+    divergences: []
+    tasks: [205]
+    note: "Z analizy adopcji vs agent-control-plane; spec i ADR-0049 proposed; dzieli helper z F3.9."
+  - id: F0.1a
+    name: "Import agentctl YAML v1 graphs"
+    kind: derived
+    parent: F0.1
+    phase: 0
+    priority: P1
+    status: not_started
+    owner_package: cli
+    spec: docs/features/F0.1a-agentctl-graph-import.md
+    depends_on: ["F0.1", "F0.2", "F0.3"]
+    acceptance:
+      - id: F0.1a-AC1
+        text: "Syntetyczny korpus pokrywający tabelę mapowania importuje się bez błędów graph validate; ostrzeżenia zgadzają się z raportem."
+        status: open
+        evidence: []
+      - id: F0.1a-AC2
+        text: "Dwie niezależne gałęzie shell zasilające trzeci node przez stdout dają po imporcie ten sam wynik co plik referencyjny i działają równolegle."
+        status: open
+        evidence: []
+      - id: F0.1a-AC3
+        text: "Każda nieobsługiwana konstrukcja daje exit 3, brak pliku wyjściowego i wpis z lokalizacją oraz feature'em, który ją umożliwi."
+        status: open
+        evidence: []
+      - id: F0.1a-AC4
+        text: "network: false i workdir: run bez --allow-weaker dają exit 3; z flagą są w weakened[] i metadata.import.weakened."
+        status: open
+        evidence: []
+      - id: F0.1a-AC5
+        text: "Dwukrotny import tego samego pliku daje identyczne bajty."
+        status: open
+        evidence: []
+      - id: F0.1a-AC6
+        text: "Stdout upstream z $(touch pwned) trafia downstream jako dane; plik pwned nie powstaje."
+        status: open
+        evidence: []
+    out_of_scope:
+      - "Node'y agent i remote, dynamiczny foreach (FX.1), run_always, expect_status, eksport wstecz, import historii runów."
+    decisions: ["ADR-0050"]
+    divergences: []
+    tasks: [206]
+    note: "Z analizy adopcji vs agent-control-plane; spec i ADR-0050 proposed."
   - id: F2.13
     name: "Repository list and manual folder add"
     kind: future
