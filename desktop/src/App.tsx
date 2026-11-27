@@ -99,7 +99,7 @@ function Shell({ lost }: { lost: boolean }) {
       <Sidebar
         primary={newRun}
         entries={main}
-        recent={<RecentRuns runs={polledRuns.data} approvals={polled.data ?? []} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
+        recent={<RecentRuns runs={polledRuns.data} approvals={polled.status === 'error' ? [] : (polled.data ?? [])} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
         deferred={deferred}
         footer={footer}
       />

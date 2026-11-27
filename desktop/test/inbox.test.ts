@@ -79,6 +79,24 @@ describe('decided approvals', () => {
   })
 })
 
+describe('selection after a decision', () => {
+  const b = inboxQueue([], [approval('b')])
+  const a = inboxQueue([], [approval('a')])[0]!
+  it('stays on the decided approval once the list drops it and its decision is recorded', () => {
+    const queue = withDecided(b, [a])
+    expect(selectItem(queue, 'a-approve')?.key).toBe('a-approve')
+    expect(queueCounts(queue).approvals).toBe(2)
+  })
+  it('stays on the decided approval while its decision has not arrived yet, without queueing it', () => {
+    expect(selectItem(b, 'a-approve', a)?.key).toBe('a-approve')
+    expect(b.map((i) => i.key)).toEqual(['b-approve'])
+  })
+  it('falls back to the first item when nothing decided here is picked', () => {
+    expect(selectItem(b, null, a)?.key).toBe('b-approve')
+    expect(selectItem(b, 'gone')?.key).toBe('b-approve')
+  })
+})
+
 describe('newestRuns', () => {
   it('keeps the five newest runs, newest first', () => {
     const runs = Array.from({ length: 7 }, (_, i) => run(`r${i}`, 'succeeded', new Date(Date.UTC(2026, 10, 14, i)).toISOString()))

@@ -146,6 +146,12 @@ async function startDemo(app, page) {
     await page.keyboard.press('Enter')
     await page.waitForSelector('[data-testid="inbox"]')
     assert.equal(await page.evaluate(() => localStorage.getItem('agentplane.welcome.v1')), 'done')
+    // F2.5b: with nothing queued, the Inbox offers Open graph; it lands on New run with the file chosen.
+    await page.waitForSelector('[data-testid="inbox-empty"]')
+    await stubOpenDialog(app, graph)
+    await page.click('[data-testid="quick-open"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    assert.equal(await page.textContent('[data-testid="graph-label"]'), path.basename(graph), 'Open graph on the Inbox lands on New run with the file chosen')
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
     const refused = await page.evaluate(async (never) => ({
@@ -206,7 +212,8 @@ async function startDemo(app, page) {
     assert.equal(again.ok, false)
     assert.equal(again.code, 'exists')
     const recent = await page.evaluate(() => window.agentplane.recentGraphs())
-    assert.deepEqual(recent.map((r) => r.label), ['fresh.yaml', 'demo.yaml'])
+    // demo-vertical.yaml was opened first, from the empty Inbox's Open graph.
+    assert.deepEqual(recent.map((r) => r.label), ['fresh.yaml', 'demo.yaml', 'demo-vertical.yaml'])
     assert.equal(JSON.stringify(recent).includes(work), false)
     const viaRecent = await page.evaluate((id) => window.agentplane.openRecentGraph(id), recent[0].id)
     assert.equal(viaRecent.ok, true)
@@ -928,6 +935,10 @@ async function startDemo(app, page) {
     assert.doesNotMatch(await page.textContent('[data-testid="event-log"]'), /node_started/)
     await page.click('[data-testid="events-all"]')
 
+    // The Approvals screen lists the pending gate too; the decision is taken in the Inbox.
+    await page.click('[data-testid="nav-approvals"]')
+    await page.waitForSelector('[data-testid="approval-card"]')
+    await shot(page, '3-approvals-inbox')
     // The Inbox queues the pending approval and offers the decision in place.
     await page.click('[data-testid="nav-inbox"]')
     await page.waitForSelector('[data-testid="inbox-item"][data-kind="approval"]')
@@ -937,12 +948,15 @@ async function startDemo(app, page) {
     assert.equal(await page.locator('[data-testid="inbox-recent"] .s-b').count() >= 1, true)
     assert.equal(await page.isVisible('[data-testid="inbox-detail"][data-kind="approval"] >> [data-testid="inbox-approve"]'), true)
 
-    // 3. The graph stops at the human gate until Approve is clicked.
+    // 3. The graph stops at the human gate until Approve is clicked (here, in the Inbox).
+    await page.fill('[data-testid="inbox-decide"] input', 'ship it')
+    await page.click('[data-testid="inbox-approve"]')
+    // The decision shows once approval_decided arrives; the item stays open and queued, dimmed.
+    await page.waitForSelector('[data-testid="inbox-decided"]')
+    assert.match(await page.textContent('[data-testid="inbox-decided"]'), /Approved/)
+    await page.waitForSelector('[data-testid="inbox-item"].done')
+    await shot(page, '3b-inbox-decided')
     await page.click('[data-testid="nav-approvals"]')
-    await page.waitForSelector('[data-testid="approval-card"]')
-    await page.fill('[data-testid="approval-card"] textarea', 'ship it')
-    await shot(page, '3-approvals-inbox')
-    await page.click('[data-testid="approval-card"] button.primary')
     await page.waitForSelector('[data-testid="no-approvals"]')
     await page.click('[data-testid="nav-runs"]')
     await page.click('[data-testid="run-row"]')

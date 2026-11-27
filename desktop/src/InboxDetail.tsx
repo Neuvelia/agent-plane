@@ -49,7 +49,8 @@ function headline(item: InboxItem, run: RunView, t: T): { title: string; lede: s
     const a = item.approval
     return { title: a?.prompt || t('approval.defaultPrompt'), lede: t('inbox.lede.approval', { node: a?.node_id ?? '' }) }
   }
-  if (item.kind === 'interrupted') return { title: t('inbox.head.interrupted', { graph }), lede: t('inbox.lede.interrupted', { sequence: run.lastSequence }) }
+  // Before the stream has replayed, the last sequence is not known yet.
+  if (item.kind === 'interrupted') return { title: t('inbox.head.interrupted', { graph }), lede: run.lastSequence > 0 ? t('inbox.lede.interrupted', { sequence: run.lastSequence }) : t('common.loading') }
   if (item.kind === 'running') {
     const active = activeNode(run)
     const last = active && lastAttempt(active.node)
@@ -126,7 +127,7 @@ function FailedBody({ run }: { run: RunView }) {
               <li key={a.id} className="inbox-line">
                 <span className="inbox-attempt-no mono mu">{a.number}</span>
                 <span className="inbox-line-value">{a.check?.reason ?? ''}</span>
-                {a.outcome && <span className="mono mu">{a.outcome.replace('_', ' ')}</span>}
+                {a.outcome && <span className="mono mu">{a.outcome}</span>}
               </li>
             ))}
           </ul>
@@ -194,7 +195,8 @@ function RunningBody({ run, graph }: { run: RunView; graph: GraphSummary | null 
   )
 }
 
-function DecisionBar({ item, decision, lost, onDecided, onNext }: { item: InboxItem; decision?: string; lost: boolean; onDecided: () => void; onNext: () => void }) {
+/** `blocked` is why deciding is off: the stream is lost, or the run cannot be read. */
+function DecisionBar({ item, decision, blocked, onDecided, onNext }: { item: InboxItem; decision?: string; blocked?: MessageKey; onDecided: () => void; onNext: () => void }) {
   const { t } = useI18n()
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
@@ -222,9 +224,9 @@ function DecisionBar({ item, decision, lost, onDecided, onNext }: { item: InboxI
   return (
     <div className="inbox-bar" data-testid="inbox-decide">
       <input type="text" aria-label={t('inbox.reason')} placeholder={t('inbox.reasonPlaceholder')} value={comment} maxLength={2048} onChange={(e) => setComment(e.target.value)} />
-      <button type="button" className="ib-btn bad" disabled={busy || lost} onClick={() => void submit(false)} data-testid="inbox-reject">{t('approval.reject')}</button>
-      <button type="button" className="ib-btn pr" disabled={busy || lost} onClick={() => void submit(true)} data-testid="inbox-approve">{t('approval.approve')}</button>
-      {lost && <div className="mu inbox-bar-note">{t('approval.disabledLost')}</div>}
+      <button type="button" className="ib-btn bad" disabled={busy || blocked !== undefined} onClick={() => void submit(false)} data-testid="inbox-reject">{t('approval.reject')}</button>
+      <button type="button" className="ib-btn pr" disabled={busy || blocked !== undefined} onClick={() => void submit(true)} data-testid="inbox-approve">{t('approval.approve')}</button>
+      {blocked && <div className="mu inbox-bar-note">{t(blocked)}</div>}
       {error && <div className="err inbox-bar-note" role="alert">{error}</div>}
     </div>
   )
@@ -265,7 +267,8 @@ export interface InboxDetailProps {
 
 export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext }: InboxDetailProps) {
   const { t } = useI18n()
-  const { run, graph, lost, notFound } = useRunStream(item.runId)
+  const { run, graph, lost, notFound, unsupported } = useRunStream(item.runId)
+  const unreadable = notFound || unsupported
   useConnectionReport('inbox-run', lost !== null)
   const { title, lede } = headline(item, run, t)
   const kind = t(`inbox.kind.${item.kind}` as MessageKey)
@@ -285,14 +288,19 @@ export function InboxDetail({ item, age, onOpenRun, onDecided, onSettled, onNext
           <h2>{title}</h2>
           <p className="inbox-lede">{lede}</p>
         </header>
-        {notFound && <p className="mu">{t('run.notFound')}</p>}
-        {item.kind === 'approval' && <ApprovalBody item={item} run={run} graph={graph} />}
-        {item.kind === 'failed' && <FailedBody run={run} />}
-        {item.kind === 'interrupted' && <InterruptedBody run={run} />}
-        {item.kind === 'running' && <RunningBody run={run} graph={graph} />}
+        {unreadable ? (
+          <p className="mu" data-testid={unsupported ? 'inbox-run-unsupported' : 'inbox-run-not-found'}>{t(unsupported ? 'run.unsupported' : 'run.notFound')}</p>
+        ) : (
+          <>
+            {item.kind === 'approval' && <ApprovalBody item={item} run={run} graph={graph} />}
+            {item.kind === 'failed' && <FailedBody run={run} />}
+            {item.kind === 'interrupted' && <InterruptedBody run={run} />}
+            {item.kind === 'running' && <RunningBody run={run} graph={graph} />}
+          </>
+        )}
       </div>
       {item.kind === 'approval' ? (
-        <DecisionBar item={item} decision={decision} lost={lost !== null} onDecided={onDecided} onNext={onNext} />
+        <DecisionBar item={item} decision={decision} blocked={unreadable ? 'inbox.cannotDecide' : lost !== null ? 'approval.disabledLost' : undefined} onDecided={onDecided} onNext={onNext} />
       ) : (
         <OpenBar summary={`${kind}: ${title}\n${lede}\n${item.graphId} · ${item.runId}`} onOpen={() => onOpenRun(item.runId)} />
       )}

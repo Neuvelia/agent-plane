@@ -344,6 +344,7 @@ export const en = {
   'inbox.waitsFor': 'waits for {nodes}',
   'inbox.reason': 'Reason',
   'inbox.reasonPlaceholder': 'Reason, kept in the run log (optional)',
+  'inbox.cannotDecide': 'Deciding is off: this run cannot be read.',
   'inbox.decided': 'Recorded in the run log.',
   'inbox.next': 'Next',
   'inbox.empty.title': 'Nothing needs you',

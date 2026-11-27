@@ -1769,13 +1769,14 @@ features:
     status: done
     owner_package: ui
     spec: docs/features/F2.5b-inbox-redesign.md
-    depends_on: ["F2.5a"]
+    depends_on: ["F2.5", "F2.5a", "F2.9", "F2.10"]
     evidence:
       - "docs/features/F2.5b-inbox-redesign.md"
       - "desktop/test/inbox.test.ts"
+      - "desktop/test/shell.test.tsx"
       - "desktop/e2e/demo.cjs"
     out_of_scope:
-      - "Light theme, redesigned Sidebar, global search, resume of interrupted runs, per-file diff counts."
+      - "Light theme, global search (no command palette), resume of interrupted runs, per-file diff counts, account names."
     decisions: ["ADR-0046"]
     divergences: []
     tasks: []

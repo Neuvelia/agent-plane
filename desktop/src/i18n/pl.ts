@@ -344,6 +344,7 @@ export const pl: Record<MessageKey, string> = {
   'inbox.waitsFor': 'czeka na {nodes}',
   'inbox.reason': 'Uzasadnienie',
   'inbox.reasonPlaceholder': 'Uzasadnienie, zapisane w dzienniku uruchomienia (opcjonalnie)',
+  'inbox.cannotDecide': 'Decyzja jest wyłączona: nie można odczytać tego uruchomienia.',
   'inbox.decided': 'Zapisano w dzienniku uruchomienia.',
   'inbox.next': 'Dalej',
   'inbox.empty.title': 'Nic nie wymaga Twojej uwagi',

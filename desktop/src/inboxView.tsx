@@ -69,6 +69,7 @@ function QueueRow({ item, selected, age, decision, onPick }: { item: InboxItem; 
         <span className="inbox-row-glyph"><Glyph kind={KIND_GLYPH[item.kind]} /></span>
         <span className="inbox-row-text">
           <span className="inbox-row-name">{item.graphId}</span>
+          {item.kind === 'approval' && !decision && <span className="sr-only">{t('status.approval.pending')}</span>}
           <span className="inbox-row-sub">{sub}</span>
         </span>
         {decision ? (
@@ -115,7 +116,10 @@ export interface InboxProps {
   nowOverride?: Date
 }
 
-/** Approvals decided here, with the decision their run's events recorded; view state only. */
+/**
+ * Approvals decided on this screen (view state only). `decision` is set only once the run's
+ * events record approval_decided; until then the item is not shown as decided.
+ */
 type Decided = Record<string, { item: InboxItem; decision?: string }>
 
 export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride }: InboxProps) {
@@ -140,11 +144,18 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
       </section>
     )
   const live = inboxQueue(polledRuns.data, polledApprovals.data)
-  const queue = withDecided(live, Object.values(decided).map((d) => d.item))
-  const counts = queueCounts(live)
+  // Only a confirmed decision keeps a dropped approval in the queue; an unconfirmed one never looks pending.
+  const queue = withDecided(live, Object.values(decided).filter((d) => d.decision).map((d) => d.item))
+  const counts = queueCounts(queue)
   const visible = filterQueue(queue, filter)
-  const current = selectItem(visible, picked)
-  const remember = (item: InboxItem, decision?: string) => setDecided((d) => ({ ...d, [item.key]: { item, decision: decision ?? d[item.key]?.decision } }))
+  const current = selectItem(visible, picked, picked ? decided[picked]?.item : undefined)
+  // Deciding pins the item, so the detail stays on it (with Next) when the list drops it.
+  const decidedHere = (item: InboxItem) => {
+    setPicked(item.key)
+    setDecided((d) => ({ ...d, [item.key]: { item, decision: d[item.key]?.decision } }))
+  }
+  // A decision recorded elsewhere (CLI, Approvals screen) is shown by the detail but not held in the queue.
+  const settled = (item: InboxItem, decision: string) => setDecided((d) => (d[item.key] ? { ...d, [item.key]: { item, decision } } : d))
   const next = () => setPicked(nextItem(live, current?.key ?? '')?.key ?? null)
   return (
     <section className="inbox" data-testid="inbox" aria-labelledby="inbox-title">
@@ -175,7 +186,7 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
       </div>
       <div className="inbox-detail" role="region" aria-label={t('inbox.selected')}>
         {current ? (
-          <InboxDetail key={current.key} item={current} age={age(current.at)} onOpenRun={onOpenRun} onDecided={() => remember(current)} onSettled={(d) => remember(current, d)} onNext={next} />
+          <InboxDetail key={current.key} item={current} age={age(current.at)} onOpenRun={onOpenRun} onDecided={() => decidedHere(current)} onSettled={(d) => settled(current, d)} onNext={next} />
         ) : (
           <InboxEmpty onNewRun={onNewRun} onOpenGraph={onOpenGraph} onAllRuns={onAllRuns} />
         )}
