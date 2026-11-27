@@ -32,6 +32,11 @@ var itemPattern = regexp.MustCompile(`^\d+\.\s+\*\*\\?\[([A-Z]+)\\?\]\\?\[P([0-3
 
 var numberedLine = regexp.MustCompile(`^\d+\.\s`)
 
+// tagPattern finds an entry tag anywhere on a line, escaped or not. A tag
+// outside an entry's own prefix means the entry is not where the gate looks
+// for it, so the review is malformed rather than silently uncounted.
+var tagPattern = regexp.MustCompile(`\\?\[(NEW|REMAINS|RESOLVED|WITHDRAWN)\\?\]`)
+
 // sectionSpec names a section and the tags its entries may carry.
 type sectionSpec struct {
 	heading string
@@ -44,6 +49,10 @@ var reviewSections = []sectionSpec{
 	{heading: headingFindings, tags: []string{"NEW", "REMAINS"}},
 	{heading: headingWithdrawn, tags: []string{"WITHDRAWN"}},
 }
+
+// emptySection holds the bodies the prompt allows for a tagged section with
+// no entries. Either is accepted in any tagged section.
+var emptySection = map[string]bool{"None.": true, "No actionable findings.": true}
 
 // finding is one entry of the Findings section.
 type finding struct {
@@ -116,22 +125,51 @@ func checkHeadingOrder(text string) error {
 	return nil
 }
 
+// parseEntries reads a tagged section strictly: it is either an empty-section
+// line alone, or numbered entries starting at column 0, each followed
+// only by indented lines. Anything else, such as a bulleted or unnumbered
+// finding, would be invisible to the gate, so it is malformed.
 func parseEntries(spec sectionSpec, body string) ([]finding, error) {
 	if body == "" {
 		return nil, fmt.Errorf("%w: %q is empty", errMalformedReview, spec.heading)
 	}
+	if spec.tags == nil || emptySection[body] {
+		return nil, nil
+	}
 	var entries []finding
 	for _, line := range strings.Split(body, "\n") {
-		if !numberedLine.MatchString(line) || spec.tags == nil {
-			continue
-		}
-		entry, err := parseEntry(spec, line)
+		entry, isEntry, err := parseLine(spec, line, len(entries) > 0)
 		if err != nil {
 			return nil, err
 		}
-		entries = append(entries, entry)
+		if isEntry {
+			entries = append(entries, entry)
+		}
 	}
 	return entries, nil
+}
+
+// parseLine classifies one line of a tagged section: an entry, a blank or
+// indented continuation of the previous entry, or an error.
+func parseLine(spec sectionSpec, line string, afterEntry bool) (finding, bool, error) {
+	if numberedLine.MatchString(line) {
+		entry, err := parseEntry(spec, line)
+		return entry, err == nil, err
+	}
+	if strings.TrimSpace(line) == "" {
+		return finding{}, false, nil
+	}
+	if !afterEntry || !startsIndented(line) {
+		return finding{}, false, fmt.Errorf("%w: line under %q is neither a numbered entry nor its indented text: %q", errMalformedReview, spec.heading, truncate(line, 120))
+	}
+	if tagPattern.MatchString(line) {
+		return finding{}, false, fmt.Errorf("%w: tag inside the text of an entry under %q: %q", errMalformedReview, spec.heading, truncate(line, 120))
+	}
+	return finding{}, false, nil
+}
+
+func startsIndented(line string) bool {
+	return strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t")
 }
 
 func parseEntry(spec sectionSpec, line string) (finding, error) {

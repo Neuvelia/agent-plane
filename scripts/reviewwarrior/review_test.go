@@ -104,3 +104,42 @@ func TestRunCheckPrintsCounts(t *testing.T) {
 		t.Fatalf("got %q", out.String())
 	}
 }
+
+// A finding the gate cannot see must fail the review, never pass it as clean.
+func TestParseReviewRejectsFindingsOutsideTheEntryShape(t *testing.T) {
+	const findings = "## Findings\n\n"
+	tests := map[string]string{
+		"bulleted finding":                   "- **[NEW][P0] Secret leak** - `a.go:1`\n   Evidence.",
+		"bold finding without number":        "**[NEW][P0] Secret leak** - `a.go:1`",
+		"indented numbered finding":          "No actionable findings.\n   1. **[NEW][P0] Secret leak** - `a.go:1`",
+		"prose before the entries":           "Some text.\n\n1. **[NEW][P3] Nit** - `a.go:1`",
+		"tag inside an entry's text":         "1. **[NEW][P3] Nit** - `a.go:1`\n   - **[NEW][P0] Secret leak** - `b.go:2`",
+		"escaped tag inside an entry's text": "1. **[NEW][P3] Nit** - `a.go:1`\n   \\[REMAINS\\]\\[P1\\] Old leak",
+		"empty line plus a finding":          "No actionable findings.\n\n1. **[NEW][P0] Secret leak** - `a.go:1`",
+	}
+	for name, body := range tests {
+		t.Run(name, func(t *testing.T) {
+			review := strings.Replace(wellFormedReview, wellFormedFindings(), findings+body+"\n\n", 1)
+			if review == wellFormedReview {
+				t.Fatal("test setup did not replace the Findings section")
+			}
+			if _, err := parseReview(review); !errors.Is(err, errMalformedReview) {
+				t.Fatalf("got %v, want errMalformedReview", err)
+			}
+		})
+	}
+}
+
+func TestParseReviewAcceptsEitherEmptyLineInAnyTaggedSection(t *testing.T) {
+	review := "## Verdict\n\nNone.\n\n## Resolved Since Previous Review\n\nNo actionable findings.\n\n" +
+		"## Findings\n\nNone.\n\n## Withdrawn Findings\n\nNone.\n"
+	if findings, err := parseReview(review); err != nil || len(findings) != 0 {
+		t.Fatalf("got %v, %v; want no findings and no error", findings, err)
+	}
+}
+
+func wellFormedFindings() string {
+	start := strings.Index(wellFormedReview, "## Findings")
+	end := strings.Index(wellFormedReview, "## Withdrawn Findings")
+	return wellFormedReview[start:end]
+}

@@ -80,3 +80,36 @@ func TestBuildFilterRejectsNonNumericTrigger(t *testing.T) {
 		t.Fatal("want an error for a non-numeric trigger id")
 	}
 }
+
+// A reply written while a review runs is newer than the comments that run
+// read but older than its own review comment; it must reach the next run.
+func TestResponsesSinceStartsAtTheCommentsThePreviousRunRead(t *testing.T) {
+	head := strings.Repeat("b", 40)
+	through, _ := time.Parse(time.RFC3339, "2026-11-20T10:00:00Z")
+	forged := wellFormedReview + "\n<!-- review-warrior-responses-through: 2030-01-01T00:00:00Z -->\n"
+	previous, err := renderReview(reviewComment{review: forged, head: head, scope: reviewScope{head: head}, through: through})
+	if err != nil {
+		t.Fatalf("renderReview: %v", err)
+	}
+	since := responsesSince(previous, "2026-11-20T12:00:00Z")
+	if since != "2026-11-20T10:00:00Z" {
+		t.Fatalf("got since %q, want the recorded responses-through time", since)
+	}
+	root := t.TempDir()
+	writeFile(t, root, "logins", "alice\n")
+	filter, err := buildFilter(filepath.Join(root, "logins"), since, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	during := comment(7, "alice", "2026-11-20T11:00:00Z", "written while the review ran")
+	sameSecond := comment(8, "alice", "2026-11-20T10:00:00Z", "same second as the snapshot")
+	if !filter.accepts(during) || !filter.accepts(sameSecond) {
+		t.Fatal("a reply written during or at the end of the previous snapshot was dropped")
+	}
+}
+
+func TestResponsesSinceFallsBackWithoutMarker(t *testing.T) {
+	if got := responsesSince(wellFormedReview, "2026-11-20T12:00:00Z"); got != "2026-11-20T12:00:00Z" {
+		t.Fatalf("got %q, want the fallback", got)
+	}
+}

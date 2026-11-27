@@ -70,3 +70,6 @@ Roadmap decisions from the 2026-11-25 audit (accepted 2026-11-26; index in
 [ADR-0036 - Roadmap precedence for phase scope; units, blast radius and ordering](0036-roadmap-scope-precedence.md),
 [ADR-0037 - Direction: a test command as a loop check](0037-test-command-check-direction.md),
 [ADR-0038 - Roadmap tracking harness](0038-roadmap-tracking-harness.md).
+
+Development tooling (proposed):
+[ADR-0039 - ReviewWarrior sends pull request content to the Anthropic API](0039-review-warrior-sends-pull-request-content-to-anthropic.md).

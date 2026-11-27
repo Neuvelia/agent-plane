@@ -27,8 +27,10 @@ type gitRepository struct {
 	dir string
 }
 
+// output runs Git with core.quotePath off, so a path with non-ASCII
+// characters appears as itself in diffs instead of as a quoted octal escape.
 func (g gitRepository) output(args ...string) (string, error) {
-	command := exec.Command("git", append([]string{"-C", g.dir}, args...)...)
+	command := exec.Command("git", append([]string{"-C", g.dir, "-c", "core.quotePath=false"}, args...)...)
 	output, err := command.Output()
 	if err != nil {
 		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
@@ -56,9 +58,17 @@ func (g gitRepository) hasCommit(sha string) bool {
 }
 
 func (g gitRepository) changedPaths(base, head string) ([]string, error) {
-	output, err := g.output("diff", "--name-only", "--no-renames", base+"..."+head)
+	// -z: paths are NUL-terminated and never quoted, so a name with spaces,
+	// quotes or non-ASCII characters is read exactly.
+	output, err := g.output("diff", "--name-only", "-z", "--no-renames", base+"..."+head)
 	if err != nil {
 		return nil, err
 	}
-	return strings.Fields(output), nil
+	var paths []string
+	for _, path := range strings.Split(output, "\x00") {
+		if path != "" {
+			paths = append(paths, path)
+		}
+	}
+	return paths, nil
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"time"
 )
 
 // Comment markers. The workflow finds the previous review and failure notice
@@ -16,6 +17,10 @@ const (
 	reviewMarker  = "<!-- review-warrior -->"
 	failureMarker = "<!-- review-warrior-failure -->"
 	shaMarker     = "<!-- review-warrior-reviewed-sha: %s -->"
+	// throughMarker records the creation time of the newest comment the run
+	// had read. The next run reads responses from there, so a reply written
+	// while a review is running is not skipped.
+	throughMarker = "<!-- review-warrior-responses-through: %s -->"
 
 	// commentMaxBytes stays under GitHub's 65,536-character comment limit.
 	commentMaxBytes = 60_000
@@ -29,6 +34,9 @@ type reviewComment struct {
 	head   string
 	scope  reviewScope
 	model  string
+	// through is when the newest comment this run read was created; zero
+	// leaves the marker out.
+	through time.Time
 }
 
 func runRender(args []string, out io.Writer) error {
@@ -37,8 +45,13 @@ func runRender(args []string, out io.Writer) error {
 	head := flags.String("head", "", "reviewed head commit SHA")
 	since := flags.String("since", "", "commit an incremental review started from; empty for a full review")
 	model := flags.String("model", "", "model that wrote the review")
+	through := flags.String("responses-through", "", "RFC 3339 creation time of the newest comment the run read")
 	if err := flags.Parse(args); err != nil {
 		return err
+	}
+	throughTime, err := parseOptionalTime(*through)
+	if err != nil {
+		return fmt.Errorf("parse -responses-through: %w", err)
 	}
 	if err := validateSHA(*head); err != nil {
 		return err
@@ -54,7 +67,7 @@ func runRender(args []string, out io.Writer) error {
 	}
 	body, err := renderReview(reviewComment{
 		review: string(review), head: *head, model: *model,
-		scope: reviewScope{head: *head, since: *since},
+		scope: reviewScope{head: *head, since: *since}, through: throughTime,
 	})
 	if err != nil {
 		return err
@@ -63,6 +76,9 @@ func runRender(args []string, out io.Writer) error {
 	return err
 }
 
+// renderReview builds the comment. Its own text never contains a review
+// command: a reply that quotes the comment must not start a paid run, and the
+// workflow only honours a command at the start of a comment.
 func renderReview(comment reviewComment) (string, error) {
 	scope := "the whole pull request"
 	if comment.scope.incremental() {
@@ -70,11 +86,15 @@ func renderReview(comment reviewComment) (string, error) {
 	}
 	header := fmt.Sprintf("**ReviewWarrior** reviewed `%s` (%s) with `%s`.\n\n"+
 		"Unresolved P0 and P1 findings set the `ReviewWarrior` status to failure. "+
-		"To dispute a finding, reply with the concrete, checkable reason it is wrong "+
-		"and include `/review-warrior review`.\n\n",
+		"To dispute a finding, write a new comment that starts with the review command "+
+		"(see `.github/review-warrior/README.md`) and gives the concrete, checkable reason it is wrong.\n\n",
 		short(comment.head), scope, sanitizeLine(comment.model, 60))
-	body := header + stripMarkers(strings.TrimSpace(comment.review)) + "\n\n" +
-		fmt.Sprintf(shaMarker, comment.head) + "\n" + reviewMarker + "\n"
+	body := header + neutralize(stripMarkers(strings.TrimSpace(comment.review))) + "\n\n" +
+		fmt.Sprintf(shaMarker, comment.head) + "\n"
+	if !comment.through.IsZero() {
+		body += fmt.Sprintf(throughMarker, comment.through.UTC().Format(time.RFC3339)) + "\n"
+	}
+	body += reviewMarker + "\n"
 	if len(body) > commentMaxBytes {
 		return "", fmt.Errorf("%w: %d bytes", errCommentTooLong, len(body))
 	}
@@ -121,7 +141,8 @@ var runURLPattern = regexp.MustCompile(`^https://[A-Za-z0-9.-]+/[A-Za-z0-9._/-]+
 func renderFailure(head, reason, runURL string) string {
 	text := fmt.Sprintf("**ReviewWarrior** could not finish the review of `%s`: %s.\n\n"+
 		"The `ReviewWarrior` status stays failed until a review completes. "+
-		"Push again or comment `/review-warrior review` to retry; a human review is needed meanwhile.",
+		"Push again, or retry with a comment that starts with the review command "+
+		"(see `.github/review-warrior/README.md`); a human review is needed meanwhile.",
 		short(head), sanitizeLine(reason, 300))
 	if runURLPattern.MatchString(runURL) {
 		text += fmt.Sprintf(" [Run log](%s).", runURL)

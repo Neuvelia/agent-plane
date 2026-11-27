@@ -101,17 +101,11 @@ func requireFlags(values map[string]string) error {
 func readOptionalFiles(paths map[string]*string) (map[string]string, error) {
 	contents := map[string]string{}
 	for name, path := range paths {
-		if *path == "" {
-			continue
-		}
-		data, err := os.ReadFile(*path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+		content, err := readOptionalFile(*path)
 		if err != nil {
 			return nil, fmt.Errorf("read -%s: %w", name, err)
 		}
-		contents[name] = string(data)
+		contents[name] = content
 	}
 	return contents, nil
 }

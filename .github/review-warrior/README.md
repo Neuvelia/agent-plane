@@ -28,34 +28,48 @@ ReviewWarrior is therefore skipped, with a passing status.
 1. **Trigger.** Every non-draft pull request from a branch of this repository,
    on open, push, reopen and ready-for-review. Forks and drafts are reviewed
    only on request.
-2. **Authorize.** A comment `/review-warrior review` (only commits since the
-   last review) or `/review-warrior full review` (the whole pull request) is
-   honoured only from someone with `write` or `admin` permission.
+2. **Authorize.** A comment that starts with `/review-warrior review` (only
+   commits since the last review) or `/review-warrior full review` (the whole
+   pull request) is honoured only from someone with `write` or `admin`
+   permission. The command must open the comment, so a quote reply never
+   starts a run. Authorized runs of one pull request run one at a time; a run
+   that replaces a queued one reads its request comment as a response.
 3. **Compose.** The tool builds the prompt from the base-commit instructions,
    the root `AGENTS.md` and every `AGENTS.md` above a changed file, the
    matching rules, and the untrusted pull request context: title, description,
    previous findings, the withdrawal ledger, author responses and the diff.
    Every free-text value is fenced. A diff over 200 KB is cut to whole files
    within 120 KB and the reviewer is told which files to read itself.
-4. **Review.** Claude Code runs headless and read-only: `--bare` (no
+4. **Review.** The checkout is moved to the pull request's head commit, the
+   one the diff and the status are about, and every symbolic link is removed
+   from its working tree, so the file tools can only read pull request blobs.
+   Claude Code runs headless and read-only: `--bare` (no
    `CLAUDE.md`, hooks or plugins from the checkout), `--restricted` (no
    settings files, file tools confined to the checkout), only `Read`, `Grep`,
    `Glob` and `git diff/show/log/ls-files`, no network tools, 15-minute limit.
    Model, effort and CLI version are fixed in the workflow.
-5. **Check.** `reviewwarrior check` validates the four sections and every
-   entry's `[TAG][Pn]` prefix. A malformed review is a failure, never "no
-   findings".
-6. **Publish.** The new review replaces the previous review comment. A failed
-   run posts a failure notice and keeps the last review, which carries the
-   findings and the withdrawal ledger.
+5. **Check.** `reviewwarrior check` validates the four sections. A tagged
+   section is either `None.` / `No actionable findings.` alone, or numbered
+   entries at column 0 with a `[TAG][Pn]` prefix, each followed only by
+   indented text with no tag in it. Anything else, such as a bulleted finding,
+   is malformed, and a malformed review is a failure, never "no findings". A
+   review that contains the API key is a failure and is not published.
+6. **Publish.** Mentions and HTML outside code are neutralized. The new
+   review replaces every earlier review comment, read fresh at publish time.
+   The comment records the reviewed commit and the newest comment the run
+   read; the next run reads author responses from that point, so a reply
+   written during a run is not skipped. A failed run posts a failure notice
+   and keeps the last review, which carries the findings and the withdrawal
+   ledger.
 7. **Gate.** The `ReviewWarrior` status is `success` only when the review
    completed, parsed, was published and has no `[NEW]` or `[REMAINS]` finding
    at P0 or P1.
 
 ## Disputing a finding
 
-Reply on the pull request with the concrete, checkable reason the finding is
-wrong (a line, a guard, a contract, a test) and include `/review-warrior review`.
+Write a new comment that starts with `/review-warrior review` and gives the
+concrete, checkable reason the finding is wrong (a line, a guard, a contract, a
+test).
 The reviewer withdraws the finding only after verifying that reason in the code.
 Withdrawals are carried forward, so the same finding does not return on the
 next push. Only comments from people who can merge are read as responses.
@@ -71,6 +85,9 @@ next push. Only comments from people who can merge are read as responses.
 
 ## Trust boundary
 
+The decision is recorded in
+[ADR-0039](../../docs/adr/0039-review-warrior-sends-pull-request-content-to-anthropic.md).
+
 When the secret is set, each run sends the pull request diff, the title,
 description and authorized comments, the instruction files, and any file the
 reviewer chooses to read from the checkout to the Anthropic API. This is an
@@ -78,7 +95,9 @@ explicit, repository-level opt-in made by adding the secret. Do not enable it
 for a repository whose content must not leave GitHub.
 
 The model never receives a GitHub token, cannot run code from the pull
-request, and cannot reach the network except through the review it returns.
+request, cannot follow a symbolic link out of the checkout, and cannot reach
+the network except through the review it returns. Its process does hold the
+API key; a review that quotes it is not published.
 The rendered comment strips any workflow marker the model writes, so a review
 cannot forge the reviewed commit or the comment identity.
 

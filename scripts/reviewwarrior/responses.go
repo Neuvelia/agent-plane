@@ -33,7 +33,9 @@ type issueComment struct {
 type responseFilter struct {
 	// authorized holds the logins the workflow verified can merge.
 	authorized map[string]bool
-	// since is when the previous review was published; zero reads every comment.
+	// since is the creation time of the newest comment the previous review
+	// had read; zero reads every comment. The bound is inclusive: a comment
+	// from the same second is read again rather than lost.
 	since time.Time
 	// trigger is the comment that asked for this run; it is read even when it
 	// predates the previous review.
@@ -44,20 +46,25 @@ func (f responseFilter) accepts(comment issueComment) bool {
 	if comment.User.Type == "Bot" || !f.authorized[comment.User.Login] {
 		return false
 	}
-	return f.since.IsZero() || comment.CreatedAt.After(f.since) || comment.ID == f.trigger
+	return !comment.CreatedAt.Before(f.since) || comment.ID == f.trigger
 }
 
 func runResponses(args []string, out io.Writer) error {
 	flags := flag.NewFlagSet("responses", flag.ContinueOnError)
 	commentsPath := flags.String("comments", "", "JSON from gh api --paginate --slurp .../issues/N/comments")
 	loginsPath := flags.String("logins", "", "file with one authorized login per line")
-	since := flags.String("since", "", "RFC 3339 time of the previous review; empty reads every comment")
+	since := flags.String("since", "", "RFC 3339 time of the previous review; used when -previous has no responses-through marker")
+	previousPath := flags.String("previous", "", "file with the previous review comment")
 	trigger := flags.String("trigger", "", "id of the comment that asked for this run")
 	limit := flags.Int("cap", defaultResponsesCap, "byte cap for the responses")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	filter, err := buildFilter(*loginsPath, *since, *trigger)
+	previous, err := readOptionalFile(*previousPath)
+	if err != nil {
+		return err
+	}
+	filter, err := buildFilter(*loginsPath, responsesSince(previous, *since), *trigger)
 	if err != nil {
 		return err
 	}
@@ -87,10 +94,8 @@ func buildFilter(loginsPath, since, trigger string) (responseFilter, error) {
 	for _, login := range strings.Fields(string(logins)) {
 		filter.authorized[login] = true
 	}
-	if since != "" {
-		if filter.since, err = time.Parse(time.RFC3339, since); err != nil {
-			return filter, fmt.Errorf("parse -since: %w", err)
-		}
+	if filter.since, err = parseOptionalTime(since); err != nil {
+		return filter, fmt.Errorf("parse -since: %w", err)
 	}
 	if trigger != "" {
 		if !digits.MatchString(trigger) {
@@ -101,6 +106,43 @@ func buildFilter(loginsPath, since, trigger string) (responseFilter, error) {
 		}
 	}
 	return filter, nil
+}
+
+var responsesThroughMarker = regexp.MustCompile(`<!-- review-warrior-responses-through: ([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z) -->`)
+
+// responsesSince returns where this run starts reading responses: the
+// responses-through marker of the previous review, or fallback for a review
+// written before the marker existed. The workflow writes the marker after the
+// model's text, from which markers are stripped, so the last match wins.
+func responsesSince(previous, fallback string) string {
+	matches := responsesThroughMarker.FindAllStringSubmatch(previous, -1)
+	if len(matches) == 0 {
+		return fallback
+	}
+	return matches[len(matches)-1][1]
+}
+
+// parseOptionalTime parses an RFC 3339 time; empty is the zero time.
+func parseOptionalTime(value string) (time.Time, error) {
+	if value == "" {
+		return time.Time{}, nil
+	}
+	return time.Parse(time.RFC3339, value)
+}
+
+// readOptionalFile reads path; an unset or missing file reads as empty.
+func readOptionalFile(path string) (string, error) {
+	if path == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	return string(data), nil
 }
 
 // decodeComments accepts a single JSON array or the array of pages that

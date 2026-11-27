@@ -43,3 +43,17 @@ func TestRenderFailureSanitizesReasonAndRejectsOddURLs(t *testing.T) {
 		t.Fatalf("run link missing:\n%s", text)
 	}
 }
+
+func TestRenderedCommentsDoNotCarryTheReviewCommand(t *testing.T) {
+	head := strings.Repeat("b", 40)
+	body, err := renderReview(reviewComment{review: wellFormedReview, head: head, scope: reviewScope{head: head}})
+	if err != nil {
+		t.Fatalf("renderReview: %v", err)
+	}
+	failure := renderFailure(head, "timeout", "")
+	for _, text := range []string{body, failure} {
+		if strings.Contains(text, "/review-warrior review") || strings.Contains(text, "/review-warrior full review") {
+			t.Fatalf("a quote reply would carry the review command:\n%s", text)
+		}
+	}
+}

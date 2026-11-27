@@ -153,3 +153,32 @@ func TestValidateSHARejectsOptionsAndShortNames(t *testing.T) {
 		}
 	}
 }
+
+// Git quotes a path with non-ASCII characters or spaces unless told not to;
+// a quoted path matches no rule and no AGENTS.md.
+func TestChangedPathsReadsNonASCIIAndSpacedNamesExactly(t *testing.T) {
+	r := newTestRepository(t)
+	base := r.commit("README.md", "base\n")
+	r.commit("internal/runtime/zażółć gęślą.go", "package runtime\n")
+	head := r.commit("internal/runtime/a b.go", "package runtime\n")
+	changed, err := r.repo.changedPaths(base, head)
+	if err != nil {
+		t.Fatalf("changedPaths: %v", err)
+	}
+	want := []string{"internal/runtime/a b.go", "internal/runtime/zażółć gęślą.go"}
+	if strings.Join(changed, "|") != strings.Join(want, "|") {
+		t.Fatalf("got %q, want %q", changed, want)
+	}
+	if selected := selectRules(mustLoadRules(t, r.repo.dir), changed); len(selected) != 1 {
+		t.Fatalf("got %d matched rules, want the runtime rule", len(selected))
+	}
+}
+
+func mustLoadRules(t *testing.T, root string) []rule {
+	t.Helper()
+	rules, err := loadRules(root)
+	if err != nil {
+		t.Fatalf("loadRules: %v", err)
+	}
+	return rules
+}
