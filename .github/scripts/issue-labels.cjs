@@ -5,6 +5,8 @@
 // model judges anything here: the workflow only keeps the labels consistent
 // with the rules a person or an agent applied.
 
+const decisions = require('./owner-decisions.cjs');
+
 const READY = 'claude-ready';
 const OWNER = 'needs-owner';
 const TRIAGE = 'triage';
@@ -58,6 +60,34 @@ function plan({ labels, action, eventLabel, body }) {
   };
 }
 
+// decide applies the owner's ticked decisions to a needs-owner issue. It
+// returns the labels the issue should have and a follow-up note (or null). It
+// only acts when every decision has exactly one ticked option; the note carries
+// a hidden key so the same answers are reported once.
+function decide({ labels, text }) {
+  const result = decisions.evaluate(decisions.parse(text));
+  if (!result || !result.complete || !labels.includes(OWNER)) return { labels, note: null };
+  const key = `<!-- owner-decisions: ${decisions.summary(result.chosen)} -->`;
+  if (!result.ready) {
+    const steps = result.chosen
+      .filter((item) => item.outcome !== 'ready')
+      .map((item) => `${item.id} → ${item.outcome}`)
+      .join(', ');
+    return { labels, note: `${key}\nAll owner decisions are ticked. Next steps before an agent can take this issue: ${steps}. It stays \`needs-owner\`.` };
+  }
+  const blocking = BLOCKING.filter((name) => labels.includes(name));
+  if (blocking.length > 0) {
+    const names = blocking.map((name) => `\`${name}\``).join(', ');
+    return { labels, note: `${key}\nAll chosen options lead to \`claude-ready\`, but ${names} keeps the issue \`needs-owner\`. Remove it if the decision leaves a bounded task.` };
+  }
+  const next = labels.filter((name) => name !== OWNER).concat(READY);
+  return { labels: next, note: `${key}\nAll owner decisions are ticked and lead to \`claude-ready\`. The issue is now \`claude-ready\`.` };
+}
+
+// TRUSTED is the minimum permission of the person whose edit may change the
+// class: ticking boxes in a comment is open to anyone who can edit it.
+const TRUSTED = new Set(['admin', 'maintain', 'write']);
+
 async function ensureLabels(github, repo) {
   for (const label of LABELS) {
     try {
@@ -69,27 +99,62 @@ async function ensureLabels(github, repo) {
   }
 }
 
-// run applies plan() to the issue of an `issues` event. It reads the labels
-// again instead of trusting the payload, because several label events of one
-// edit run one after another.
+async function senderTrusted(github, repo, username) {
+  const { data } = await github.rest.repos.getCollaboratorPermissionLevel({ ...repo, username });
+  return TRUSTED.has(data.permission);
+}
+
+// decisionText returns the text whose ticked boxes count for this event: an
+// edited comment, or an edited issue body. Anything else has none.
+function decisionText(context, issue) {
+  const { eventName, payload } = context;
+  if (eventName === 'issue_comment' && payload.action === 'edited') return payload.comment.body;
+  if (eventName === 'issues' && payload.action === 'edited') return issue.body;
+  return null;
+}
+
+async function postOnce(github, repo, number, note) {
+  const key = note.split('\n')[0];
+  const comments = await github.paginate(github.rest.issues.listComments, { ...repo, issue_number: number, per_page: 100 });
+  if (comments.some((comment) => (comment.body || '').includes(key))) return;
+  const footer = '\n\n---\n_Posted by the `issue-labels` workflow (docs/roadmap/issue-triage.md)._';
+  await github.rest.issues.createComment({ ...repo, issue_number: number, body: note + footer });
+}
+
+async function applyLabels(github, repo, number, before, after) {
+  const add = after.filter((name) => !before.includes(name));
+  const remove = before.filter((name) => !after.includes(name));
+  if (add.length > 0) await github.rest.issues.addLabels({ ...repo, issue_number: number, labels: add });
+  for (const name of remove) await github.rest.issues.removeLabel({ ...repo, issue_number: number, name });
+  return { add, remove };
+}
+
+// run handles one issues or issue_comment event. It reads the labels again
+// instead of trusting the payload, because several events of one edit run one
+// after another.
 async function run({ github, context, core }) {
   const repo = context.repo;
   const number = context.payload.issue.number;
   await ensureLabels(github, repo);
   const { data: issue } = await github.rest.issues.get({ ...repo, issue_number: number });
-  const decision = plan({
-    labels: issue.labels.map((label) => (typeof label === 'string' ? label : label.name)),
-    action: context.payload.action,
-    eventLabel: context.payload.label ? context.payload.label.name : null,
+  const current = issue.labels.map((label) => (typeof label === 'string' ? label : label.name));
+
+  let labels = current;
+  let note = null;
+  const text = decisionText(context, issue);
+  if (text && decisions.parse(text) && (await senderTrusted(github, repo, context.payload.sender.login))) {
+    ({ labels, note } = decide({ labels: current, text }));
+  }
+  const fix = plan({
+    labels,
+    action: labels === current ? context.payload.action : 'labeled',
+    eventLabel: labels === current ? (context.payload.label ? context.payload.label.name : null) : READY,
     body: issue.body,
   });
-  if (decision.add.length > 0) {
-    await github.rest.issues.addLabels({ ...repo, issue_number: number, labels: decision.add });
-  }
-  for (const name of decision.remove) {
-    await github.rest.issues.removeLabel({ ...repo, issue_number: number, name });
-  }
-  core.info(`#${number}: add [${decision.add.join(', ')}], remove [${decision.remove.join(', ')}]`);
+  const after = labels.filter((name) => !fix.remove.includes(name)).concat(fix.add);
+  const changed = await applyLabels(github, repo, number, current, after);
+  if (note) await postOnce(github, repo, number, note);
+  core.info(`#${number}: add [${changed.add.join(', ')}], remove [${changed.remove.join(', ')}]${note ? ', decisions noted' : ''}`);
 }
 
-module.exports = { plan, run, autonomyChoice, LABELS, BLOCKING };
+module.exports = { plan, decide, run, autonomyChoice, LABELS, BLOCKING };

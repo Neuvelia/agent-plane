@@ -32,8 +32,8 @@ body:
       description: Only for "Needs me". One numbered decision per block, one checkbox per option, recommended first (docs/roadmap/issue-triage.md).
       value: |
         **D1. ...?**
-        - [ ] A: ... (recommended)
-        - [ ] B: ...
+        - [ ] A: ... (recommended) `→ ready`
+        - [ ] B: ... `→ ADR`
 
         **When decided:** ...
 

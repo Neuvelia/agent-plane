@@ -6,11 +6,18 @@ name: issue-labels
 # decides whether a task is small enough, it only enforces what a person or an
 # agent decided. Label changes made with GITHUB_TOKEN start no new run.
 #
-# The issue body is untrusted: it is read only through the GitHub API inside the
-# script and matched against one fixed heading, never passed to a shell.
+# It also reads the "Owner decisions" checkboxes of a needs-owner issue: when an
+# edit leaves exactly one ticked option per decision and every chosen option is
+# marked `→ ready`, it swaps needs-owner for claude-ready; otherwise it comments
+# the next steps once. Only an edit by someone with write access counts.
+#
+# Issue and comment text is untrusted: it is read only through the GitHub API
+# inside the script and matched with fixed patterns, never passed to a shell.
 on:
   issues:
-    types: [opened, labeled, unlabeled]
+    types: [opened, edited, labeled, unlabeled]
+  issue_comment:
+    types: [edited]
   pull_request:
     paths:
       - .github/scripts/**
@@ -22,7 +29,7 @@ permissions:
 
 jobs:
   label:
-    if: github.event_name == 'issues'
+    if: github.event_name == 'issues' || (github.event_name == 'issue_comment' && !github.event.issue.pull_request)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -44,7 +51,7 @@ jobs:
             await labels.run({ github, context, core });
 
   test:
-    if: github.event_name != 'issues'
+    if: github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -54,4 +61,4 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: node --test .github/scripts/issue-labels.test.cjs
+      - run: node --test .github/scripts/issue-labels.test.cjs .github/scripts/owner-decisions.test.cjs

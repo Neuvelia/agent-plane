@@ -83,19 +83,22 @@ first), `→ spec` (a spec first), `→ split` (split into smaller issues),
 ```
 
 The last line says what follows the decision: the issue becomes `claude-ready`,
-is split, needs an ADR or a spec, or is closed. After ticking, the owner swaps
-the label (or asks an agent to). An agent that takes the issue reads the ticked
-options as the decision; an unticked decision means the issue is not ready.
+is split, needs an ADR or a spec, or is closed. The `issue-labels` workflow acts
+on the ticks (see Enforcement), so the owner only ticks. An agent that takes the
+issue reads the ticked options as the decision; an unticked decision means the
+issue is not ready. **Agents never tick Owner decisions checkboxes**, also when
+they act with the owner's account.
 
 For issues that existed before this rule, the section is posted as the first
 comment by the triage backfill instead of rewriting the body.
 
 ## Enforcement (`.github/workflows/issue-labels.yml`)
 
-The workflow runs on `issues` events (`opened`, `labeled`, `unlabeled`) and is
-deterministic (`.github/scripts/issue-labels.cjs`, tested by
-`node --test .github/scripts/issue-labels.test.cjs`). It does not judge the
-rule above; it keeps the labels consistent:
+The workflow runs on `issues` events (`opened`, `edited`, `labeled`,
+`unlabeled`) and on edited issue comments. It is deterministic
+(`.github/scripts/issue-labels.cjs` and `owner-decisions.cjs`, tested by
+`node --test .github/scripts/issue-labels.test.cjs .github/scripts/owner-decisions.test.cjs`).
+It does not judge the rule above; it keeps the labels consistent:
 
 - creates `claude-ready`, `needs-owner` and `triage` when they are missing;
 - on `opened`, takes the form's "Autonomy" choice when no class label is set;
@@ -103,6 +106,23 @@ rule above; it keeps the labels consistent:
 - with both class labels, the one added by the current event wins; otherwise
   `needs-owner` wins;
 - `triage` is present exactly when neither class label is.
+
+And it applies the owner's decisions. When someone with write access edits an
+issue body or a comment that has an `## Owner decisions` section, on a
+`needs-owner` issue:
+
+- nothing happens until every decision has exactly one ticked option;
+- if every chosen option is `→ ready` and no blocking label is set, it swaps
+  `needs-owner` for `claude-ready` and comments that it did;
+- if a chosen option leads elsewhere (`→ ADR`, `→ spec`, `→ split`, `→ blocked`,
+  `→ close`, or no marker), the label stays and it comments the next steps
+  (`D1 → adr, ...`);
+- if a blocking label is set, the label stays and the comment names it;
+- each set of answers is commented once (a hidden key in the comment); changing
+  a tick later is a new set.
+
+The workflow never closes issues, writes ADRs or splits issues; those next steps
+stay with the owner or an agent the owner asks.
 
 ## Taking a `claude-ready` issue
 

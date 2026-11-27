@@ -312,7 +312,10 @@ Issues and labels (`docs/roadmap/issue-triage.md`):
 - Put the feature ID in the title (`[F2.5b] ...`). A `claude-ready` body states the
   expected outcome and how to verify it; a `needs-owner` body ends with an
   `## Owner decisions` section: one numbered decision per block, one checkbox
-  per option, recommended option first, and what follows once decided.
+  per option, recommended option first, each option ending with an outcome
+  marker (`→ ready`, `→ ADR`, `→ spec`, `→ split`, `→ blocked`, `→ close`).
+  Never tick Owner decisions checkboxes yourself: the owner's ticks drive the
+  `issue-labels` workflow.
 - Take only `claude-ready` issues on your own. If one turns out to need a
   decision, stop, comment what is missing and swap the label to `needs-owner`.
 

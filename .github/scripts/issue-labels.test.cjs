@@ -1,4 +1,4 @@
-// Run with: node --test .github/scripts/issue-labels.test.cjs
+// Run with: node --test .github/scripts/issue-labels.test.cjs .github/scripts/owner-decisions.test.cjs
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { plan, autonomyChoice } = require('./issue-labels.cjs');
@@ -95,4 +95,41 @@ test('an unknown or missing autonomy answer is no choice', () => {
   assert.equal(autonomyChoice(formBody('_No response_')), null);
   assert.equal(autonomyChoice('free text issue'), null);
   assert.equal(autonomyChoice(null), null);
+});
+
+const { decide } = require('./issue-labels.cjs');
+
+const decisionComment = (a, b) =>
+  `## Owner decisions\n\n**D1. Q?**\n- [${a}] A: x \`→ ready\`\n- [${b}] B: y \`→ ADR\`\n`;
+
+test('ticked ready decisions turn needs-owner into claude-ready', () => {
+  const result = decide({ labels: ['bug', 'needs-owner'], text: decisionComment('x', ' ') });
+  assert.deepEqual(result.labels, ['bug', 'claude-ready']);
+  assert.match(result.note, /^<!-- owner-decisions: D1=A:ready -->\n.*now `claude-ready`/);
+});
+
+test('a ticked ADR option keeps needs-owner and names the next step', () => {
+  const result = decide({ labels: ['needs-owner'], text: decisionComment(' ', 'x') });
+  assert.deepEqual(result.labels, ['needs-owner']);
+  assert.match(result.note, /D1 → adr\. It stays `needs-owner`/);
+});
+
+test('a blocking label keeps needs-owner even when every option is ready', () => {
+  const result = decide({ labels: ['feature', 'needs-owner'], text: decisionComment('x', ' ') });
+  assert.deepEqual(result.labels, ['feature', 'needs-owner']);
+  assert.match(result.note, /`feature` keeps the issue `needs-owner`/);
+});
+
+test('incomplete decisions change nothing and say nothing', () => {
+  assert.deepEqual(decide({ labels: ['needs-owner'], text: decisionComment(' ', ' ') }), {
+    labels: ['needs-owner'],
+    note: null,
+  });
+});
+
+test('decisions on an issue that is not needs-owner change nothing', () => {
+  assert.deepEqual(decide({ labels: ['claude-ready'], text: decisionComment('x', ' ') }), {
+    labels: ['claude-ready'],
+    note: null,
+  });
 });
