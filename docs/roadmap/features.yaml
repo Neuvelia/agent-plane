@@ -1938,6 +1938,29 @@ features:
         issue: 218
     tasks: []
     note: "Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety."
+  - id: F2.5e
+    name: "New run with preflight (desktop redesign)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5e-new-run-preflight.md
+    depends_on: ["F2.5", "F2.5a", "F2.5b", "F2.5c", "F2.11"]
+    evidence:
+      - "docs/features/F2.5e-new-run-preflight.md"
+      - "desktop/test/new-run.test.tsx"
+      - "desktop/test/new-run-session.test.ts"
+      - "desktop/test/settled-pick.test.ts"
+      - "desktop/test/recents.test.ts"
+      - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Per-run max concurrency (#209) and Agent workspace (#210), uncommitted-file count (#211), templates and project-folder graphs in the list (#212, F2.13)."
+    decisions: ["ADR-0049"]
+    divergences: []
+    tasks: [209, 210, 211, 212]
+    note: "Presentation only; Options are shown disabled until the API accepts them."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived

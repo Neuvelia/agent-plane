@@ -77,7 +77,7 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
   return (
     <div className={`ed-node${c.selectedNode === data.id ? ' sel' : ''}`} style={{ width: size.w, height: size.h }} data-testid={`node-${data.id}`}>
       <div className="ed-node-head">
-        <b>{data.id}</b>
+        <b title={data.id}>{data.id}</b>
         <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
           {/* A fixed-width node has room for the counts only; the full words are for screen readers. */}
           {n && n.errors > 0 && (

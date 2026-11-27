@@ -42,9 +42,13 @@ function createRecents(file, deps = {}) {
     pathOf(id) {
       return load().find((i) => i.id === id)?.path
     },
+    // A reopened file keeps its id: a list the renderer already holds stays valid
+    // (switching back to a graph on New run must not find its entry gone).
     add(filePath) {
-      const kept = load().filter((i) => i.path !== filePath)
-      kept.unshift({ id: randomId(), path: filePath, label: path.basename(filePath), openedAt: now() })
+      const items = load()
+      const known = items.find((i) => i.path === filePath)
+      const kept = items.filter((i) => i.path !== filePath)
+      kept.unshift({ id: known ? known.id : randomId(), path: filePath, label: path.basename(filePath), openedAt: now() })
       save(kept.slice(0, MAX))
     },
     remove(id) {

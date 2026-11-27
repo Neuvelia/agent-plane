@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { listApprovals, listRuns, startRun, validateGraph, type ApiFailure } from './api'
+import { useEffect, useMemo, useState } from 'react'
+import { listApprovals, listRuns } from './api'
 import { useConnectionReport } from './connection'
 import { EngineErrorState, LoadingState } from './states'
 import { GraphMap } from './GraphMap'
@@ -15,12 +15,11 @@ import { matchingNodes, type NodeFilter } from './nodeFilter'
 import { clockTime, NodeFilterBar, OutcomeCard, RunIdentity, RunSummaryCard } from './overview'
 import { NodeTimeline } from './timelineView'
 import { RunPill } from './status'
-import type { ChosenGraph, Diagnostic, GraphSummary } from './types'
+import type { GraphSummary } from './types'
 import { CodeView, EventLog, type EventRow } from './ui/data'
-import { canStart, preflightState } from './preflight'
-import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Step, Tag } from './ui/primitives'
+import { Button, Card, Field, HelpTip, ListRow, Pill, SegmentedControl, Tag } from './ui/primitives'
 
-// R1: Run Inspector, Approvals and New run on the design system. Behaviour and
+// R1: Run Inspector and Approvals on the design system (New run is NewRun.tsx, F2.5e). Behaviour and
 // data are unchanged from F2.5; the Dashboard is redesigned in R2.
 
 export function RunsList({ onOpen }: { onOpen: (id: string) => void }) {
@@ -322,122 +321,6 @@ export function Approvals({ onOpen }: { onOpen: (runId: string) => void }) {
         >
           <ApprovalBox runId={current.run_id} nodeRunId={current.node_run_id} prompt={current.prompt} context={current.context} />
         </Card>
-      </div>
-    </section>
-  )
-}
-
-const SEVERITY_TONE: Record<string, 'x' | 'w' | 'n'> = { error: 'x', warning: 'w' }
-
-export function RunConfig({ onStarted, initialGraph }: { onStarted: (runId: string) => void; initialGraph?: ChosenGraph }) {
-  const { t } = useI18n()
-  // The graph is addressed by grant only; its path stays in the main process (ADR-0021).
-  const [graph, setGraph] = useState<ChosenGraph | null>(initialGraph ?? null)
-  const current = useRef(graph)
-  const mounted = useRef(false)
-  const [inputs, setInputs] = useState('')
-  const [result, setResult] = useState<{ status: string; diagnostics: Diagnostic[] } | null>(null)
-  const [error, setError] = useState<ApiFailure | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [validating, setValidating] = useState(false)
-
-  const release = (g: ChosenGraph) => void window.agentplane.closeGraph(g.grant).catch(() => undefined)
-
-  async function validate(g: ChosenGraph) {
-    setError(null)
-    setResult(null)
-    setValidating(true)
-    const r = await validateGraph(g.grant).finally(() => {
-      if (current.current?.grant === g.grant) setValidating(false)
-    })
-    if (current.current?.grant !== g.grant) return // another graph was chosen meanwhile
-    if ('message' in r) setError(r)
-    else setResult(r)
-  }
-  async function choose() {
-    const picked = await window.agentplane.openGraph()
-    if ('canceled' in picked) return
-    if (!picked.ok) {
-      setError({ message: picked.message, diagnostics: [] })
-      return
-    }
-    const chosen = { grant: picked.grant, label: picked.label }
-    const previous = current.current
-    current.current = chosen
-    setGraph(chosen)
-    if (previous) release(previous)
-    void validate(chosen)
-  }
-  async function run() {
-    if (!graph) return
-    setBusy(true)
-    setError(null)
-    const lines = inputs.split('\n').map((l) => l.trim()).filter(Boolean)
-    const r = await startRun(graph.grant, lines)
-    setBusy(false)
-    if ('message' in r) setError(r)
-    else onStarted(r.runId)
-  }
-  // Opened with a graph already chosen (Dashboard "Open graph"): validate it right away.
-  useEffect(() => {
-    if (initialGraph) void validate(initialGraph)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialGraph])
-  // Leaving the screen revokes the grant. StrictMode re-runs the effect synchronously, so only a real unmount releases.
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-      queueMicrotask(() => {
-        if (!mounted.current && current.current) release(current.current)
-      })
-    }
-  }, [])
-  const state = preflightState(result)
-  const diagnostics = [...(result?.diagnostics ?? []), ...(error?.diagnostics ?? [])]
-  const pill = state === 'ready' ? <Pill tone="p" testId="preflight-status">{t('config.ready')}</Pill> : state === 'warnings' ? <Pill tone="w" testId="preflight-status">{t('config.warnings')}</Pill> : state === 'blocked' ? <Pill tone="x" testId="preflight-status">{t('config.blocked')}</Pill> : null
-  return (
-    <section className="config">
-      <h1>{t('config.title')}</h1>
-      <Step n={1} title={t('config.step.graph')}>
-        <Field label={t('config.graphFile')} htmlFor="graph-label">
-          <div className="row">
-            <output id="graph-label" data-testid="graph-label" className={graph ? 'mono' : 'mu'} style={{ flex: 1 }}>{graph?.label ?? t('config.noGraph')}</output>
-            <Button data-testid="choose" onClick={choose}>{t('config.choose')}</Button>
-            <Button data-testid="validate" disabled={!graph} onClick={() => graph && validate(graph)}>{t('config.validate')}</Button>
-          </div>
-        </Field>
-      </Step>
-      <Step n={2} title={t('config.step.inputs')}>
-        <Field label={t('config.inputs')} htmlFor="inputs">
-          <textarea id="inputs" value={inputs} onChange={(e) => setInputs(e.target.value)} />
-        </Field>
-      </Step>
-      <Step n={3} title={t('config.step.preflight')} action={<span className="row">{pill}<HelpTip>{t('config.preflightHelp')}</HelpTip></span>} testId="preflight-card">
-        {validating && <div className="mu empty-line" role="status" data-testid="validating">{t('config.validating')}</div>}
-        {state === 'idle' && !validating && diagnostics.length === 0 && !error && <div className="mu empty-line">{t('config.preflightIdle')}</div>}
-        {state === 'ready' && diagnostics.length === 0 && (
-          <div className="check-row">
-            <Pill tone="p" small>{t('config.ready')}</Pill>
-            <span>{t('config.graphValid')}</span>
-          </div>
-        )}
-        {error && <div className="err empty-line">{error.message}</div>}
-        {diagnostics.map((d, i) => (
-          <div className="check-row diag" key={i} data-testid="diagnostic">
-            <Pill tone={SEVERITY_TONE[d.severity] ?? 'n'} small>{d.severity === 'error' || d.severity === 'warning' ? t(`config.severity.${d.severity}`) : t('config.severity.info')}</Pill>
-            <div className="check-text">
-              <div>
-                <b className="mono">{d.code}</b> {d.message}
-                {d.location?.node_id && <> <Tag>{d.location.node_id}</Tag></>}
-              </div>
-              {d.suggestion && <div className="mu">{d.suggestion}</div>}
-            </div>
-          </div>
-        ))}
-      </Step>
-      <div className="row">
-        <Button variant="primary" data-testid="run" disabled={!graph || !canStart(state) || busy} onClick={run}>{t('config.run')}</Button>
       </div>
     </section>
   )

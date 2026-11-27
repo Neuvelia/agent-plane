@@ -33,6 +33,17 @@ describe('recent graphs', () => {
     expect(r.list().map((i) => i.label)).toEqual(['x.yaml', 'y.yaml'])
   })
 
+  it('keeps the id of a reopened graph, so a list read earlier can still open it', () => {
+    const { r } = recents()
+    r.add('/a/x.yaml')
+    r.add('/a/y.yaml')
+    const before = r.list()
+    r.add('/a/x.yaml') // opened from the list
+    r.add('/a/y.yaml') // and the other one
+    expect(r.list().map((i) => i.id).sort()).toEqual(before.map((i) => i.id).sort())
+    for (const { id } of before) expect(r.pathOf(id)).toBeDefined()
+  })
+
   it('keeps at most MAX entries', () => {
     const { r } = recents()
     for (let i = 0; i < MAX + 5; i++) r.add(`/a/g${i}.yaml`)

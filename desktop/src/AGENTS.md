@@ -14,7 +14,8 @@ spec before changing a screen, API wrapper or event view. The sibling
 | Attempt compare (F2.8a): pure model and view | `compare.ts`, `AttemptCompare.tsx`, `check.tsx` |
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
-| Runs, inspector, approvals and New run screens | `views.tsx`, `preflight.ts`, `GraphMap.tsx`, `NodePanel.tsx` |
+| Runs, inspector and approvals screens | `views.tsx`, `GraphMap.tsx`, `NodePanel.tsx` |
+| New run with preflight (F2.5e): view, state, pure preflight model | `NewRun.tsx`, `useNewRun.ts`, `newRunSession.ts` (pick/grant ordering), `settledPick.ts` (arrow-key picks), `newRunModel.ts`, `preflight.ts` |
 | Inbox triage queue (F2.5b): queue, detail, decision in place | `inbox.ts`, `inboxRun.ts`, `inboxView.tsx`, `InboxDetail.tsx`, `ui/glyphs.tsx` |
 | Sidebar (F2.5b): New run, navigation, recent runs, Later, profile | `ui/shell.tsx`, `sidebarRecent.tsx`, `ui/icons.tsx` |
 | Event-derived run insight | `insight.ts` |
@@ -96,7 +97,9 @@ as implemented merely because the full spec describes it.
 - Attempt compare model and view: `desktop/test/compare.test.tsx`.
 - Command palette (F2.5d: filtering, `>`/`#` scopes, Tab, active row, shortcuts, dialog/combobox markup, states): `desktop/test/palette.test.ts`, `desktop/test/palette-view.test.tsx`, DOM behaviour under jsdom in `desktop/test/palette-dom.test.tsx` (the file opts in with `// @vitest-environment jsdom`; jsdom has no `<dialog>` methods, so the test stubs them), stories `ui/palette.stories.tsx`.
 - API/list/preflight failures: `desktop/test/api.test.ts`,
-  `desktop/test/preflight.test.ts`.
+  `desktop/test/preflight.test.ts`; New run inputs, preflight rows and headline over
+  recorded engine answers: `desktop/test/new-run.test.tsx`; pick and grant ordering:
+  `desktop/test/new-run-session.test.ts`; stories `NewRun.stories.tsx`.
 - Inbox queue and detail selectors (F2.5b): `desktop/test/inbox.test.ts`; stories `Screens/Inbox*`.
 - Timeline and bounded event detail:
   `desktop/test/insight.test.ts`.
