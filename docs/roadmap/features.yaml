@@ -1839,7 +1839,7 @@ features:
       - "Run-store path in About (the renderer never receives paths)."
     decisions: ["ADR-0046"]
     divergences: []
-    tasks: [219]
+    tasks: [219, 221]
     note: "Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon."
   - id: F2.8a
     name: "Attempt compare (desktop)"

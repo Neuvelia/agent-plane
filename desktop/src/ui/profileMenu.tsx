@@ -74,6 +74,17 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
     return () => document.removeEventListener('pointerdown', onDown)
   }, [open, close])
 
+  // An app shortcut (Ctrl/Cmd+, or /) closes the menu wherever focus is, even outside it
+  // (review N1). From inside the menu the key handlers below also return focus to the button.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (appShortcut(e, platform())) close(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, close])
+
   // Focus moves once the element it targets is in the DOM.
   useEffect(() => {
     const target = pendingFocus.current

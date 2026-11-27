@@ -146,13 +146,32 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
-type Load<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'failed' }
+export type Load<T> = { state: 'loading' } | { state: 'ok'; value: T } | { state: 'failed' }
 
 /** The text "Copy diagnostics" puts on the clipboard: versions and counts only, never a path or a value. */
 export function diagnosticsText(appVersion: string, engine: Load<CapabilityReport['engine']>, runs: Load<number>): string {
   const engineText = engine.state === 'ok' ? `${engine.value.version} ${engine.value.os}/${engine.value.arch}` : 'unknown'
   const runsText = runs.state === 'ok' ? String(runs.value) : 'unknown'
   return [`Tarmind ${appVersion || 'unknown'}`, `Engine ${engineText}`, `Runs stored ${runsText}`].join('\n')
+}
+
+/** The words for an About value that is not a value: still checking, the engine is not
+ *  connected, or (when the engine answered) this one read failed on its own, e.g. a run-store error. */
+export function aboutStatusKey(value: Load<unknown>, engine: Load<unknown>): 'about.checking' | 'about.unreachable' | 'about.unavailable' {
+  if (value.state === 'loading') return 'about.checking'
+  return engine.state === 'failed' ? 'about.unreachable' : 'about.unavailable'
+}
+
+/** Puts text on the clipboard. A missing clipboard or a refusal is a result, never a throw. */
+export async function copyText(text: string, clipboard: () => Pick<Clipboard, 'writeText'> | undefined): Promise<'copied' | 'failed'> {
+  try {
+    const target = clipboard()
+    if (!target) return 'failed'
+    await target.writeText(text)
+    return 'copied'
+  } catch {
+    return 'failed'
+  }
 }
 
 export function AboutDialog({ appVersion, onClose }: { appVersion: string; onClose: () => void }) {
@@ -172,19 +191,9 @@ export function AboutDialog({ appVersion, onClose }: { appVersion: string; onClo
     }
   }, [])
   const loading = engine.state === 'loading' || runs.state === 'loading'
-  const doCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(diagnosticsText(appVersion, engine, runs))
-      setCopy('copied')
-    } catch {
-      // No clipboard (a denied permission or no navigator.clipboard): say so, never throw.
-      setCopy('failed')
-    }
-  }
-  const engineText = engine.state === 'loading' ? t('about.checking') : engine.state === 'failed' ? t('about.unreachable') : `${engine.value.version} · ${engine.value.os}/${engine.value.arch}`
-  // The run list can fail on its own (a store error) while the engine answers: only an
-  // unreachable engine is reported as such.
-  const runsText = runs.state === 'loading' ? t('about.checking') : runs.state === 'failed' ? t(engine.state === 'failed' ? 'about.unreachable' : 'about.unavailable') : String(runs.value)
+  const doCopy = async () => setCopy(await copyText(diagnosticsText(appVersion, engine, runs), () => navigator.clipboard))
+  const engineText = engine.state === 'ok' ? `${engine.value.version} · ${engine.value.os}/${engine.value.arch}` : t(aboutStatusKey(engine, engine))
+  const runsText = runs.state === 'ok' ? String(runs.value) : t(aboutStatusKey(runs, engine))
   return (
     <Modal
       title={t('about.title')}

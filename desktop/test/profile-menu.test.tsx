@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../src/i18n/context'
 import { clearLocale, loadLocale, saveLocale } from '../src/i18n'
-import { THEME_FADE_MS, ThemeProvider, loadThemeChoice, resolveTheme, saveThemeChoice, type ThemeChoice } from '../src/theme'
+import { THEME_FADE_MS, ThemeProvider, crossFade, loadThemeChoice, resolveTheme, saveThemeChoice, type ThemeChoice } from '../src/theme'
 import { closesSubmenu, commandHeld, isAppShortcut, modifierLabel, moveFocus, openFromButton } from '../src/ui/menuKeys'
 import { PROFILE_INITIALS, PROFILE_NAME, ProfileMenu, type ProfileMenuState } from '../src/ui/profileMenu'
 import { Sidebar } from '../src/ui/shell'
@@ -204,5 +204,30 @@ describe('motion', () => {
     expect(THEME_FADE_MS).toBe(240)
     expect(styles).toContain('transition:background-color .24s ease')
     expect(styles).toMatch(/@media \(prefers-reduced-motion:reduce\)\{\*\{transition:none!important;animation:none!important\}\}/)
+  })
+})
+
+describe('theme cross-fade timer (review N3)', () => {
+  afterEach(() => vi.useRealTimers())
+  const root = () => {
+    const classes = new Set<string>()
+    return { classes, classList: { add: (c: string) => void classes.add(c), remove: (c: string) => void classes.delete(c) } as unknown as DOMTokenList }
+  }
+  it('keeps the class for the full time again when a second change comes during a fade [F2.5b-AC6]', () => {
+    vi.useFakeTimers()
+    const r = root()
+    const first = crossFade(undefined, r, false)
+    vi.advanceTimersByTime(150)
+    crossFade(first, r, false)
+    vi.advanceTimersByTime(200)
+    expect(r.classes.has('theme-switching')).toBe(true)
+    vi.advanceTimersByTime(THEME_FADE_MS - 200)
+    expect(r.classes.has('theme-switching')).toBe(false)
+  })
+  it('does not fade under reduced motion', () => {
+    vi.useFakeTimers()
+    const r = root()
+    expect(crossFade(undefined, r, true)).toBeUndefined()
+    expect(r.classes.size).toBe(0)
   })
 })

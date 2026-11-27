@@ -203,7 +203,8 @@ async function checkProfileMenu(browser, origin, fail) {
   await page.click('[data-testid="profile-language"]')
   await page.waitForSelector('[data-testid="profile-submenu"]')
   await page.keyboard.press('Enter')
-  await page.waitForTimeout(200)
+  // Wait on the outcome, not a clock: focus reaches the checked choice (or the step fails).
+  await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'profile-language-en', null, { timeout: 2000 }).catch(() => undefined)
   expect((await page.$('[data-testid="profile-submenu"]:not(.closing)')) !== null, 'Enter on an open trigger closed its submenu')
   expect((await focused()) === 'profile-language-en', `Enter on an open trigger should focus the checked choice: ${await focused()}`)
   await page.keyboard.press('Escape')
@@ -255,10 +256,35 @@ async function checkProfileMenu(browser, origin, fail) {
   await openAbout()
   await page.click('[data-testid="about-dialog-close"]')
   await page.keyboard.press('Control+/')
-  await page.waitForTimeout(400)
+  // The shortcut list's entrance (160 ms) outlasts About's old exit timer (140 ms): once it has
+  // settled, a late onClose from About would already have closed it.
+  await page.waitForSelector('[data-testid="shortcuts-dialog"][open]')
+  await settleAnimations(page)
   expect((await page.$('[data-testid="shortcuts-dialog"][open]')) !== null, 'the closing About window closed the shortcut list opened after it')
   await page.keyboard.press('Escape')
   await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+
+  // Review N1: an app shortcut closes the menu even when focus is outside it.
+  await page.goto(`${origin}/iframe.html?id=screens--full-app-shell&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+  await page.click('[data-testid="profile"]')
+  await page.waitForSelector('[data-testid="profile-menu"]')
+  await page.click('.pm-who')
+  await page.keyboard.press('Control+/')
+  await page.waitForSelector('[data-testid="profile-menu"]', { state: 'detached' })
+  await page.waitForSelector('[data-testid="shortcuts-dialog"][open]')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+
+  // Review m4: the YAML editor's CodeMirror base theme follows the app theme.
+  const editorClasses = async (theme) => {
+    await page.goto(`${origin}/iframe.html?id=screens-editor--opened&viewMode=story&globals=locale:en;theme:${theme}`)
+    await page.waitForSelector('.cm-editor')
+    return page.evaluate(() => [...document.querySelector('.cm-editor').classList].sort().join(' '))
+  }
+  const darkEditor = await editorClasses('dark')
+  const lightEditor = await editorClasses('light')
+  expect(darkEditor !== lightEditor, `the YAML editor looks the same in both themes (${darkEditor})`)
 
   // Reduced motion: no animation, and the menu leaves at once.
   await page.goto(`${origin}/iframe.html?id=ui-shell--sidebar-with-deferred-entries&viewMode=story&globals=locale:en;theme:dark`)

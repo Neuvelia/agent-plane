@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
 import { I18nProvider } from '../src/i18n/context'
-import { AboutDialog, ShortcutsDialog, diagnosticsText } from '../src/ui/dialogs'
+import { AboutDialog, ShortcutsDialog, aboutStatusKey, copyText, diagnosticsText } from '../src/ui/dialogs'
 
 const noop = () => undefined
 const wrap = (node: React.ReactNode, locale: 'en' | 'pl' = 'en') => renderToStaticMarkup(<I18nProvider locale={locale}>{node}</I18nProvider>)
@@ -38,5 +38,31 @@ describe('About dialog (F2.5b)', () => {
     const engine = { state: 'ok', value: { version: '0.14.0', os: 'linux', arch: 'amd64' } } as const
     expect(diagnosticsText('0.14.0', engine, { state: 'ok', value: 512 })).toBe('Tarmind 0.14.0\nEngine 0.14.0 linux/amd64\nRuns stored 512')
     expect(diagnosticsText('', { state: 'failed' }, { state: 'loading' })).toBe('Tarmind unknown\nEngine unknown\nRuns stored unknown')
+  })
+})
+
+describe('About values that are not values (review N3)', () => {
+  const ok = { state: 'ok', value: 1 } as const
+  it('say Checking while loading, Engine not connected when the engine is down, Not available when only this read failed', () => {
+    expect(aboutStatusKey({ state: 'loading' }, ok)).toBe('about.checking')
+    expect(aboutStatusKey({ state: 'failed' }, { state: 'failed' })).toBe('about.unreachable')
+    expect(aboutStatusKey({ state: 'failed' }, ok)).toBe('about.unavailable')
+  })
+})
+
+describe('Copy diagnostics (review N3)', () => {
+  it('reports copied when the clipboard takes the text', async () => {
+    const written: string[] = []
+    expect(await copyText('x', () => ({ writeText: async (s: string) => void written.push(s) }))).toBe('copied')
+    expect(written).toEqual(['x'])
+  })
+  it('reports failed, never throws, when the clipboard refuses or is missing', async () => {
+    expect(await copyText('x', () => ({ writeText: () => Promise.reject(new Error('denied')) }))).toBe('failed')
+    expect(await copyText('x', () => undefined)).toBe('failed')
+    expect(
+      await copyText('x', () => {
+        throw new TypeError('navigator.clipboard is undefined')
+      }),
+    ).toBe('failed')
   })
 })

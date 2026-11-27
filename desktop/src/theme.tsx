@@ -85,13 +85,20 @@ export function ThemeProvider({ children, initialChoice }: { children: ReactNode
   // Cross-fade only when the painted theme really changes, whether a pick or the OS changed it;
   // never on the first paint. A second change during a fade restarts its timer.
   const painted = useRef<Theme | null>(null)
-  const fadeTimer = useRef<number | undefined>(undefined)
+  const fadeTimer = useRef<FadeTimer>(undefined)
   useEffect(() => {
-    if (painted.current !== null && painted.current !== theme) fadeTimer.current = crossFade(fadeTimer.current)
+    if (painted.current !== null && painted.current !== theme) fadeTimer.current = crossFade(fadeTimer.current, document.documentElement, reducedMotion())
     painted.current = theme
     applyTheme(theme)
   }, [theme])
-  useEffect(() => () => window.clearTimeout(fadeTimer.current), [])
+  // Unmounted mid-fade (a Storybook story change): stop the timer and take the class off with it.
+  useEffect(
+    () => () => {
+      clearTimeout(fadeTimer.current)
+      document.documentElement.classList.remove(FADE_CLASS)
+    },
+    [],
+  )
   const setChoice = useCallback((c: ThemeChoice) => {
     saveThemeChoice(c)
     setChoiceState(c)
@@ -100,13 +107,25 @@ export function ThemeProvider({ children, initialChoice }: { children: ReactNode
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
-/** Colours cross-fade for a moment instead of snapping; skipped under reduced motion. Returns the new timer. */
-function crossFade(previous: number | undefined): number | undefined {
-  window.clearTimeout(previous)
-  if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
-  const root = document.documentElement
-  root.classList.add('theme-switching')
-  return window.setTimeout(() => root.classList.remove('theme-switching'), THEME_FADE_MS)
+const FADE_CLASS = 'theme-switching'
+
+function reducedMotion(): boolean {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+}
+
+type FadeTimer = ReturnType<typeof setTimeout> | undefined
+
+/** Colours cross-fade for THEME_FADE_MS instead of snapping (styles.css `.theme-switching`).
+ *  Cancels the previous fade's timer, so a second change during a fade keeps the class for
+ *  the full time again; under reduced motion nothing fades. Returns the new timer. */
+export function crossFade(previous: FadeTimer, root: Pick<HTMLElement, 'classList'>, reduced: boolean): FadeTimer {
+  clearTimeout(previous)
+  if (reduced) {
+    root.classList.remove(FADE_CLASS)
+    return undefined
+  }
+  root.classList.add(FADE_CLASS)
+  return setTimeout(() => root.classList.remove(FADE_CLASS), THEME_FADE_MS)
 }
 
 /** Dot colour of the graph canvases' background grid in each theme. */
