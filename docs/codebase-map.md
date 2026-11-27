@@ -115,3 +115,6 @@ coding agents working on this repository. They are separate from the
 AgentPlane graph/runtime product under `internal/`. A developer's Git
 worktree is not the product's workspace isolation (F3.1, `internal/worktree`), and
 neither worktrees nor instructions are a security sandbox for untrusted code.
+The ReviewWarrior pull request reviewer (`.github/workflows/review-warrior.yml`,
+`.github/review-warrior/`, `scripts/reviewwarrior`) belongs to this harness; see
+`.github/review-warrior/README.md`.

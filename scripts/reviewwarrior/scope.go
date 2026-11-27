@@ -45,10 +45,11 @@ func (s reviewScope) diffCommand() string {
 
 // chooseScope reviews only the commits after the previous review when that
 // review's commit is still in this pull request's history: after a force push
-// or a base change it is not, and the whole pull request is read again.
-func chooseScope(repo gitRepository, base, head, previous string, full bool) (reviewScope, error) {
+// or a base change it is not, and the whole pull request is read again. An
+// empty previous commit asks for a full review.
+func chooseScope(repo gitRepository, base, head, previous string) (reviewScope, error) {
 	scope := reviewScope{base: base, head: head}
-	if full || previous == "" || !repo.hasCommit(previous) {
+	if previous == "" || !repo.hasCommit(previous) {
 		return scope, nil
 	}
 	onHead, err := repo.isAncestor(previous, head)
