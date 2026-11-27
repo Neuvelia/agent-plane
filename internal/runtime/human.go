@@ -115,6 +115,11 @@ func (m *runMachine) humanNode(ctx context.Context, id string, n graph.NodeDefin
 		return done(nil, err)
 	}
 	if !decision.Approve {
+		if mode, _ := n.Config["on_reject"].(string); mode == graph.HumanRejectContinue {
+			// The graph configured an explicit path (ADR-0043): the node succeeds and
+			// publishes the verdict, which dependents consume as ordinary data.
+			return done(map[string]graph.Value{"decision": graph.NewStringValue(events.ApprovalRejected)}, nil)
+		}
 		return done(nil, rejectedError{})
 	}
 	return done(map[string]graph.Value{"decision": graph.NewStringValue(events.ApprovalApproved)}, nil)
