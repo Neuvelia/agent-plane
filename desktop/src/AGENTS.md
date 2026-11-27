@@ -15,7 +15,7 @@ spec before changing a screen, API wrapper or event view. The sibling
 | List polling, SSE replay/follow and reconnect | `hooks.ts` |
 | Navigation, shared editor lifetime and connection badge | `App.tsx`, `connection.tsx` |
 | Runs, inspector and approvals screens | `views.tsx`, `GraphMap.tsx`, `NodePanel.tsx` |
-| New run with preflight (F2.5c): view, state, pure preflight model | `NewRun.tsx`, `useNewRun.ts`, `newRunSession.ts` (pick/grant ordering), `newRunModel.ts`, `preflight.ts` |
+| New run with preflight (F2.5c): view, state, pure preflight model | `NewRun.tsx`, `useNewRun.ts`, `newRunSession.ts` (pick/grant ordering), `settledPick.ts` (arrow-key picks), `newRunModel.ts`, `preflight.ts` |
 | Inbox triage queue (F2.5b): queue, detail, decision in place | `inbox.ts`, `inboxRun.ts`, `inboxView.tsx`, `InboxDetail.tsx`, `ui/glyphs.tsx` |
 | Sidebar (F2.5b): New run, navigation, recent runs, Later, profile | `ui/shell.tsx`, `sidebarRecent.tsx`, `ui/icons.tsx` |
 | Event-derived run insight | `insight.ts` |

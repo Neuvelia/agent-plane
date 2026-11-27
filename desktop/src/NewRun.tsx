@@ -1,10 +1,11 @@
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { useI18n } from './i18n/context'
 import { agentWorkspace, graphShape, headline, inputFields, preflightChecks, tally, type Check, type Tone } from './newRunModel'
 import { canStart, preflightState } from './preflight'
 import type { ChosenGraph, Diagnostic, RecentGraph } from './types'
 import { Glyph, type GlyphKind } from './ui/glyphs'
 import type { GraphSource } from './newRunSession'
+import { SettledPick } from './settledPick'
 import { useNewRun } from './useNewRun'
 import type { Definition } from './editor/types'
 
@@ -41,19 +42,53 @@ function Group({ title, lede, children }: { title: string; lede: string; childre
   )
 }
 
+const windowTimers = { set: (run: () => void, ms: number) => window.setTimeout(run, ms), clear: (h: unknown) => window.clearTimeout(h as number) }
+
+/**
+ * Picks from the recent list: a click or Space opens the graph at once; an arrow key
+ * selects it and opens it only once the selection rests (SettledPick). Returns the
+ * id shown as selected while it waits, and the handlers for each radio.
+ */
+function useRecentPicks(source: GraphSource | null, locked: boolean, onRecent: (r: RecentGraph) => void) {
+  const [waiting, setWaiting] = useState<string | null>(null)
+  const arrow = useRef(false)
+  const open = useRef(onRecent)
+  open.current = onRecent
+  const [picker] = useState(() => new SettledPick<RecentGraph>((r) => open.current(r), (r) => setWaiting(r?.id ?? null), windowTimers))
+  useEffect(() => () => picker.cancel(), [picker])
+  // A run is being started: the graph cannot change, so a waiting selection is dropped.
+  useEffect(() => {
+    if (locked) picker.cancel()
+  }, [locked, picker])
+  const onKeyDown = (e: KeyboardEvent) => {
+    arrow.current = e.key.startsWith('Arrow')
+  }
+  const pick = (r: RecentGraph | null) => {
+    const byArrow = arrow.current
+    arrow.current = false
+    // Back on the graph already chosen (or the chosen file): nothing to open.
+    if (!r || (source?.kind === 'recent' && source.id === r.id)) return picker.cancel()
+    if (byArrow) picker.later(r)
+    else picker.now(r)
+  }
+  return { waiting, onKeyDown, pick }
+}
+
 // While a run is being started the graph cannot change (`locked`).
 function GraphGroup({ graph, source, recent, def, locked, pickError, onRecent, onFile }: { graph: ChosenGraph | null; source: GraphSource | null; recent: RecentGraph[]; def: Definition | null; locked: boolean; pickError: string | null; onRecent: (r: RecentGraph) => void; onFile: () => void }) {
   const { t } = useI18n()
+  const { waiting, onKeyDown, pick } = useRecentPicks(source, locked, onRecent)
   const shape = def ? graphShape(def) : null
   const sub = shape ? t('newrun.graph.shape', { count: shape.nodes, types: shape.types.join(', ') }) : undefined
   const fileChosen = graph !== null && source?.kind === 'file'
   return (
     <Group title={t('newrun.graph')} lede={t('newrun.graph.lede')}>
       <div className="nr-opts" role="radiogroup" aria-label={t('newrun.graph')}>
-        {fileChosen && <GraphOption name={graph.label} tag={t('newrun.graph.tag.file')} sub={sub} checked disabled={locked} onPick={() => undefined} />}
+        {fileChosen && <GraphOption name={graph.label} tag={t('newrun.graph.tag.file')} sub={sub} checked={waiting === null} disabled={locked} onKeyDown={onKeyDown} onPick={() => pick(null)} />}
         {recent.map((r) => {
           const on = source?.kind === 'recent' && source.id === r.id
-          return <GraphOption key={r.id} name={on && graph ? graph.label : r.label} tag={t('newrun.graph.tag.recent')} sub={on ? sub : undefined} checked={on} disabled={locked} onPick={() => onRecent(r)} />
+          const checked = waiting === null ? on : waiting === r.id
+          return <GraphOption key={r.id} name={on && graph ? graph.label : r.label} tag={t('newrun.graph.tag.recent')} sub={on ? sub : undefined} checked={checked} disabled={locked} onKeyDown={onKeyDown} onPick={() => pick(r)} />
         })}
       </div>
       {!graph && recent.length === 0 && <p className="nr-none mu">{t('newrun.graph.none')}</p>}
@@ -71,10 +106,10 @@ function GraphGroup({ graph, source, recent, def, locked, pickError, onRecent, o
   )
 }
 
-function GraphOption({ name, tag, sub, checked, disabled, onPick }: { name: string; tag: string; sub?: string; checked: boolean; disabled: boolean; onPick: () => void }) {
+function GraphOption({ name, tag, sub, checked, disabled, onKeyDown, onPick }: { name: string; tag: string; sub?: string; checked: boolean; disabled: boolean; onKeyDown: (e: KeyboardEvent) => void; onPick: () => void }) {
   return (
     <label className="nr-opt">
-      <input type="radio" name="nr-graph" checked={checked} disabled={disabled} onChange={onPick} />
+      <input type="radio" name="nr-graph" checked={checked} disabled={disabled} onKeyDown={onKeyDown} onChange={onPick} />
       <span className="nr-opt-text">
         <span className="nr-opt-name" data-testid={checked ? 'graph-label' : undefined}>{name}</span>
         {sub && <span className="nr-opt-sub">{sub}</span>}
