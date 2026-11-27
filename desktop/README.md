@@ -228,7 +228,7 @@ active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 (wall clock, node time, saved, retries, tokens always unknown), a per-second
 timeline and a filterable event log. Those numbers are computed in the app from
 the event stream (`src/insight.ts`) and carry no authority
-over run state. F2.5b (ADR-0039) replaces the Dashboard with the **Inbox**, a triage
+over run state. F2.5b (ADR-0046) replaces the Dashboard with the **Inbox**, a triage
 queue (approvals waiting for you, stopped runs, running runs) beside the selected item's
 evidence read from its event stream; an approval is decided in place
 (`src/inbox.ts`, `src/inboxRun.ts`, `src/inboxView.tsx`, `src/InboxDetail.tsx`).

@@ -14,7 +14,14 @@ import (
 
 // Executor adapts one Agent graph node to the provider-neutral contract.
 // Adapters is an explicit per-caller lookup, not a global or dynamic registry.
-type Executor struct{ Adapters map[AdapterID]AgentAdapter }
+type Executor struct {
+	Adapters map[AdapterID]AgentAdapter
+	// Remedy tells the user of this entry point how to make an adapter
+	// available (a CLI flag, a desktop setting); empty adds nothing. The
+	// composition root supplies it, so the message names only steps that exist
+	// on the surface that runs the graph (F1.2-AC2).
+	Remedy func(AdapterID) string
+}
 
 var _ runtime.Executor = Executor{}
 var _ runtime.CorrelatedExecutor = Executor{}
@@ -45,7 +52,7 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 	}
 	adapter, ok := e.Adapters[cfg.adapter]
 	if !ok || adapter == nil || adapter.ID() != cfg.adapter {
-		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: errors.New("adapter is not registered under its logical ID")}
+		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: e.unavailable(fmt.Sprintf("adapter %q is not registered in this runner", cfg.adapter), cfg.adapter)}
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorExecution, Cause: err}
@@ -60,7 +67,7 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: kind, Cause: err}
 	}
 	if !report.Available {
-		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: errors.New("adapter reported unavailable")}
+		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnavailable, Cause: e.unavailable(displayName(cfg.adapter, report)+" reported that it is unavailable", cfg.adapter)}
 	}
 	if report.Workspace != nil && !*report.Workspace {
 		return nil, &ExecutionError{NodeID: nodeID, AdapterID: cfg.adapter, Kind: ErrorUnsupported, Cause: errors.New("adapter does not support workspace execution")}
@@ -99,6 +106,27 @@ func (e Executor) execute(ctx context.Context, nodeID string, node graph.NodeDef
 		*evidence = &p
 	}
 	return values, nil
+}
+
+// unavailable is the cause of an ErrorUnavailable: what is missing, then the
+// remedy the entry point gave for this adapter, if any. The agent package
+// knows neither the adapters' binaries nor the entry point's flags or settings.
+func (e Executor) unavailable(what string, id AdapterID) error {
+	if e.Remedy == nil {
+		return errors.New(what)
+	}
+	if remedy := e.Remedy(id); remedy != "" {
+		return fmt.Errorf("%s; %s", what, remedy)
+	}
+	return errors.New(what)
+}
+
+// displayName is the adapter's own name for itself, else its logical ID.
+func displayName(id AdapterID, report CapabilityReport) string {
+	if report.DisplayName != "" {
+		return report.DisplayName
+	}
+	return string(id)
 }
 
 func outputValues(node graph.NodeDefinition, output AgentExecutionOutput) (map[string]graph.Value, error) {

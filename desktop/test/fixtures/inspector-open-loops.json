@@ -372,7 +372,8 @@
        "command",
        "json_predicate",
        "reported_file_scope",
-       "changed_files_scope"
+       "changed_files_scope",
+       "test_command"
       ],
       "id": "gate.config.kind",
       "key": "kind",
@@ -530,6 +531,77 @@
      {
       "fields": [
        {
+        "format": "nonempty",
+        "id": "gate.config.test_command.command",
+        "key": "command",
+        "kind": "string",
+        "required": true
+       },
+       {
+        "id": "gate.config.test_command.args",
+        "item": {
+         "id": "gate.config.test_command.args.item",
+         "kind": "string"
+        },
+        "key": "args",
+        "kind": "list"
+       },
+       {
+        "format": "clean_absolute_path",
+        "id": "gate.config.test_command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true
+       },
+       {
+        "id": "gate.config.test_command.env_allowlist",
+        "item": {
+         "format": "env_name",
+         "id": "gate.config.test_command.env_name",
+         "kind": "string"
+        },
+        "key": "env_allowlist",
+        "kind": "list"
+       },
+       {
+        "id": "gate.config.test_command.env",
+        "key": "env",
+        "kind": "map"
+       },
+       {
+        "enum": [
+         "none",
+         "workspace_writes"
+        ],
+        "id": "gate.config.test_command.side_effects",
+        "key": "side_effects",
+        "kind": "enum",
+        "required": true
+       },
+       {
+        "id": "gate.config.test_command.input",
+        "input_required": true,
+        "input_types": [
+         "string",
+         "json"
+        ],
+        "key": "input",
+        "kind": "input_name",
+        "required": true
+       }
+      ],
+      "id": "gate.config.test_command",
+      "kind": "group",
+      "requires": [
+       {
+        "equals": "test_command",
+        "key": "kind"
+       }
+      ]
+     },
+     {
+      "fields": [
+       {
         "id": "gate.config.changed_files_scope.input",
         "input_required": true,
         "input_types": [
@@ -584,7 +656,8 @@
      "command",
      "json_predicate",
      "reported_file_scope",
-     "changed_files_scope"
+     "changed_files_scope",
+     "test_command"
     ]
    },
    "outputs": [
@@ -703,7 +776,8 @@
       "enum": [
        "command",
        "json_predicate",
-       "reported_file_scope"
+       "reported_file_scope",
+       "test_command"
       ],
       "id": "gate.config.kind",
       "key": "kind",
@@ -857,12 +931,84 @@
         "key": "kind"
        }
       ]
+     },
+     {
+      "fields": [
+       {
+        "format": "nonempty",
+        "id": "gate.config.test_command.command",
+        "key": "command",
+        "kind": "string",
+        "required": true
+       },
+       {
+        "id": "gate.config.test_command.args",
+        "item": {
+         "id": "gate.config.test_command.args.item",
+         "kind": "string"
+        },
+        "key": "args",
+        "kind": "list"
+       },
+       {
+        "format": "clean_absolute_path",
+        "id": "gate.config.test_command.cwd",
+        "key": "cwd",
+        "kind": "string",
+        "required": true
+       },
+       {
+        "id": "gate.config.test_command.env_allowlist",
+        "item": {
+         "format": "env_name",
+         "id": "gate.config.test_command.env_name",
+         "kind": "string"
+        },
+        "key": "env_allowlist",
+        "kind": "list"
+       },
+       {
+        "id": "gate.config.test_command.env",
+        "key": "env",
+        "kind": "map"
+       },
+       {
+        "enum": [
+         "none",
+         "workspace_writes"
+        ],
+        "id": "gate.config.test_command.side_effects",
+        "key": "side_effects",
+        "kind": "enum",
+        "required": true
+       },
+       {
+        "id": "gate.config.test_command.input",
+        "input_required": true,
+        "input_types": [
+         "string",
+         "json"
+        ],
+        "key": "input",
+        "kind": "input_name",
+        "required": true
+       }
+      ],
+      "id": "gate.config.test_command",
+      "kind": "group",
+      "requires": [
+       {
+        "equals": "test_command",
+        "key": "kind"
+       }
+      ]
      }
     ],
     "gate_kinds": [
      "command",
      "json_predicate",
-     "reported_file_scope"
+     "reported_file_scope",
+     "test_command"
     ]
    },
    "outputs": [

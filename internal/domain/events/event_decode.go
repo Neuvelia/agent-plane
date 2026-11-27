@@ -76,6 +76,8 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		payload = CancelRequestedPayload{}
 	case ProcessTerminated:
 		payload = ProcessTerminatedPayload{}
+	case ExecutorAbandoned:
+		payload = ExecutorAbandonedPayload{}
 	case AttemptDiff:
 		payload = AttemptDiffPayload{}
 	case AttemptStarted:
@@ -188,6 +190,11 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		payload = p
 	case ProcessTerminatedPayload:
+		if err := decodePayload(wire.Payload, &p); err != nil {
+			return err
+		}
+		payload = p
+	case ExecutorAbandonedPayload:
 		if err := decodePayload(wire.Payload, &p); err != nil {
 			return err
 		}

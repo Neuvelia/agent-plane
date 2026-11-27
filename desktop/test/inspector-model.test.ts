@@ -19,9 +19,9 @@ describe('descriptor selection', () => {
     expect(keys('json_predicate')).toEqual(['check_id', 'kind', 'input', 'field', 'operator', 'expected', 'expected_json'])
     expect(keys('nope')).toEqual(['check_id', 'kind'])
   })
-  it('a standalone Gate offers three kinds, an agent loop four', () => {
+  it('a standalone Gate offers three kinds, an agent loop five', () => {
     expect(cat.gate!.config.find((f) => f.key === 'kind')!.enum).toEqual(['command', 'json_predicate', 'reported_file_scope'])
-    expect(cat.agent!.loop!.gate_kinds).toHaveLength(4)
+    expect(cat.agent!.loop!.gate_kinds).toHaveLength(5)
     expect(cat.human!.loop).toBeUndefined()
     expect(cat.human!.outputs_locked).toBe(true)
   })

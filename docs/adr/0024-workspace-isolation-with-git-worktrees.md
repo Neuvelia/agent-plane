@@ -96,7 +96,7 @@ ports (consistent with AGENTS.md rule 4). Making upstream files visible
 
 ### 5. Scope boundaries
 
-v1 isolates Agent nodes only. Standalone Shell, Gate and Human nodes keep the
+v1 isolates Agent nodes only (loop-enabled Shell producers: follow-up F3.1c, ADR-0041 proposed). Standalone Shell, Gate and Human nodes keep the
 source `cwd`/workspace and therefore do not observe integrated results. A Gate
 embedded in an isolated worker's loop evaluates that worker's worktree.
 Isolation is per node, not a graph-level default.

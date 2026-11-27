@@ -5,7 +5,7 @@ import { Button, Tag } from './ui/primitives'
 import type { ValuesPicker } from './useRunValues'
 
 // "Show values from run" (F2.3 requirement 16). A view of useValuesPicker: it
-// decides nothing about versions, which valuePickerModel.ts has already resolved.
+// decides nothing about versions, which valuePicker.ts has already resolved.
 export function ValuePicker({ picker }: { picker: ValuesPicker }) {
   const { t, locale } = useI18n()
   const id = useId()

@@ -278,8 +278,8 @@ func TestResultRedactorKeepsFailureWithoutSecretText(t *testing.T) {
 
 func resultGraph() *graph.Definition {
 	def := definition(map[string]graph.NodeDefinition{
-		"a": {Type: "test", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}},
-		"b": {Type: "test", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"echo": {Type: graph.ValueTypeString, Required: true}}},
+		"a": {Type: "shell", Outputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}},
+		"b": {Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"echo": {Type: graph.ValueTypeString, Required: true}}},
 	}, graph.EdgeDefinition{From: "a.outputs.text", To: "b.inputs.text"})
 	def.Outputs["final"] = graph.OutputDefinition{From: "b.outputs.echo"}
 	return def

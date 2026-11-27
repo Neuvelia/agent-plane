@@ -68,7 +68,8 @@ export function ApprovalPill({ decision }: { decision?: string }) {
 export function OutcomePill({ outcome }: { outcome?: string }) {
   const { t } = useI18n()
   if (!outcome) return <Pill tone="b">{t('status.inProgress')}</Pill>
-  const tone: Tone = outcome === 'accepted' ? 'p' : outcome === 'rejected' ? 'w' : outcome === 'cancelled' ? 'n' : 'x'
+  // A rejected or timed-out attempt is retried within the loop budget: a warning, not an error.
+  const tone: Tone = outcome === 'accepted' ? 'p' : outcome === 'rejected' || outcome === 'timeout' ? 'w' : outcome === 'cancelled' ? 'n' : 'x'
   // The outcome is a machine value from the engine: shown literally.
   return <Pill tone={tone}>{outcome.replace('_', ' ')}</Pill>
 }

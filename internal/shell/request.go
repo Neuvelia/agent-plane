@@ -47,10 +47,18 @@ func (e Executor) Run(ctx context.Context, request Request) (map[string]graph.Va
 	return collectOutputs(nodeID, node, names, result)
 }
 
-// collectOutputs maps a finished process to the declared output ports.
+// collectOutputs maps a finished process to the declared output ports. A
+// declared stdout, stderr or json port carries the complete stream or nothing:
+// when the capture limit omitted bytes of that stream, the node fails with
+// FailureOutput instead of passing a truncated text downstream as data
+// (ADR-0045). The retained text with its omission marker stays in the failure
+// evidence.
 func collectOutputs(nodeID string, node graph.NodeDefinition, names []string, result Result) (map[string]graph.Value, error) {
 	outputs := make(map[string]graph.Value, len(node.Outputs))
 	for _, name := range names {
+		if err := requireCompleteStream(name, result); err != nil {
+			return nil, &ExecutionError{NodeID: nodeID, Kind: FailureOutput, Result: result, Cause: err}
+		}
 		switch name {
 		case "stdout":
 			outputs[name] = graph.NewStringValue(result.Stdout)
@@ -68,6 +76,26 @@ func collectOutputs(nodeID string, node graph.NodeDefinition, names []string, re
 		}
 	}
 	return outputs, nil
+}
+
+// ErrOutputTruncated marks an output failure caused by the capture limit.
+var ErrOutputTruncated = errors.New("output exceeded the capture limit")
+
+// requireCompleteStream returns an error when the stream behind the declared
+// output port name lost bytes to the capture limit.
+func requireCompleteStream(name string, result Result) error {
+	stream, omitted := "stdout", result.StdoutOmitted
+	switch name {
+	case "stdout", "json":
+	case "stderr":
+		stream, omitted = "stderr", result.StderrOmitted
+	default:
+		return nil
+	}
+	if omitted == 0 {
+		return nil
+	}
+	return fmt.Errorf("declared output %q needs the complete %s, but the capture limit omitted %d bytes: %w", name, stream, omitted, ErrOutputTruncated)
 }
 
 // secretEnvironment returns the NAME=value entries for the secret_env variables

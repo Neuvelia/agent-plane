@@ -125,10 +125,12 @@ async function startDemo(app, page) {
     const engineVersion = require('node:child_process').execFileSync(env.AGENTPLANE_BIN, ['version'], { encoding: 'utf8' }).trim()
     assert.ok((await page.textContent('[data-testid="cap-engine-version"]')).includes(engineVersion.split(/\s+/).pop()), 'Engine row shows the sidecar version')
     const rows = await page.evaluate(() => [...document.querySelectorAll('[data-testid="cap-list"] > li')].map((li) => [li.dataset.testid, li.dataset.status]))
-    assert.deepEqual(rows.map((r) => r[0]), ['cap-engine', 'cap-git', 'cap-codex', 'cap-claude', 'cap-cursor-agent', 'cap-gemini'])
+    assert.deepEqual(rows.map((r) => r[0]), ['cap-engine', 'cap-git', 'cap-codex', 'cap-claude', 'cap-cursor-agent', 'cap-gemini', 'cap-shell', 'cap-docker'])
     assert.ok(['available', 'missing', 'error', 'unsupported_platform'].includes(rows[1][1]), `git status ${rows[1][1]}`)
     assert.equal(rows[2][1], 'not_configured')
-    for (const [, st] of rows.slice(3)) assert.ok(['missing', 'detected_no_adapter'].includes(st), st)
+    for (const [, st] of rows.slice(3, 6)) assert.ok(['missing', 'detected_no_adapter'].includes(st), st)
+    assert.ok(['available', 'missing', 'error', 'unsupported_platform'].includes(rows[6][1]), `shell status ${rows[6][1]}`)
+    assert.ok(['available', 'missing'].includes(rows[7][1]), `docker status ${rows[7][1]}`)
     const firstCheck = await page.textContent('[data-testid="cap-announce"]')
     assert.match(firstCheck, /Check finished/)
     await page.keyboard.press('Tab')
@@ -532,7 +534,7 @@ async function startDemo(app, page) {
     assert.equal(await activeTestId(), 'template-blank', 'initial focus is the first entry')
     assert.deepEqual(
       await page.$$eval('[data-testid^="picker-entry-"]', (els) => els.map((e) => e.getAttribute('data-testid').replace('picker-entry-', ''))),
-      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'agent-scoped-approval', 'fix-issue', 'code-review', 'dependency-update', 'repo-audit'],
+      ['blank', 'parallel-shell', 'shell-check-loop', 'human-approval', 'modify-test-approve', 'agent-scoped-approval', 'fix-issue', 'code-review', 'dependency-update', 'repo-audit'],
     )
     // Without Codex configured the agent entry says so; the report is the engine's, so this is Linux only.
     assert.match(await page.textContent('[data-testid="picker-entry-agent-scoped-approval"]'), /Needs Codex: Not configured\./)

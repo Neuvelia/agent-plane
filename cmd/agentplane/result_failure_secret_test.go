@@ -23,7 +23,7 @@ func failedSecretEchoRun(t *testing.T) run.Result {
 	node := "  a:\n    type: shell\n    config: {command: /bin/sh, args: [-c, 'echo \"$T\"; echo \"$T\" >&2; exit 3'], secret_env: {T: tok}}\n"
 	def := parseGraphText(t, secretGraphText(node))
 	options := runtime.Options{GraphVersion: yamlgraph.Marshal, Clock: system.Clock{}, IDs: system.IDs{}, SecretResolver: secretResolver()}
-	result, err := runtime.Run(context.Background(), def, nil, selectExecutor(def), options)
+	result, err := runtime.Run(context.Background(), def, nil, selectExecutor(def, cliAgentRemedy), options)
 	if err != nil || result.State != run.RunFailed || result.Failure == nil {
 		t.Fatalf("run = %v %v", result.State, err)
 	}

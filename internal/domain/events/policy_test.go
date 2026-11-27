@@ -42,8 +42,8 @@ func policyFacts() []Event {
 }
 
 func TestPolicyEventsRequireNewSchema(t *testing.T) {
-	if SchemaPolicy != SchemaVersion {
-		t.Fatalf("policy facts must be introduced by the current schema: %d vs %d", SchemaPolicy, SchemaVersion)
+	if SchemaPolicy > SchemaVersion {
+		t.Fatalf("policy facts need a schema the writer stamps: %d vs %d", SchemaPolicy, SchemaVersion)
 	}
 	for _, below := range []int{SchemaPolicy - 1, 11} {
 		for _, e := range policyFacts() {
@@ -64,7 +64,7 @@ func TestPolicyEventsRequireNewSchema(t *testing.T) {
 		}
 	}
 	e := policyFacts()[0]
-	e.SchemaVersion = SchemaPolicy + 1
+	e.SchemaVersion = SchemaVersion + 1
 	if _, err := json.Marshal(e); err == nil {
 		t.Fatal("a schema newer than the runner is unsupported")
 	}

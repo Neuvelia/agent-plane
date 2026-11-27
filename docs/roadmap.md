@@ -66,6 +66,10 @@ Goal: move graph authoring and execution debugging from terminal to a local IDE.
 | F2.10 | Human Gate UI | P0 | F2.5, F2.6; local pause/approval contract |
 | F2.11 | Onboarding + Capability Detection | P1 | F1.1, F1.2 |
 | F2.12 | Graph Templates | P1 | F2.1-F2.4 |
+| F2.13 | Repository List and Manual Folder Add | P1 | F2.11, F2.12; supplies the path a template's `workspace` needs |
+| F2.14 | Agent Nodes in the Desktop Engine | P1 | F2.11, F2.13, F1.2; removes `AGENTPLANE_CODEX_BIN` and the `workspace` fill-in |
+| F2.15 | Desktop Runner Self-check | P2 | F2.11 (CLI `agentplane self-check` exists); route and welcome-screen button |
+| F2.16 | Desktop/Engine Version Check | P2 | F2.11 |
 
 F2.6 and F2.7 are largely delivered through F2.5, F2.5a, F2.8a, F2.9 and F2.3-E6; their
 specs in `docs/features/` list what is already delivered and cover only the remaining gap.
@@ -82,6 +86,7 @@ Goal: make long-running local execution durable and safer.
 | ID | Feature | Priority | Proposed dependencies |
 | --- | --- | --- | --- |
 | F3.1 | Workspace Isolation / Git Worktrees | P0 | F1.7; closes file-state gap. Implemented; ADR-0024 |
+| F3.1b | Downstream File Visibility | P1 | F3.1; base = run base + accepted upstream units (ADR-0024 follow-up) |
 | F3.2 | Durable Run State / Append-only Event Store | P0 | F0.6, F1.3 (spec: implemented on Linux) |
 | F3.3 | Resume / Recovery | P0 | F3.1, F3.2 |
 | F3.4 | Cancellation and Timeouts | P0 | F1.2, F1.6; F3.2 only for the durable-store criteria |
@@ -92,12 +97,13 @@ Goal: make long-running local execution durable and safer.
 | F3.9 | Permissions / Execution Policy v0 | P0 | F1.2, F3.1, F3.8 |
 | F3.10 | Cost/Usage Metadata | P1 | F1.1, F3.2 |
 | F3.11 | Local Diagnostics | P1 | F3.2, F3.4 |
+| F3.12 | Using Docker | P2 | F2.11, F3.1, F3.9; F2.11 only reports whether Docker exists, this feature would run units in a container |
 
 Exit: a run can stop and resume after restart, parallel nodes use isolated
 workspaces, trace/artifacts are durable, and secrets and permissions have an
 explicit model. F3.1 (implemented, opt-in per Agent node) establishes
 file-level isolation that F1.7 does not promise; it is not a sandbox (F3.9),
-downstream nodes do not yet see upstream files, and Shell nodes are not isolated. Design F3.8 and F3.9 together so secret resolution never bypasses
+downstream nodes do not yet see upstream files (F3.1b), and Shell nodes are not isolated (proposed F3.1c, ADR-0041). Proposed follow-ups with named IDs: F3.9c requested permissions UI (ADR-0039), F2.3b JSON field selection (ADR-0040). Design F3.8 and F3.9 together so secret resolution never bypasses
 the execution policy.
 
 ## Phase 4 - Connected Control Plane

@@ -121,6 +121,14 @@ func gateKindCases(dir string) map[string]gateKindCase {
 			},
 			needsRequiredString: true,
 		},
+		gate.KindTestCommand: {
+			inputs: map[string]edit.PortSpec{"candidate": req},
+			config: map[string]any{"input": "candidate", "command": "pytest", "args": []string{"-q"}, "cwd": dir, "side_effects": "workspace_writes"},
+			bindings: func(p loopProducer) []edit.LoopBinding {
+				return []edit.LoopBinding{from("candidate.outputs."+p.stringOut, "gate.inputs.candidate")}
+			},
+			needsRequiredString: true,
+		},
 	}
 }
 

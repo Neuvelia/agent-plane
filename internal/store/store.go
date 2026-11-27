@@ -122,6 +122,13 @@ type Summary struct {
 	// from the first event; empty for an unreadable run.
 	GraphVersion string    `json:"graph_version,omitempty"`
 	StartedAt    time.Time `json:"started_at"`
+	// RepoName, RepoBranch, RepoCommit and RuntimeVersion come from the
+	// run_started payload (F2.9, F3.6); empty when it did not record them.
+	RepoName       string `json:"repo_name,omitempty"`
+	RepoID         string `json:"repo_id,omitempty"`
+	RepoBranch     string `json:"repo_branch,omitempty"`
+	RepoCommit     string `json:"repo_commit,omitempty"`
+	RuntimeVersion string `json:"runtime_version,omitempty"`
 	// FinishedAt is the timestamp of the run_finished event; nil for a run that
 	// has none. Retention measures a run's age from it (F3.2 requirement 7).
 	FinishedAt *time.Time `json:"finished_at,omitempty"`

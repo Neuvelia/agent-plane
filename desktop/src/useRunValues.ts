@@ -4,7 +4,7 @@ import { usePoll, type PollStatus } from './hooks'
 import { classifyEnd } from './reducer'
 import type { ApEvent, RunSummary } from './types'
 import { initialValues, reduceValues, type RunValues } from './values'
-import { choose, confirmVersion, noChoice, pickerRuns, readableRunId, resolveRun, type PickerRun, type ResolvedRun, type RunChoice } from './valuePickerModel'
+import { choose, confirmVersion, noChoice, pickerRuns, readableRunId, resolveRun, type PickerRun, type ResolvedRun, type RunChoice } from './valuePicker'
 
 export type ValuesLoad = 'idle' | 'loading' | 'ready' | 'unavailable'
 

@@ -82,6 +82,15 @@ export const InspectorStandaloneGateRed: S = {
   },
 }
 export const InspectorRejectedByHuman: S = inspector(demoReject, 'failed', 'end')
+// F2.10: the waiting human gate shows its reason and the checks and changed files of the nodes it depends on.
+export const InspectorWaitingForHumanContext: S = {
+  ...inspector(waitingForHuman, 'running', 'open'),
+  play: async (ctx) => {
+    await new Promise((r) => setTimeout(r, 300))
+    ctx.canvasElement.querySelector<HTMLButtonElement>('[data-testid="node-approve"]')?.click()
+    await new Promise((r) => setTimeout(r, 100))
+  },
+}
 export const InspectorFailedAfterRetries: S = inspector(exhaustedRetries, 'failed', 'end', false)
 export const InspectorConnectionLost: S = inspector(waitingForHuman, 'running', 'lost')
 export const InspectorFailedEvents: S = { ...inspector(demoReject, 'failed', 'end'), play: clickTestId('events-failed') }
@@ -98,9 +107,19 @@ export const InspectorRunNotFound: S = {
 }
 
 export const RunsListEmpty: S = { parameters: { bridge: { runs: [] } }, render: () => <RunsList onOpen={noop} /> }
+const withSource = (r: BridgeRun, repo_name: string, repo_branch: string | undefined, repo_commit: string): BridgeRun => ({
+  ...r,
+  summary: { ...r.summary, repo_name, repo_branch, repo_commit, runtime_version: '0.0.0-dev' },
+})
 export const RunsListBusy: S = {
   parameters: {
-    bridge: { runs: [run(runningParallel, 'running', 'open'), run(demoReject, 'failed', 'end'), run(exhaustedRetries, 'failed', 'end', false)] } satisfies BridgeData,
+    bridge: {
+      runs: [
+        withSource(run(runningParallel, 'running', 'open'), 'agent-plane', 'main', '1a2b3c4d5e6f7a8b9c0d'),
+        withSource(run(demoReject, 'failed', 'end'), 'agent-plane', undefined, '9f8e7d6c5b4a39281706'),
+        run(exhaustedRetries, 'failed', 'end', false),
+      ],
+    } satisfies BridgeData,
   },
   render: () => <RunsList onOpen={noop} />,
 }

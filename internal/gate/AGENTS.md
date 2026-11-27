@@ -12,6 +12,7 @@ node state, retry and event emission.
 | Gate config, required ports, supported kinds and path rules | `config.go` |
 | Verdict execution, predicate and reported-file comparison | `executor.go` |
 | Restricted read-only `/usr/bin/diff` comparison | `command.go` |
+| Test command loop check and its side-effect policy | `test_command.go` |
 | Git-observed changed-file scope, warn/deny and evidence budget | `changed_files.go` |
 | Shared Git baseline capture and path observation | `internal/gitstate/AGENTS.md` |
 | Check Result schema and legacy decoding | `internal/events/AGENTS.md` |
@@ -50,6 +51,16 @@ node state, retry and event emission.
   Capture/redact bounded stdout and stderr with omitted-byte counts. Path
   preflight does not protect against hostile concurrent filesystem mutation
   and is not a general process sandbox.
+- `test_command` (F1.4b, ADR-0042) runs an author-chosen command and is NOT
+  read-only: exit 0 green, any other exit red with bounded redacted evidence
+  and the exit code; start failure, signal death, cancellation, timeout
+  (`Executor.TestBound`, default 10 min) and a bad cwd are errors, never
+  verdicts. It is valid only as a loop's embedded Gate (graph validation in
+  `cmd/agentplane/validation.go` rejects it standalone). `side_effects` is a
+  required, unenforced declaration echoed in the Check Result reason. Command,
+  args, cwd and environment are literal (empty env plus allowlist/explicit
+  values); bound inputs never reach them. Process lifecycle is shared with the
+  diff command through `runOwned`.
 - `json_predicate` reads a required JSON object input, follows literal
   object keys and compares a scalar/null with `eq` or `ne`. A missing field
   or predicate mismatch is a red result; malformed JSON, wrong traversal
@@ -85,7 +96,9 @@ Read `docs/features/F1.4-gate-node.md`,
 `docs/features/F1.5-check-result-contract.md`,
 `docs/adr/0013-check-result-contract.md`,
 `docs/features/F1.8-changed-files-scope-check.md`, and
-`docs/adr/0016-changed-files-scope-check.md`. For embedded correction
+`docs/adr/0016-changed-files-scope-check.md`, and for `test_command`
+`docs/features/F1.4b-test-command-loop-check.md` and
+`docs/adr/0042-test-command-loop-check.md`. For embedded correction
 behavior read `docs/features/F1.6-correction-loop.md` and
 `docs/adr/0014-bounded-node-correction-loop.md`.
 

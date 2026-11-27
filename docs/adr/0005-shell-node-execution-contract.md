@@ -1,6 +1,6 @@
 # ADR-0005 - Shell node execution contract
 
-**Status:** accepted
+**Status:** accepted; the unbounded-capture consequence is amended by ADR-0045 (accepted)
 **Date:** 2026-10-07
 
 ## Context

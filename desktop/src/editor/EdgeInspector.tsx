@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n/context'
-import { ValuePicker } from '../ValuePicker'
+import { ValuePicker } from '../ValuePickerView'
 import type { ValuesPicker } from '../useRunValues'
 import { useSessionRecording } from '../useSessionRecording'
 import { Card, KeyValue, StateMessage, Tag } from '../ui/primitives'

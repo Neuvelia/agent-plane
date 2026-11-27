@@ -3,7 +3,6 @@
 package shell
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,17 +28,25 @@ type Executor struct {
 
 	// terminate replaces tree termination in tests to make a leak deterministic.
 	terminate func(*proctree.Tree, context.Context, proctree.Policy) (proctree.Outcome, error)
+
+	// captureLimit replaces DefaultCaptureLimit in tests only.
+	captureLimit int
 }
 
 // Result is the process evidence retained by Execute and ExecutionError.
 // ExitCode is -1 if no OS exit code is available. A canceled process may
 // report an OS-specific termination code.
 type Result struct {
-	Stdout    string
-	Stderr    string
-	ExitCode  int
-	StartedAt time.Time
-	EndedAt   time.Time
+	// Stdout and Stderr hold at most the capture limit of leading bytes. When
+	// output was omitted the text ends with a marker naming the omitted count.
+	Stdout string
+	Stderr string
+	// StdoutOmitted and StderrOmitted count the bytes not retained.
+	StdoutOmitted uint64
+	StderrOmitted uint64
+	ExitCode      int
+	StartedAt     time.Time
+	EndedAt       time.Time
 }
 
 // FailureKind distinguishes configuration, start, exit, cancellation, and
@@ -123,9 +130,9 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 	// A descendant may inherit stdout or stderr after the direct child exits.
 	// Bound the pipe drain so Wait can finish even if a descendant escapes.
 	cmd.WaitDelay = time.Second
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &logWriter{capture: &stdout, stream: "stdout", observe: request.Observe}
-	cmd.Stderr = &logWriter{capture: &stderr, stream: "stderr", observe: request.Observe}
+	stdout := &logWriter{limit: e.limit(), stream: "stdout", observe: request.Observe}
+	stderr := &logWriter{limit: e.limit(), stream: "stderr", observe: request.Observe}
+	cmd.Stdout, cmd.Stderr = stdout, stderr
 	tree, err := proctree.Start(cmd)
 	if err != nil {
 		return result, &ExecutionError{NodeID: nodeID, Kind: FailureStart, Result: result, Cause: err}
@@ -138,7 +145,8 @@ func (e Executor) execute(ctx context.Context, request Request) (Result, error) 
 	close(exited)
 	cancellation := <-stopped
 	result.EndedAt = time.Now()
-	result.Stdout, result.Stderr = stdout.String(), stderr.String()
+	result.Stdout, result.StdoutOmitted = stdout.retained()
+	result.Stderr, result.StderrOmitted = stderr.retained()
 	if cmd.ProcessState != nil {
 		result.ExitCode = cmd.ProcessState.ExitCode()
 	}
@@ -270,31 +278,6 @@ func checkOutputs(node graph.NodeDefinition, cfg config) ([]string, error) {
 		}
 	}
 	return names, nil
-}
-
-const maxLogChunk = 16 * 1024
-
-type logWriter struct {
-	capture *bytes.Buffer
-	stream  string
-	observe func(string, []byte)
-}
-
-func (w *logWriter) Write(data []byte) (int, error) {
-	n, err := w.capture.Write(data)
-	if err != nil {
-		return n, err
-	}
-	if w.observe != nil {
-		for start := 0; start < n; start += maxLogChunk {
-			end := start + maxLogChunk
-			if end > n {
-				end = n
-			}
-			w.observe(w.stream, data[start:end])
-		}
-	}
-	return n, nil
 }
 
 func parseConfig(node graph.NodeDefinition) (config, error) {

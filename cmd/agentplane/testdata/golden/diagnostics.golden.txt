@@ -19,6 +19,9 @@
 ## E_EDGE_TARGET_REFERENCE_INVALID exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_EDGE_TARGET_REFERENCE_INVALID","message":"the reference is not a valid node input reference","graph_id":"g","location":{"edge_index":0,"path":"edges[0].to"},"suggestion":"use NODE.inputs.PORT"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"o\" on node \"a\" is not consumed","graph_id":"g","location":{"node_id":"a","path":"nodes.a.outputs.o"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
 
+## E_GATE_KIND_LOOP_ONLY exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GATE_KIND_LOOP_ONLY","message":"a test_command Gate is valid only as a loop's embedded Gate","graph_id":"g","location":{"node_id":"t","path":"nodes.t.config.kind"},"suggestion":"move the check into loop.gate of the node that produces the change"},{"severity":"error","code":"E_REQUIRED_INPUT_UNBOUND","message":"required input \"c\" on node \"t\" has no valid binding","graph_id":"g","location":{"node_id":"t","path":"nodes.t.inputs.c"},"suggestion":"add one compatible edge or graph input binding"}],"failure":null,"error":null}
+
 ## E_GRAPH_CYCLE exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_GRAPH_CYCLE","message":"graph contains cycle: a -\u003e b -\u003e a","graph_id":"g","location":{"edge_index":1,"path":"edges[1]"},"suggestion":"remove a dependency from the cycle"},{"severity":"warning","code":"W_EDGE_INPUT_UNUSED","message":"node \"b\" does not use input \"i\", which edge 0 delivers","graph_id":"g","location":{"edge_index":0,"path":"edges[0].to"},"suggestion":"name input \"i\" in config.input_env so the node reads it; removing the edge would also remove the node's dependency on its source"}],"failure":null,"error":null}
 
@@ -57,6 +60,9 @@
 
 ## E_HUMAN_INVALID exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_HUMAN_INVALID","message":"human node must declare exactly one output \"decision\" of type string","graph_id":"g","location":{"node_id":"h","path":"nodes.h"},"suggestion":"declare outputs: {decision: {type: string, required: true}}"}],"failure":null,"error":null}
+
+## E_HUMAN_REJECT_UNROUTED exit=3 stderr=""
+{"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_HUMAN_REJECT_UNROUTED","message":"on_reject: continue needs the decision as a graph output: nothing records the verdict","graph_id":"g","location":{"node_id":"h","path":"nodes.h"},"suggestion":"add a graph output from h.outputs.decision, or remove on_reject"},{"severity":"warning","code":"W_DECLARED_OUTPUT_UNUSED","message":"output \"decision\" on node \"h\" is not consumed","graph_id":"g","location":{"node_id":"h","path":"nodes.h.outputs.decision"},"suggestion":"remove the output or bind it to an edge or graph output"}],"failure":null,"error":null}
 
 ## E_IDENTIFIER_INVALID exit=3 stderr=""
 {"cli_schema_version":1,"command":"graph validate","status":"invalid","graph_id":"g","diagnostics":[{"severity":"error","code":"E_IDENTIFIER_INVALID","message":"node id \u003cinvalid identifier\u003e does not match the identifier grammar","graph_id":"g","location":{"path":"nodes"},"suggestion":"use lowercase letters, digits, hyphens, and underscores"}],"failure":null,"error":null}

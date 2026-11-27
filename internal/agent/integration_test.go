@@ -35,7 +35,7 @@ func (e compositeExecutor) ExecuteNodeWithCorrelation(ctx context.Context, id st
 	return e.deterministic(ctx, id, n, in, ids)
 }
 func withDownstream(d *graph.Definition) {
-	d.Nodes["consume"] = graph.NodeDefinition{Type: "test", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeString, Required: true}}}
+	d.Nodes["consume"] = graph.NodeDefinition{Type: "shell", Inputs: map[string]graph.PortDefinition{"text": {Type: graph.ValueTypeString, Required: true}}, Outputs: map[string]graph.PortDefinition{"result": {Type: graph.ValueTypeString, Required: true}}}
 	d.Edges = []graph.EdgeDefinition{{From: "work.outputs.summary", To: "consume.inputs.text"}}
 	d.Outputs = map[string]graph.OutputDefinition{"result": {From: "consume.outputs.result"}}
 }
@@ -91,7 +91,7 @@ func (a barrierAdapter) Execute(ctx context.Context, input agent.AgentExecutionI
 func TestAgentFailureRetainsIndependentSiblingAndSafeEvents(t *testing.T) {
 	d := agentGraph(t.TempDir())
 	withDownstream(d)
-	d.Nodes["sibling"] = graph.NodeDefinition{Type: "test", Outputs: map[string]graph.PortDefinition{"kept": {Type: graph.ValueTypeString, Required: true}}}
+	d.Nodes["sibling"] = graph.NodeDefinition{Type: "shell", Outputs: map[string]graph.PortDefinition{"kept": {Type: graph.ValueTypeString, Required: true}}}
 	const sentinel = "PROVIDER_FAILURE_SENTINEL"
 	cause := errors.New(sentinel)
 	m := &adaptertest.MockAdapter{AdapterID: "test-adapter", Report: agent.CapabilityReport{Available: true}, ExecuteErr: cause, Started: make(chan struct{}), Output: agent.AgentExecutionOutput{RawMetadata: json.RawMessage(`{"private":"METADATA_SENTINEL"}`), Artifacts: []agent.ArtifactReference{{Ref: "ARTIFACT_SENTINEL"}}}}

@@ -10,6 +10,9 @@ const (
 	KindJSONPredicate     = "json_predicate"
 	KindReportedFileScope = "reported_file_scope"
 	KindChangedFilesScope = "changed_files_scope"
+	// KindTestCommand runs an author-chosen test command; it is not read-only
+	// and is valid only as a loop's embedded Gate (ADR-0042).
+	KindTestCommand = "test_command"
 )
 
 // diffCommand is the only command a command Gate may run (ADR-0012).
@@ -30,7 +33,7 @@ func ConfigFields() []fields.Field {
 	return []fields.Field{
 		{ID: "gate.config.check_id", Key: "check_id", Kind: fields.String, Required: true, Format: fields.FormatNotBlank, MaxBytes: 256},
 		{ID: "gate.config.kind", Key: "kind", Kind: fields.Enum, Required: true,
-			Enum: []string{KindCommand, KindJSONPredicate, KindReportedFileScope, KindChangedFilesScope}},
+			Enum: []string{KindCommand, KindJSONPredicate, KindReportedFileScope, KindChangedFilesScope, KindTestCommand}},
 		{ID: "gate.config.command", Kind: fields.Group, Requires: kindIs(KindCommand), Fields: []fields.Field{
 			{ID: "gate.config.command.command", Key: "command", Kind: fields.String, Required: true,
 				Locked: &fields.Locked{Value: diffCommand, Reason: "a command Gate compares two inputs with " + diffCommand + " only"}},
@@ -52,6 +55,7 @@ func ConfigFields() []fields.Field {
 			input("gate.config.reported_file_scope.input", "json"),
 			paths("gate.config.reported_file_scope.allowed_paths"),
 		}},
+		{ID: "gate.config.test_command", Kind: fields.Group, Requires: kindIs(KindTestCommand), Fields: testCommandFields(input("gate.config.test_command.input", "string", "json"))},
 		{ID: "gate.config.changed_files_scope", Kind: fields.Group, Requires: kindIs(KindChangedFilesScope), Fields: []fields.Field{
 			input("gate.config.changed_files_scope.input", "string", "json"),
 			paths("gate.config.changed_files_scope.allowed_paths"),
@@ -64,4 +68,19 @@ func ConfigFields() []fields.Field {
 // OutputPorts lists the outputs a Gate node may declare.
 func OutputPorts() []fields.Port {
 	return []fields.Port{{Name: "verdict", Type: "string"}}
+}
+
+// testCommandFields describes the keys of a test_command Gate. side_effects has
+// no default on purpose: an author must state it (ADR-0042).
+func testCommandFields(input fields.Field) []fields.Field {
+	envName := &fields.Field{ID: "gate.config.test_command.env_name", Kind: fields.String, Format: fields.FormatEnvName}
+	return []fields.Field{
+		{ID: "gate.config.test_command.command", Key: "command", Kind: fields.String, Required: true, Format: fields.FormatNonEmpty},
+		{ID: "gate.config.test_command.args", Key: "args", Kind: fields.List, Item: &fields.Field{ID: "gate.config.test_command.args.item", Kind: fields.String}},
+		{ID: "gate.config.test_command.cwd", Key: "cwd", Kind: fields.String, Required: true, Format: fields.FormatCleanAbsolutePath},
+		{ID: "gate.config.test_command.env_allowlist", Key: "env_allowlist", Kind: fields.List, Item: envName},
+		{ID: "gate.config.test_command.env", Key: "env", Kind: fields.Map},
+		{ID: "gate.config.test_command.side_effects", Key: "side_effects", Kind: fields.Enum, Required: true, Enum: []string{SideEffectsNone, SideEffectsWorkspace}},
+		input,
+	}
 }

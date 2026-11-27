@@ -126,22 +126,42 @@ func TestInputsTheTargetReadsDoNotWarn(t *testing.T) {
     config: {check_id: same, kind: command, command: /usr/bin/diff, cwd: /tmp, left_input: i, right_input: i}
     inputs:
       i: {type: string, required: true}`,
-		"loop binding": `    type: shell
-    config: {command: /usr/bin/printf, args: ["{}"], stdout_json: true}
+		// A forwarded input counts only when the embedded Gate reads the Gate
+		// input it lands on; validation_test.go covers a Gate that ignores it.
+		"loop binding to an input the Gate reads": `    type: shell
+    config: {command: /usr/bin/printf, args: ["x"]}
     inputs:
       i: {type: string, required: true}
     outputs:
-      json: {type: json}
+      stdout: {type: string}
     loop:
       max_attempts: 2
       gate:
         inputs:
           expected: {type: string, required: true}
-          candidate: {type: json, required: true}
-        config: {check_id: c, kind: json_predicate, input: candidate, field: [ok], operator: eq, expected: true}
+          candidate: {type: string, required: true}
+        config: {check_id: c, kind: command, command: /usr/bin/diff, cwd: /tmp, left_input: expected, right_input: candidate}
       bindings:
-        - {from: candidate.outputs.json, to: gate.inputs.candidate}
+        - {from: candidate.outputs.stdout, to: gate.inputs.candidate}
         - {from: node.inputs.i, to: gate.inputs.expected}`,
+		// A loop-only Gate kind (ADR-0042) is read through the loop's Gate
+		// descriptors, not the standalone Gate catalogue entry.
+		"loop binding to a test_command Gate input": `    type: shell
+    config: {command: /usr/bin/printf, args: ["x"]}
+    inputs:
+      i: {type: string, required: true}
+    outputs:
+      stdout: {type: string}
+    loop:
+      max_attempts: 2
+      gate:
+        inputs:
+          spec: {type: string, required: true}
+          candidate: {type: string, required: true}
+        config: {check_id: t, kind: test_command, command: /usr/bin/true, cwd: /tmp, side_effects: none, input: spec}
+      bindings:
+        - {from: candidate.outputs.stdout, to: gate.inputs.candidate}
+        - {from: node.inputs.i, to: gate.inputs.spec}`,
 	}
 	for name, target := range cases {
 		requireNoErrors(t, strings.Replace(edgeInputGraph, "TARGET", target, 1))

@@ -92,7 +92,7 @@ func TestStandaloneGateOffersThreeKinds(t *testing.T) {
 	if got := groupIDs(g.Config); !reflect.DeepEqual(got, []string{"gate.config.command", "gate.config.json_predicate", "gate.config.reported_file_scope"}) {
 		t.Errorf("standalone groups %v", got)
 	}
-	if got := groupIDs(catalogueByType(t)["agent"].Loop.Gate); len(got) != 4 {
+	if got := groupIDs(catalogueByType(t)["agent"].Loop.Gate); len(got) != 5 {
 		t.Errorf("agent loop groups %v", got)
 	}
 	// Narrowing changes nothing but the kind enum and the dropped group.

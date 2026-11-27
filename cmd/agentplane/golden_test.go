@@ -26,6 +26,8 @@ var (
 	uuidPattern     = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 	timestampFormat = regexp.MustCompile(`"timestamp":"[^"]*"`)
 	durationFormat  = regexp.MustCompile(`"duration_ms":[0-9]+`)
+	// Run metadata depends on where the checkout lives (F2.9), not on the engine.
+	runMetadataFormat = regexp.MustCompile(`,"(?:repo_name|repo_id|repo_branch|repo_commit|runtime_version)":"[^"]*"`)
 )
 
 // normalizeGolden replaces the only run-specific values (identifiers, clock
@@ -44,6 +46,7 @@ func normalizeGolden(raw []byte) []byte {
 	})
 	out = timestampFormat.ReplaceAllString(out, `"timestamp":"<ts>"`)
 	out = durationFormat.ReplaceAllString(out, `"duration_ms":0`)
+	out = runMetadataFormat.ReplaceAllString(out, "")
 	return []byte(out)
 }
 

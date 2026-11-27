@@ -76,7 +76,22 @@ export const runningParallel = until(demoApprove, (e) => e.type === 'attempt_sta
 
 export function summaryOf(events: ApEvent[], status: string): RunSummary {
   const first = events[0]!
-  return { run_id: first.run_id, graph_id: first.graph_id, started_at: first.timestamp, status, event_count: events.length }
+  const last = events[events.length - 1]!
+  const str = (v: unknown) => (typeof v === 'string' && v !== '' ? v : undefined)
+  const p = first.payload
+  return {
+    run_id: first.run_id,
+    graph_id: first.graph_id,
+    graph_version: first.graph_version,
+    started_at: first.timestamp,
+    ...(last.type === 'run_finished' ? { finished_at: last.timestamp } : {}),
+    repo_name: str(p.repo_name),
+    repo_branch: str(p.repo_branch),
+    repo_commit: str(p.repo_commit),
+    runtime_version: str(p.runtime_version),
+    status,
+    event_count: events.length,
+  }
 }
 
 /** Pending approvals as the API would list them, derived from the event stream. */

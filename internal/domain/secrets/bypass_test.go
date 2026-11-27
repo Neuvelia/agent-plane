@@ -42,3 +42,11 @@ func TestAmbientBypassesAreDeterministicAndEmptyWithoutSecrets(t *testing.T) {
 		t.Fatalf("unexpected order: %+v", first)
 	}
 }
+
+func TestAmbientBypassesReportAVariableASectionNamesTwiceOnce(t *testing.T) {
+	refs := map[string]Ref{"tok": {Provider: ProviderEnv, Name: "TOK"}}
+	nodes := []NodeChannels{{NodeID: "n", Section: "config", Names: []string{"TOK", "TOK"}}}
+	if got := AmbientBypasses(refs, nodes); len(got) != 1 || got[0].Section != "config" {
+		t.Fatalf("got %+v", got)
+	}
+}

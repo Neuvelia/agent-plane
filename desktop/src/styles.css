@@ -159,6 +159,8 @@ table.runs{width:100%;border-collapse:collapse}
 .approval{background:var(--warn-wash);border-radius:var(--radius-14);padding:var(--space-14);display:flex;flex-direction:column;gap:var(--space-10)}
 .approval .row{justify-content:flex-end}
 .approval p{margin:0}
+.approval-context{border-top:1px solid var(--hairline);padding-top:var(--space-8)}
+.approval-context ul{margin:4px 0 0;padding-left:18px;word-break:break-all}
 .err{color:var(--bad-text);font-size:13px}
 .decision{font-size:13px}
 .config{max-width:720px;display:flex;flex-direction:column;gap:10px}
@@ -384,6 +386,8 @@ main:focus{outline:none}
 .ev-region:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .ev-text{margin:0;font-family:var(--font-mono);font-size:var(--type-mono-size);white-space:pre-wrap;overflow-wrap:anywhere;unicode-bidi:isolate}
 .ev-mark{color:var(--warn);border:1px solid currentColor;border-radius:4px;padding:0 2px;font-weight:600}
+.runs-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-12);margin-bottom:var(--space-12)}
+.runs .run-group-head th{padding-top:var(--space-12);text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)}
 
 /* F2.5b: Inbox, a triage queue (queue left, selected item right) */
 .inbox{display:grid;grid-template-columns:minmax(320px,400px) minmax(0,1fr);height:100%;min-height:520px;border:1px solid var(--card-line);border-radius:var(--radius-20);overflow:hidden;background:var(--bg)}

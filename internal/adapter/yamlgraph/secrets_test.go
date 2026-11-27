@@ -338,3 +338,32 @@ func TestAmbientBypassNamesAValidIdentifier(t *testing.T) {
 		t.Errorf("a valid identifier is still named: %+v", d)
 	}
 }
+
+func TestValidateSecretAmbientBypassCoversATestCommandLoopGate(t *testing.T) {
+	loop := "  a:\n    type: shell\n    inputs: {}\n    outputs: {out: {type: string, required: true}}\n    config:\n      command: /bin/true\n      cwd: /w\n" +
+		"    loop:\n      max_attempts: 2\n      gate:\n        inputs: {candidate: {type: string, required: true}}\n        config:\n          check_id: t\n          kind: test_command\n          command: /bin/true\n          cwd: /w\n          side_effects: none\n          input: candidate\n          env_allowlist: [GITHUB_TOKEN]\n"
+	result := validateText(t, secretsGraph(oneSecret, loop))
+	if !hasDiagnosticCode(result, "E_SECRET_AMBIENT_BYPASS") {
+		t.Fatalf("a loop Gate naming a secret's backing variable must be rejected: %+v", result.Diagnostics)
+	}
+	// The diagnostic points at the loop Gate's configuration, where the name is.
+	if d := diagnosticFor(t, result, "E_SECRET_AMBIENT_BYPASS"); d.Location.Path != "nodes.a.loop.gate.config" {
+		t.Fatalf("path = %q, want nodes.a.loop.gate.config", d.Location.Path)
+	}
+}
+
+// The same variable named by a loop's producer and by its Gate is two problems
+// in two places: one diagnostic for each, never two identical ones.
+func TestAmbientBypassInProducerAndLoopGateIsReportedOncePerPlace(t *testing.T) {
+	loop := "  a:\n    type: shell\n    inputs: {}\n    outputs: {out: {type: string, required: true}}\n    config:\n      command: /bin/true\n      cwd: /w\n      env_allowlist: [GITHUB_TOKEN]\n" +
+		"    loop:\n      max_attempts: 2\n      gate:\n        inputs: {candidate: {type: string, required: true}}\n        config:\n          check_id: t\n          kind: test_command\n          command: /bin/true\n          cwd: /w\n          side_effects: none\n          input: candidate\n          env_allowlist: [GITHUB_TOKEN]\n"
+	var paths []string
+	for _, d := range validateText(t, secretsGraph(oneSecret, loop)).Diagnostics {
+		if d.Code == "E_SECRET_AMBIENT_BYPASS" {
+			paths = append(paths, d.Location.Path)
+		}
+	}
+	if strings.Join(paths, ",") != "nodes.a.config,nodes.a.loop.gate.config" {
+		t.Fatalf("bypass paths = %v", paths)
+	}
+}

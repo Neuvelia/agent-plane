@@ -1,4 +1,4 @@
-# ADR-0039 - The Inbox triage queue replaces the Dashboard as the landing screen
+# ADR-0046 - The Inbox triage queue replaces the Dashboard as the landing screen
 
 **Status:** proposed
 **Date:** 2026-11-27

@@ -1,5 +1,5 @@
 // Package capability reports what this machine can run (F2.11, ADR-0025): the
-// engine version, the Git binary the engine uses, each agent adapter the
+// engine version, the Git binary, the POSIX shell, optional Docker the engine uses, each agent adapter the
 // engine is composed with, and the common agent CLIs that have no adapter yet. Detection is read-only and bounded. Nothing it learns
 // leaves the report except fixed status and reason codes and a version string
 // that matches a strict pattern: no path, environment value or raw tool output.
@@ -162,7 +162,9 @@ func (d Detector) Detect(ctx context.Context) Report {
 		_, err := lookPath(command)
 		return err == nil
 	}
-	tools := make([]Tool, 1+len(agents)+len(d.CLIs))
+	// Rows: git, then adapters, then agent CLIs, then the shell and Docker.
+	tail := 1 + len(agents) + len(d.CLIs)
+	tools := make([]Tool, tail+2)
 	var wg sync.WaitGroup
 	run := func(i int, id, kind string, probe func() Tool) {
 		wg.Add(1)
@@ -177,6 +179,14 @@ func (d Detector) Detect(ctx context.Context) Report {
 		}()
 	}
 	run(0, "git", "tool", func() Tool { return d.git(ctx, goos) })
+	run(tail, "shell", "tool", func() Tool { return d.shell(goos) })
+	// Docker is optional and only looked up, never run (no daemon is contacted).
+	run(tail+1, "docker", "tool", func() Tool {
+		if found("docker") {
+			return Tool{ID: "docker", Kind: "tool", Status: StatusAvailable}
+		}
+		return Tool{ID: "docker", Kind: "tool", Status: StatusMissing}
+	})
 	for i, a := range agents {
 		if !posix(goos) {
 			// Every adapter today needs Darwin/Linux process ownership (ADR-0010),
@@ -208,6 +218,33 @@ func (d Detector) Detect(ctx context.Context) Report {
 		Engine:    Engine{Version: d.EngineVersion, OS: goos, Arch: goarch},
 		Tools:     tools,
 	}
+}
+
+// shellPath is the shell the bundled templates and shell nodes rely on.
+const shellPath = "/bin/sh"
+
+// shell reports whether the POSIX shell exists and is executable. It only
+// stats the file: nothing is run, and no version is reported.
+func (d Detector) shell(goos string) Tool {
+	t := Tool{ID: "shell", Kind: "tool"}
+	if !posix(goos) {
+		t.Status, t.Reason = StatusUnsupportedPlatform, ReasonPlatformNotSupported
+		return t
+	}
+	stat := d.Stat
+	if stat == nil {
+		stat = os.Stat
+	}
+	info, err := stat(shellPath)
+	switch {
+	case errors.Is(err, os.ErrNotExist):
+		t.Status = StatusMissing
+	case err != nil || !info.Mode().IsRegular() || info.Mode()&0o111 == 0:
+		t.Status, t.Reason = StatusError, ReasonNotExecutable
+	default:
+		t.Status = StatusAvailable
+	}
+	return t
 }
 
 func posix(goos string) bool { return goos == "linux" || goos == "darwin" }

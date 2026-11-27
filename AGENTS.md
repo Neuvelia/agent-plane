@@ -62,7 +62,7 @@ F2.5 adds the loopback `serve` API plus the `desktop/` Electron shell
 (ADR-0019). The desktop UI observes and steers runs through that API; it never
 schedules, retries or decides state. F2.5a (presentation only) put the
 desktop UI on the Tarmind design system with PL/EN localisation and a dev-only
-Storybook; the API and event contracts are unchanged. F2.5b (ADR-0039, presentation only) replaces the
+Storybook; the API and event contracts are unchanged. F2.5b (ADR-0046, presentation only) replaces the
 Dashboard with the Inbox triage queue: approvals, stopped and running runs beside the
 selected item's evidence, with approvals decided in place. Slice E6 of F2.3 adds
 opt-in, bounded and redacted `value_recorded` events (event schema 10,
