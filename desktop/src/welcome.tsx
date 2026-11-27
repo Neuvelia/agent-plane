@@ -5,11 +5,11 @@ import type { DraftMaker } from './editor/TemplatePicker'
 import { formatDateTime } from './i18n'
 import type { MessageKey } from './i18n'
 import { useI18n } from './i18n/context'
-import { BLANK, SETUP_STEPS, setupCards, type CheckState, type SetupStep } from './setup'
+import { SETUP_STEPS, setupCards, setupDraft, type CheckState, type SetupStep } from './setup'
 import { CapabilityPanel } from './setupCheck'
 import { Arrow } from './setupIcons'
 import { AgentsStep, GraphStep, StepHead, WelcomeStep } from './setupSteps'
-import { SUGGESTED, TEMPLATES, templateDraft } from './templates'
+import { SUGGESTED } from './templates'
 
 export { CapabilityPanel, ToolRow, type CapabilityView } from './setupCheck'
 
@@ -23,6 +23,8 @@ export interface WelcomeActions {
   onCreate: (make: DraftMaker | undefined) => void
   onOpen: () => void
   onSkip: () => void
+  /** The engine connection is lost; setup hides the global bar, so its header says so instead. */
+  lost?: boolean
   /** Step to open on; stories use it, the app starts at the first. */
   initialStep?: SetupStep
 }
@@ -31,7 +33,7 @@ const LABELS: Record<SetupStep, MessageKey> = { welcome: 'setup.step.welcome', c
 const HINTS: Partial<Record<SetupStep, MessageKey>> = { agents: 'setup.hint.optional', graph: 'setup.hint.graph' }
 const CARDS = setupCards()
 
-export function Welcome({ onCreate, onOpen, onSkip, initialStep = 'welcome' }: WelcomeActions) {
+export function Welcome({ onCreate, onOpen, onSkip, lost = false, initialStep = 'welcome' }: WelcomeActions) {
   const { t } = useI18n()
   const [step, setStep] = useState(SETUP_STEPS.indexOf(initialStep))
   const [choice, setChoice] = useState<string>(SUGGESTED)
@@ -51,9 +53,8 @@ export function Welcome({ onCreate, onOpen, onSkip, initialStep = 'welcome' }: W
     setStep(Math.min(SETUP_STEPS.length - 1, Math.max(0, n)))
   }
 
-  const template = TEMPLATES.find((e) => e.id === choice)
-  const usable = choice === BLANK || (template !== undefined && templateDraft(template, 'probe.yaml') !== null)
-  const create = () => onCreate(choice === BLANK || !template ? undefined : (label) => templateDraft(template, label))
+  const draft = setupDraft(choice)
+  const create = () => draft.usable && onCreate(draft.make)
   const last = step === SETUP_STEPS.length - 1
   const hint = name === 'check' && check.view.state !== 'loaded' ? 'setup.hint.continue' : HINTS[name]
 
@@ -73,6 +74,12 @@ export function Welcome({ onCreate, onOpen, onSkip, initialStep = 'welcome' }: W
           ))}
         </nav>
         <span className="su-sp" />
+        {lost && (
+          <span className="conn bad" role="status" data-testid="setup-connection-lost">
+            <span className="dot sm" aria-hidden="true" />
+            {t('topbar.lost')}
+          </span>
+        )}
         <button type="button" className="su-btn ghost" title={t('setup.skipHint')} onClick={onSkip} data-testid="welcome-skip">
           {t('setup.skip')}
         </button>
@@ -98,7 +105,7 @@ export function Welcome({ onCreate, onOpen, onSkip, initialStep = 'welcome' }: W
         <span className="su-sp" />
         {hint && <span className="hint">{t(hint)}</span>}
         {last ? (
-          <button type="button" className="su-btn pr" onClick={create} disabled={!usable} data-testid="welcome-template">
+          <button type="button" className="su-btn pr" onClick={create} disabled={!draft.usable} data-testid="welcome-template">
             {t('setup.create', { name: choice })}
             <Arrow />
           </button>

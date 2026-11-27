@@ -1,6 +1,6 @@
 import { statusOf, type CapabilityReport, type CapabilityTool } from './capabilities'
 import type { MessageKey } from './i18n'
-import { SUGGESTED, TEMPLATES, type TemplateEntry } from './templates'
+import { SUGGESTED, TEMPLATES, templateDraft, type TemplateEntry } from './templates'
 
 // Pure model of the four-step setup (canvas "Setup, revised"). The views only
 // render what these functions decide; nothing here reads the bridge.
@@ -74,6 +74,21 @@ export function setupCards(templates: readonly TemplateEntry[] = TEMPLATES): Set
     return e ? [{ id, flow: e.flow, recommended: id === SUGGESTED, placeholders: e.placeholders, agent: e.flow.includes('agent') }] : []
   })
   return [...cards, { id: BLANK, flow: [], recommended: false, placeholders: 0, agent: false }]
+}
+
+/** What the last step creates: Blank (no draft maker) or the picked template's draft. */
+export type SetupDraft = { usable: true; make: ((label: string) => string | null) | undefined } | { usable: false }
+
+/**
+ * The graph the primary action of the last step creates. A template that is
+ * missing from the build, or whose text cannot take a new id, is unusable, so
+ * the action is disabled instead of creating the wrong graph.
+ */
+export function setupDraft(choice: string, templates: readonly TemplateEntry[] = TEMPLATES): SetupDraft {
+  if (choice === BLANK) return { usable: true, make: undefined }
+  const entry = templates.find((t) => t.id === choice)
+  if (!entry || templateDraft(entry, 'probe.yaml') === null) return { usable: false }
+  return { usable: true, make: (label) => templateDraft(entry, label) }
 }
 
 /** The command shown on the Agents step: run a graph with the Codex adapter from the CLI. */

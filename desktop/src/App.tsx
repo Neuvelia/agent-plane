@@ -114,7 +114,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} onRun={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'welcome' && <Welcome onCreate={(make) => leaveWelcome({ name: 'editor' }, () => editor.create(make))()} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
+          {route.name === 'welcome' && <Welcome lost={lost} onCreate={(make) => leaveWelcome({ name: 'editor' }, () => editor.create(make))()} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

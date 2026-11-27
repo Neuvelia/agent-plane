@@ -4,8 +4,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { CapabilityReport } from '../src/capabilities'
 import { I18nProvider } from '../src/i18n/context'
-import { BLANK, CLI_COMMAND, rowTone, scanDelay, setupCards, verdictDelay, verdictOf, type SetupStep } from '../src/setup'
-import { SUGGESTED, TEMPLATES } from '../src/templates'
+import { BLANK, CLI_COMMAND, rowTone, scanDelay, setupCards, setupDraft, verdictDelay, verdictOf, type SetupStep } from '../src/setup'
+import { SUGGESTED, TEMPLATES, templateDraft } from '../src/templates'
 import { Welcome } from '../src/welcome'
 import recorded from './fixtures/capabilities-linux.json'
 
@@ -76,13 +76,34 @@ describe('setup template cards', () => {
   })
 })
 
+describe('setup create action', () => {
+  it('creates Blank with no draft maker, so the editor uses its empty graph', () => {
+    expect(setupDraft(BLANK)).toEqual({ usable: true, make: undefined })
+  })
+  it('creates a template as that template with only its id line changed', () => {
+    for (const id of ['dependency-update', SUGGESTED]) {
+      const d = setupDraft(id)
+      const entry = TEMPLATES.find((t) => t.id === id)!
+      expect(d.usable, id).toBe(true)
+      if (!d.usable || !d.make) throw new Error(`${id}: no draft maker`)
+      expect(d.make('picked.yaml'), id).toBe(templateDraft(entry, 'picked.yaml'))
+      expect(d.make('picked.yaml'), id).toContain('id: picked')
+    }
+  })
+  it('refuses a template that is missing or cannot take a new id, instead of creating another graph', () => {
+    expect(setupDraft('not-bundled')).toEqual({ usable: false })
+    const broken = { ...TEMPLATES[0]!, text: 'schema_version: 0\n' }
+    expect(setupDraft(broken.id, [broken])).toEqual({ usable: false })
+  })
+})
+
 describe('setup screen', () => {
   afterEach(() => vi.unstubAllGlobals())
-  const html = (step: SetupStep, locale: 'en' | 'pl' = 'en') => {
+  const html = (step: SetupStep, locale: 'en' | 'pl' = 'en', lost = false) => {
     vi.stubGlobal('window', { agentplane: { appVersion: '1.2.3' } })
     return renderToStaticMarkup(
       <I18nProvider locale={locale}>
-        <Welcome onCreate={() => undefined} onOpen={() => undefined} onSkip={() => undefined} initialStep={step} />
+        <Welcome onCreate={() => undefined} onOpen={() => undefined} onSkip={() => undefined} initialStep={step} lost={lost} />
       </I18nProvider>,
     )
   }
@@ -114,6 +135,12 @@ describe('setup screen', () => {
     expect(out).toMatch(new RegExp(`data-testid="setup-template-${SUGGESTED}"[^>]*checked=""|checked=""[^>]*data-testid="setup-template-${SUGGESTED}"`))
     expect(out).toContain(`Create and open ${SUGGESTED}`)
     expect(out).toContain('data-testid="welcome-open"')
+  })
+  it('says in its header when the engine connection is lost, on every step', () => {
+    for (const step of ['welcome', 'check', 'agents', 'graph'] as const) {
+      expect(html(step, 'en', true), step).toMatch(/data-testid="setup-connection-lost"[^>]*>.*Connection lost/)
+      expect(html(step), step).not.toContain('setup-connection-lost')
+    }
   })
   it('is translated into Polish', () => {
     const out = html('graph', 'pl')
