@@ -69,7 +69,8 @@ func cleanMetadata(s string) string {
 
 // repoID identifies a work tree by a hash of its absolute path, so two
 // repositories with the same base name stay apart in the run list without the
-// path itself entering the log (F2.9).
+// path itself entering the log (F2.9). It is a pseudonym, not anonymisation:
+// a guessable path can be recovered by hashing candidates (ADR-0044).
 func repoID(top string) string {
 	sum := sha256.Sum256([]byte(filepath.Clean(top)))
 	return hex.EncodeToString(sum[:8])

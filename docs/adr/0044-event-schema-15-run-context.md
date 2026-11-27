@@ -34,7 +34,9 @@ Event schema **15** (`events.SchemaRunContext`) introduces:
   - `repo_name` is the base name of the Git work tree, never a path.
   - `repo_id` is the first 16 hex digits of the SHA-256 of the work tree's
     absolute path. It tells apart two checkouts with the same base name
-    without recording the path.
+    without storing the path in clear text. It is a pseudonym, not
+    anonymisation: an unsalted hash of a guessable path such as
+    `/home/<user>/<repo>` can be reversed by trying candidates.
   - `repo_branch` is empty on a detached HEAD.
   - `repo_commit` is the full commit.
   - `runtime_version` is the engine build.
@@ -98,6 +100,9 @@ hash is enough to group runs.
 ### Negative / trade-offs
 
 - `repo_id` changes when a checkout moves on disk.
+- `repo_id` can be reversed by guessing likely paths. The log stays local
+  (ADR-0027), so this matters only when a run log is shared; a per-install salt
+  would prevent it but would also change the id across reinstalls.
 - `executor_abandoned` admits a leak that the runtime cannot stop: Go cannot
   kill a goroutine. Process-tree ownership (ADR-0028) is what normally prevents
   it.
