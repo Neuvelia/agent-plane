@@ -8,7 +8,6 @@ interface I18n {
   locale: Locale
   /** What the person chose; "system" when nothing is saved. */
   choice: LocaleChoice
-  setLocale: (l: Locale) => void
   setChoice: (c: LocaleChoice) => void
   t: (key: MessageKey, params?: Params) => string
 }
@@ -32,9 +31,8 @@ export function I18nProvider({ children, locale: fixed }: { children: ReactNode;
     else saveLocale(c)
     setState(c)
   }, [])
-  const setLocale = useCallback((l: Locale) => setChoice(l), [setChoice])
   const choice: LocaleChoice = fixed ?? state
-  const value = useMemo<I18n>(() => ({ locale, choice, setLocale, setChoice, t: (key, params) => translate(locale, key, params) }), [locale, choice, setLocale, setChoice])
+  const value = useMemo<I18n>(() => ({ locale, choice, setChoice, t: (key, params) => translate(locale, key, params) }), [locale, choice, setChoice])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 

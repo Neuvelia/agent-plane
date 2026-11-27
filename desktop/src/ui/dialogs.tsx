@@ -29,15 +29,23 @@ function Modal({ title, titleId, onClose, children, testId, actions, wide = fals
   const { t } = useI18n()
   const ref = useRef<HTMLDialogElement>(null)
   const [closing, setClosing] = useState(false)
+  // The pending exit timer dies with the dialog: a parent that already replaced this
+  // window must not get a late onClose that would close the next one.
+  const exitTimer = useRef<number | undefined>(undefined)
+  // Where the last press started: only a press that starts and ends on the backdrop closes.
+  const pressedOn = useRef<EventTarget | null>(null)
   useEffect(() => {
     const d = ref.current
     if (d && !d.open && typeof d.showModal === 'function') d.showModal()
-    return () => d?.close()
+    return () => {
+      window.clearTimeout(exitTimer.current)
+      d?.close()
+    }
   }, [])
   const close = () => {
     if (closing) return
     setClosing(true)
-    window.setTimeout(
+    exitTimer.current = window.setTimeout(
       () => {
         ref.current?.close()
         onClose()
@@ -54,8 +62,12 @@ function Modal({ title, titleId, onClose, children, testId, actions, wide = fals
         e.preventDefault()
         close()
       }}
-      // A press on the dialog element itself (not its content) is a press on the backdrop.
-      onClick={(e) => e.target === e.currentTarget && close()}
+      // A press on the dialog element itself (not its content) is a press on the backdrop. Its own
+      // scrollbar also targets the dialog, so the press must fall outside the dialog's box too.
+      onPointerDown={(e) => (pressedOn.current = e.target)}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && pressedOn.current === e.currentTarget && outside(e.currentTarget, e.clientX, e.clientY)) close()
+      }}
       data-testid={testId}
     >
       <div className="modal-body">
@@ -72,6 +84,11 @@ function Modal({ title, titleId, onClose, children, testId, actions, wide = fals
   )
 }
 
+function outside(el: HTMLElement, x: number, y: number): boolean {
+  const r = el.getBoundingClientRect()
+  return x < r.left || x > r.right || y < r.top || y > r.bottom
+}
+
 function platform(): string {
   return typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent
 }
@@ -86,10 +103,13 @@ function Keys({ keys }: { keys: string[] }) {
   )
 }
 
-function Shortcut({ label, keys }: { label: string; keys: string[] }) {
+function Shortcut({ label, keys, note }: { label: string; keys: string[]; note?: string }) {
   return (
     <div className="sc">
-      <span className="t">{label}</span>
+      <span className="t">
+        {label}
+        {note && <span className="sc-note">{note}</span>}
+      </span>
       <Keys keys={keys} />
     </div>
   )
@@ -106,7 +126,7 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
           <section className="sc-grp" aria-labelledby="sc-anywhere">
             <h3 id="sc-anywhere">{t('shortcuts.anywhere')}</h3>
             <Shortcut label={t('shortcuts.settings')} keys={[mod, ',']} />
-            <Shortcut label={t('shortcuts.list')} keys={[mod, '/']} />
+            <Shortcut label={t('shortcuts.list')} keys={[mod, '/']} note={t('shortcuts.listInYaml', { keys: `${mod} /` })} />
           </section>
           <section className="sc-grp" aria-labelledby="sc-editor">
             <h3 id="sc-editor">{t('shortcuts.editor')}</h3>
@@ -151,14 +171,20 @@ export function AboutDialog({ appVersion, onClose }: { appVersion: string; onClo
       alive = false
     }
   }, [])
-  const doCopy = () => {
-    navigator.clipboard.writeText(diagnosticsText(appVersion, engine, runs)).then(
-      () => setCopy('copied'),
-      () => setCopy('failed'),
-    )
+  const loading = engine.state === 'loading' || runs.state === 'loading'
+  const doCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(diagnosticsText(appVersion, engine, runs))
+      setCopy('copied')
+    } catch {
+      // No clipboard (a denied permission or no navigator.clipboard): say so, never throw.
+      setCopy('failed')
+    }
   }
   const engineText = engine.state === 'loading' ? t('about.checking') : engine.state === 'failed' ? t('about.unreachable') : `${engine.value.version} · ${engine.value.os}/${engine.value.arch}`
-  const runsText = runs.state === 'loading' ? t('about.checking') : runs.state === 'failed' ? t('about.unreachable') : String(runs.value)
+  // The run list can fail on its own (a store error) while the engine answers: only an
+  // unreachable engine is reported as such.
+  const runsText = runs.state === 'loading' ? t('about.checking') : runs.state === 'failed' ? t(engine.state === 'failed' ? 'about.unreachable' : 'about.unavailable') : String(runs.value)
   return (
     <Modal
       title={t('about.title')}
@@ -166,7 +192,7 @@ export function AboutDialog({ appVersion, onClose }: { appVersion: string; onClo
       onClose={onClose}
       testId="about-dialog"
       actions={
-        <button type="button" className="btn ghost" onClick={doCopy} data-testid="about-copy">
+        <button type="button" className="btn ghost" onClick={doCopy} disabled={loading} data-testid="about-copy">
           {t('about.copy')}
         </button>
       }

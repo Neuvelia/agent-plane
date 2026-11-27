@@ -41,3 +41,11 @@ export function modifierLabel(platform: string): 'Cmd' | 'Ctrl' {
 export function commandHeld(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey'>, platform: string): boolean {
   return modifierLabel(platform) === 'Cmd' ? e.metaKey : e.ctrlKey
 }
+
+/** The app-wide shortcut a key press is, if any: Ctrl/Cmd+, opens Settings, Ctrl/Cmd+/ the shortcut list (F2.5b). */
+export function isAppShortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'key'>, platform: string): 'settings' | 'shortcuts' | null {
+  if (e.shiftKey || e.altKey || !commandHeld(e, platform)) return null
+  if (e.key === ',') return 'settings'
+  if (e.key === '/') return 'shortcuts'
+  return null
+}

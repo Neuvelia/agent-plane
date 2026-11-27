@@ -1,10 +1,11 @@
 import { defaultKeymap } from '@codemirror/commands'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { yaml } from '@codemirror/lang-yaml'
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { useEffect, useRef } from 'react'
+import { useResolvedTheme, type Theme } from '../theme'
 
 // The YAML view: CodeMirror 6, configured to be a plain text editor of the draft.
 // It has no history of its own (the app keeps one undo stack for the canvas,
@@ -22,22 +23,25 @@ const highlight = HighlightStyle.define([
   { tag: tags.comment, color: 'var(--muted)', fontStyle: 'italic' },
 ])
 
-const theme = EditorView.theme(
-  {
-    '&': { backgroundColor: 'var(--code-bg)', color: 'var(--fg)', height: '100%', fontSize: '12.5px' },
-    '&.cm-focused': { outline: '2px solid var(--focus)', outlineOffset: '2px' },
-    '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '22px', overflow: 'auto' },
-    '.cm-content': { caretColor: 'var(--fg)', padding: '12px 0' },
-    '.cm-line': { padding: '0 12px 0 4px' },
-    '.cm-gutters': { backgroundColor: 'transparent', color: 'var(--muted)', border: 'none' },
-    '.cm-lineNumbers .cm-gutterElement': { padding: '0 14px 0 12px', minWidth: '32px' },
-    '.cm-activeLine': { backgroundColor: 'var(--fill-4)' },
-    '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--fg)' },
-    '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fg)' },
-    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': { backgroundColor: 'var(--brand-soft)' },
-  },
-  { dark: true },
-)
+// CodeMirror's base theme picks its own colours for whatever this spec leaves out
+// (panels, tooltips, matches) from the `dark` flag, so the flag follows the app theme (F2.5b).
+const editorTheme = (theme: Theme) =>
+  EditorView.theme(
+    {
+      '&': { backgroundColor: 'var(--code-bg)', color: 'var(--fg)', height: '100%', fontSize: '12.5px' },
+      '&.cm-focused': { outline: '2px solid var(--focus)', outlineOffset: '2px' },
+      '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '22px', overflow: 'auto' },
+      '.cm-content': { caretColor: 'var(--fg)', padding: '12px 0' },
+      '.cm-line': { padding: '0 12px 0 4px' },
+      '.cm-gutters': { backgroundColor: 'transparent', color: 'var(--muted)', border: 'none' },
+      '.cm-lineNumbers .cm-gutterElement': { padding: '0 14px 0 12px', minWidth: '32px' },
+      '.cm-activeLine': { backgroundColor: 'var(--fill-4)' },
+      '.cm-activeLineGutter': { backgroundColor: 'transparent', color: 'var(--fg)' },
+      '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--fg)' },
+      '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': { backgroundColor: 'var(--brand-soft)' },
+    },
+    { dark: theme === 'dark' },
+  )
 
 export interface YamlEditorProps {
   value: string
@@ -59,6 +63,8 @@ export function YamlEditor({ value, onChange, onSave, onUndo, onRedo, label, rev
   handlers.current = { onChange, onSave, onUndo, onRedo }
   // True while the app pushes a new value into the editor, so it is not echoed back.
   const applying = useRef(false)
+  const appTheme = useResolvedTheme()
+  const themeSlot = useRef(new Compartment())
 
   useEffect(() => {
     if (!host.current) return
@@ -76,7 +82,7 @@ export function YamlEditor({ value, onChange, onSave, onUndo, onRedo, label, rev
           drawSelection(),
           yaml(),
           syntaxHighlighting(highlight),
-          theme,
+          themeSlot.current.of(editorTheme(appTheme)),
           keymap.of([
             { key: 'Mod-s', run: run(() => handlers.current.onSave()), preventDefault: true },
             { key: 'Mod-z', run: run(() => handlers.current.onUndo()), preventDefault: true },
@@ -101,6 +107,11 @@ export function YamlEditor({ value, onChange, onSave, onUndo, onRedo, label, rev
     // The editor is created once; later values arrive through the effect below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The app theme changed: swap the editor theme in place, keeping text, caret and scroll.
+  useEffect(() => {
+    view.current?.dispatch({ effects: themeSlot.current.reconfigure(editorTheme(appTheme)) })
+  }, [appTheme])
 
   // The draft changed outside the editor (undo, redo, reload): show it, keeping the caret in range.
   useEffect(() => {

@@ -805,6 +805,8 @@ export const pl: Record<MessageKey, string> = {
   'about.checking': 'Sprawdzanie…',
   'about.unknown': 'Nieznana',
   'about.unreachable': 'Silnik niepołączony',
+  'shortcuts.listInYaml': 'W edytorze YAML {keys} zamiast tego komentuje linię.',
+  'about.unavailable': 'Niedostępne',
   'about.copy': 'Kopiuj diagnostykę',
   'about.copied': 'Skopiowano diagnostykę',
   'about.copyFailed': 'Nie udało się skopiować. Zaznacz wartości i skopiuj je ręcznie.',

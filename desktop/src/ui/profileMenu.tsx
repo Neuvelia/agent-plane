@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type RefObject } from 'react'
 import { useI18n, type LocaleChoice } from '../i18n/context'
 import { THEME_CHOICES, useTheme, type ThemeChoice } from '../theme'
-import { closesSubmenu, modifierLabel, moveFocus, openFromButton } from './menuKeys'
+import { closesSubmenu, isAppShortcut as appShortcut, modifierLabel, moveFocus, openFromButton } from './menuKeys'
 import { usePresence } from './presence'
 
 // F2.5b profile menu: the menu under the avatar at the foot of the sidebar,
@@ -90,11 +90,16 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
     setOpen(true)
   }
   const openSub = (s: Sub, focus: boolean) => {
-    if (focus) pendingFocus.current = 'sub'
+    // Already open (by pointer): no state changes and no render follows, so move focus now.
+    if (sub === s) {
+      if (focus) focusChecked(subRef.current)
+      return
+    }
+    pendingFocus.current = focus ? 'sub' : null
     setSub(s)
   }
   const closeSub = () => {
-    if (sub) pendingFocus.current = sub
+    pendingFocus.current = sub
     setSub(null)
   }
   // The button gets focus back first; a dialog opened by `run` then takes it and returns it on close.
@@ -102,11 +107,13 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
     close(true)
     run()
   }
-  // Enter and Space reach a trigger as a click with no pointer (detail 0): that opens the submenu
-  // and moves focus into it; a pointer click toggles it and leaves focus where it is.
+  // Enter and Space reach a trigger as a click with no pointer (detail 0): that always opens the
+  // submenu and moves focus into it. A pointer click toggles it and leaves focus where it is.
   const toggleSub = (s: Sub) => (e: MouseEvent) => {
-    if (sub === s) return setSub(null)
-    openSub(s, e.detail === 0)
+    if (e.detail === 0) return openSub(s, true)
+    if (sub !== s) return openSub(s, false)
+    pendingFocus.current = null
+    setSub(null)
   }
 
   const onButtonKey = (e: KeyboardEvent<HTMLButtonElement>) => {
@@ -117,6 +124,8 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
   }
   const onMenuKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Tab') return close(false)
+    // An app shortcut (Ctrl/Cmd+, or /) closes the menu onto the button; the key still reaches the app.
+    if (isAppShortcut(e)) return close(true)
     if (e.key === 'Escape') {
       e.preventDefault()
       return close(true)
@@ -130,6 +139,7 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
   }
   const onSubKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Tab') return close(false)
+    if (isAppShortcut(e)) return close(true)
     if (closesSubmenu(e.key)) {
       e.preventDefault()
       e.stopPropagation()
@@ -194,6 +204,10 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
       </button>
     </div>
   )
+}
+
+function isAppShortcut(e: KeyboardEvent<HTMLElement>): boolean {
+  return appShortcut(e, platform()) !== null
 }
 
 function itemsOf(container: HTMLElement | null): HTMLElement[] {

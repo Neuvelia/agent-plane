@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from 'react'
 import { LOCALES, LOCALE_LABEL } from './i18n'
-import { useI18n } from './i18n/context'
+import { useI18n, type LocaleChoice } from './i18n/context'
 import { THEME_CHOICES, useTheme, type ThemeChoice } from './theme'
 import type { RecordingSettings } from './types'
 import { Button, Card, Field, HelpTip, ListRow, SegmentedControl } from './ui/primitives'
@@ -18,7 +18,7 @@ const THEME_LABEL = { system: 'choice.system', light: 'theme.light', dark: 'them
 // "Record run values" preference (ADR-0023), held by the main process.
 // F2.5b adds Appearance, the same choice as the profile menu's.
 export function Settings() {
-  const { t, locale, setLocale } = useI18n()
+  const { t, choice: languageChoice, setChoice: setLanguageChoice } = useI18n()
   const { choice, setChoice } = useTheme()
   return (
     <section className="config">
@@ -27,7 +27,8 @@ export function Settings() {
         <ListRow>
           <span style={{ flex: 1 }}>{t('settings.language')}</span>
           <HelpTip>{t('settings.languageHelp')}</HelpTip>
-          <SegmentedControl label={t('settings.language')} value={locale} onChange={setLocale} segments={LOCALES.map((l) => ({ value: l, label: `${LOCALE_LABEL[l]} · ${NAME[l]}` }))} />
+          {/* The same three choices as the profile menu: System follows the operating system's language. */}
+          <SegmentedControl<LocaleChoice> label={t('settings.language')} value={languageChoice} onChange={setLanguageChoice} segments={[{ value: 'system', label: t('choice.system'), testId: 'settings-language-system' }, ...LOCALES.map((l) => ({ value: l, label: `${LOCALE_LABEL[l]} · ${NAME[l]}` }))]} />
         </ListRow>
         <ListRow>
           <span style={{ flex: 1 }}>{t('settings.appearance')}</span>

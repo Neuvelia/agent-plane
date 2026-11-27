@@ -1798,12 +1798,14 @@ features:
         evidence:
           - "desktop/test/profile-menu.test.tsx::F2.5b-AC5"
           - "desktop/scripts/stories-smoke.cjs"
+        note: "The real-browser proof runs in `npm run stories:test` (make desktop-stories), which is not part of npm run check or make check."
       - id: F2.5b-AC6
         text: "Menu, submenu and windows animate in and out, a theme change cross-fades, and nothing animates under prefers-reduced-motion."
         status: met
         evidence:
           - "desktop/test/profile-menu.test.tsx::F2.5b-AC6"
           - "desktop/scripts/stories-smoke.cjs"
+        note: "The real-browser proof runs in `npm run stories:test` (make desktop-stories), which is not part of npm run check or make check."
       - id: F2.5b-AC7
         text: "Every colour token has a light value under :root[data-theme=light]; text reaches 4.5:1 and indicators 3:1 in both themes."
         status: met
@@ -1816,6 +1818,8 @@ features:
         evidence:
           - "desktop/test/shell-dialogs.test.tsx::F2.5b-AC8"
           - "desktop/e2e/demo.cjs::F2.5b-AC8"
+          - "desktop/scripts/stories-smoke.cjs"
+        note: "Backdrop close, focus return and shortcuts ignored under an open window are checked in the browser by `npm run stories:test`."
       - id: F2.5b-AC9
         text: "Ctrl/Cmd+, opens Settings, Ctrl/Cmd+/ opens the shortcuts; Settings shows the same Appearance choice."
         status: met
@@ -1828,13 +1832,14 @@ features:
         evidence:
           - "desktop/test/stories.test.ts::F2.5b-AC10"
           - "desktop/scripts/stories-smoke.cjs"
+        note: "The real-browser proof runs in `npm run stories:test` (make desktop-stories), which is not part of npm run check or make check."
     out_of_scope:
       - "Accounts, sign-in, Log out, plans and organisations."
       - "A Help/documentation surface (the item is unavailable)."
       - "Run-store path in About (the renderer never receives paths)."
     decisions: ["ADR-0046"]
     divergences: []
-    tasks: []
+    tasks: [219]
     note: "Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon."
   - id: F2.8a
     name: "Attempt compare (desktop)"

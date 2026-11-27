@@ -11,7 +11,7 @@ describe('Keyboard shortcuts dialog (F2.5b)', () => {
   it('lists only the shortcuts the app has, written as text [F2.5b-AC8]', () => {
     const out = wrap(<ShortcutsDialog onClose={noop} />)
     const rows = [...out.matchAll(/<div class="sc">([\s\S]*?)<\/div>/g)].map((m) => text(m[1]!))
-    expect(rows).toEqual(['Settings Ctrl ,', 'This list Ctrl /', 'Save the graph Ctrl S', 'Move between menu items ↑ ↓', 'Close a menu or dialog, cancel an inline edit Esc'])
+    expect(rows).toEqual(['Settings Ctrl ,', 'This list In the YAML editor Ctrl / comments the line instead. Ctrl /', 'Save the graph Ctrl S', 'Move between menu items ↑ ↓', 'Close a menu or dialog, cancel an inline edit Esc'])
     expect(out).toContain('aria-labelledby="shortcuts-title"')
     expect(out).toMatch(/<button[^>]*data-testid="shortcuts-dialog-close"/)
     expect(out).not.toContain('<svg')
@@ -31,6 +31,8 @@ describe('About dialog (F2.5b)', () => {
     expect(out).toMatch(/data-testid="about-app">0\.14\.0</)
     expect(out).toMatch(/data-testid="about-engine">Checking…</)
     expect(out.indexOf('about-copy')).toBeLessThan(out.indexOf('about-dialog-close'))
+    // Nothing is copied while the values are still being checked.
+    expect(out).toMatch(/<button[^>]*disabled=""[^>]*data-testid="about-copy"/)
   })
   it('puts only versions and a count on the clipboard, never a path', () => {
     const engine = { state: 'ok', value: { version: '0.14.0', os: 'linux', arch: 'amd64' } } as const

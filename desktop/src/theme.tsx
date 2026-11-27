@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
 // F2.5b (ADR-0046): the interface theme. The choice is a renderer preference in
 // localStorage, like the language; "system" follows the operating system.
@@ -82,23 +82,31 @@ export function ThemeProvider({ children, initialChoice }: { children: ReactNode
     return () => query.removeEventListener('change', onChange)
   }, [])
   const theme = resolveTheme(choice, prefersDark)
-  useEffect(() => applyTheme(theme), [theme])
+  // Cross-fade only when the painted theme really changes, whether a pick or the OS changed it;
+  // never on the first paint. A second change during a fade restarts its timer.
+  const painted = useRef<Theme | null>(null)
+  const fadeTimer = useRef<number | undefined>(undefined)
+  useEffect(() => {
+    if (painted.current !== null && painted.current !== theme) fadeTimer.current = crossFade(fadeTimer.current)
+    painted.current = theme
+    applyTheme(theme)
+  }, [theme])
+  useEffect(() => () => window.clearTimeout(fadeTimer.current), [])
   const setChoice = useCallback((c: ThemeChoice) => {
     saveThemeChoice(c)
-    crossFade()
     setChoiceState(c)
   }, [])
   const value = useMemo<ThemeState>(() => ({ choice, theme, setChoice }), [choice, theme, setChoice])
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
 }
 
-/** Colours cross-fade for a moment instead of snapping; skipped under reduced motion. */
-function crossFade(): void {
-  if (typeof document === 'undefined') return
-  if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+/** Colours cross-fade for a moment instead of snapping; skipped under reduced motion. Returns the new timer. */
+function crossFade(previous: number | undefined): number | undefined {
+  window.clearTimeout(previous)
+  if (typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined
   const root = document.documentElement
   root.classList.add('theme-switching')
-  window.setTimeout(() => root.classList.remove('theme-switching'), THEME_FADE_MS)
+  return window.setTimeout(() => root.classList.remove('theme-switching'), THEME_FADE_MS)
 }
 
 /** Dot colour of the graph canvases' background grid in each theme. */

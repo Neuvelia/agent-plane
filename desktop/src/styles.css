@@ -4,8 +4,8 @@
 
 *{box-sizing:border-box}
 /* Native controls, scrollbars and the canvas follow the chosen theme (F2.5b). */
-:root{color-scheme:dark;--scrim:rgba(0,0,0,.6)}
-:root[data-theme=light]{color-scheme:light;--scrim:rgba(0,0,0,.32)}
+:root{color-scheme:dark;--scrim:rgba(0,0,0,.6);--shadow-pop:0 18px 50px rgba(0,0,0,.45)}
+:root[data-theme=light]{color-scheme:light;--scrim:rgba(0,0,0,.32);--shadow-pop:0 12px 32px rgba(0,0,0,.14)}
 html,body,#root{height:100%;margin:0}
 body{background:var(--bg);color:var(--fg);font:var(--type-body-weight) var(--type-body-size)/1.4 var(--font-sans);-webkit-font-smoothing:antialiased}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
@@ -388,7 +388,7 @@ main:focus{outline:none}
 .me .av{width:24px;height:24px;border-radius:50%;background:var(--raised-hover);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex:none}
 .me-name{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .me-local{margin-left:auto;font-size:11px;color:var(--muted)}
-.pm,.pm-sub{position:absolute;border-radius:var(--radius-12);border:1px solid var(--card-line);background:var(--inset);box-shadow:0 18px 50px rgba(0,0,0,.45);padding:6px;color:var(--fg)}
+.pm,.pm-sub{position:absolute;border-radius:var(--radius-12);border:1px solid var(--card-line);background:var(--inset);box-shadow:var(--shadow-pop);padding:6px;color:var(--fg)}
 .pm{left:0;bottom:calc(100% + 6px);width:248px;z-index:50;transform-origin:0 100%;animation:pm-in .16s cubic-bezier(.2,.9,.3,1)}
 .pm.closing{animation:pm-out .12s ease-in forwards;pointer-events:none}
 .pm-sub{left:calc(248px + 6px);width:200px;z-index:51;transform-origin:0 100%;animation:pm-sub-in .14s cubic-bezier(.2,.9,.3,1)}
@@ -417,7 +417,7 @@ main:focus{outline:none}
 .btn.ghost:hover:not(:disabled){background:var(--fill-6);color:var(--fg);filter:none}
 
 /* F2.5b Keyboard shortcuts and About (design: "Shortcuts, About and Soon"). */
-.modal{width:min(440px,calc(100% - 32px));max-height:calc(100vh - 64px);overflow:auto;padding:0;border:1px solid var(--card-line);border-radius:var(--radius-12);background:var(--inset);color:var(--fg);box-shadow:0 18px 50px rgba(0,0,0,.45)}
+.modal{width:min(440px,calc(100% - 32px));max-height:calc(100vh - 64px);overflow:auto;padding:0;border:1px solid var(--card-line);border-radius:var(--radius-12);background:var(--inset);color:var(--fg);box-shadow:var(--shadow-pop)}
 .modal.wide{width:min(640px,calc(100% - 32px))}
 .modal::backdrop{background:var(--scrim)}
 .modal[open]{animation:modal-in .16s cubic-bezier(.2,.9,.3,1)}
@@ -438,7 +438,8 @@ main:focus{outline:none}
 .sc-col{display:flex;flex-direction:column;gap:16px;min-width:0}
 .sc-grp h3{margin:0 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
 .sc{display:flex;align-items:center;gap:12px;min-height:32px;border-top:1px solid var(--hairline);font-size:12px}
-.sc .t{flex:1;min-width:0}
+.sc .t{flex:1;min-width:0;padding:6px 0}
+.sc-note{display:block;margin-top:2px;font-size:11px;color:var(--muted)}
 .ks{display:inline-flex;gap:4px;align-items:center}
 .ks kbd{font:500 11px/1 var(--font-mono);padding:4px 6px;border-radius:5px;border:1px solid var(--card-line);background:var(--fill-6);color:var(--fg);white-space:nowrap}
 .about-kv{margin:0}
@@ -448,5 +449,5 @@ main:focus{outline:none}
 @media (max-width:560px){.sc-cols{grid-template-columns:minmax(0,1fr)}}
 
 /* Changing the theme cross-fades colours for THEME_FADE_MS (theme.tsx) instead of snapping. */
-.theme-switching,.theme-switching *,.theme-switching *::before,.theme-switching *::after{transition:background-color .24s ease,color .24s ease,border-color .24s ease,fill .24s ease,stroke .24s ease,box-shadow .24s ease!important}
+.theme-switching,.theme-switching *,.theme-switching *::before,.theme-switching *::after{transition:background-color .24s ease,color .24s ease,border-color .24s ease,fill .24s ease,stroke .24s ease,box-shadow .24s ease,opacity .24s ease,transform .24s ease!important}
 /* Reduced motion: the global rule above turns every animation and transition off. */

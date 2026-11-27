@@ -191,6 +191,25 @@ async function checkProfileMenu(browser, origin, fail) {
   await page.keyboard.press('ArrowLeft')
   await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
   expect((await focused()) === 'profile-appearance', 'ArrowLeft did not return focus to the trigger')
+  // Review M1 (the story pins English, so English is checked): a submenu opened by pointer still takes the keyboard. ArrowRight and Enter on its
+  // open trigger move focus to the checked choice; ArrowLeft brings it back.
+  await page.click('[data-testid="profile-language"]')
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  expect((await focused()) === 'profile-language', `a pointer click should leave focus on the trigger: ${await focused()}`)
+  await page.keyboard.press('ArrowRight')
+  expect((await focused()) === 'profile-language-en', `ArrowRight on a pointer-opened submenu should focus the checked choice: ${await focused()}`)
+  await page.keyboard.press('ArrowLeft')
+  await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
+  await page.click('[data-testid="profile-language"]')
+  await page.waitForSelector('[data-testid="profile-submenu"]')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(200)
+  expect((await page.$('[data-testid="profile-submenu"]:not(.closing)')) !== null, 'Enter on an open trigger closed its submenu')
+  expect((await focused()) === 'profile-language-en', `Enter on an open trigger should focus the checked choice: ${await focused()}`)
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="profile-submenu"]', { state: 'detached' })
+  await page.keyboard.press('Home')
+  for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowDown')
   // Escape closes the menu (with an exit animation) and returns focus to the profile button.
   await page.keyboard.press('Escape')
   expect((await page.$('.pm.closing')) !== null, 'the menu left without an exit animation')
@@ -210,7 +229,42 @@ async function checkProfileMenu(browser, origin, fail) {
   await page.click('[data-testid="profile-appearance"]')
   await page.click('[data-testid="profile-theme-dark"]')
   expect((await theme()) === 'dark', 'Dark was not applied')
+  // roadmap: F2.5b-AC8
+  // In the whole app: About closes on a backdrop press and focus returns to the profile button;
+  // app shortcuts do nothing while a window is open; a window closed just before a shortcut
+  // never closes the next one (review m1, m2).
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.goto(`${origin}/iframe.html?id=screens--full-app-shell&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+  const openAbout = async () => {
+    await page.click('[data-testid="profile"]')
+    await page.click('[data-testid="profile-about"]')
+    await page.waitForSelector('[data-testid="about-dialog"][open]')
+    await settleAnimations(page)
+  }
+  await openAbout()
+  const route = () => page.evaluate(() => document.querySelector('main')?.innerHTML.length)
+  const before = await route()
+  await page.keyboard.press('Control+,')
+  await page.keyboard.press('Control+/')
+  expect((await page.$('[data-testid="shortcuts-dialog"]')) === null, 'Ctrl+/ opened a second window over About')
+  expect((await route()) === before, 'Ctrl+, changed the screen behind About')
+  await page.mouse.click(4, 4)
+  await page.waitForSelector('[data-testid="about-dialog"]', { state: 'detached' })
+  expect((await focused()) === 'profile', `focus did not return to the profile button after a backdrop press: ${await focused()}`)
+  await openAbout()
+  await page.click('[data-testid="about-dialog-close"]')
+  await page.keyboard.press('Control+/')
+  await page.waitForTimeout(400)
+  expect((await page.$('[data-testid="shortcuts-dialog"][open]')) !== null, 'the closing About window closed the shortcut list opened after it')
+  await page.keyboard.press('Escape')
+  await page.waitForSelector('[data-testid="shortcuts-dialog"]', { state: 'detached' })
+
   // Reduced motion: no animation, and the menu leaves at once.
+  await page.goto(`${origin}/iframe.html?id=ui-shell--sidebar-with-deferred-entries&viewMode=story&globals=locale:en;theme:dark`)
+  await page.waitForSelector('[data-testid="profile"]')
+  await page.click('[data-testid="profile"]')
+  await page.waitForSelector('[data-testid="profile-menu"]')
   await page.emulateMedia({ reducedMotion: 'reduce' })
   expect((await page.evaluate(() => getComputedStyle(document.querySelector('.pm')).animationName)) === 'none', 'the menu animates under reduced motion')
   await page.keyboard.press('Escape')

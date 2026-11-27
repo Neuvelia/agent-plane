@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { I18nProvider } from '../src/i18n/context'
 import { clearLocale, loadLocale, saveLocale } from '../src/i18n'
 import { THEME_FADE_MS, ThemeProvider, loadThemeChoice, resolveTheme, saveThemeChoice, type ThemeChoice } from '../src/theme'
-import { closesSubmenu, commandHeld, modifierLabel, moveFocus, openFromButton } from '../src/ui/menuKeys'
+import { closesSubmenu, commandHeld, isAppShortcut, modifierLabel, moveFocus, openFromButton } from '../src/ui/menuKeys'
 import { PROFILE_INITIALS, PROFILE_NAME, ProfileMenu, type ProfileMenuState } from '../src/ui/profileMenu'
 import { Sidebar } from '../src/ui/shell'
 
@@ -110,6 +110,19 @@ describe('menu keyboard model', () => {
   })
 })
 
+describe('app shortcuts', () => {
+  const key = (k: string, extra: Partial<KeyboardEvent> = {}) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, ...extra })
+  it('are Ctrl/Cmd with , or / and nothing else [F2.5b-AC9]', () => {
+    expect(isAppShortcut(key(','), 'Linux x86_64')).toBe('settings')
+    expect(isAppShortcut(key('/'), 'Win32')).toBe('shortcuts')
+    expect(isAppShortcut(key('/', { ctrlKey: false, metaKey: true }), 'MacIntel')).toBe('shortcuts')
+    expect(isAppShortcut(key('/'), 'MacIntel')).toBeNull()
+    expect(isAppShortcut(key('/', { shiftKey: true }), 'Win32')).toBeNull()
+    expect(isAppShortcut(key('/', { altKey: true }), 'Win32')).toBeNull()
+    expect(isAppShortcut(key('s'), 'Win32')).toBeNull()
+  })
+})
+
 describe('appearance and language preferences', () => {
   it('saves Light and Dark, and System removes the saved choice [F2.5b-AC4]', () => {
     const s = new MemoryStorage()
@@ -156,6 +169,17 @@ describe('Settings carries the same Appearance choice', () => {
     expect(out).toContain('Appearance')
     expect(out).toMatch(/aria-pressed="true"[^>]*data-testid="settings-theme-light"/)
     expect(out).toMatch(/aria-pressed="false"[^>]*data-testid="settings-theme-system"/)
+  })
+  it('offers the language System choice too, pressed when nothing is saved', async () => {
+    const { Settings } = await import('../src/settings')
+    const out = renderToStaticMarkup(
+      <I18nProvider>
+        <ThemeProvider initialChoice="dark">
+          <Settings />
+        </ThemeProvider>
+      </I18nProvider>,
+    )
+    expect(out).toMatch(/aria-pressed="true"[^>]*data-testid="settings-language-system"/)
   })
 })
 

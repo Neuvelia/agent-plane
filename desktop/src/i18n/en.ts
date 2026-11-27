@@ -806,6 +806,8 @@ export const en = {
   'about.checking': 'Checking…',
   'about.unknown': 'Unknown',
   'about.unreachable': 'Engine not connected',
+  'shortcuts.listInYaml': 'In the YAML editor {keys} comments the line instead.',
+  'about.unavailable': 'Not available',
   'about.copy': 'Copy diagnostics',
   'about.copied': 'Diagnostics copied',
   'about.copyFailed': 'Could not copy. Select the values and copy them by hand.',
