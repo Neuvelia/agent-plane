@@ -9,24 +9,27 @@ export const MAX_CONTEXT_FILES = 10
 
 export interface UpstreamContext {
   nodeId: string
-  /** The latest check result of the node, from its last attempt or as a standalone Gate. */
+  /** The check result of the node's last attempt, or of the node as a standalone Gate. */
   check?: CheckView
-  /** Sorted Git-observed paths of the latest attempt that observed any, bounded. Undefined: not observed. */
+  /** Sorted Git-observed paths of that same last attempt, bounded. Undefined: not observed. */
   files?: string[]
   /** Observed paths beyond MAX_CONTEXT_FILES. */
   moreFiles: number
 }
 
-/** Context for each direct dependency of a human node, in the graph's edge order without duplicates. */
+/**
+ * Context for each direct dependency of a human node, in the graph's edge order without duplicates.
+ * The check and the changed files come from the same attempt, the node's last one: an earlier,
+ * rejected attempt never lends its files or its check to the attempt being approved.
+ */
 export function approvalContext(run: RunView, upstream: readonly string[]): UpstreamContext[] {
   return [...new Set(upstream)].map((id) => {
     const n = nodeView(run, id)
-    const lastWithCheck = [...n.attempts].reverse().find((a) => a.check)
-    const lastObserved = [...n.attempts].reverse().find((a) => a.changedFiles)
-    const all = lastObserved?.changedFiles && [...lastObserved.changedFiles].sort()
+    const last = n.attempts[n.attempts.length - 1]
+    const all = last?.changedFiles && [...last.changedFiles].sort()
     return {
       nodeId: id,
-      check: lastWithCheck?.check ?? n.check,
+      check: last ? last.check : n.check,
       files: all?.slice(0, MAX_CONTEXT_FILES),
       moreFiles: Math.max(0, (all?.length ?? 0) - MAX_CONTEXT_FILES),
     }

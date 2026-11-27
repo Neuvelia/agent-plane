@@ -13,6 +13,8 @@ import { pl } from '../src/i18n/pl'
 // "fast" and "flaky" feed the human node "approve"; "flaky" is a Shell loop, red then green.
 const recorded = approveEvents as unknown as ApEvent[]
 const waiting = recorded.slice(0, recorded.findIndex((e) => e.type === 'approval_requested') + 1)
+const attemptStarts = waiting.filter((e) => e.type === 'attempt_started' && e.node_id === 'flaky')
+const lastAttemptStarted = attemptStarts[attemptStarts.length - 1]!
 
 function panel(events: ApEvent[], locale: 'en' | 'pl', opts: { upstream?: string[]; onOpenNode?: (id: string) => void } = { upstream: ['fast', 'flaky'] }) {
   return renderToStaticMarkup(
@@ -38,10 +40,10 @@ describe('approval context model', () => {
     }
   })
 
-  it('bounds the changed files and counts the rest, from the latest attempt that observed them', () => {
+  it('bounds the changed files and counts the rest, from the last attempt', () => {
     const paths = Array.from({ length: MAX_CONTEXT_FILES + 3 }, (_, i) => `src/f${String(i).padStart(2, '0')}.go`)
     const evidence = {
-      ...waiting.find((e) => e.type === 'attempt_started')!,
+      ...lastAttemptStarted,
       type: 'node_evidence',
       sequence: 1000,
       payload: { changed_files: paths.map((path) => ({ path })) },
@@ -55,7 +57,7 @@ describe('approval context model', () => {
     const paths = Array.from({ length: MAX_CONTEXT_FILES + 2 }, (_, i) => `src/f${String(i).padStart(2, '0')}.go`)
     const shuffled = [...paths].reverse()
     const evidence = {
-      ...waiting.find((e) => e.type === 'attempt_started')!,
+      ...lastAttemptStarted,
       type: 'node_evidence',
       sequence: 1000,
       payload: { changed_files: shuffled.map((path) => ({ path })) },
@@ -63,6 +65,18 @@ describe('approval context model', () => {
     const [u] = approvalContext(reduceAll([...waiting.slice(0, -1), evidence]), ['flaky'])
     expect(u!.files).toEqual(paths.slice(0, MAX_CONTEXT_FILES))
     expect(u!.moreFiles).toBe(2)
+  })
+
+  it('never shows the files of an earlier, rejected attempt next to the accepted check', () => {
+    const evidence = {
+      ...attemptStarts[0]!,
+      type: 'node_evidence',
+      sequence: 1000,
+      payload: { changed_files: [{ path: 'src/rejected.go' }] },
+    } as unknown as ApEvent
+    const [u] = approvalContext(reduceAll([...waiting.slice(0, -1), evidence]), ['flaky'])
+    expect(u!.check?.verdict).toBe('green')
+    expect(u!.files).toBeUndefined()
   })
 })
 
