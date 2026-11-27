@@ -86,4 +86,5 @@ Follow-ups to the audit (accepted 2026-11-27, implemented; ADR-0042 is listed ab
 
 Desktop presentation:
 [ADR-0046 - The Inbox triage queue replaces the Dashboard](0046-inbox-replaces-dashboard.md) (F2.5b),
-[ADR-0047 - Desktop light theme and profile menu](0047-desktop-light-theme-and-profile-menu.md) (F2.5c).
+[ADR-0047 - Desktop light theme and profile menu](0047-desktop-light-theme-and-profile-menu.md) (F2.5c),
+[ADR-0048 - Welcome and setup as a four-step setup](0048-four-step-setup.md) (F2.11, F2.12; proposed 2026-11-27).

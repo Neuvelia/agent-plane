@@ -43,6 +43,7 @@ const REQUIRED = [
   'screens--runs-list-loading', 'screens--runs-list-error', 'screens--inbox-loading', 'screens--inbox-error', 'screens--approvals-loading', 'screens--approvals-error', 'screens--new-run-validating', 'screens--full-app-shell-engine-down',
   'screens--new-run-no-file', 'screens--new-run-ready', 'screens--new-run-warnings', 'screens--new-run-blocked',
   'screens-welcome--all-available', 'screens-welcome--git-missing', 'screens-welcome--codex-not-configured', 'screens-welcome--codex-found-on-path', 'screens-welcome--agent-clis-found', 'screens-welcome--codex-unsupported-version', 'screens-welcome--windows', 'screens-welcome--detection-error', 'screens-welcome--checking', 'screens-welcome--rechecking', 'screens-welcome--request-failed', 'screens-welcome--engine-disconnected',
+  'screens-welcome--step-welcome', 'screens-welcome--step-agents', 'screens-welcome--step-first-graph', 'screens-welcome--step-first-graph-blank-picked', 'screens-welcome--step-first-graph-windows', 'screens-welcome--in-app-first-launch-light', 'screens-welcome--step-check-light', 'screens-welcome--step-agents-light', 'screens-welcome--step-first-graph-light', 'screens-welcome--checking-light', 'screens-welcome--shell-missing', 'screens-welcome--in-app-first-launch', 'screens-welcome--in-app-engine-disconnected',
   'screens-edge-inspector--no-run', 'screens-edge-inspector--run-unavailable', 'screens-edge-inspector--different-version-none-chosen', 'screens-edge-inspector--different-version-needs-confirmation', 'screens-edge-inspector--different-version-confirmed', 'screens-edge-inspector--node-not-finished', 'screens-edge-inspector--node-waiting-for-person', 'screens-edge-inspector--node-failed', 'screens-edge-inspector--older-run', 'screens-edge-inspector--not-recorded', 'screens-edge-inspector--no-value-for-this-port', 'screens-edge-inspector--value-not-carried', 'screens-edge-inspector--value-string', 'screens-edge-inspector--value-json-formatted', 'screens-edge-inspector--value-json-raw', 'screens-edge-inspector--value-not-json', 'screens-edge-inspector--value-truncated', 'screens-edge-inspector--value-redacted', 'screens-edge-inspector--value-long', 'screens-edge-inspector--value-hidden-characters', 'screens-edge-inspector--value-empty', 'screens-edge-inspector--value-artifact-reference', 'screens-edge-inspector--live-run-value-arrived', 'screens-edge-inspector--connection-lost', 'screens-edge-inspector--connection-lost-before-value',
   'screens-template-picker--default', 'screens-template-picker--windows-report', 'screens-template-picker--no-report', 'screens-template-picker--codex-not-configured', 'screens-template-picker--agent-draft-shows-placeholder',
 ]
@@ -73,7 +74,8 @@ const server = http.createServer((req, res) => {
   const workers = Math.max(1, Number(process.env.AP_STORIES_WORKERS) || Math.min(4, os.cpus().length))
   const themes = (process.env.AP_STORIES_THEMES || 'dark,light').split(',')
   for (const [locale, theme] of ['en', 'pl'].flatMap((l) => themes.map((t) => [l, t]))) {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+    // Reduced motion: axe judges each story's settled frame, not a fade caught halfway.
+    const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' })
     const queue = [...ids]
     // Each page takes the next story from the shared queue; failures name the
     // story that page was rendering, so the report matches a sequential run.

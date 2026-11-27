@@ -66,6 +66,9 @@ describe('formatDuration', () => {
     expect(formatDuration(48300, 'pl')).toBe('48,3s')
     expect(formatDuration(72000, 'en')).toBe('1m 12s')
     expect(formatDuration(120000, 'pl')).toBe('2m')
+    expect(formatDuration(7_500_000, 'en')).toBe('2h 5m')
+    expect(formatDuration(3_600_000, 'en')).toBe('1h')
+    expect(formatDuration(1_141_522_000, 'en')).toBe('13d 5h')
   })
 })
 

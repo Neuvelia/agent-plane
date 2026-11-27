@@ -144,7 +144,8 @@ function Entry({ entry, report, checked, onPick, onKey }: { entry: TemplateEntry
   )
 }
 
-function NoticeText({ n }: { n: Notice }) {
+/** One picker notice as a sentence; setup's template cards show the same words. */
+export function NoticeText({ n }: { n: Notice }) {
   const { t } = useI18n()
   if (n.kind === 'platform') return <>{t('picker.platform')}</>
   if (n.kind === 'cliOnly') return <>{t('picker.cliOnly')}</>

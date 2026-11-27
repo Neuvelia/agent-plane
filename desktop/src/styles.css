@@ -1,12 +1,14 @@
 @import './design/fonts.css';
 @import './design/tokens.css';
 @import './design/overrides.css';
+@import './setup.css';
 
 *{box-sizing:border-box}
 /* Native controls, scrollbars and the canvas follow the chosen theme (F2.5c). */
 :root{color-scheme:dark;--scrim:rgba(0,0,0,.6);--shadow-pop:0 18px 50px rgba(0,0,0,.45)}
 :root[data-theme=light]{color-scheme:light;--scrim:rgba(0,0,0,.32);--shadow-pop:0 12px 32px rgba(0,0,0,.14)}
 html,body,#root{height:100%;margin:0}
+:root{color-scheme:dark}
 body{background:var(--bg);color:var(--fg);font:var(--type-body-weight) var(--type-body-size)/1.4 var(--font-sans);-webkit-font-smoothing:antialiased}
 :focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 .mono{font-family:var(--font-mono);font-size:var(--type-mono-size)}
@@ -94,6 +96,9 @@ main{overflow:auto;min-width:0;min-height:0;flex:1;padding:var(--space-18) 24px 
 input,textarea{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);padding:8px var(--space-10);width:100%}
 input::placeholder,textarea::placeholder{color:var(--muted)}
 input{height:var(--size-nav)}
+/* Radios and checkboxes keep their native size: the text-field rule above must not stretch them. */
+input:is([type=radio],[type=checkbox]){width:18px;height:18px;padding:0;margin:0;flex:none;accent-color:var(--brand)}
+select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);max-width:100%;color-scheme:dark}
 textarea{min-height:64px;resize:vertical}
 .field{display:flex;flex-direction:column;gap:6px}
 .toggle{display:flex;align-items:center;gap:var(--space-10)}
@@ -183,6 +188,9 @@ table.runs{width:100%;border-collapse:collapse}
 .ap-node.s-waiting_human{outline:1px solid var(--warn)}
 .ap-node-top,.ap-node-bottom{display:flex;align-items:center;gap:6px;white-space:nowrap;min-width:0}
 .ap-node-top{justify-content:space-between}
+.ap-node-top>*{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ap-node-top>.tag{display:inline-block;line-height:20px;flex:0 1 auto}
+.ap-node-top>b{flex:1 1 auto}
 .react-flow__edge.flow .react-flow__edge-path{stroke:var(--brand)}
 .react-flow__handle{opacity:0}
 .banner{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;border-radius:var(--radius-12);background:var(--bad-soft);color:var(--fg)}
@@ -191,12 +199,13 @@ table.runs{width:100%;border-collapse:collapse}
 .cmp p{margin:0}
 .cmp-controls{display:flex;align-items:flex-end;gap:var(--space-8);flex-wrap:wrap}
 .cmp-controls .field{flex:1 1 140px;min-width:0}
-.cmp select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);width:100%}
+.cmp select{width:100%}
 .cmp-scroll{overflow-x:auto}
 .cmp-table{width:100%;border-collapse:collapse;font-size:13px;table-layout:fixed}
 .cmp-table th,.cmp-table td{text-align:left;vertical-align:top;padding:var(--space-8);border-bottom:1px solid var(--fill-6);overflow-wrap:anywhere}
 .cmp-table thead th{font-weight:600}
-.cmp-table th[scope=row]{width:28%}
+.cmp-table th[scope=row]{width:24%}
+.cmp-table .pill{white-space:normal;height:auto;min-height:20px;padding-block:2px}
 .cmp-files ul{list-style:none;margin:4px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
 .cmp-files li{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
 .cmp-feedback{background:var(--inset);border-radius:var(--radius-12);padding:10px;display:flex;flex-direction:column;gap:6px}
@@ -268,6 +277,8 @@ main:focus{outline:none}
 .ed-node:hover{background:var(--raised-hover)}
 .ed-node.sel{box-shadow:var(--ring-selected)}
 .ed-node-head{display:flex;justify-content:space-between;align-items:center;gap:6px;height:44px;padding:0 12px;white-space:nowrap}
+.ed-node-head>b{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.ed-node-head .pill{position:relative}
 .ed-port{position:absolute;left:0;right:0;height:22px;display:flex;align-items:center;gap:6px;padding:0 14px;white-space:nowrap}
 .ed-port.out{justify-content:flex-end}
 .ed-port .mu{font-size:11px}
@@ -321,7 +332,6 @@ main:focus{outline:none}
 .ed-port.focus{background:var(--fill-8,var(--fill-4));border-radius:6px}
 /* F2.2 node inspector */
 .ins{display:grid;gap:var(--space-12);padding:0 var(--space-12) var(--space-12)}
-.ins select,.ins-row select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);max-width:100%}
 .ins-section{display:grid;gap:var(--space-8);padding-top:var(--space-8);border-top:1px solid var(--card-line)}
 .ins-head{margin:0;font-size:var(--type-label-size);font-weight:600;letter-spacing:var(--type-label-tracking);text-transform:uppercase;color:var(--muted)}
 .ins-sub{margin:var(--space-8) 0 0;font-size:12px;font-weight:600}
@@ -347,17 +357,6 @@ main:focus{outline:none}
 .ins-strip li:not([aria-hidden]){padding:4px 10px;border-radius:var(--radius-pill);background:var(--raised)}
 .ins-yaml{margin:0;padding:6px 8px;border-radius:var(--radius-6);background:var(--bg);white-space:pre-wrap;word-break:break-word}
 .ins-preview ul{margin:4px 0 0;padding-left:18px}
-/* F2.11 welcome screen */
-.welcome{max-width:880px}
-.welcome-intro{margin:0 0 var(--space-8);max-width:70ch}
-.cap-list{list-style:none;margin:0;padding:0 var(--space-8);display:flex;flex-direction:column;gap:var(--space-4)}
-.cap-row{padding:var(--space-8) var(--space-10);border-radius:var(--radius-12);background:var(--fill-4)}
-.cap-head{display:flex;align-items:center;gap:var(--space-8);flex-wrap:wrap}
-.cap-name{font-weight:600}
-.cap-meaning,.cap-still{margin:var(--space-4) 0 0}
-.cap-note{margin:0 var(--space-12)}
-.cap-note:empty{display:none}
-.cap-state{display:flex;justify-content:space-between;align-items:center;gap:var(--space-12);margin:0 var(--space-12);padding:10px 14px;border-radius:var(--radius-12);background:var(--bad-soft)}
 /* F2.12 New graph picker */
 .picker{max-width:640px;width:calc(100% - 32px);max-height:calc(100vh - 64px);overflow:auto;padding:var(--space-14) var(--space-14) var(--space-12);border:1px solid var(--card-line);border-radius:var(--radius-20);background:var(--surface);color:var(--fg)}
 .picker::backdrop{background:var(--scrim)}
@@ -365,14 +364,13 @@ main:focus{outline:none}
 .picker-list{border:0;margin:var(--space-8) 0;padding:0;display:flex;flex-direction:column;gap:var(--space-4)}
 .picker-entry{display:flex;gap:var(--space-10);align-items:flex-start;padding:var(--space-8) var(--space-10);border-radius:var(--radius-12);background:var(--fill-4);cursor:pointer}
 .picker-entry:has(input:checked){box-shadow:var(--ring-selected)}
-.picker-entry input{margin-top:3px;accent-color:var(--brand)}
+.picker-entry input{margin-top:2px}
 .picker-text,.picker-desc{display:flex;flex-direction:column;gap:2px}
 .picker-title{display:flex;gap:var(--space-8);align-items:center;font-weight:600}
 .picker-meta{display:flex;gap:var(--space-4);flex-wrap:wrap;margin-top:2px}
 .picker-notice{color:var(--warn)}
 .picker-actions{justify-content:flex-end}
 .val-picker{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-8)}
-.val-picker select{font:inherit;color:var(--fg);background:var(--raised);border:1px solid transparent;border-radius:var(--radius-10);height:var(--size-nav);padding:0 var(--space-10);max-width:100%}
 .ap-node.dim{opacity:.45}
 .tl-btn{font:inherit;color:inherit;background:transparent;border:0;border-radius:var(--radius-10);padding:2px var(--space-4);width:100%;text-align:left;cursor:pointer}
 .tl-btn:hover{background:var(--fill-4)}.tl-btn.sel{box-shadow:var(--ring-selected)}
@@ -397,6 +395,14 @@ main:focus{outline:none}
 .runs-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-12);margin-bottom:var(--space-12)}
 .runs .run-group-head th{padding-top:var(--space-12);text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)}
 
+/* Setup (welcome) is full-bleed: no bars, no page padding. */
+.app.setup-mode{padding:0;gap:0}
+.app.setup-mode>.col{gap:0;border-left:1px solid var(--hairline)}
+main.setup-host{padding:0;overflow:hidden;display:flex;flex-direction:column}
+main.setup-host>.su{flex:1}
+/* The canvas toolbar goes below the title as a whole when it does not fit beside it. */
+.ed-visual .card-head{flex-wrap:wrap}
+.ed-visual .card-head>[role=toolbar]{flex:1 1 auto;justify-content:flex-end}
 /* F2.5d command palette (design board "Command palette"). A modal <dialog> in the
    top layer; the page behind is dimmed and slightly blurred by its backdrop.
    Enter: fade + 8px drop + scale from .98 on a decelerating curve; exit is shorter

@@ -6,6 +6,7 @@ import {
   ReactFlowProvider,
   applyNodeChanges,
   useReactFlow,
+  useStore,
   type Connection,
   type Edge,
   type Node,
@@ -78,8 +79,19 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
       <div className="ed-node-head">
         <b>{data.id}</b>
         <span className="row" style={{ gap: 6, flexWrap: 'nowrap' }}>
-          {n && n.errors > 0 && <Pill tone="x" small>{'✖ '}{t('editor.nodeErrors', { count: n.errors })}</Pill>}
-          {n && n.warnings > 0 && <Pill tone="w" small>{'⚠ '}{t('editor.nodeWarnings', { count: n.warnings })}</Pill>}
+          {/* A fixed-width node has room for the counts only; the full words are for screen readers. */}
+          {n && n.errors > 0 && (
+            <Pill tone="x" small>
+              <span aria-hidden="true">{`✖ ${n.errors}`}</span>
+              <span className="sr-only">{t('editor.nodeErrors', { count: n.errors })}</span>
+            </Pill>
+          )}
+          {n && n.warnings > 0 && (
+            <Pill tone="w" small>
+              <span aria-hidden="true">{`⚠ ${n.warnings}`}</span>
+              <span className="sr-only">{t('editor.nodeWarnings', { count: n.warnings })}</span>
+            </Pill>
+          )}
           <span className="tag">{data.kind}</span>
         </span>
       </div>
@@ -90,7 +102,7 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
         const badge = c.badges.ports[ref]
         return (
           <div className={`ed-port in${c.focusPort === ref ? ' focus' : ''}`} style={{ top: rowY(i) - 11 }} key={`in:${p.name}`}>
-            <Handle type="target" position={Position.Left} id={`in:${p.name}`} style={{ top: rowY(i) }} isConnectable={!c.readOnly} className={bad ? 'ed-bad' : verdict?.ok ? 'ed-ok' : ''} title={bad ? verdict.message : undefined} data-testid={`handle-${ref}`} />
+            <Handle type="target" position={Position.Left} id={`in:${p.name}`} isConnectable={!c.readOnly} className={bad ? 'ed-bad' : verdict?.ok ? 'ed-ok' : ''} title={bad ? verdict.message : undefined} data-testid={`handle-${ref}`} />
             <span className="mono">{p.name}</span>
             <span className="mu">{p.type}</span>
             <PortBadge badge={badge} />
@@ -102,7 +114,7 @@ function EdNode({ data }: NodeProps<Node<EdData>>) {
           <PortBadge badge={c.badges.ports[makeRef(data.id, 'outputs', p.name)]} />
           <span className="mu">{p.type}</span>
           <span className="mono">{p.name}</span>
-          <Handle type="source" position={Position.Right} id={`out:${p.name}`} style={{ top: rowY(i) }} isConnectable={!c.readOnly} data-testid={`handle-${makeRef(data.id, 'outputs', p.name)}`} />
+          <Handle type="source" position={Position.Right} id={`out:${p.name}`} isConnectable={!c.readOnly} data-testid={`handle-${makeRef(data.id, 'outputs', p.name)}`} />
         </div>
       ))}
     </div>
@@ -480,7 +492,7 @@ function Inner({ g, doc, focusReq, selection, picker }: { g: GraphDocument; doc:
               nodeTypes={nodeTypes}
               onNodesChange={onNodesChange}
               fitView
-              fitViewOptions={{ padding: 0.2 }}
+              fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
               nodesDraggable={!readOnly}
               nodesConnectable={!readOnly}
               edgesFocusable
@@ -592,19 +604,20 @@ function Selected({ def, sel, onRemove, readOnly, headRef }: { def: Definition; 
 // resizing then (view switch). Refit whenever its size changes.
 function FitOnResize() {
   const { fitView } = useReactFlow()
+  // The flow's own element: a view switch can replace the wrapper around it, never this one.
+  const el = useStore((s) => s.domNode)
   useEffect(() => {
-    const el = document.querySelector('[data-testid="editor-canvas"]')
     if (!el) return
     let frame = 0
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => void fitView({ padding: 0.2 }))
+      frame = requestAnimationFrame(() => void fitView({ padding: 0.2, maxZoom: 1 }))
     })
     ro.observe(el)
     return () => {
       ro.disconnect()
       cancelAnimationFrame(frame)
     }
-  }, [fitView])
+  }, [fitView, el])
   return null
 }
