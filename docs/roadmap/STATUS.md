@@ -173,7 +173,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | FX.1 | Dynamic fan-out units (foreach / Splitter) | future |  | deferred | Z decyzji D13; brak fazy w roadmapie. |
 | [REL1](../../docs/features/REL1-release-engineering.md) | Release engineering | enabler |  | in_progress | LICENSE jest; brak tagów i paczek. |
 | [REL2](../../docs/features/REL2-public-roadmap-status.md) | Public roadmap status feed | enabler |  | not_started | Feed ma być generowany z features.yaml (ADR-0038). |
-| REL3 | Roadmap tracking harness | enabler |  | in_progress | features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty. |
+| REL3 | Roadmap tracking harness | enabler |  | in_progress | features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty, triage issues (claude-ready / needs-owner, issue-triage.md, workflow issue-labels). |
 
 ## Open decisions (`needs_decision`)
 

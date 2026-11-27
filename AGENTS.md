@@ -301,6 +301,20 @@ describes the workflow. For every feature, fix or docs change:
 - Reusable prompts for planning, implementation, fixes, docs, reviews, new specs and
   re-audits live in `prompts/` (`prompts/README.md`).
 
+Issues and labels (`docs/roadmap/issue-triage.md`):
+
+- Every issue you open gets exactly one class label: `claude-ready` when all seven
+  conditions of the triage rule hold (one feature, unambiguous outcome, no ADR,
+  deterministic proof, runs in an agent container, no trust boundary, one PR),
+  otherwise `needs-owner`. When in doubt, `needs-owner`.
+- `needs_decision`, `epic`, `spike` and `feature` are always `needs-owner`; the
+  `issue-labels` workflow enforces that and the `triage` label.
+- Put the feature ID in the title (`[F2.5b] ...`). A `claude-ready` body states the
+  expected outcome and how to verify it; a `needs-owner` body ends with
+  `Owner input needed: ...`.
+- Take only `claude-ready` issues on your own. If one turns out to need a
+  decision, stop, comment what is missing and swap the label to `needs-owner`.
+
 Roadmap invariants (roadmap §2), checked in every change and re-audit:
 
 - [ ] Local-first: no cloud account or remote service is required; listeners stay on loopback.

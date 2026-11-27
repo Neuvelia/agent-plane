@@ -1,0 +1,57 @@
+name: issue-labels
+
+# Keeps the triage labels of an issue consistent (docs/roadmap/issue-triage.md):
+# exactly one of claude-ready / needs-owner, or triage when neither. The rules
+# live in .github/scripts/issue-labels.cjs and are deterministic; nothing here
+# decides whether a task is small enough, it only enforces what a person or an
+# agent decided. Label changes made with GITHUB_TOKEN start no new run.
+#
+# The issue body is untrusted: it is read only through the GitHub API inside the
+# script and matched against one fixed heading, never passed to a shell.
+on:
+  issues:
+    types: [opened, labeled, unlabeled]
+  pull_request:
+    paths:
+      - .github/scripts/**
+      - .github/workflows/issue-labels.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    # Events of one issue run in order; a later run sees the earlier result.
+    concurrency:
+      group: issue-labels-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const labels = require(`${process.env.GITHUB_WORKSPACE}/.github/scripts/issue-labels.cjs`);
+            await labels.run({ github, context, core });
+
+  test:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test .github/scripts/issue-labels.test.cjs

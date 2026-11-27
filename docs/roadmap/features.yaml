@@ -1981,4 +1981,4 @@ features:
     decisions: ["ADR-0038"]
     divergences: []
     tasks: []
-    note: "features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty."
+    note: "features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty, triage issues (claude-ready / needs-owner, issue-triage.md, workflow issue-labels)."

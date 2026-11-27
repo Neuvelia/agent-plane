@@ -1,0 +1,47 @@
+name: Bug
+description: A behavior that contradicts a spec, an acceptance criterion or a documented contract
+title: "[Fx.y] "
+labels: ["bug"]
+body:
+  - type: input
+    id: feature_id
+    attributes:
+      label: Feature ID
+      description: The registry entry in docs/roadmap/features.yaml.
+      placeholder: F2.5b
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Command, graph, test or UI steps; path:line when known.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What the spec or criterion requires, with its ID or file.
+    validations:
+      required: true
+
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: The test that should fail before the fix.
+
+  - type: dropdown
+    id: autonomy
+    attributes:
+      label: Autonomy
+      description: "Rule: docs/roadmap/issue-triage.md. Choose \"Claude\" only if all seven conditions hold; the issue-labels workflow sets claude-ready or needs-owner from this answer."
+      options:
+        - Needs me (decision, environment or review)
+        - Claude can take it autonomously
+      default: 0
+    validations:
+      required: true

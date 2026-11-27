@@ -52,5 +52,7 @@ Then give:
 - the result of `go run ./scripts/roadmapcheck`, if you can run it;
 - a recommendation: MERGE / FIX THEN MERGE / REDESIGN.
 
-Do not change code. Do not invent issues to lengthen the review.
+Do not change code. Do not invent issues to lengthen the review. If you are asked
+to file findings as issues, label each `claude-ready` or `needs-owner` by
+docs/roadmap/issue-triage.md.
 ```

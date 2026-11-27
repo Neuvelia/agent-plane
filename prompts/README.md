@@ -12,6 +12,7 @@ Replace the `{{PLACEHOLDERS}}` and paste the fenced block as the first message.
 | [`docs.md`](docs.md) | documentation-only changes (specs, docs, registry) | docs only |
 | [`new-spec.md`](new-spec.md) | writing a feature spec for a registry entry before it is activated | docs only |
 | [`review.md`](review.md) | reviewing a branch in a separate session | no |
+| [`triage.md`](triage.md) | classifying issues as `claude-ready` / `needs-owner` (`docs/roadmap/issue-triage.md`) | labels, after approval |
 | [`re-audit.md`](re-audit.md) | re-auditing the repo against the registry and canonical spec | report + registry |
 | [`refactor-clean-architecture.md`](refactor-clean-architecture.md) | the layered refactor plan (historical) | – |
 | [`first-session.md`](first-session.md) | historical F0.1 kickoff | – |
@@ -35,3 +36,5 @@ Every prompt shares the **harness contract**:
    `docs/roadmap/features.yaml`.
 5. Run `make roadmap` and `make check`, and report the actual results.
 6. Put the feature ID in commits and the PR (`[Fx.y] ...`).
+7. Label every issue you open `claude-ready` or `needs-owner`
+   (`docs/roadmap/issue-triage.md`).
