@@ -60,11 +60,7 @@ func (r ValidationResult) HasErrors() bool {
 // parsed graph definition. Structural YAML decoding remains the responsibility
 // of Parse.
 func Validate(definition *Definition) ValidationResult {
-	return validate(definition, nil)
-}
-
-func validate(definition *Definition, use InputUse) ValidationResult {
-	validator := definitionValidator{definition: definition, usedOutputs: make(map[portKey]bool), inputUse: use}
+	validator := definitionValidator{definition: definition, usedOutputs: make(map[portKey]bool)}
 	if definition == nil {
 		validator.error("E_DEFINITION_NIL", "graph definition is nil", DiagnosticLocation{}, "provide a parsed graph definition")
 		return validator.result()
@@ -84,7 +80,6 @@ func validate(definition *Definition, use InputUse) ValidationResult {
 	validator.validateRequiredInputs()
 	validator.validateCycles()
 	validator.validateUnusedOutputs()
-	validator.validateUnconsumedInputs()
 	return validator.result()
 }
 
@@ -95,7 +90,6 @@ type definitionValidator struct {
 	dependencies []dependency
 	usedOutputs  map[portKey]bool
 	nodeIDs      []string
-	inputUse     InputUse
 }
 
 type dependency struct {

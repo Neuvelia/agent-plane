@@ -327,6 +327,8 @@ outputs:
 // read it; one whose Gate reads it (gated) does. It spares the approval edges:
 // the decision edge that makes an Agent wait for approval and the edges that
 // feed an approval panel (#180, ADR-0043).
+//
+// roadmap: F0.2-AC4
 func TestEdgeIntoAnInputTheTargetDoesNotReadWarns(t *testing.T) {
 	result := validateGraph(parseGraph(t, inputUseGraph))
 	var warned []string

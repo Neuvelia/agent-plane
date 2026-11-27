@@ -27,7 +27,7 @@ Canonical decisions: [`canonical-spec.md`](canonical-spec.md). How it works: [`R
 | ID | Feature | Priority | Status | Criteria met | Issues |
 | --- | --- | --- | --- | --- | --- |
 | [F0.1](../../docs/features/F0.1-graph-definition-schema-v0.md) | Graph Definition Schema v0 | P0 | diverged | 3/3 | #179 |
-| [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | done | 3/3 | #180 |
+| [F0.2](../../docs/features/F0.2-graph-validator-and-lint.md) | Graph Validator i lint | P0 | done | 4/4 | #180 |
 | [F0.3](../../docs/features/F0.3-data-bindings.md) | Data bindings na edge'ach | P0 | done | 2/2 |  |
 | [F0.4](../../docs/features/F0.4-dag-scheduler.md) | DAG Scheduler in-memory | P0 | done | 3/3 |  |
 | [F0.5](../../docs/features/F0.5-shell-node.md) | Shell Node | P0 | diverged | 3/3 | #181 |

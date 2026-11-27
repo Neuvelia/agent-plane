@@ -611,26 +611,26 @@ F0.2 reports a warning for a declared node output that is not consumed by a
 valid, type-compatible edge or exposed as a graph output. Invalid edges do not
 count as consumers. This warning does not block execution.
 
-`W_EDGE_INPUT_UNUSED` (F0.2/F2.3) reports a valid edge whose target node does
-not read the input it receives. The location is the edge's `to` path
-(`edges[<n>].to`). Whether a node reads an input comes from the field
-descriptors its validator owns (`internal/fields`):
-
-- an input-name field (a Gate's `input`, `left_input` or `right_input`);
-- a list of input names (a Human node's `context_inputs`);
-- a map keyed by inputs (a Shell node's `input_env`);
-- a field the input replaces (an Agent's `task`);
-- a loop binding whose source is `node.inputs.<id>`.
-
-Two kinds of edge are exempt, because the edge itself is the contract
-(ADR-0043):
-
-- an edge from a human node's `decision` output. It makes the target wait for
-  approval.
-- an edge into a human node. The approval panel shows every input.
-
-Graph input bindings are not checked. The warning does not block execution.
-`graph validate`, `run`, `serve` and the editor all report it. This rule is a
+`W_EDGE_INPUT_UNUSED` (F0.2 and F2.3, #180) reports an edge whose target node
+never reads the input the edge delivers, for example a Shell input with no
+`config.input_env` entry. Its location is the edge (`edge_index`, path
+`edges[<n>].to`). A node reads an input when a configuration field of its type
+names it, as the type's field descriptors declare (`internal/fields`): Shell
+`input_env` keys, Gate `input`, `left_input` and `right_input`, human
+`context_inputs`, and an Agent's `task` input. A loop reads an input it
+forwards (`from: node.inputs.<id>`) only when its embedded Gate's configuration
+reads the Gate input the binding lands on; a forwarded input the Gate ignores
+is not read. An approval dependency (ADR-0017, ADR-0043) always counts
+as read, because schema v0 has no ordering-only edge: an edge into a human node
+makes the approval wait for its source, and an edge from a human node's
+`decision` output makes its target wait for the approval. The suggestion names
+only configuration keys that accept the input's type, and it says that removing
+the edge also removes the dependency on its source. Edges named by a
+blocking diagnostic, edges to an undeclared input or to a node of unknown type,
+and graph input bindings are not checked. The check runs in the validation
+paths of `graph validate`, the API and the editor (ADR-0021) and before `run`
+and `serve` start a run, not in `graph.Validate`, because the field descriptors
+belong to the executors. This warning does not block execution. This rule is a
 gap-closing choice for the roadmap's "unused edge" warnings (owner decision
 Q17).
 

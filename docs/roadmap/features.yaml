@@ -71,15 +71,22 @@ features:
           - "internal/adapter/yamlgraph/validation_test.go::TestValidateDetectsTwoNodeCycle"
           - "internal/adapter/yamlgraph/validation_test.go::TestValidateReportsMissingSourceAndTargetNodes"
           - "internal/adapter/yamlgraph/validation_test.go::TestValidateRejectsIncompatibleBindingTypes"
+      - id: F0.2-AC4
+        text: "Ostrzeżenie dla edge'a, którego output nie jest używany przez kolejny node (W_EDGE_INPUT_UNUSED)."
+        status: met
+        evidence:
+          - "cmd/agentplane/edge_input_test.go::TestEdgeToAnInputTheShellNodeDoesNotMapWarns"
+          - "cmd/agentplane/edge_input_test.go::TestUnusedEdgeInputDoesNotBlockValidateOrRun"
+          - "cmd/agentplane/edge_input_test.go::TestInputsTheTargetReadsDoNotWarn"
+          - "cmd/agentplane/edge_input_test.go::TestShippedGraphsHaveNoUnusedEdgeInput"
+          - "cmd/agentplane/validation_test.go::TestEdgeIntoAnInputTheTargetDoesNotReadWarns"
+        issue: 180
+        note: "Z zakresu roadmapy F0.2 (luka #180, decyzja właściciela Q17 w docs/roadmap/audit/AUDIT-2026-11-25.md). Krawędzie do node'a human i z jego decision to zależności zatwierdzenia (ADR-0017) i nie są zgłaszane."
     out_of_scope:
       - "Autofix i inteligentne sugestie z LLM pozostają poza fazą."
     decisions: ["ADR-0002"]
-    evidence:
-      - "cmd/agentplane/validation_test.go::TestEdgeIntoAnInputTheTargetDoesNotReadWarns"
-      - "internal/fields/fields_test.go::TestReadsInputFollowsTheDescriptors"
-    divergences: []
     tasks: [180]
-    note: "#180: W_EDGE_INPUT_UNUSED ostrzega, gdy edge trafia w input, którego konfiguracja celu nie czyta (z deskryptorów pól); krawędzie decyzji human i krawędzie do human są wyłączone (ADR-0043)."
+    note: "#180: W_EDGE_INPUT_UNUSED ostrzega, gdy edge trafia w input, którego konfiguracja celu nie czyta (z deskryptorów pól); input przekazany przez pętlę liczy się tylko, gdy wbudowany Gate czyta input, do którego trafia; krawędzie decyzji human i krawędzie do human są wyłączone (ADR-0043). Ostrzeżenie zgłaszają też `run` i `serve`."
 
   - id: F0.3
     name: "Data bindings na edge'ach"
@@ -552,6 +559,7 @@ features:
         status: met
         evidence:
           - "desktop/e2e/demo.cjs"
+          - "cmd/agentplane/edge_input_test.go::TestUnusedEdgeInputReachesTheEditorAPI"
     out_of_scope:
       - "Graficzne ETL nie jest celem; złożone transformacje trafiają do Code node."
     decisions: ["ADR-0020", "ADR-0023"]
