@@ -4,7 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { I18nProvider } from '../src/i18n/context'
 import { clearLocale, loadLocale, saveLocale } from '../src/i18n'
 import { THEME_FADE_MS, ThemeProvider, crossFade, loadThemeChoice, resolveTheme, saveThemeChoice, type ThemeChoice } from '../src/theme'
-import { closesSubmenu, commandHeld, isAppShortcut, modifierLabel, moveFocus, openFromButton } from '../src/ui/menuKeys'
+import { closesSubmenu, modifierLabel, moveFocus, openFromButton } from '../src/ui/menuKeys'
+import { IDLE, matchShortcut } from '../src/palette'
 import { PROFILE_NAME, ProfileMenu, type ProfileMenuState } from '../src/ui/profileMenu'
 import { PROFILE_INITIALS, Sidebar } from '../src/ui/shell'
 
@@ -104,22 +105,21 @@ describe('menu keyboard model', () => {
     expect(modifierLabel('MacIntel')).toBe('Cmd')
     expect(modifierLabel('Linux x86_64')).toBe('Ctrl')
     expect(modifierLabel('Win32')).toBe('Ctrl')
-    expect(commandHeld({ ctrlKey: false, metaKey: true }, 'MacIntel')).toBe(true)
-    expect(commandHeld({ ctrlKey: true, metaKey: false }, 'MacIntel')).toBe(false)
-    expect(commandHeld({ ctrlKey: true, metaKey: false }, 'Win32')).toBe(true)
   })
 })
 
+// Ctrl/Cmd+, and Ctrl/Cmd+/ are matched by the shell's one shortcut model (palette.ts, F2.5d).
 describe('app shortcuts', () => {
-  const key = (k: string, extra: Partial<KeyboardEvent> = {}) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, ...extra })
-  it('are Ctrl/Cmd with , or / and nothing else [F2.5c-AC9]', () => {
-    expect(isAppShortcut(key(','), 'Linux x86_64')).toBe('settings')
-    expect(isAppShortcut(key('/'), 'Win32')).toBe('shortcuts')
-    expect(isAppShortcut(key('/', { ctrlKey: false, metaKey: true }), 'MacIntel')).toBe('shortcuts')
-    expect(isAppShortcut(key('/'), 'MacIntel')).toBeNull()
-    expect(isAppShortcut(key('/', { shiftKey: true }), 'Win32')).toBeNull()
-    expect(isAppShortcut(key('/', { altKey: true }), 'Win32')).toBeNull()
-    expect(isAppShortcut(key('s'), 'Win32')).toBeNull()
+  const key = (k: string, extra: Partial<KeyboardEvent> = {}) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, typing: false, time: 0, ...extra })
+  const command = (k: ReturnType<typeof key>, mac: boolean) => matchShortcut(IDLE, k, mac).command
+  it('are Ctrl/Cmd with , or / [F2.5c-AC9]', () => {
+    expect(command(key(','), false)).toBe('settings')
+    expect(command(key('/'), false)).toBe('shortcuts')
+    expect(command(key('/', { ctrlKey: false, metaKey: true }), true)).toBe('shortcuts')
+    expect(command(key('/'), true)).toBeNull()
+    expect(command(key('/', { shiftKey: true }), false)).toBeNull()
+    expect(command(key('/', { altKey: true }), false)).toBeNull()
+    expect(command(key('s'), false)).toBeNull()
   })
 })
 

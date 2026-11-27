@@ -98,6 +98,22 @@ a dev dependency and is never part of the packaged app. `npm run stories:test`
 renders every story in EN/PL × dark/light (`AP_STORIES_THEMES=dark` limits it)
 and drives the profile menu with the keyboard and the pointer.
 
+`make desktop-stories` (or `npm run stories:test` after a build) renders every
+story in EN and PL. It waits for the story's render phase to reach `finished`, fails
+a story whose play function threw (Storybook's `playFunctionThrewException`, read from
+the preview channel), and waits for finite animations (a dialog's entrance, a fade)
+before running axe, so the checked frame is the state the story ends in.
+
+## Command palette (F2.5d)
+
+Ctrl K (Cmd K on macOS) or the global bar's Search button opens the palette:
+actions (New run Ctrl N, Open graph… Ctrl O, Review approvals Ctrl Shift A),
+recent runs read from `GET /runs` when it opens, and screens (Inbox G I,
+Settings Ctrl ,). Type `>` for actions only, `#` for runs by ID prefix; Tab cycles
+those scopes, arrows move, Enter opens, Escape closes. The shortcuts also work
+outside the palette (G I only when no text field has focus). Spec:
+`docs/features/F2.5d-command-palette.md`; stories: `Screens/Command palette`.
+
 ## Design system and localisation (F2.5a)
 
 - `src/design/tokens.json` is a copy of the Tarmind design system's `tokens.json`;
@@ -161,8 +177,10 @@ and drives the profile menu with the keyboard and the pointer.
   reported by `GET /capabilities`; "Check again" calls `POST /capabilities/check`.
   The CLIs are only looked up on the engine's `PATH`, never run. Main passes
   `--codex-bin` only when `AGENTPLANE_CODEX_BIN` is an absolute path
-  (`electron/capabilities.cjs`). "Start from a template" opens the New graph
-  picker (F2.12, below).
+  (`electron/capabilities.cjs`). The screen is a four-step setup (ADR-0048):
+  Welcome, Check this computer (the list above), Agent nodes (the CLI command)
+  and First graph, whose primary action creates the picked template directly;
+  "Skip setup" is always in its header.
 - **Local only.** The sidecar binds `127.0.0.1`, requires a bearer token and
   exits when the app closes its stdin.
 

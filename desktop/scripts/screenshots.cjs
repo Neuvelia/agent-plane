@@ -18,8 +18,8 @@ const SHOTS = {
   'inspector-failed-after-retries': 'screens--inspector-failed-after-retries',
   'inspector-connection-lost': 'screens--inspector-connection-lost',
   'approvals': 'screens--approvals-one-pending',
-  'new-run-ready': 'screens--new-run-ready',
-  'new-run-blocked': 'screens--new-run-blocked',
+  'new-run-ready': 'screens-new-run--agent-graph-ready',
+  'new-run-blocked': 'screens-new-run--blocked',
   'settings': 'screens--settings-language',
   'engine-down': 'screens--full-app-shell-engine-down',
 }

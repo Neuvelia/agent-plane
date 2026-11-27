@@ -343,11 +343,11 @@ success evidence. See ADR-0010 for process ownership and protocol limits.
 
 `adapter: claude` is an existing `adapter` value; the schema is unchanged. CLI selection requires
 `--adapter claude --claude-bin /absolute/path/to/claude`. Authentication is `ANTHROPIC_API_KEY`, which
-must be named in `environment_refs` (ADR-0048 D6); no ambient environment is forwarded. Bash is disabled
+must be named in `environment_refs` (ADR-0050 D6); no ambient environment is forwarded. Bash is disabled
 in v1: only the file tools Read, Edit, Write, Glob and Grep are enabled. Changed files come from Git with
 `observed` provenance, as for Codex. The protocol is an unconfirmed assumption until the spike
 (`validation/F1.2b-claude-code-spike.md`) and smoke (`validation/F1.2b-claude-code-smoke.md`) run; both are
-NOT RUN. See [examples/claude-agent.yaml](examples/claude-agent.yaml) and ADR-0048.
+NOT RUN. See [examples/claude-agent.yaml](examples/claude-agent.yaml) and ADR-0050.
 
 ```yaml
     config:

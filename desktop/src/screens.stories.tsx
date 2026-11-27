@@ -5,7 +5,7 @@ import type { BridgeData, BridgeRun, StreamEnding } from './storybook/bridge'
 import { agentScopeGraph, asRun, agentScopeIndeterminate, agentScopeRetry, agentScopeYaml, approvalsOf, demoApprove, demoGraph, demoReject, demoYaml, exhaustedGraph, exhaustedRetries, exhaustedYaml, runningParallel, standaloneGateGraph, standaloneGateRed, standaloneGateYaml, summaryOf, waitingForHuman } from './storybook/fixtures'
 import { Settings } from './settings'
 import { Inbox } from './inboxView'
-import { Approvals, RunConfig, RunInspector, RunsList } from './views'
+import { Approvals, RunInspector, RunsList } from './views'
 import type { ApEvent } from './types'
 
 const meta: Meta = { title: 'Screens' }
@@ -149,31 +149,6 @@ export const ApprovalsDecisionError: S = {
   },
 }
 
-const choose: S['play'] = async ({ canvasElement }) => {
-  canvasElement.querySelector<HTMLButtonElement>('[data-testid="choose"]')?.click()
-  await new Promise((r) => setTimeout(r, 50))
-}
-export const NewRunNoFile: S = { parameters: { bridge: { runs: [] } }, render: () => <RunConfig onStarted={noop} /> }
-export const NewRunReady: S = {
-  parameters: { bridge: { runs: [], pickedGraph: 'demo-vertical.yaml' } satisfies BridgeData },
-  render: () => <RunConfig onStarted={noop} />,
-  play: choose,
-}
-export const NewRunWarnings: S = {
-  parameters: {
-    bridge: { runs: [], pickedGraph: 'graph.yaml', validate: { status: 'valid', diagnostics: [{ severity: 'warning', code: 'W_UNUSED_OUTPUT', message: 'output "stdout" is never consumed', suggestion: 'bind it to a downstream input or remove it', location: { node_id: 'fast' } }] } } satisfies BridgeData,
-  },
-  render: () => <RunConfig onStarted={noop} />,
-  play: choose,
-}
-export const NewRunBlocked: S = {
-  parameters: {
-    bridge: { runs: [], pickedGraph: 'graph.yaml', validate: { status: 'invalid', diagnostics: [{ severity: 'error', code: 'E_GRAPH_FIELD_REQUIRED', message: 'graph is missing required "edges" collection', suggestion: 'declare the collection, using an empty list when there are no edges' }] } } satisfies BridgeData,
-  },
-  render: () => <RunConfig onStarted={noop} />,
-  play: choose,
-}
-
 export const FullAppShell: S = {
   parameters: { bridge: { runs: [run(waitingForHuman, 'running', 'open'), run(exhaustedRetries, 'failed', 'end', false)], approvals: pending } satisfies BridgeData },
   beforeEach: returning,
@@ -315,11 +290,6 @@ export const InboxLoading: S = inbox(hang)
 export const InboxError: S = inbox(down)
 export const ApprovalsLoading: S = { parameters: { bridge: hang }, render: () => <Approvals onOpen={noop} /> }
 export const ApprovalsError: S = { parameters: { bridge: down }, render: () => <Approvals onOpen={noop} /> }
-export const NewRunValidating: S = {
-  parameters: { bridge: { runs: [], pickedGraph: 'graph.yaml', hang: true } satisfies BridgeData },
-  render: () => <RunConfig onStarted={noop} />,
-  play: choose,
-}
 export const FullAppShellEngineDown: S = {
   parameters: { bridge: down },
   beforeEach: returning,

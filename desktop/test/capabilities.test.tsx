@@ -108,7 +108,7 @@ describe('capability panel states', () => {
   const html = (view: CapabilityView, locale: 'en' | 'pl' = 'en') =>
     renderToStaticMarkup(
       <I18nProvider locale={locale}>
-        <CapabilityPanel view={view} announce="" appVersion="1.2.3" onCheck={() => undefined} onRetry={() => undefined} />
+        <CapabilityPanel view={view} appVersion="1.2.3" onCheck={() => undefined} onRetry={() => undefined} />
       </I18nProvider>,
     )
   it('request failed and disconnected render no rows', () => {
@@ -123,7 +123,6 @@ describe('capability panel states', () => {
     expect(out).toContain('engine 0.0.0-dev · app 1.2.3')
     for (const id of ['engine', 'git', 'codex', 'claude', 'cursor-agent', 'gemini', 'shell', 'docker']) expect(out).toContain(`data-testid="cap-${id}"`)
     expect(out).toContain('Not configured')
-    expect(out).toContain('aria-live="polite"')
   })
   it('loading and re-checking mark the list busy; re-checking keeps the previous rows', () => {
     expect(html({ state: 'loading' })).toContain('aria-busy="true"')
@@ -136,7 +135,7 @@ describe('capability panel states', () => {
 
 describe('no direct network access in the welcome code', () => {
   it('uses only the preload bridge', () => {
-    for (const f of ['capabilities.ts', 'welcome.tsx']) {
+    for (const f of ['capabilities.ts', 'welcome.tsx', 'setup.ts', 'setupCheck.tsx', 'setupSteps.tsx']) {
       const text = readFileSync(join(__dirname, '..', 'src', f), 'utf8')
       expect(text, f).not.toMatch(/\bfetch\(|XMLHttpRequest|WebSocket|EventSource/)
     }

@@ -1,4 +1,4 @@
-# ADR-0048 - Claude Code adapter: process permissions and evidence
+# ADR-0050 - Claude Code adapter: process permissions and evidence
 
 **Status:** accepted, pending spike (2026-11-27). The owner accepted decisions D1-D9 of the plan. The
 protocol assumptions in D3-D6 and the `stream-json` record shapes are **assumed** from `claude --help` of

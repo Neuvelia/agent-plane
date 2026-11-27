@@ -51,16 +51,18 @@ export function agentTime(run: RunView, graph: GraphSummary | null): AgentTime {
   return finished.length === 0 ? { kind: 'unknown' } : { kind: 'value', ms: finished.reduce((a, b) => a + b, 0) }
 }
 
-/** "820 ms", "48.3s", "1m 12s". Units are the same in every language. */
+/** "820 ms", "48.3s", "1m 12s", "2h 5m", "13d 5h". Units are the same in every language. */
 export function formatDuration(durationMs: number, locale: Locale): string {
   if (durationMs < 1000) return `${Math.round(durationMs)} ms`
   const seconds = durationMs / 1000
   if (seconds < 60) return `${new Intl.NumberFormat(locale, { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(seconds)}s`
   const whole = Math.floor(seconds)
-  const m = Math.floor(whole / 60)
-  const s = whole % 60
-  return s === 0 ? `${m}m` : `${m}m ${s}s`
+  if (whole >= 86400) return pair(Math.floor(whole / 86400), 'd', Math.floor((whole % 86400) / 3600), 'h')
+  if (whole >= 3600) return pair(Math.floor(whole / 3600), 'h', Math.floor((whole % 3600) / 60), 'm')
+  return pair(Math.floor(whole / 60), 'm', whole % 60, 's')
 }
+
+const pair = (big: number, bigUnit: string, small: number, smallUnit: string) => (small === 0 ? `${big}${bigUnit}` : `${big}${bigUnit} ${small}${smallUnit}`)
 
 export const MAX_TIMELINE_COLUMNS = 600
 

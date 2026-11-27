@@ -1,5 +1,5 @@
 import dagre from '@dagrejs/dagre'
-import { Background, Handle, Position, ReactFlow, useReactFlow, type Edge, type Node, type NodeProps } from '@xyflow/react'
+import { Background, Handle, Position, ReactFlow, useReactFlow, useStore, type Edge, type Node, type NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { createContext, useContext, useEffect, useMemo } from 'react'
 import { useI18n } from './i18n/context'
@@ -62,20 +62,21 @@ const nodeTypes = { ap: ApNode }
 // resizing then (cards, view switch). Refit whenever the container's size changes.
 function FitOnResize() {
   const { fitView } = useReactFlow()
+  // The flow's own element: a view switch can replace the wrapper around it, never this one.
+  const el = useStore((s) => s.domNode)
   useEffect(() => {
-    const el = document.querySelector('[data-testid="graph-map"]')
     if (!el) return
     let frame = 0
     const ro = new ResizeObserver(() => {
       cancelAnimationFrame(frame)
-      frame = requestAnimationFrame(() => void fitView({ padding: 0.2 }))
+      frame = requestAnimationFrame(() => void fitView({ padding: 0.2, maxZoom: 1 }))
     })
     ro.observe(el)
     return () => {
       ro.disconnect()
       cancelAnimationFrame(frame)
     }
-  }, [fitView])
+  }, [fitView, el])
   return null
 }
 
@@ -128,7 +129,9 @@ export function GraphMap({ graph, run, selected, onSelect, critical = NONE, dimm
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
-        fitViewOptions={{ padding: 0.2 }}
+        fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+        // A narrow pane (Split view) must still show the whole graph.
+        minZoom={0.2}
         nodesDraggable={false}
         nodesConnectable={false}
         edgesFocusable={false}

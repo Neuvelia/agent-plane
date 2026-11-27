@@ -10,6 +10,7 @@ ADR-0038 after the 2026-11-25 audit (`audit/AUDIT-2026-11-25.md`).
 | [`STATUS.md`](STATUS.md) | readable status: progress per phase and priority, exit criteria, demos, open criteria, divergences | **generated** (`make roadmap`), never by hand |
 | [`canonical-spec.md`](canonical-spec.md) | the one binding version of names, states, events, graph format, adapter interface, layout | an ADR for every change |
 | [`decisions/`](decisions/README.md) | index of the ADRs that settle roadmap questions (the ADRs live in `docs/adr/`) | with each new ADR |
+| [`issue-triage.md`](issue-triage.md) | the `claude-ready` / `needs-owner` rule for GitHub issues and its enforcement workflow | hand |
 | [`audit/`](audit/) | audit reports `AUDIT-<YYYY-MM-DD>.md` | each re-audit |
 
 The sources are `docs/reference/full-roadmap-features.md` (the roadmap) and
@@ -134,7 +135,8 @@ warning.
 change the spec silently.
 
 **Tasks** are GitHub issues. Their numbers go into `tasks` and into
-criterion/divergence `issue` fields.
+criterion/divergence `issue` fields. Every issue carries `claude-ready` or
+`needs-owner` ([`issue-triage.md`](issue-triage.md)).
 
 ## Workflow for a feature, fix or docs change
 

@@ -1,7 +1,7 @@
 name: Roadmap feature
 description: Track one feature spec through planning, implementation, and review
 title: "[FEATURE] "
-labels: ["feature"]
+labels: ["feature", "needs-owner"]
 body:
   - type: input
     id: feature_id

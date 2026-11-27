@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode, type Ref, type RefObject } from 'react'
 import { useI18n, type LocaleChoice } from '../i18n/context'
 import { THEME_CHOICES, useTheme, type ThemeChoice } from '../theme'
-import { closesSubmenu, isAppShortcut as appShortcut, modifierLabel, moveFocus, openFromButton } from './menuKeys'
+import { closesSubmenu, modifierLabel, moveFocus, openFromButton } from './menuKeys'
+import { IDLE, matchShortcut } from '../palette'
 import { usePresence } from './presence'
 import { PROFILE_INITIALS } from './shell'
 
@@ -104,12 +105,12 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
     }
   }, [open, close])
 
-  // An app shortcut (Ctrl/Cmd+, or /) closes the menu wherever focus is, even outside it
+  // An app shortcut (any Ctrl/Cmd chord of the shell, F2.5d) closes the menu wherever focus is, even outside it
   // (review N1). From inside the menu the key handlers below also return focus to the button.
   useEffect(() => {
     if (!open) return
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if (appShortcut(e, platform())) close(false)
+      if (isAppShortcut(e)) close(false)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -165,7 +166,7 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
   }
   const onMenuKey = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key === 'Tab') return close(false)
-    // An app shortcut (Ctrl/Cmd+, or /) closes the menu onto the button; the key still reaches the app.
+    // An app shortcut (any Ctrl/Cmd chord of the shell, F2.5d) closes the menu onto the button; the key still reaches the app.
     if (isAppShortcut(e)) return close(true)
     if (e.key === 'Escape') {
       e.preventDefault()
@@ -247,8 +248,10 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
   )
 }
 
-function isAppShortcut(e: KeyboardEvent<HTMLElement>): boolean {
-  return appShortcut(e, platform()) !== null
+/** Any chord the shell answers (Ctrl/Cmd with K, N, O, Shift+A, comma or slash); letter sequences never apply inside a menu. */
+function isAppShortcut(e: Pick<globalThis.KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>): boolean {
+  const press = { key: e.key, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey, altKey: e.altKey, typing: true, time: 0 }
+  return matchShortcut(IDLE, press, modifierLabel(platform()) === 'Cmd').command !== null
 }
 
 function itemsOf(container: HTMLElement | null): HTMLElement[] {

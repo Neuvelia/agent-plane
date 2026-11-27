@@ -781,7 +781,7 @@ features:
         note: "szablony shell (w tym modify-test-approve) działają bez edycji; starter agentowy nadal wymaga workspace i AGENTPLANE_CODEX_BIN (F2.13, F2.14)"
     out_of_scope:
       - "Automatyczne skanowanie całego dysku nie jest wymagane."
-    decisions: ["ADR-0025"]
+    decisions: ["ADR-0025", "ADR-0048"]
     divergences:
       - text: "Brak listy repozytoriów i agentów w silniku desktopu; starter agentowy wymaga ręcznego workspace."
         issue: 188
@@ -1791,8 +1791,8 @@ features:
       - "Wznawianie sesji, sub-agenci, MCP, pluginy, Claude w chmurze."
       - "Windows, fail closed jak Codex (razem z F3.4a)."
       - "Wspólne SDK adapterów (F6.5)."
-      - "Bash i sandbox Claude Code: późniejsza poprawka ADR-0048 po spike'u."
-    decisions: ["ADR-0048"]
+      - "Bash i sandbox Claude Code: późniejsza poprawka ADR-0050 po spike'u."
+    decisions: ["ADR-0050"]
     divergences: []
     tasks: [202]
     note: "Protokół CLI (D3-D6, kształt rekordów stream-json) jest założony z claude --help 2.1.332 i niepotwierdzony; spike i smoke nie wykonane."
@@ -1977,6 +1977,76 @@ features:
     divergences: []
     tasks: [219, 221]
     note: "Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon."
+  - id: F2.5d
+    name: "Command palette and global shortcuts (desktop)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5d-command-palette.md
+    depends_on: ["F2.5a", "F2.5b", "F2.5c", "F2.9"]
+    acceptance:
+      - id: F2.5d-AC1
+        text: "Ctrl/Cmd+K i przycisk Search otwierają paletę z każdego ekranu."
+        status: met
+        evidence:
+          - "desktop/test/palette.test.ts::F2.5d-AC1"
+          - "desktop/test/palette-view.test.tsx::F2.5d-AC1"
+          - "desktop/test/palette-dom.test.tsx::F2.5d-AC1"
+      - id: F2.5d-AC2
+        text: "Nawigacja klawiaturą (strzałki, Enter) i semantyka combobox/listbox."
+        status: met
+        evidence:
+          - "desktop/test/palette.test.ts::F2.5d-AC2"
+          - "desktop/test/palette-view.test.tsx::F2.5d-AC2"
+          - "desktop/test/palette-dom.test.tsx::F2.5d-AC2"
+      - id: F2.5d-AC3
+        text: "Prefiksy > (akcje) i # (id uruchomień) oraz Tab przełączający typ."
+        status: met
+        evidence:
+          - "desktop/test/palette.test.ts::F2.5d-AC3"
+          - "desktop/test/palette-dom.test.tsx::F2.5d-AC3"
+      - id: F2.5d-AC4
+        text: "Stany: brak wyników, wczytywanie i błąd listy uruchomień (nigdy pusta lista zamiast błędu)."
+        status: met
+        evidence:
+          - "desktop/test/palette-view.test.tsx::F2.5d-AC4"
+          - "desktop/test/palette.test.ts::F2.5d-AC4"
+          - "desktop/test/palette-dom.test.tsx::F2.5d-AC4"
+    out_of_scope:
+      - "Wyszukiwanie w plikach grafów, YAML i zdarzeniach; uruchamianie lub decyzje z palety."
+      - "Jasny motyw, arkusz skrótów (Ctrl /), okno About."
+    decisions: []
+    divergences:
+      - text: "Prefiks # dopasowuje też nazwę grafu (wymaganie 4 speca: tylko początek id uruchomienia); decyzja w issue."
+        issue: 218
+    tasks: []
+    note: "Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety."
+  - id: F2.5e
+    name: "New run with preflight (desktop redesign)"
+    kind: derived
+    parent: F2.5
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.5e-new-run-preflight.md
+    depends_on: ["F2.5", "F2.5a", "F2.5b", "F2.5c", "F2.11"]
+    evidence:
+      - "docs/features/F2.5e-new-run-preflight.md"
+      - "desktop/test/new-run.test.tsx"
+      - "desktop/test/new-run-session.test.ts"
+      - "desktop/test/settled-pick.test.ts"
+      - "desktop/test/recents.test.ts"
+      - "desktop/e2e/demo.cjs"
+    out_of_scope:
+      - "Per-run max concurrency (#209) and Agent workspace (#210), uncommitted-file count (#211), templates and project-folder graphs in the list (#212, F2.13)."
+    decisions: ["ADR-0049"]
+    divergences: []
+    tasks: [209, 210, 211, 212]
+    note: "Presentation only; Options are shown disabled until the API accepts them."
   - id: F2.8a
     name: "Attempt compare (desktop)"
     kind: derived
@@ -2198,4 +2268,4 @@ features:
     decisions: ["ADR-0038"]
     divergences: []
     tasks: []
-    note: "features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty."
+    note: "features.yaml, phases.yaml, canonical-spec, roadmapcheck, STATUS.md, prompty, triage issues (claude-ready / needs-owner, issue-triage.md, workflow issue-labels)."
