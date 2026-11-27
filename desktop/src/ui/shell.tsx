@@ -120,10 +120,19 @@ export function IconRail({ entries }: { entries: NavEntry[] }) {
 /** Placeholder identity until accounts exist (F2.5a): initials are hard-coded. */
 export const PROFILE_INITIALS = 'KW'
 
-/** Bar above the page content: connection state at the right (the profile sits in the sidebar footer).
+/** The command palette trigger (F2.5d): its shortcut as written on screen and for assistive technology. */
+export interface SearchTrigger {
+  onOpen: () => void
+  /** "Ctrl K" or "⌘ K". */
+  keys: string
+  /** aria-keyshortcuts value, e.g. "Control+K". */
+  ariaKeys: string
+}
+
+/** Bar above the page content: connection state and Search (F2.5d) at the right (the profile sits in the sidebar footer).
  *  On macOS the window has no native title bar, so this bar (with the sidebar's
  *  brand strip) is the drag area (see styles.css `.mac`). */
-export function GlobalBar({ lost, crumbs }: { lost: boolean; crumbs?: ReactNode[] }) {
+export function GlobalBar({ lost, crumbs, search }: { lost: boolean; crumbs?: ReactNode[]; search?: SearchTrigger }) {
   const { t } = useI18n()
   return (
     <header className="global-bar">
@@ -133,6 +142,11 @@ export function GlobalBar({ lost, crumbs }: { lost: boolean; crumbs?: ReactNode[
           <span className="dot sm" aria-hidden="true" />
           {lost ? t('topbar.lost') : t('topbar.connected')}
         </span>
+        {search && (
+          <button type="button" className="ib-btn ghost sm" onClick={search.onOpen} aria-label={t('palette.triggerLabel')} aria-keyshortcuts={search.ariaKeys} aria-haspopup="dialog" title={`${t('palette.triggerLabel')} (${search.keys})`} data-testid="palette-open">
+            {t('palette.trigger')}
+          </button>
+        )}
       </div>
     </header>
   )

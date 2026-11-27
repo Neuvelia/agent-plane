@@ -397,6 +397,46 @@ main:focus{outline:none}
 .runs-filters{display:flex;flex-wrap:wrap;align-items:flex-end;gap:var(--space-12);margin-bottom:var(--space-12)}
 .runs .run-group-head th{padding-top:var(--space-12);text-transform:none;letter-spacing:0;font-size:13px;color:var(--text)}
 
+/* F2.5d command palette (design board "Command palette"). A modal <dialog> in the
+   top layer; the page behind is dimmed and slightly blurred by its backdrop.
+   Enter: fade + 8px drop + scale from .98 on a decelerating curve; exit is shorter
+   and accelerating. The global reduced-motion rule above removes both (and the
+   rule below the backdrop's, which `*` does not reach). */
+.cmdk{width:min(640px,calc(100% - 32px));max-width:none;max-height:calc(100vh - 140px);margin:110px auto auto;padding:0;border:1px solid var(--card-line);border-radius:18px;background:var(--bg);color:var(--fg);box-shadow:0 30px 80px rgba(0,0,0,.7);overflow:hidden;font-size:13px;line-height:1.45}
+.cmdk[open]{display:flex;flex-direction:column;animation:cmdk-in .18s cubic-bezier(.23,1,.32,1)}
+.cmdk::backdrop{background:var(--scrim);backdrop-filter:blur(1.5px);animation:cmdk-fade .18s ease-out}
+/* Light theme (F2.5c, design "Command palette · light"): the same layout; colours come from the theme tokens, the shadow is lighter. */
+[data-theme=light] .cmdk{box-shadow:0 30px 80px rgba(0,0,0,.18)}
+.cmdk.closing{animation:cmdk-out .12s cubic-bezier(.4,0,1,1) forwards;pointer-events:none}
+.cmdk.closing::backdrop{animation:cmdk-fade-out .12s ease-in forwards}
+/* The global reduced-motion rule uses `*`, which never matches ::backdrop. */
+@media (prefers-reduced-motion:reduce){.cmdk::backdrop{animation:none}}
+@keyframes cmdk-in{from{opacity:0;transform:translateY(-8px) scale(.98)}}
+@keyframes cmdk-out{to{opacity:0;transform:translateY(-4px) scale(.98)}}
+@keyframes cmdk-fade{from{opacity:0}}
+@keyframes cmdk-fade-out{to{opacity:0}}
+.cmdk-q{display:flex;align-items:center;gap:12px;flex:none;height:56px;padding:0 18px;border-bottom:1px solid var(--hairline);color:var(--muted)}
+.cmdk-q input{flex:1;min-width:0;height:auto;padding:0;border:0;border-radius:0;background:transparent;color:var(--fg);font:inherit;font-size:16px}
+.cmdk-q input:focus-visible{outline-offset:4px;border-radius:4px}
+.cmdk-q input::placeholder{color:var(--muted)}
+.cmdk-res{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;max-height:420px;padding:6px}
+.cmdk-list{min-height:0;overflow:auto;border-radius:10px}
+.cmdk-list:focus-visible{outline-offset:-2px}
+.cmdk-g{padding:10px 12px 6px;font:500 11px/1 var(--font-sans);letter-spacing:.02em;color:var(--muted)}
+.cmdk-it{display:flex;align-items:center;gap:12px;height:38px;padding:0 12px;border-radius:10px;color:var(--fg);cursor:pointer;transition:background-color .12s ease-out}
+.cmdk-it.on{background:var(--brand-soft)}
+.cmdk-ic{display:flex;align-items:center;justify-content:center;flex:none;width:24px;height:24px;border-radius:7px;background:var(--fill-8);color:var(--muted)}
+.cmdk-label{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cmdk-hint{display:flex;align-items:center;gap:6px;flex:none;margin-left:auto;color:var(--muted);font-size:12px;white-space:nowrap}
+.cmdk kbd{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:5px;background:var(--fill-8);color:var(--muted);font:400 10.5px/1 var(--font-mono)}
+.cmdk-none{padding:28px 16px;text-align:center;color:var(--muted)}
+.cmdk-note{padding:10px 12px;color:var(--muted);font-size:12px}
+.cmdk-note.bad{color:var(--bad-text)}
+.cmdk-foot{display:flex;flex-wrap:wrap;align-items:center;gap:16px;flex:none;padding:10px 16px;border-top:1px solid var(--hairline);color:var(--muted);font-size:11.5px}
+.cmdk-foot>span{display:inline-flex;align-items:center;gap:6px}
+.cmdk-foot>.cmdk-prefixes{display:block;margin-left:auto}
+.cmdk-foot .mono{font-size:inherit}
+
 /* F2.5b: Inbox, a triage queue (Tarmind Dashboard UX canvas, artboard "Inbox: triage queue").
    Full-bleed under the page header: the queue left, the selected item right. */
 main:has(>.inbox){padding:0}
@@ -470,6 +510,8 @@ main:has(>.inbox){padding:0}
 .ib-btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
 .ib-btn.ghost:hover:not(:disabled){background:var(--fill-6);color:var(--fg)}
 .ib-btn:disabled{opacity:.4;cursor:not-allowed}
+/* Small quiet button (the global bar's Search, F2.5d; design `.btn.sm`). */
+.ib-btn.sm{height:var(--size-control-sm);padding:0 10px;font-size:12px}
 .inbox-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-10);padding:40px;text-align:center}
 .inbox-empty .glyph{width:20px;height:20px}
 .inbox-empty h2{margin:0;font-size:var(--type-card-title-size)}

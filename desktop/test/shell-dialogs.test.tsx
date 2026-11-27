@@ -11,7 +11,19 @@ describe('Keyboard shortcuts dialog (F2.5c)', () => {
   it('lists only the shortcuts the app has, written as text [F2.5c-AC8]', () => {
     const out = wrap(<ShortcutsDialog onClose={noop} />)
     const rows = [...out.matchAll(/<div class="sc">([\s\S]*?)<\/div>/g)].map((m) => text(m[1]!))
-    expect(rows).toEqual(['Settings Ctrl ,', 'This list In the YAML editor Ctrl / comments the line instead. Ctrl /', 'Save the graph Ctrl S', 'Move between menu items ↑ ↓', 'Close a menu or dialog, cancel an inline edit Esc'])
+    // The command palette's shortcuts (F2.5d) are among the ones the app has.
+    expect(rows).toEqual([
+      'Command palette Ctrl K',
+      'New run Ctrl N',
+      'Open a graph Ctrl O',
+      'Review approvals Ctrl Shift A',
+      'Settings Ctrl ,',
+      'This list In the YAML editor Ctrl / comments the line instead. Ctrl /',
+      'Go to the Inbox G, then I within a second, when no text field has focus. G I',
+      'Save the graph Ctrl S',
+      'Move between menu items ↑ ↓',
+      'Close a menu or dialog, cancel an inline edit Esc',
+    ])
     expect(out).toContain('aria-labelledby="shortcuts-title"')
     expect(out).toMatch(/<button[^>]*data-testid="shortcuts-dialog-close"/)
     expect(out).not.toContain('<svg')

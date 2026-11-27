@@ -125,8 +125,14 @@ export function ShortcutsDialog({ onClose }: { onClose: () => void }) {
         <div className="sc-col">
           <section className="sc-grp" aria-labelledby="sc-anywhere">
             <h3 id="sc-anywhere">{t('shortcuts.anywhere')}</h3>
+            {/* F2.5d command palette and its shortcuts, in the order of the design's shortcut sheet. */}
+            <Shortcut label={t('shortcuts.palette')} keys={[mod, 'K']} />
+            <Shortcut label={t('shortcuts.newRun')} keys={[mod, 'N']} />
+            <Shortcut label={t('shortcuts.openGraph')} keys={[mod, 'O']} />
+            <Shortcut label={t('shortcuts.approvals')} keys={[mod, 'Shift', 'A']} />
             <Shortcut label={t('shortcuts.settings')} keys={[mod, ',']} />
             <Shortcut label={t('shortcuts.list')} keys={[mod, '/']} note={t('shortcuts.listInYaml', { keys: `${mod} /` })} />
+            <Shortcut label={t('shortcuts.inbox')} keys={['G', 'I']} note={t('shortcuts.inboxNote')} />
           </section>
           <section className="sc-grp" aria-labelledby="sc-editor">
             <h3 id="sc-editor">{t('shortcuts.editor')}</h3>

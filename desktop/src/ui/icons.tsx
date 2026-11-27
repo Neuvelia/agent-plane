@@ -8,6 +8,10 @@ const FILLED = {
   projects: <path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />,
   runners: <path d="M4 5h16a1.5 1.5 0 0 1 1.5 1.5v3A1.5 1.5 0 0 1 20 11H4A1.5 1.5 0 0 1 2.5 9.5v-3A1.5 1.5 0 0 1 4 5zm0 8h16a1.5 1.5 0 0 1 1.5 1.5v3A1.5 1.5 0 0 1 20 19H4a1.5 1.5 0 0 1-1.5-1.5v-3A1.5 1.5 0 0 1 4 13z" />,
   docs: <path d="M5 4a2 2 0 0 1 2-2h12v17H7a2 2 0 0 0-2 2zm2 15h10V4H7z" />,
+  // Command palette glyphs (F2.5d, design board "Command palette"): run, graph file, approval.
+  play: <path d="M7 4.5v15l12-7.5z" />,
+  file: <path d="M6 2.5h8.5L19 7v14.5H6z" />,
+  shield: <path d="M12 2.5 4.5 5.6v5.6c0 4.7 3.2 8.9 7.5 10.3 4.3-1.4 7.5-5.6 7.5-10.3V5.6z" />,
   back: <path d="m14 6-6 6 6 6-1.4 1.4L5.2 12l7.4-7.4z" />,
   lock: <path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z" />,
 } satisfies Record<string, ReactNode>
