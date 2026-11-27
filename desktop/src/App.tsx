@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { listApprovals } from './api'
+import { listApprovals, listRuns } from './api'
 import { ConnectionProvider, useConnectionReport } from './connection'
-import { Dashboard } from './dashboardView'
+import { Inbox } from './inboxView'
 import { usePoll } from './hooks'
 import { useI18n } from './i18n/context'
 import { EditorScreen } from './editor/EditorScreen'
 import { useGraphDocument } from './editor/useGraphDocument'
 import { Settings } from './settings'
-import { GlobalBar, Sidebar, TopBar, type NavEntry } from './ui/shell'
+import { GlobalBar, Sidebar, type NavEntry } from './ui/shell'
 import { AboutDialog, ShortcutsDialog } from './ui/dialogs'
 import { isAppShortcut } from './ui/menuKeys'
 import { ProfileMenu } from './ui/profileMenu'
@@ -15,8 +15,9 @@ import type { ChosenGraph } from './types'
 import { Approvals, RunConfig, RunInspector, RunsList } from './views'
 import { markWelcomeDone, welcomeDone } from './capabilities'
 import { Welcome } from './welcome'
+import { RecentRuns } from './sidebarRecent'
 
-type Route = { name: 'dashboard' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor'; picker?: boolean } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
+type Route = { name: 'inbox' } | { name: 'runs' } | { name: 'approvals' } | { name: 'new'; graph?: ChosenGraph } | { name: 'editor'; picker?: boolean } | { name: 'settings' } | { name: 'run'; id: string } | { name: 'welcome' }
 
 export default function App() {
   // Every screen that cannot reach the engine reports here; the global bar says so while any does.
@@ -40,8 +41,9 @@ export default function App() {
 function Shell({ lost }: { lost: boolean }) {
   const { t, locale } = useI18n()
   // First run (F2.11 requirement 10): the welcome screen until one of its actions is chosen.
-  const [route, setRoute] = useState<Route>(() => (welcomeDone() ? { name: 'dashboard' } : { name: 'welcome' }))
+  const [route, setRoute] = useState<Route>(() => (welcomeDone() ? { name: 'inbox' } : { name: 'welcome' }))
   const polled = usePoll(listApprovals, 1500)
+  const polledRuns = usePoll(listRuns, 3000)
   const pending = polled.data?.length ?? 0
   // The open graph lives here so it survives moving to another screen and back.
   const editor = useGraphDocument()
@@ -49,7 +51,7 @@ function Shell({ lost }: { lost: boolean }) {
   useEffect(() => {
     document.documentElement.lang = locale
   }, [locale])
-  // F2.5b: the profile menu's two windows, and their shortcuts (Ctrl or Cmd with , and /).
+  // F2.5c: the profile menu's two windows, and their shortcuts (Ctrl or Cmd with , and /).
   const [dialog, setDialog] = useState<'shortcuts' | 'about' | null>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -83,12 +85,12 @@ function Shell({ lost }: { lost: boolean }) {
 
   const go = (name: Route['name']) => () => setRoute({ name } as Route)
   const main: NavEntry[] = [
-    { id: 'dashboard', icon: 'dashboard', label: 'nav.dashboard', active: route.name === 'dashboard', onSelect: go('dashboard') },
+    { id: 'inbox', icon: 'inbox', label: 'nav.inbox', active: route.name === 'inbox', onSelect: go('inbox') },
     { id: 'runs', icon: 'runs', label: 'nav.runs', active: route.name === 'runs' || route.name === 'run', onSelect: go('runs') },
     { id: 'approvals', icon: 'approvals', label: 'nav.approvals', badge: pending, active: route.name === 'approvals', onSelect: go('approvals') },
-    { id: 'new', icon: 'new', label: 'nav.new', active: route.name === 'new', onSelect: go('new') },
     { id: 'editor', icon: 'editor', label: 'nav.editor', active: route.name === 'editor', onSelect: go('editor') },
   ]
+  const newRun: NavEntry = { id: 'new', icon: 'new', label: 'nav.new', active: route.name === 'new', onSelect: go('new') }
   const footer: NavEntry[] = [{ id: 'welcome', icon: 'welcome', label: 'nav.welcome', active: route.name === 'welcome', onSelect: go('welcome') }, { id: 'settings', icon: 'settings', label: 'nav.settings', active: route.name === 'settings', onSelect: go('settings') }]
   // Surfaces deferred by F2.5a: greyed out, never navigable.
   const deferred: NavEntry[] = [
@@ -101,7 +103,7 @@ function Shell({ lost }: { lost: boolean }) {
     setRoute(next)
     then?.()
   }
-  const crumb = route.name === 'welcome' ? t('nav.welcome') : route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'dashboard' ? t('nav.dashboard') : t('nav.runs')
+  const crumb = route.name === 'welcome' ? t('nav.welcome') : route.name === 'approvals' ? t('nav.approvals') : route.name === 'new' ? t('nav.new') : route.name === 'settings' ? t('nav.settings') : route.name === 'editor' ? t('nav.editor') : route.name === 'inbox' ? t('nav.inbox') : t('nav.runs')
   return (
     <div className="app">
       <a
@@ -114,13 +116,19 @@ function Shell({ lost }: { lost: boolean }) {
       >
         {t('a11y.skip')}
       </a>
-      <Sidebar entries={main} deferred={deferred} footer={footer} profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />} />
+      <Sidebar
+        primary={newRun}
+        entries={main}
+        recent={<RecentRuns runs={polledRuns.data} approvals={polled.status === 'error' ? [] : (polled.data ?? [])} failed={polledRuns.status === 'error'} onOpen={(id) => setRoute({ name: 'run', id })} onAll={go('runs')} />}
+        deferred={deferred}
+        footer={footer}
+        profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />}
+      />
       <div className="col">
-        <GlobalBar lost={lost} />
-        <TopBar crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
+        <GlobalBar lost={lost} crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : [])]} />
         <main id="content" ref={mainRef} tabIndex={-1}>
-          {route.name === 'dashboard' && (
-            <Dashboard
+          {route.name === 'inbox' && (
+            <Inbox
               onOpenRun={(id) => setRoute({ name: 'run', id })}
               onNewRun={() => setRoute({ name: 'new' })}
               onOpenGraph={(graph) => setRoute({ name: 'new', graph })}
@@ -132,7 +140,7 @@ function Shell({ lost }: { lost: boolean }) {
           {route.name === 'approvals' && <Approvals onOpen={(id) => setRoute({ name: 'run', id })} />}
           {route.name === 'settings' && <Settings />}
           {route.name === 'editor' && <EditorScreen g={editor} startWithPicker={route.picker} onRun={(id) => setRoute({ name: 'run', id })} />}
-          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'dashboard' })} />}
+          {route.name === 'welcome' && <Welcome onTemplate={leaveWelcome({ name: 'editor', picker: true })} onOpen={leaveWelcome({ name: 'editor' }, editor.open)} onSkip={leaveWelcome({ name: 'inbox' })} />}
           {route.name === 'new' && <RunConfig key={route.graph?.grant ?? ''} initialGraph={route.graph} onStarted={(id) => setRoute({ name: 'run', id })} />}
         </main>
       </div>

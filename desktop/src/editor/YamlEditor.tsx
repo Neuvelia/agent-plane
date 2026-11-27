@@ -24,7 +24,7 @@ const highlight = HighlightStyle.define([
 ])
 
 // CodeMirror's base theme picks its own colours for whatever this spec leaves out
-// (panels, tooltips, matches) from the `dark` flag, so the flag follows the app theme (F2.5b).
+// (panels, tooltips, matches) from the `dark` flag, so the flag follows the app theme (F2.5c).
 const editorTheme = (theme: Theme) =>
   EditorView.theme(
     {

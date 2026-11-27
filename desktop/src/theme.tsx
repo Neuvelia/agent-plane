@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 
-// F2.5b (ADR-0046): the interface theme. The choice is a renderer preference in
+// F2.5c (ADR-0047): the interface theme. The choice is a renderer preference in
 // localStorage, like the language; "system" follows the operating system.
 // Tokens for each theme live in design/tokens.css under :root[data-theme].
 

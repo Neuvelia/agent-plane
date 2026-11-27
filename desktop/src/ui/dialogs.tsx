@@ -6,7 +6,7 @@ import { modifierLabel } from './menuKeys'
 import { prefersReducedMotion } from './presence'
 import { Button } from './primitives'
 
-// F2.5b: the two small windows the profile menu opens, drawn from the design's
+// F2.5c: the two small windows the profile menu opens, drawn from the design's
 // "Shortcuts, About and Soon" artboard. A modal <dialog>: focus stays inside,
 // Escape, Close and a press on the backdrop close it, and focus returns to
 // whatever opened it.

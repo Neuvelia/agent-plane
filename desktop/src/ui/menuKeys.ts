@@ -1,4 +1,4 @@
-// Keyboard model of a WAI-ARIA menu (F2.5b profile menu): which item takes
+// Keyboard model of a WAI-ARIA menu (F2.5c profile menu): which item takes
 // focus for a key, and what the key does to the open submenu. Pure, so the
 // behaviour is tested without a browser.
 
@@ -42,7 +42,7 @@ export function commandHeld(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey'>, platf
   return modifierLabel(platform) === 'Cmd' ? e.metaKey : e.ctrlKey
 }
 
-/** The app-wide shortcut a key press is, if any: Ctrl/Cmd+, opens Settings, Ctrl/Cmd+/ the shortcut list (F2.5b). */
+/** The app-wide shortcut a key press is, if any: Ctrl/Cmd+, opens Settings, Ctrl/Cmd+/ the shortcut list (F2.5c). */
 export function isAppShortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'key'>, platform: string): 'settings' | 'shortcuts' | null {
   if (e.shiftKey || e.altKey || !commandHeld(e, platform)) return null
   if (e.key === ',') return 'settings'

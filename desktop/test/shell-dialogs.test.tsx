@@ -7,8 +7,8 @@ const noop = () => undefined
 const wrap = (node: React.ReactNode, locale: 'en' | 'pl' = 'en') => renderToStaticMarkup(<I18nProvider locale={locale}>{node}</I18nProvider>)
 const text = (html: string) => html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
 
-describe('Keyboard shortcuts dialog (F2.5b)', () => {
-  it('lists only the shortcuts the app has, written as text [F2.5b-AC8]', () => {
+describe('Keyboard shortcuts dialog (F2.5c)', () => {
+  it('lists only the shortcuts the app has, written as text [F2.5c-AC8]', () => {
     const out = wrap(<ShortcutsDialog onClose={noop} />)
     const rows = [...out.matchAll(/<div class="sc">([\s\S]*?)<\/div>/g)].map((m) => text(m[1]!))
     expect(rows).toEqual(['Settings Ctrl ,', 'This list In the YAML editor Ctrl / comments the line instead. Ctrl /', 'Save the graph Ctrl S', 'Move between menu items ↑ ↓', 'Close a menu or dialog, cancel an inline edit Esc'])
@@ -23,8 +23,8 @@ describe('Keyboard shortcuts dialog (F2.5b)', () => {
   })
 })
 
-describe('About dialog (F2.5b)', () => {
-  it('shows the app version and checks the engine and run count, with Copy diagnostics before Close [F2.5b-AC8]', () => {
+describe('About dialog (F2.5c)', () => {
+  it('shows the app version and checks the engine and run count, with Copy diagnostics before Close [F2.5c-AC8]', () => {
     const out = wrap(<AboutDialog appVersion="0.14.0" onClose={noop} />)
     expect(out).toContain('aria-labelledby="about-title"')
     expect(text(out)).toContain('Everything stays local: nothing is sent anywhere.')

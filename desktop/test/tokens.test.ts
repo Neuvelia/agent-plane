@@ -27,7 +27,7 @@ describe('design tokens', () => {
     }
   })
 
-  it('has a light value for every colour token, declared under :root[data-theme="light"] (F2.5b) [F2.5b-AC7]', () => {
+  it('has a light value for every colour token, declared under :root[data-theme="light"] (F2.5c) [F2.5c-AC7]', () => {
     expect(json.color.themes.map((t: { id: string }) => t.id)).toEqual(['dark', 'light'])
     const light = block(':root[data-theme="light"]')
     expect(light.size).toBe(json.color.tokens.length)

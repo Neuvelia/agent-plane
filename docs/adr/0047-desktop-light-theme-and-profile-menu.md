@@ -1,4 +1,4 @@
-# ADR-0046 - Desktop light theme and profile menu
+# ADR-0047 - Desktop light theme and profile menu
 
 **Status:** accepted
 **Date:** 2026-11-27
@@ -16,7 +16,8 @@ canvas also has a light variant whose values are given in the canvas's
 
 The product owner asked for the profile menu 1:1 with the design, including a
 working light theme across the app and the Keyboard shortcuts and About
-windows (2026-11-27). That widens F2.5a's scope, so it needs a decision.
+windows (2026-11-27). That widens the non-goals of F2.5a and of F2.5b (the Inbox,
+ADR-0046, which lists "Light theme" as out of scope), so it needs a decision.
 
 ## Decision
 
@@ -38,8 +39,8 @@ windows (2026-11-27). That widens F2.5a's scope, so it needs a decision.
 3. **The language preference gains "System"**: choosing it removes the saved
    language (`agentplane.locale`), so the operating system's language applies,
    as it already did on first launch.
-4. **The profile moves from the global bar to the foot of the sidebar.** The
-   avatar row is a WAI-ARIA menu button; the menu, its two submenus and the two
+4. **The profile row at the foot of the sidebar** (placed there by F2.5b) becomes a
+   WAI-ARIA menu button; the menu, its two submenus and the two
    windows are presentation only: they call existing navigation, the existing
    read-only `GET /capabilities` and `GET /runs`, and the two preferences above.
    "Help and documentation" stays visible but unavailable ("Soon"), like the

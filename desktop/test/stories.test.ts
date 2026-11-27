@@ -25,7 +25,7 @@ describe('stories', () => {
       expect(text, f).not.toMatch(/nodes:\s*\{[^}]*status:/)
     }
   })
-  it('render in both languages and both themes, with the profile menu states and its interaction check [F2.5b-AC10]', () => {
+  it('render in both languages and both themes, with the profile menu states and its interaction check [F2.5c-AC10]', () => {
     const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
     expect(smoke).toContain("(process.env.AP_STORIES_THEMES || 'dark,light')")
     expect(smoke).toContain("['en', 'pl'].flatMap")
@@ -35,3 +35,20 @@ describe('stories', () => {
     expect(preview).toContain('<ThemeProvider key={theme} initialChoice={theme}>')
   })
 })
+
+describe('Inbox stories (F2.5b)', () => {
+  // The smoke renders each required story in EN and PL, waits for its play function (which
+  // asserts the state it drives: decided rows, pinning, focus) and fails on a play error or axe.
+  it('the story smoke requires every Inbox and Sidebar state [F2.5b-AC3]', () => {
+    const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+    const required = [
+      'needs-attention', 'failed-selected', 'retries-used-up', 'interrupted-selected', 'running-selected', 'filter-stopped', 'filter-empty',
+      'decided', 'decided-here', 'run-not-found', 'decision-error', 'connection-lost', 'stays-on-shown-item', 'keyboard-focus',
+      'empty', 'no-runs', 'loading', 'error',
+    ].map((s) => `screens--inbox-${s}`)
+    for (const id of [...required, 'ui-shell--sidebar-recent-runs', 'ui-shell--sidebar-recent-unavailable', 'ui-shell--sidebar-no-runs']) expect(smoke, id).toContain(`'${id}'`)
+    expect(smoke).toMatch(/playFunctionThrewException/)
+    expect(smoke).toMatch(/currentRender\?\.phase/)
+  })
+})
+

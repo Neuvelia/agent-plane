@@ -38,13 +38,13 @@ describe("first launch (F2.11 requirement 10)", () => {
     });
     expect(launch()).toContain('data-testid="welcome"');
   });
-  it("opens the default screen, the Dashboard, once Skip has been recorded", () => {
+  it("opens the default screen, the Inbox, once Skip has been recorded", () => {
     storage({
       getItem: (k: string) => (k === WELCOME_KEY ? "done" : null),
       setItem: () => undefined,
     });
     const out = launch();
     expect(out).not.toContain('data-testid="welcome"');
-    expect(out).toContain('data-testid="dashboard"');
+    expect(out).toContain('data-testid="inbox"');
   });
 });

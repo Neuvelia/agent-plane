@@ -1,7 +1,7 @@
 // Pure generator: design-system tokens.json -> tokens.css. Used by
 // scripts/sync-tokens.mjs (writes the file) and by test/tokens.test.ts (parity).
 // The first theme (dark) is the default on :root. Every other theme overrides
-// only the colour tokens under :root[data-theme="<id>"] (F2.5b, ADR-0046).
+// only the colour tokens under :root[data-theme="<id>"] (F2.5c, ADR-0047).
 
 const kebab = (s) => s.replace(/[^A-Za-z0-9_-]+/g, '-')
 

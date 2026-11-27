@@ -5,8 +5,8 @@ import { I18nProvider } from '../src/i18n/context'
 import { clearLocale, loadLocale, saveLocale } from '../src/i18n'
 import { THEME_FADE_MS, ThemeProvider, crossFade, loadThemeChoice, resolveTheme, saveThemeChoice, type ThemeChoice } from '../src/theme'
 import { closesSubmenu, commandHeld, isAppShortcut, modifierLabel, moveFocus, openFromButton } from '../src/ui/menuKeys'
-import { PROFILE_INITIALS, PROFILE_NAME, ProfileMenu, type ProfileMenuState } from '../src/ui/profileMenu'
-import { Sidebar } from '../src/ui/shell'
+import { PROFILE_NAME, ProfileMenu, type ProfileMenuState } from '../src/ui/profileMenu'
+import { PROFILE_INITIALS, Sidebar } from '../src/ui/shell'
 
 const noop = () => undefined
 
@@ -32,8 +32,8 @@ class MemoryStorage {
   removeItem = (k: string) => void this.data.delete(k)
 }
 
-describe('profile row (F2.5b)', () => {
-  it('is a closed menu button at the foot of the sidebar with initials, name and Local [F2.5b-AC1]', () => {
+describe('profile row (F2.5c)', () => {
+  it('is a closed menu button at the foot of the sidebar with initials, name and Local [F2.5c-AC1]', () => {
     const out = html('closed')
     const button = /<button[^>]*data-testid="profile"[^>]*>/.exec(out)?.[0] ?? ''
     expect(button).toContain('aria-haspopup="menu"')
@@ -46,8 +46,8 @@ describe('profile row (F2.5b)', () => {
   })
 })
 
-describe('profile menu (F2.5b)', () => {
-  it('draws the design: header, then Settings and shortcuts, Language and Appearance, Help and About [F2.5b-AC2]', () => {
+describe('profile menu (F2.5c)', () => {
+  it('draws the design: header, then Settings and shortcuts, Language and Appearance, Help and About [F2.5c-AC2]', () => {
     const out = html('open')
     expect(out).toMatch(/<button[^>]*aria-expanded="true"[^>]*data-testid="profile"/)
     expect(out).toContain('role="menu" id=')
@@ -65,14 +65,14 @@ describe('profile menu (F2.5b)', () => {
     const out = html('open', 'pl')
     expect(items(out, 'menuitem')).toEqual(['Ustawienia Ctrl ,', 'Skróty klawiszowe Ctrl /', 'Język Polski', 'Wygląd Ciemny', 'Pomoc i dokumentacja Wkrótce', 'O aplikacji Tarmind 0.14.0'])
   })
-  it('offers System, English and Polski in the Language submenu, one checked [F2.5b-AC3]', () => {
+  it('offers System, English and Polski in the Language submenu, one checked [F2.5c-AC3]', () => {
     const out = html('language', 'pl')
     expect(out).toMatch(/<button[^>]*aria-expanded="true"[^>]*data-sub="language"/)
     expect(items(out, 'menuitemradio')).toEqual(['Systemowy', 'English', 'Polski'])
     expect(out.match(/aria-checked="true"/g)?.length).toBe(1)
     expect(out).toMatch(/aria-checked="true"[^>]*data-testid="profile-language-pl"/)
   })
-  it('offers System, Light and Dark in the Appearance submenu with the current choice checked [F2.5b-AC4]', () => {
+  it('offers System, Light and Dark in the Appearance submenu with the current choice checked [F2.5c-AC4]', () => {
     const out = html('appearance', 'en', 'light')
     expect(items(out, 'menuitemradio')).toEqual(['System', 'Light', 'Dark'])
     expect(out).toMatch(/aria-checked="true"[^>]*data-testid="profile-theme-light"/)
@@ -81,7 +81,7 @@ describe('profile menu (F2.5b)', () => {
 })
 
 describe('menu keyboard model', () => {
-  it('roves with arrows, Home and End, wrapping at both ends [F2.5b-AC5]', () => {
+  it('roves with arrows, Home and End, wrapping at both ends [F2.5c-AC5]', () => {
     expect(moveFocus('ArrowDown', 0, 6)).toBe(1)
     expect(moveFocus('ArrowDown', 5, 6)).toBe(0)
     expect(moveFocus('ArrowUp', 0, 6)).toBe(5)
@@ -112,7 +112,7 @@ describe('menu keyboard model', () => {
 
 describe('app shortcuts', () => {
   const key = (k: string, extra: Partial<KeyboardEvent> = {}) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: false, altKey: false, ...extra })
-  it('are Ctrl/Cmd with , or / and nothing else [F2.5b-AC9]', () => {
+  it('are Ctrl/Cmd with , or / and nothing else [F2.5c-AC9]', () => {
     expect(isAppShortcut(key(','), 'Linux x86_64')).toBe('settings')
     expect(isAppShortcut(key('/'), 'Win32')).toBe('shortcuts')
     expect(isAppShortcut(key('/', { ctrlKey: false, metaKey: true }), 'MacIntel')).toBe('shortcuts')
@@ -124,7 +124,7 @@ describe('app shortcuts', () => {
 })
 
 describe('appearance and language preferences', () => {
-  it('saves Light and Dark, and System removes the saved choice [F2.5b-AC4]', () => {
+  it('saves Light and Dark, and System removes the saved choice [F2.5c-AC4]', () => {
     const s = new MemoryStorage()
     expect(loadThemeChoice(s)).toBe('system')
     saveThemeChoice('light', s)
@@ -147,7 +147,7 @@ describe('appearance and language preferences', () => {
     expect(resolveTheme('light', true)).toBe('light')
     expect(resolveTheme('dark', false)).toBe('dark')
   })
-  it('language System forgets the saved language [F2.5b-AC3]', () => {
+  it('language System forgets the saved language [F2.5c-AC3]', () => {
     const s = new MemoryStorage()
     saveLocale('pl', s)
     expect(loadLocale(s)).toBe('pl')
@@ -157,7 +157,7 @@ describe('appearance and language preferences', () => {
 })
 
 describe('Settings carries the same Appearance choice', () => {
-  it('offers System, Light and Dark, pressed on the current choice [F2.5b-AC9]', async () => {
+  it('offers System, Light and Dark, pressed on the current choice [F2.5c-AC9]', async () => {
     const { Settings } = await import('../src/settings')
     const out = renderToStaticMarkup(
       <I18nProvider locale="en">
@@ -185,9 +185,9 @@ describe('Settings carries the same Appearance choice', () => {
 
 describe('motion', () => {
   const styles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8')
-  it('animates the menu, submenu and windows in and out, cross-fades a theme change, and reduced motion stops all of it [F2.5b-AC6]', () => {
+  it('animates the menu, submenu and windows in and out, cross-fades a theme change, and reduced motion stops all of it [F2.5c-AC6]', () => {
     for (const rule of [
-      '.pm{left:0;bottom:calc(100% + 6px);width:248px;z-index:50;transform-origin:0 100%;animation:pm-in .16s',
+      '.pm{width:248px;z-index:50;transform-origin:0 100%;animation:pm-in .16s',
       '.pm.closing{animation:pm-out .12s',
       'animation:pm-sub-in .14s',
       '.pm-sub.closing{animation:pm-sub-out .1s',
@@ -213,7 +213,7 @@ describe('theme cross-fade timer (review N3)', () => {
     const classes = new Set<string>()
     return { classes, classList: { add: (c: string) => void classes.add(c), remove: (c: string) => void classes.delete(c) } as unknown as DOMTokenList }
   }
-  it('keeps the class for the full time again when a second change comes during a fade [F2.5b-AC6]', () => {
+  it('keeps the class for the full time again when a second change comes during a fade [F2.5c-AC6]', () => {
     vi.useFakeTimers()
     const r = root()
     const first = crossFade(undefined, r, false)

@@ -12,7 +12,7 @@ const preview: Preview = {
       toolbar: { title: 'Language', icon: 'globe', items: [{ value: 'en', title: 'English' }, { value: 'pl', title: 'Polski' }], dynamicTitle: true },
     },
     theme: {
-      description: 'Interface theme (F2.5b)',
+      description: 'Interface theme (F2.5c)',
       toolbar: { title: 'Theme', icon: 'contrast', items: [{ value: 'dark', title: 'Dark' }, { value: 'light', title: 'Light' }], dynamicTitle: true },
     },
   },

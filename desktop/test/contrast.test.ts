@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 // WCAG contrast of the colour pairs the app actually draws, computed from the
-// shipped tokens.css (+ overrides.css) in each theme (F2.5b adds light). Text
+// shipped tokens.css (+ overrides.css) in each theme (F2.5c adds light). Text
 // must reach 4.5:1; focus rings and selection outlines 3:1. Translucent colours
 // are composited over what is behind.
 const css = ['tokens.css', 'overrides.css'].map((f) => readFileSync(new URL(`../src/design/${f}`, import.meta.url), 'utf8')).join('\n').replace(/\/\*[\s\S]*?\*\//g, '')
@@ -89,7 +89,7 @@ for (const theme of ['dark', 'light'] as const) {
   const ringRatios = [grounds.raised!, grounds.inset!].map((bg) => ratio(parse('brand'), bg))
   const dotRatios = ['ok', 'warn', 'brand', 'bad'].map((c) => [c, ratio(parse(c), card)] as const)
 
-  describe(`${theme}: text contrast reaches 4.5:1 [F2.5b-AC7]`, () => {
+  describe(`${theme}: text contrast reaches 4.5:1 [F2.5c-AC7]`, () => {
     for (const c of cases) it(c.pair, () => expect(c.value).toBeGreaterThanOrEqual(4.5))
   })
 

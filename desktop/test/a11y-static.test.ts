@@ -19,7 +19,7 @@ describe('interactive elements are native', () => {
     for (const f of files) {
       const text = readFileSync(f, 'utf8')
       expect(text, f).not.toMatch(/<(div|span|li|td|tr)\b[^>]*\bon(Click|KeyUp|MouseDown)\b/)
-      // The one exception: a role="menu" container (F2.5b) may take onKeyDown, as a composite widget owns its arrow-key model.
+      // The one exception: a role="menu" container (F2.5c) may take onKeyDown, as a composite widget owns its arrow-key model.
       for (const m of text.matchAll(/<(div|span|li|td|tr)\b[^>]*\bonKeyDown\b[^>]*/g)) expect(m[0], f).toMatch(/\brole="menu"/)
       expect(text, f).not.toMatch(/role=["'](button|link|tab|switch|checkbox)["']/)
       // Menu items are native buttons that take a menu role; nothing else may.

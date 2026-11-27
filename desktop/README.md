@@ -92,7 +92,7 @@ real components, reducer and selectors over **recorded event streams**
 (`test/fixtures/*.json`, produced by `agentplane run --json`); a story never builds
 node or run state by hand. A decorator installs an in-memory `window.agentplane`
 (`src/storybook/bridge.tsx`), so no sidecar or network is involved. The toolbar
-switches language (EN/PL) and theme (Dark/Light, F2.5b); a story can pin a theme
+switches language (EN/PL) and theme (Dark/Light, F2.5c); a story can pin a theme
 with `parameters.theme`. Viewport is Storybook's built-in toolbar. Storybook is
 a dev dependency and is never part of the packaged app. `npm run stories:test`
 renders every story in EN/PL × dark/light (`AP_STORIES_THEMES=dark` limits it)
@@ -109,11 +109,11 @@ and drives the profile menu with the keyboard and the pointer.
 - UI text is localised in `src/i18n/` (`en.ts`, `pl.ts`, same keys; a test enforces
   it). Machine values (event types, node ids, paths, diagnostic codes and engine
   messages) are never translated. Language and Appearance are in the profile
-  menu at the foot of the sidebar (F2.5b) and in Settings.
+  menu at the foot of the sidebar (F2.5c) and in Settings.
 - Sidebar entries for Projects, Runners and Docs are intentionally greyed out
   and inert until those surfaces exist.
 
-## Profile menu and light theme (F2.5b, ADR-0046)
+## Profile menu and light theme (F2.5c, ADR-0047)
 
 - The profile row (initials, name, "Local") at the foot of the sidebar opens the
   profile menu: Settings (`Ctrl ,`), Keyboard shortcuts (`Ctrl /`), Language
@@ -245,8 +245,11 @@ and New run (graph, inputs, preflight steps). R2 adds the Dashboard (needs atten
 active runs, 7-day outcomes, quick actions) and, in the inspector, a run summary
 (wall clock, node time, saved, retries, tokens always unknown), a per-second
 timeline and a filterable event log. Those numbers are computed in the app from
-the event stream (`src/insight.ts`, `src/dashboard.ts`) and carry no authority
-over run state.
+the event stream (`src/insight.ts`) and carry no authority
+over run state. F2.5b (ADR-0046) replaces the Dashboard with the **Inbox**, a triage
+queue (approvals waiting for you, stopped runs, running runs) beside the selected item's
+evidence read from its event stream; an approval is decided in place
+(`src/inbox.ts`, `src/inboxRun.ts`, `src/inboxView.tsx`, `src/InboxDetail.tsx`).
 R3 adds loading and error states for every engine-backed screen (a failed read is
 an error with Retry, never an empty list), a skip link and focus-to-content on
 navigation, contrast-checked colours and reduced-motion support. F2.5a is
@@ -255,6 +258,6 @@ implemented; screenshots are in `docs/validation/F2.5a-screenshots/`.
 Screens implemented from the Tarmind interface design: Runs (IA-01, list only),
 Run Inspector (IA-15/16) with live map, attempts, reason/evidence and log,
 Approvals (IA-17/18), New run with preflight (IA-12/13) and the YAML view of the
-graph (IA-07-11, read-only), plus Settings with the interface language, Appearance and the opt-in "Record run values" switch, and the profile menu with Keyboard shortcuts and About (F2.5b). Not
+graph (IA-07-11, read-only), plus Settings with the interface language, Appearance and the opt-in "Record run values" switch, and the profile menu with Keyboard shortcuts and About (F2.5c). Not
 implemented (greyed out in the sidebar where they would live): Projects, Runners,
 Docs; also mobile approval, onboarding, attempt compare and graph editing.

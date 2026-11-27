@@ -3,13 +3,13 @@ import { useI18n, type LocaleChoice } from '../i18n/context'
 import { THEME_CHOICES, useTheme, type ThemeChoice } from '../theme'
 import { closesSubmenu, isAppShortcut as appShortcut, modifierLabel, moveFocus, openFromButton } from './menuKeys'
 import { usePresence } from './presence'
+import { PROFILE_INITIALS } from './shell'
 
-// F2.5b profile menu: the menu under the avatar at the foot of the sidebar,
+// F2.5c profile menu: the menu under the avatar at the foot of the sidebar,
 // drawn 1:1 from the design's "Profile menu" artboard. Only what exists in a
 // local app: no account, no plan, no organisation, no Log out.
 
-/** Placeholder identity until accounts exist (F2.5a): initials and name are hard-coded. */
-export const PROFILE_INITIALS = 'KW'
+/** Placeholder name until the welcome screen asks for one (issue #219); the initials come from the shell. */
 export const PROFILE_NAME = 'Kacper'
 
 /** Exit animation lengths; styles.css `.pm.closing` and `.pm-sub.closing` use the same values. */
@@ -17,6 +17,15 @@ const MENU_EXIT_MS = 120
 const SUB_EXIT_MS = 100
 /** The submenu's padding plus border: its last item lines up with the bottom of its trigger. */
 const SUB_INSET = 7
+/** Gap between the button and the menu, and between the menu and a submenu. */
+const GAP = 6
+
+/** Where the menu sits in the viewport. Menu and submenus are `position: fixed`, so the
+ *  sidebar's own scrolling (`overflow-y: auto`) cannot clip them. */
+interface Place {
+  left: number
+  bottom: number
+}
 
 type Sub = 'language' | 'appearance'
 export type ProfileMenuState = 'closed' | 'open' | Sub
@@ -56,6 +65,18 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
   const pendingFocus = useRef<'first' | 'last' | Sub | 'sub' | null>(null)
   const menuId = useId()
   const subId = useId()
+  const [place, setPlace] = useState<Place | null>(null)
+  // Placed above the button before paint, and again when the window resizes.
+  useLayoutEffect(() => {
+    if (!menu.mounted) return
+    const measure = () => {
+      const r = buttonRef.current?.getBoundingClientRect()
+      if (r) setPlace({ left: r.left, bottom: window.innerHeight - r.top + GAP })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [menu.mounted])
   const mod = modifierLabel(platform())
 
   const close = useCallback((returnFocus: boolean) => {
@@ -70,8 +91,17 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
     const onDown = (e: PointerEvent) => {
       if (!rootRef.current?.contains(e.target as Node)) close(false)
     }
+    // The menu is fixed in the viewport: if the sidebar scrolls under it, it would point at
+    // nothing, so a scroll anywhere but inside the menu closes it.
+    const onScroll = (e: Event) => {
+      if (!rootRef.current?.contains(e.target as Node)) close(false)
+    }
     document.addEventListener('pointerdown', onDown)
-    return () => document.removeEventListener('pointerdown', onDown)
+    document.addEventListener('scroll', onScroll, true)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      document.removeEventListener('scroll', onScroll, true)
+    }
   }, [open, close])
 
   // An app shortcut (Ctrl/Cmd+, or /) closes the menu wherever focus is, even outside it
@@ -173,7 +203,7 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
   return (
     <div className="profile" ref={rootRef}>
       {menu.mounted && (
-        <div className={`pm ${menu.phase}`} role="menu" id={menuId} aria-label={t('profile.menu')} ref={menuRef} onKeyDown={onMenuKey} data-testid="profile-menu">
+        <div className={`pm ${menu.phase}`} role="menu" id={menuId} aria-label={t('profile.menu')} ref={menuRef} onKeyDown={onMenuKey} style={place ?? undefined} data-testid="profile-menu">
           <div className="pm-who" role="none">
             <b>{PROFILE_NAME}</b>
             <span>{t('profile.stored')}</span>
@@ -190,7 +220,7 @@ export function ProfileMenu({ onSettings, onShortcuts, onAbout, appVersion, init
         </div>
       )}
       {menu.mounted && submenu.mounted && shownSub && (
-        <SubMenu id={subId} label={t(shownSub === 'language' ? 'profile.language' : 'profile.appearance')} phase={submenu.phase} sub={shownSub} menuRef={menuRef} ref={subRef} onKeyDown={onSubKey}>
+        <SubMenu id={subId} label={t(shownSub === 'language' ? 'profile.language' : 'profile.appearance')} phase={submenu.phase} sub={shownSub} menuRef={menuRef} place={place} ref={subRef} onKeyDown={onSubKey}>
           {shownSub === 'language'
             ? LANGUAGE_CHOICES.map((c) => <Radio key={c} label={languageName(c)} checked={langChoice === c} onPick={() => pickLanguage(c)} testId={`profile-language-${c}`} />)
             : THEME_CHOICES.map((c) => <Radio key={c} label={themeName(c)} checked={themeChoice === c} onPick={() => pickTheme(c)} testId={`profile-theme-${c}`} />)}
@@ -345,28 +375,27 @@ interface SubMenuProps {
   phase: string
   sub: Sub
   menuRef: RefObject<HTMLDivElement | null>
+  place: Place | null
   onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => void
   children: ReactNode
   ref: Ref<HTMLDivElement>
 }
 
 /** The submenu sits to the right of the menu; its last item lines up with the bottom of its trigger. */
-function SubMenu({ id, label, phase, sub, menuRef, onKeyDown, children, ref }: SubMenuProps) {
-  const [bottom, setBottom] = useState<number | null>(null)
-  // Measured after commit, before paint, from layout offsets: the menu may still be
-  // scaling in, and a transform would skew getBoundingClientRect.
+function SubMenu({ id, label, phase, sub, menuRef, place, onKeyDown, children, ref }: SubMenuProps) {
+  const [own, setOwn] = useState<Place | null>(null)
+  // Measured before paint from the menu's place and layout offsets, never from
+  // getBoundingClientRect: the menu may still be scaling in, and its transform would skew it.
   useLayoutEffect(() => {
-    // The menu's offset parent is the profile root; on first mount the root's own
-    // ref is attached only after this child effect runs, so it is not used here.
     const menu = menuRef.current
     const anchor = menu?.querySelector<HTMLElement>(`[data-sub="${sub}"]`)
-    const root = menu?.offsetParent
-    if (!menu || !anchor || !root) return
-    const anchorBottom = menu.offsetTop + menu.clientTop + anchor.offsetTop + anchor.offsetHeight
-    setBottom(root.clientHeight - anchorBottom - SUB_INSET)
-  }, [sub, menuRef])
+    if (!menu || !anchor || !place) return
+    const menuTop = window.innerHeight - place.bottom - menu.offsetHeight
+    const anchorBottom = menuTop + menu.clientTop + anchor.offsetTop + anchor.offsetHeight
+    setOwn({ left: place.left + menu.offsetWidth + GAP, bottom: window.innerHeight - anchorBottom - SUB_INSET })
+  }, [sub, menuRef, place])
   return (
-    <div className={`pm-sub ${phase}`} role="menu" id={id} aria-label={label} ref={ref} onKeyDown={onKeyDown} style={bottom === null ? undefined : { bottom }} data-testid="profile-submenu">
+    <div className={`pm-sub ${phase}`} role="menu" id={id} aria-label={label} ref={ref} onKeyDown={onKeyDown} style={own ?? undefined} data-testid="profile-submenu">
       {children}
     </div>
   )

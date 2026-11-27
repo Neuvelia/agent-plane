@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-// Keeps a closing element mounted for its exit animation (F2.5b). Under
+// Keeps a closing element mounted for its exit animation (F2.5c). Under
 // prefers-reduced-motion the element leaves at once: there is no animation to wait for.
 
 export type Phase = 'open' | 'closing'

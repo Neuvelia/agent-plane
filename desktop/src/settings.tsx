@@ -16,7 +16,7 @@ const THEME_LABEL = { system: 'choice.system', light: 'theme.light', dark: 'them
 
 // F2.5a: Settings holds the interface language. F2.3 E6 adds the opt-in
 // "Record run values" preference (ADR-0023), held by the main process.
-// F2.5b adds Appearance, the same choice as the profile menu's.
+// F2.5c adds Appearance, the same choice as the profile menu's.
 export function Settings() {
   const { t, choice: languageChoice, setChoice: setLanguageChoice } = useI18n()
   const { choice, setChoice } = useTheme()
