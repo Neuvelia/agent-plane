@@ -1794,6 +1794,7 @@ features:
     evidence:
       - "docs/features/F2.5c-new-run-preflight.md"
       - "desktop/test/new-run.test.tsx"
+      - "desktop/test/new-run-session.test.ts"
       - "desktop/e2e/demo.cjs"
     out_of_scope:
       - "Per-run max concurrency (#209) and Agent workspace (#210), uncommitted-file count (#211), templates and project-folder graphs in the list (#212, F2.13), light theme."

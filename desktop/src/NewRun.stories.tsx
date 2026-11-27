@@ -79,3 +79,5 @@ export const StartFails = story({ runs: [], graph: { opened: opened(demoOpen), r
   ctx.canvasElement.querySelector<HTMLButtonElement>('[data-testid="run"]')?.click()
   await settle()
 })
+/** Choosing a graph fails: said under the list, not as a refused start. */
+export const PickFails = story({ runs: [], graph: { openError: 'the file is not a regular file' } }, choose)

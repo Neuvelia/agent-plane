@@ -11,19 +11,33 @@ import type { Diagnostic } from './types'
 // `preflightState` (the engine's status) does that, and the engine checks again
 // when the run starts.
 
-/** One declared graph input, shown as one field. `targets` are the nodes it is bound to. */
+/**
+ * One declared graph input, shown as one field. `targets` are the nodes it is bound to;
+ * `neededBy` are those whose bound input port is declared required, as written in the
+ * file. The engine decides what that means for an optional graph input; the field only says so.
+ */
 export interface InputField {
   name: string
   type: string
   required: boolean
   targets: string[]
+  neededBy: string[]
+}
+
+function boundPorts(def: Definition, name: string): { node: string; required: boolean }[] {
+  return (def.graph_input_bindings ?? [])
+    .filter((b) => b.from === `inputs.${name}`)
+    .map((b) => {
+      const [node = b.to, , port = ''] = b.to.split('.')
+      return { node, required: def.nodes[node]?.inputs?.[port]?.required === true }
+    })
 }
 
 export function inputFields(def: Definition | null): InputField[] {
   if (!def) return []
   return Object.entries(def.inputs ?? {}).map(([name, port]) => {
-    const targets = (def.graph_input_bindings ?? []).filter((b) => b.from === `inputs.${name}`).map((b) => b.to.split('.')[0] ?? b.to)
-    return { name, type: port.type, required: port.required === true, targets: [...new Set(targets)] }
+    const bound = boundPorts(def, name)
+    return { name, type: port.type, required: port.required === true, targets: [...new Set(bound.map((b) => b.node))], neededBy: [...new Set(bound.filter((b) => b.required).map((b) => b.node))] }
   })
 }
 

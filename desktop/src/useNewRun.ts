@@ -1,123 +1,51 @@
-import { useEffect, useRef, useState } from 'react'
-import { startRun, validateGraph, type ApiFailure } from './api'
-import { getCapabilities, type CapabilityResult } from './capabilities'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { startRun, validateGraph } from './api'
+import { getCapabilities } from './capabilities'
 import { openDocument, recentGraphs } from './editor/api'
-import type { Definition } from './editor/types'
-import { agentWorkspace, inputFields, inputLines } from './newRunModel'
-import type { ChosenGraph, Diagnostic, RecentGraph } from './types'
+import { NewRunSession, type NewRunPorts } from './newRunSession'
+import type { ChosenGraph } from './types'
 
-// F2.5c: the state behind New run. The graph is addressed by grant only; its
-// path stays in the main process (ADR-0021). Choosing a graph validates it and
-// opens its document (for the declared inputs and node kinds); answers for a
-// graph that is no longer chosen are dropped.
+// F2.5c: binds a NewRunSession to the component's lifetime and to the bridge.
 
-const unreachable = (e: unknown): ApiFailure => ({ message: e instanceof Error ? e.message : 'the engine could not be reached', diagnostics: [] })
-
-/** Which option of the graph list is chosen: a recent graph by id, or a file chosen with the dialog. */
-export type GraphSource = { kind: 'recent'; id: string } | { kind: 'file' }
+// The bridge is read on each call, so rendering without one (server markup in tests) is safe.
+const bridgePorts = (): NewRunPorts => ({
+  openGraph: () => window.agentplane.openGraph(),
+  openRecentGraph: (id) => window.agentplane.openRecentGraph(id),
+  recentGraphs,
+  closeGraph: (grant) => window.agentplane.closeGraph(grant),
+  validate: validateGraph,
+  definition: async (grant) => {
+    const r = await openDocument(grant)
+    return r.ok ? (r.doc.definition ?? null) : null
+  },
+  start: startRun,
+  capabilities: getCapabilities,
+})
 
 export function useNewRun(initialGraph: ChosenGraph | undefined, onStarted: (runId: string) => void) {
-  const [graph, setGraph] = useState<ChosenGraph | null>(initialGraph ?? null)
-  const [source, setSource] = useState<GraphSource | null>(initialGraph ? { kind: 'file' } : null)
-  const current = useRef(graph)
-  const mounted = useRef(false)
-  const [recent, setRecent] = useState<RecentGraph[]>([])
-  const [def, setDef] = useState<Definition | null>(null)
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [validation, setValidation] = useState<{ status: string; diagnostics: Diagnostic[] } | null>(null)
-  const [validationError, setValidationError] = useState<string | null>(null)
-  const [validating, setValidating] = useState(false)
-  const [startError, setStartError] = useState<ApiFailure | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [capabilities, setCapabilities] = useState<CapabilityResult | 'loading' | null>(null)
-
-  const release = (g: ChosenGraph) => void window.agentplane.closeGraph(g.grant).catch(() => undefined)
-  const isCurrent = (g: ChosenGraph) => current.current?.grant === g.grant
-
-  async function inspect(g: ChosenGraph) {
-    setValidation(null)
-    setValidationError(null)
-    setStartError(null)
-    setDef(null)
-    setValues({})
-    setValidating(true)
-    const [checked, opened] = await Promise.all([validateGraph(g.grant).catch(unreachable), openDocument(g.grant).catch(() => null)])
-    if (!isCurrent(g)) return // another graph was chosen meanwhile
-    setValidating(false)
-    if ('message' in checked) setValidationError(checked.message)
-    else setValidation(checked)
-    if (opened?.ok && opened.doc.definition) setDef(opened.doc.definition)
-  }
-
-  function adopt(chosen: ChosenGraph, from: GraphSource) {
-    const previous = current.current
-    current.current = chosen
-    setGraph(chosen)
-    setSource(from)
-    if (previous && previous.grant !== chosen.grant) release(previous)
-    void inspect(chosen)
-  }
-
-  async function chooseFile() {
-    const picked = await window.agentplane.openGraph()
-    if ('canceled' in picked) return
-    if (!picked.ok) {
-      setStartError({ message: picked.message, diagnostics: [] })
-      return
-    }
-    adopt({ grant: picked.grant, label: picked.label }, { kind: 'file' })
-  }
-
-  async function chooseRecent(r: RecentGraph) {
-    const picked = await window.agentplane.openRecentGraph(r.id)
-    if ('canceled' in picked) return
-    if (!picked.ok) {
-      setStartError({ message: picked.message, diagnostics: [] })
-      return
-    }
-    adopt({ grant: picked.grant, label: picked.label }, { kind: 'recent', id: r.id })
-  }
-
-  async function run() {
-    if (!graph) return
-    setBusy(true)
-    setStartError(null)
-    const r = await startRun(graph.grant, inputLines(inputFields(def), values)).catch(unreachable)
-    setBusy(false)
-    if ('message' in r) setStartError(r)
-    else onStarted(r.runId)
-  }
-
-  // Opened with a graph already chosen (Inbox "Open graph"): check it right away.
+  const [session] = useState(() => new NewRunSession(bridgePorts(), initialGraph))
+  const state = useSyncExternalStore(session.subscribe, session.snapshot, session.snapshot)
+  const mounts = useRef(0)
+  // StrictMode unmounts and remounts synchronously, so only a real unmount disposes the session.
   useEffect(() => {
-    if (initialGraph) void inspect(initialGraph)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialGraph])
-  useEffect(() => {
-    let live = true
-    void recentGraphs().then((r) => live && setRecent(r))
+    mounts.current += 1
+    session.start()
+    // Coming back to the window (for example after saving the file elsewhere) checks the graph again.
+    const recheck = () => session.recheck()
+    window.addEventListener('focus', recheck)
     return () => {
-      live = false
-    }
-  }, [])
-  // The capability report is read once, and only for a graph with an Agent node.
-  const needsAgent = agentWorkspace(def).agents > 0
-  useEffect(() => {
-    if (!needsAgent || capabilities !== null) return
-    setCapabilities('loading')
-    void getCapabilities().then((r) => mounted.current && setCapabilities(r))
-  }, [needsAgent, capabilities])
-  // Leaving the screen revokes the grant. StrictMode re-runs the effect synchronously, so only a real unmount releases.
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
+      mounts.current -= 1
+      window.removeEventListener('focus', recheck)
       queueMicrotask(() => {
-        if (!mounted.current && current.current) release(current.current)
+        if (mounts.current === 0) session.dispose()
       })
     }
-  }, [])
-
-  const setValue = (name: string, value: string) => setValues((v) => ({ ...v, [name]: value }))
-  return { graph, source, recent, def, values, setValue, validation, validationError, validating, startError, busy, capabilities, chooseFile, chooseRecent, run }
+  }, [session])
+  return {
+    ...state,
+    setValue: (name: string, value: string) => session.setValue(name, value),
+    chooseFile: () => void session.chooseFile(),
+    chooseRecent: (r: Parameters<NewRunSession['chooseRecent']>[0]) => void session.chooseRecent(r),
+    run: () => void session.run(onStarted),
+  }
 }

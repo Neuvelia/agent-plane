@@ -4,7 +4,8 @@ import { agentWorkspace, graphShape, headline, inputFields, preflightChecks, tal
 import { canStart, preflightState } from './preflight'
 import type { ChosenGraph, Diagnostic, RecentGraph } from './types'
 import { Glyph, type GlyphKind } from './ui/glyphs'
-import { useNewRun, type GraphSource } from './useNewRun'
+import type { GraphSource } from './newRunSession'
+import { useNewRun } from './useNewRun'
 import type { Definition } from './editor/types'
 
 // F2.5c: New run with preflight (Tarmind canvas, artboard "New run with preflight").
@@ -21,7 +22,7 @@ export function NewRun({ onStarted, initialGraph }: { onStarted: (runId: string)
     <div className="nr">
       <section className="nr-form" aria-label={t('newrun.setup')}>
         <h1>{t('config.title')}</h1>
-        <GraphGroup graph={s.graph} source={s.source} recent={s.recent} def={s.def} onRecent={s.chooseRecent} onFile={s.chooseFile} />
+        <GraphGroup graph={s.graph} source={s.source} recent={s.recent} def={s.def} locked={s.busy} pickError={s.pickError} onRecent={s.chooseRecent} onFile={s.chooseFile} />
         <InputsGroup chosen={!!s.graph} loading={s.validating} def={s.def} values={s.values} onChange={s.setValue} />
         <OptionsGroup def={s.def} />
       </section>
@@ -40,7 +41,8 @@ function Group({ title, lede, children }: { title: string; lede: string; childre
   )
 }
 
-function GraphGroup({ graph, source, recent, def, onRecent, onFile }: { graph: ChosenGraph | null; source: GraphSource | null; recent: RecentGraph[]; def: Definition | null; onRecent: (r: RecentGraph) => void; onFile: () => void }) {
+// While a run is being started the graph cannot change (`locked`).
+function GraphGroup({ graph, source, recent, def, locked, pickError, onRecent, onFile }: { graph: ChosenGraph | null; source: GraphSource | null; recent: RecentGraph[]; def: Definition | null; locked: boolean; pickError: string | null; onRecent: (r: RecentGraph) => void; onFile: () => void }) {
   const { t } = useI18n()
   const shape = def ? graphShape(def) : null
   const sub = shape ? t('newrun.graph.shape', { count: shape.nodes, types: shape.types.join(', ') }) : undefined
@@ -48,15 +50,20 @@ function GraphGroup({ graph, source, recent, def, onRecent, onFile }: { graph: C
   return (
     <Group title={t('newrun.graph')} lede={t('newrun.graph.lede')}>
       <div className="nr-opts" role="radiogroup" aria-label={t('newrun.graph')}>
-        {fileChosen && <GraphOption name={graph.label} tag={t('newrun.graph.tag.file')} sub={sub} checked onPick={() => undefined} />}
+        {fileChosen && <GraphOption name={graph.label} tag={t('newrun.graph.tag.file')} sub={sub} checked disabled={locked} onPick={() => undefined} />}
         {recent.map((r) => {
           const on = source?.kind === 'recent' && source.id === r.id
-          return <GraphOption key={r.id} name={on && graph ? graph.label : r.label} tag={t('newrun.graph.tag.recent')} sub={on ? sub : undefined} checked={on} onPick={() => onRecent(r)} />
+          return <GraphOption key={r.id} name={on && graph ? graph.label : r.label} tag={t('newrun.graph.tag.recent')} sub={on ? sub : undefined} checked={on} disabled={locked} onPick={() => onRecent(r)} />
         })}
       </div>
       {!graph && recent.length === 0 && <p className="nr-none mu">{t('newrun.graph.none')}</p>}
+      {pickError && (
+        <p className="nr-err" role="alert" data-testid="pick-error">
+          {t('newrun.graph.pickFailed', { message: pickError })}
+        </p>
+      )}
       <div className="nr-choose">
-        <button type="button" className="ib-btn" data-testid="choose" onClick={onFile}>
+        <button type="button" className="ib-btn" data-testid="choose" disabled={locked} onClick={onFile}>
           {t('newrun.graph.choose')}
         </button>
       </div>
@@ -64,10 +71,10 @@ function GraphGroup({ graph, source, recent, def, onRecent, onFile }: { graph: C
   )
 }
 
-function GraphOption({ name, tag, sub, checked, onPick }: { name: string; tag: string; sub?: string; checked: boolean; onPick: () => void }) {
+function GraphOption({ name, tag, sub, checked, disabled, onPick }: { name: string; tag: string; sub?: string; checked: boolean; disabled: boolean; onPick: () => void }) {
   return (
     <label className="nr-opt">
-      <input type="radio" name="nr-graph" checked={checked} onChange={onPick} />
+      <input type="radio" name="nr-graph" checked={checked} disabled={disabled} onChange={onPick} />
       <span className="nr-opt-text">
         <span className="nr-opt-name" data-testid={checked ? 'graph-label' : undefined}>{name}</span>
         {sub && <span className="nr-opt-sub">{sub}</span>}
@@ -86,7 +93,7 @@ function InputsGroup({ chosen, loading, def, values, onChange }: { chosen: boole
       {empty && <p className="nr-none mu">{t(empty)}</p>}
       {fields.map((f) => {
         const id = `nr-in-${f.name}`
-        const hint = [t(f.required ? 'newrun.inputs.required' : 'newrun.inputs.optional'), f.type, ...(f.targets.length ? [t('newrun.inputs.passedTo', { nodes: f.targets.join(', ') })] : [])].join(' · ')
+        const hint = [t(f.required ? 'newrun.inputs.required' : 'newrun.inputs.optional'), f.type, ...(f.targets.length ? [t('newrun.inputs.passedTo', { nodes: f.targets.join(', ') })] : []), ...(!f.required && f.neededBy.length ? [t('newrun.inputs.neededBy', { nodes: f.neededBy.join(', ') })] : [])].join(' · ')
         return (
           <div className="nr-fld" key={f.name}>
             <label htmlFor={id}>{f.name}</label>
@@ -117,7 +124,10 @@ function OptionsGroup({ def }: { def: Definition | null }) {
             <button type="button" aria-label={t('newrun.options.decrease')} disabled>
               −
             </button>
-            <span className="mono" aria-label={t('newrun.options.engineValue')}>—</span>
+            <span className="mono">
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">{t('newrun.options.engineValue')}</span>
+            </span>
             <button type="button" aria-label={t('newrun.options.increase')} disabled>
               +
             </button>

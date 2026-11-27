@@ -491,6 +491,9 @@ main:has(>.nr){padding:0}
 .nr-opt-sub{color:var(--muted);font-size:var(--type-small-size)}
 .nr-opt-tag{margin-left:auto;flex:none;color:var(--muted);font-size:var(--type-label-size)}
 .nr-choose{padding-top:var(--space-12)}
+.nr-err{margin:var(--space-12) 0 0;color:var(--bad-text);font-size:var(--type-small-size);overflow-wrap:anywhere}
+.nr-opt:has(input:disabled){cursor:not-allowed;opacity:.6}
+.nr-opt input:disabled{cursor:not-allowed}
 .nr-fld{display:flex;flex-direction:column;gap:6px}
 .nr-fld+.nr-fld{margin-top:var(--space-12)}
 .nr-fld label{font-weight:500;font-size:var(--type-small-size)}

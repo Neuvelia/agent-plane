@@ -58,7 +58,10 @@ describe('New run holds a grant and a file name, never a path', () => {
 
 describe('New run model over recorded graphs', () => {
   it('lists declared inputs with their type and the nodes they are bound to', () => {
-    expect(inputFields(fixIssue)).toEqual([{ name: 'issue', type: 'string', required: true, targets: ['confirm_start', 'fix'] }])
+    expect(inputFields(fixIssue)).toEqual([{ name: 'issue', type: 'string', required: true, targets: ['confirm_start', 'fix'], neededBy: ['confirm_start', 'fix'] }])
+    // An optional graph input bound to a required node input says which node needs it; the engine decides.
+    const optional: Definition = { ...fixIssue, inputs: { issue: { type: 'string' } } }
+    expect(inputFields(optional)[0]).toMatchObject({ required: false, neededBy: ['confirm_start', 'fix'] })
     expect(inputFields(demo)).toEqual([])
     expect(inputFields(null)).toEqual([])
   })
