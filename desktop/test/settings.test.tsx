@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import recorded from './fixtures/capabilities-linux.json'
 import type { CapabilityReport, CapabilityTool } from '../src/capabilities'
 import { I18nProvider } from '../src/i18n/context'
 import { ThemeProvider } from '../src/theme'
 import type { Locale } from '../src/i18n'
 import { SECTIONS, Settings } from '../src/settings'
-import { diagnosticsText } from '../src/settings/about'
+import { AboutPane, diagnosticsText } from '../src/settings/about'
+import { translate } from '../src/i18n'
 import { AgentsPane, agentRows } from '../src/settings/agents'
 import { EngineGroup } from '../src/settings/groups'
 import { draftAfterToggle, namesDirty, noticeOf, sessionKey } from '../src/settings/recording'
@@ -157,5 +158,30 @@ describe('About', () => {
     expect(text).toContain('codex not_configured (no_binary_configured)')
     expect(text).not.toMatch(/[/\\]{1}[a-z]+[/\\]/i)
     expect(diagnosticsText('', null)).toBe('app unknown')
+  })
+})
+
+describe('Settings screen-reader announcements (#239)', () => {
+  it('keeps the About copy result in the accessibility tree while empty', () => {
+    vi.stubGlobal('window', {})
+    const out = render(<AboutPane view={{ state: 'disconnected' }} />)
+    vi.unstubAllGlobals()
+    const span = /<span[^>]*data-testid="about-copy-result"[^>]*>/.exec(out)?.[0] ?? ''
+    expect(span).toContain('role="status"')
+    expect(span).toContain('aria-atomic="true"')
+  })
+  it('describes each Check again button with the check-all note', () => {
+    const report = withTools([{ id: 'codex' }, { id: 'claude' }])
+    const out = render(<AgentsPane view={{ state: 'loaded', report, refreshing: false }} onCheck={noop} onRetry={noop} />)
+    const note = /<p class="st-note" id="([^"]+)">Check again checks every agent at once\.<\/p>/.exec(out)
+    expect(note).not.toBeNull()
+    for (const id of ['codex', 'claude']) {
+      const button = new RegExp(`<button[^>]*aria-describedby="([^"]+)"[^>]*data-testid="agent-check-${id}"`).exec(out)
+      expect(button?.[1]?.split(' ')).toContain(note?.[1])
+    }
+  })
+  it('has the check-all sentence in EN and PL', () => {
+    expect(translate('en', 'settings.agents.checkAll')).toContain('Check again')
+    expect(translate('pl', 'settings.agents.checkAll')).toContain('Sprawdź ponownie')
   })
 })
