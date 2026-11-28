@@ -20,7 +20,7 @@ const SHOTS = {
   'approvals': 'screens--approvals-one-pending',
   'new-run-ready': 'screens-new-run--agent-graph-ready',
   'new-run-blocked': 'screens-new-run--blocked',
-  'settings': 'screens--settings-language',
+  'settings': 'screens-settings--language',
   'engine-down': 'screens--full-app-shell-engine-down',
 }
 

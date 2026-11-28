@@ -939,10 +939,10 @@ async function startDemo(app, page) {
     await page.click('[data-testid="settings-theme-system"]')
     await page.click('[data-testid="nav-inbox"]')
     await page.click('[data-testid="nav-settings"]')
-    await page.click('button:has-text("PL ·")')
+    await page.click('[data-testid="language-pl"]')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Uruchomienia/)
     assert.equal(await page.evaluate(() => document.documentElement.lang), 'pl')
-    await page.click('button:has-text("EN ·")')
+    await page.click('[data-testid="language-en"]')
     assert.match(await page.textContent('[data-testid="nav-runs"]'), /Runs/)
     await page.click('[data-testid="nav-runs"]')
 
@@ -1051,9 +1051,43 @@ async function startDemo(app, page) {
     assert.match(await page.textContent('[data-testid="decision"]'), /approved.*ship it/i)
     await shot(page, '4-succeeded')
     const finishedEvents = await page.textContent('[data-testid="event-count"]')
+
+    // roadmap: F2.5f-AC3
+    // F2.3 E6 through the Settings switch: it saves at once to the main-process file
+    // read at start, keeps an unsaved names draft as typed, and keeps keyboard focus.
+    // The runs above were not recorded; the ones after the restart below are.
+    const recordingFile = path.join(work, 'user', 'recording.json')
+    await page.click('[data-testid="nav-settings"]')
+    await page.waitForSelector('[data-testid="values-record"]:not([disabled])')
+    await page.fill('[data-testid="values-redact-env"]', 'NOT_SAVED_YET')
+    assert.equal(await page.isVisible('[data-testid="values-unsaved"]'), true)
+    await page.focus('[data-testid="values-record"]')
+    await page.keyboard.press('Space')
+    await page.waitForSelector('[data-testid="values-saved"]')
+    assert.equal(await page.isChecked('[data-testid="values-record"]'), true)
+    assert.deepEqual(JSON.parse(fs.readFileSync(recordingFile, 'utf8')), { version: 1, enabled: true, redactEnv: [] })
+    assert.equal(await page.inputValue('[data-testid="values-redact-env"]'), 'NOT_SAVED_YET', 'a toggle must not discard a typed draft')
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'values-record', 'focus stays on the switch')
+    await page.fill('[data-testid="values-redact-env"]', 'not a name!')
+    await page.click('[data-testid="values-save"]')
+    await page.waitForSelector('[data-testid="values-invalid"]')
+    assert.deepEqual(JSON.parse(fs.readFileSync(recordingFile, 'utf8')).redactEnv, [], 'an invalid name is not saved')
+    // Panes keep the recording draft; the breadcrumb names the pane; choosing
+    // Settings in the sidebar opens the main pane again without losing the draft.
+    await page.fill('[data-testid="values-redact-env"]', 'KEPT_DRAFT')
+    await page.click('[data-testid="settings-nav-agents"]')
+    await page.waitForSelector('[data-testid="settings-agents"]')
+    assert.match(await page.textContent('.topbar'), /Settings\s*\/?\s*Agents/)
+    await page.click('[data-testid="nav-settings"]')
+    await page.waitForSelector('[data-testid="values-redact-env"]')
+    assert.equal(await page.locator('.crumb').count(), 1, 'the breadcrumb is back to Settings only')
+    assert.equal(await page.inputValue('[data-testid="values-redact-env"]'), 'KEPT_DRAFT')
+    // Choosing a group in the section list moves focus to its heading.
+    await page.click('[data-testid="settings-nav-engine"]')
+    await page.waitForFunction(() => document.activeElement?.id === 'st-engine-h')
+    assert.equal(await page.getAttribute('[data-testid="settings-nav-engine"]', 'aria-current'), 'true')
+    await page.fill('[data-testid="values-redact-env"]', '')
     await app.close()
-    // F2.3 E6: the switch is a main-process file read at start. The runs above were not recorded; the ones below are.
-    fs.writeFileSync(path.join(work, 'user', 'recording.json'), JSON.stringify({ version: 1, enabled: true, redactEnv: [] }))
 
     // roadmap: F2.9-AC1, F2.5-AC2
     // 4. History survives an application restart and the map is rebuilt from events.

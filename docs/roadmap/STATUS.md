@@ -162,6 +162,7 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | [F2.5c](../../docs/features/F2.5c-profile-menu-and-light-theme.md) | Profile menu, light theme, Keyboard shortcuts and About (desktop) | derived | F2.5 | done | Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon. |
 | [F2.5d](../../docs/features/F2.5d-command-palette.md) | Command palette and global shortcuts (desktop) | derived | F2.5 | done | Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety. |
 | [F2.5e](../../docs/features/F2.5e-new-run-preflight.md) | New run with preflight (desktop redesign) | derived | F2.5 | done | Presentation only; Options are shown disabled until the API accepts them. |
+| [F2.5f](../../docs/features/F2.5f-settings-redesign.md) | Settings redesign (design canvas) | derived | F2.5 | done | Rows without a contract are visible but disabled; enabling them needs F2.8b (diffs), F2.14 (Codex path) and a desktop engine-options preference. |
 | F2.8a | Attempt compare (desktop) | derived | F2.8 | done |  |
 | F2.8b | Attempt diff capture and display | derived | F2.8 | in_progress | Silnik (--record-diffs, attempt_diff) gotowy; panel w desktopie nie. |
 | [F3.4a](../../docs/features/F3.4a-windows-process-tree-termination.md) | Windows process-tree termination | derived | F3.4 | in_progress | proctree_windows.go istnieje, nigdy nie uruchomiony na Windows. |

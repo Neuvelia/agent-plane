@@ -31,7 +31,7 @@ const REQUIRED = [
   'screens--runs-list-empty', 'screens--runs-list-busy', 'screens--inbox-empty', 'screens--inbox-no-runs', 'screens--inbox-busy', 'screens--inbox-needs-attention', 'screens--inbox-failed-selected', 'screens--inbox-retries-used-up', 'screens--inbox-interrupted-selected', 'screens--inbox-running-selected', 'screens--inbox-filter-stopped', 'screens--inbox-filter-empty', 'screens--inbox-decided', 'screens--inbox-decided-here', 'screens--inbox-run-not-found', 'screens--inbox-stays-on-shown-item', 'screens--inbox-keyboard-focus', 'screens--inbox-decision-error', 'screens--inbox-connection-lost',
   'screens--inspector-running', 'screens--inspector-waiting-for-human', 'screens--inspector-failed-after-retries', 'screens--inspector-succeeded', 'screens--inspector-yaml-view', 'screens--inspector-split-view', 'screens--inspector-first-attempt', 'screens--inspector-compare-shell-attempts', 'screens--inspector-compare-agent-scope', 'screens--inspector-compare-scope-indeterminate','screens--inspector-connection-lost', 'screens--inspector-run-not-found',
   'screens--approvals-empty', 'screens--approvals-one-pending', 'screens--approvals-many-pending', 'screens--approvals-decision-error',
-  'screens--settings-language',
+  'screens-settings--language', 'screens-settings--recording-on', 'screens-settings--recording-missing-variable', 'screens-settings--recording-save-fails', 'screens-settings--recording-saved', 'screens-settings--recording-save-throws', 'screens-settings--recording-invalid-name', 'screens-settings--recording-unsaved-draft-kept', 'screens-settings--recording-load-fails', 'screens-settings--recording-details-open', 'screens-settings--jump-to-engine', 'screens-settings--engine-checking', 'screens-settings--engine-disconnected', 'screens-settings--agents-codex-available', 'screens-settings--agents-codex-not-configured', 'screens-settings--agents-codex-found-on-path', 'screens-settings--agents-codex-unsupported-version', 'screens-settings--agents-detection-error', 'screens-settings--agents-rechecking', 'screens-settings--agents-request-failed', 'screens-settings--agents-engine-disconnected', 'screens-settings--about', 'screens-settings--about-engine-disconnected',
   'screens-editor--empty', 'screens-editor--empty-no-recent', 'screens-editor--opened', 'screens-editor--opened-config-error', 'screens-editor--opened-parse-error', 'screens-editor--unsaved', 'screens-editor--yaml-error-while-typing', 'screens-editor--new-graph', 'screens-editor--save-conflict', 'screens-editor--file-gone', 'screens-editor--save-failed', 'screens-editor--leave-prompt', 'screens-editor--open-failed',
   'screens-editor--canvas-graph', 'screens-editor--canvas-node-selected', 'screens-editor--canvas-connect-list', 'screens-editor--canvas-rename', 'screens-editor--canvas-delete-confirm', 'screens-editor--canvas-add-node', 'screens-editor--canvas-operation-refused', 'screens-editor--canvas-read-only-anchors', 'screens-editor--canvas-yaml-broken', 'screens-editor--canvas-empty-graph',
   'screens-editor--bindings-rows', 'screens-editor--bindings-with-issues', 'screens-editor--bindings-empty', 'screens-editor--bindings-add-form', 'screens-editor--bindings-replace-confirm', 'screens-editor--bindings-read-only', 'screens-editor--bindings-conflict',
@@ -158,9 +158,16 @@ async function checkStory(page, origin, id, globals, fail) {
   for (const v of result.violations) fail(`axe ${v.id}: ${v.help} (${v.nodes.length} nodes) e.g. ${v.nodes[0].html.slice(0, 160)} -> ${(v.nodes[0].any[0] || v.nodes[0].all[0] || {}).message}`)
 }
 
-/** Waits for finite animations (menu and dialog entrances) so axe measures final colours, not a fade. */
+/**
+ * Waits for finite animations (menu and dialog entrances, Settings panes and
+ * notices) so axe measures final colours, not a fade. Bounded at 2 s; infinite
+ * animations (a pulsing status dot, a flowing edge) are left running.
+ */
 async function settleAnimations(page) {
-  await page.evaluate(() => Promise.all(document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))))
+  await page.evaluate(async () => {
+    const finite = document.getAnimations().filter((a) => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity)
+    await Promise.race([Promise.all(finite.map((a) => a.finished.catch(() => undefined))), new Promise((r) => setTimeout(r, 2000))])
+  })
 }
 
 // roadmap: F2.5c-AC5
