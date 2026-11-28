@@ -10,10 +10,10 @@ F1.3/ADR-0011 before changing process, result, Git or progress behavior.
 | --- | --- |
 | Detection, argv/environment, execution and final result parsing | `adapter.go` |
 | Private JSONL progress parsing and supported event projection | `adapter.go`, `progress.go` |
-| Duplicate-key, UTF-8 and JSON-depth checks | `json.go` |
+| Duplicate-key, UTF-8 and JSON-depth checks | `internal/agent/cliproc/json.go` (shared) |
 | Workspace and invocation-relative Git evidence wrappers | `git.go`, `internal/gitstate/snapshot.go` |
-| Process tree launch (through `internal/proctree`), cancellation and cleanup on Darwin/Linux | `process_unix.go` |
-| Fail-closed behavior on other platforms | `process_other.go` |
+| Process tree launch (through `internal/proctree`), cancellation and cleanup on Darwin/Linux | `process.go` (maps `cliproc.Run` stages to Codex errors; launch lives in `internal/agent/cliproc/process_unix.go`) |
+| Fail-closed behavior on other platforms | `internal/agent/cliproc/process_other.go` |
 | Neutral adapter contract and graph output conversion | `internal/agent/AGENTS.md` |
 
 ## Preserve these contracts

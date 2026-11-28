@@ -89,3 +89,5 @@ Desktop presentation:
 [ADR-0047 - Desktop light theme and profile menu](0047-desktop-light-theme-and-profile-menu.md) (F2.5c),
 [ADR-0048 - Welcome and setup as a four-step setup](0048-four-step-setup.md) (F2.11, F2.12; proposed 2026-11-27),
 [ADR-0049 - New run with a live preflight](0049-new-run-with-preflight.md) (F2.5e).
+
+F1.2b: [ADR-0050 - Claude Code adapter: process permissions and evidence](0050-claude-code-process-permissions-and-evidence.md) (accepted 2026-11-27, pending spike).

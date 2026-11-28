@@ -64,7 +64,9 @@ graph semantics, scheduler transitions or event schemas.
   writes may still be lost after process kill before their next sync; see
   `internal/store/AGENTS.md`.
   `serve` exits when stdin closes and cancels active runs. `run` selects
-  Codex only with `--adapter codex --codex-bin`; `serve` has no Agent adapter
+  adapters with the repeatable `--adapter codex|claude`, each paired with its
+  `--codex-bin` or `--claude-bin` (a bare bin flag or an empty `--adapter` is a
+  usage error); `serve` has no Agent adapter
   or `--redact-env` flag in this slice, so Agent nodes cannot execute through
   the server. Preserve the narrow Electron/API boundary in the owning
   packages when changing this composition.

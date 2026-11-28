@@ -26,7 +26,7 @@ func TestServeRejectsARelativeCodexBinBeforeAnnouncing(t *testing.T) {
 }
 
 func TestServeCapabilityCompositionReportsGitCodexThenAgentCLIs(t *testing.T) {
-	r := capabilityDetector("").Detect(context.Background())
+	r := capabilityDetector("", "").Detect(context.Background())
 	if r.Version != 1 || r.Engine.Version != version.String() || r.Engine.OS != goruntime.GOOS || r.Engine.Arch != goruntime.GOARCH {
 		t.Fatalf("report header %+v", r)
 	}
@@ -47,7 +47,7 @@ func TestServeCapabilityCompositionReportsGitCodexThenAgentCLIs(t *testing.T) {
 		t.Fatalf("codex without --codex-bin: %+v", r.Tools[1])
 	}
 	absent := filepath.Join(t.TempDir(), "codex")
-	r = capabilityDetector(absent).Detect(context.Background())
+	r = capabilityDetector(absent, "").Detect(context.Background())
 	if want := map[bool]capability.Status{true: capability.StatusMissing, false: capability.StatusUnsupportedPlatform}[posix]; r.Tools[1].Status != want {
 		t.Fatalf("codex with an absent binary: %+v", r.Tools[1])
 	}

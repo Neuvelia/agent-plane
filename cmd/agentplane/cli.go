@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"agentplane/internal/agent"
-	"agentplane/internal/agent/codex"
 	"agentplane/internal/domain/events"
 	"agentplane/internal/domain/graph"
 	"agentplane/internal/runtime"
@@ -62,7 +61,7 @@ func runCommand(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	if wantsJSON(args) {
 		return usageError("agentplane", errors.New("unknown command"), true, stdout, stderr)
 	}
-	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane runs prune [--store-dir DIR] [--dry-run] [--json] | agentplane self-check | agentplane version"); err != nil {
+	if _, err := fmt.Fprintln(stderr, "usage: agentplane graph validate PATH [--json] | agentplane run PATH [--input key=value]... [--redact-env NAME]... [--approve NODE]... [--reject NODE]... [--store-dir DIR] [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--adapter codex --codex-bin ABSOLUTE_PATH] [--adapter claude --claude-bin ABSOLUTE_PATH] [--watch | --json] | agentplane serve [--store-dir DIR] [--redact-env NAME]... [--record-values] [--record-diffs] [--max-concurrency N] [--worktree-root ABSOLUTE_PATH] [--retain-worktrees never|failed|always] [--codex-bin ABSOLUTE_PATH] [--claude-bin ABSOLUTE_PATH] | agentplane runs list [--store-dir DIR] [--json] | agentplane runs show RUN_ID [--store-dir DIR] [--json] | agentplane runs prune [--store-dir DIR] [--dry-run] [--json] | agentplane self-check | agentplane version"); err != nil {
 		return presentationError(err, stderr)
 	}
 	return exitUsage
@@ -132,8 +131,8 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		return usageError("run", err, wantsJSON(args), stdout, stderr)
 	}
 	jsonMode := fs.Bool("json", false, "emit one JSON document")
-	adapterID := fs.String("adapter", "", "explicit installed adapter (codex)")
-	codexBin := fs.String("codex-bin", "", "absolute Codex CLI binary path")
+	var adapterChoice adapterFlags
+	adapterChoice.register(fs)
 	watch := fs.Bool("watch", false, "show events as they occur")
 	concurrency := fs.Int("max-concurrency", 2, "maximum concurrent nodes")
 	var inputs inputFlags
@@ -151,8 +150,8 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 	if err := fs.Parse(args[1:]); err != nil || fs.NArg() != 0 {
 		return usageError("run", err, wantsJSON(args), stdout, stderr)
 	}
-	if (*adapterID != "" && *adapterID != "codex") || (*adapterID == "codex" && !filepath.IsAbs(*codexBin)) || (*adapterID == "" && *codexBin != "") {
-		return usageError("run", errors.New("use --adapter codex with --codex-bin ABSOLUTE_PATH"), *jsonMode, stdout, stderr)
+	if err := adapterChoice.validate(); err != nil {
+		return usageError("run", err, *jsonMode, stdout, stderr)
 	}
 	if *jsonMode && *watch {
 		return usageError("run", errors.New("--json and --watch cannot be combined"), true, stdout, stderr)
@@ -242,8 +241,8 @@ func executeCommand(ctx context.Context, args []string, stdout, stderr io.Writer
 		}
 	}
 	executor := selectExecutor(def, cliAgentRemedy)
-	if *adapterID == "codex" {
-		executor = nodeExecutor{agents: agent.Executor{Adapters: map[agent.AdapterID]agent.AgentAdapter{"codex": codex.Adapter{Binary: *codexBin}}, Remedy: registeredCodexRemedy}}
+	if adapters := adapterChoice.adapters(); adapters != nil {
+		executor = nodeExecutor{agents: agent.Executor{Adapters: adapters, Remedy: registeredAgentRemedy}}
 	}
 	result, err := runtime.Run(runCtx, def, values, executor, opts)
 	if writer != nil {

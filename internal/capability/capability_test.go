@@ -615,3 +615,70 @@ func TestDockerRowIsOnlyLookedUpAndNeverReportsAPath(t *testing.T) {
 		t.Fatalf("docker %+v", got)
 	}
 }
+
+// claudeCapabilityDetector mirrors how serve composes a Claude adapter next to
+// the CLI table: the id "claude" is both an Agent and an AgentCLIs entry.
+func claudeCapabilityDetector(goos string, adapter agent.AgentAdapter, look func(string) (string, error)) Detector {
+	return Detector{GOOS: goos, GitPath: absent, Stat: shellPresent, Agents: []Agent{{ID: "claude", Command: "claude", Adapter: adapter}}, CLIs: AgentCLIs, LookPath: look}
+}
+
+func TestConfiguredClaudeAdapterIsReportedAsAdapterRowOnly(t *testing.T) {
+	version := "2.1.0"
+	look, asked := fakeLook("claude", "gemini")
+	adapter := &adaptertest.MockAdapter{Report: agent.CapabilityReport{Available: true, Version: &version}}
+	r := claudeCapabilityDetector("linux", adapter, look).Detect(context.Background())
+	want := []Tool{
+		{ID: "git", Kind: "tool", Status: StatusMissing},
+		{ID: "claude", Kind: "agent_adapter", Status: StatusAvailable, Version: "2.1.0"},
+		{ID: "cursor-agent", Kind: "agent_cli", Status: StatusMissing},
+		{ID: "gemini", Kind: "agent_cli", Status: StatusDetectedNoAdapter},
+		{ID: "shell", Kind: "tool", Status: StatusAvailable},
+		{ID: "docker", Kind: "tool", Status: StatusMissing},
+	}
+	if !slices.Equal(r.Tools, want) {
+		t.Fatalf("tools\n got %+v\nwant %+v", r.Tools, want)
+	}
+	if slices.Contains(*asked, "claude") {
+		t.Fatal("a configured claude adapter was also looked up on PATH")
+	}
+}
+
+func TestClaudeAdapterWithMissingBinaryIsMissingWithoutDuplicate(t *testing.T) {
+	look, _ := fakeLook("claude")
+	r := claudeCapabilityDetector("linux", &adaptertest.MockAdapter{}, look).Detect(context.Background())
+	count := 0
+	for _, tool := range r.Tools {
+		if tool.ID == "claude" {
+			count++
+			if tool.Kind != "agent_adapter" || tool.Status != StatusMissing {
+				t.Fatalf("claude row %+v", tool)
+			}
+		}
+	}
+	if count != 1 {
+		t.Fatalf("claude appears %d times: %+v", count, r.Tools)
+	}
+}
+
+func TestClaudeAdapterOnUnsupportedPlatformIsNotDetected(t *testing.T) {
+	counting := &countingAdapter{}
+	look, _ := fakeLook("claude")
+	r := claudeCapabilityDetector("windows", counting, look).Detect(context.Background())
+	if got := r.Tools[1]; got.ID != "claude" || got.Kind != "agent_adapter" || got.Status != StatusUnsupportedPlatform || got.Reason != ReasonPlatformNotSupported {
+		t.Fatalf("claude row %+v", got)
+	}
+	if counting.calls.Load() != 0 {
+		t.Fatal("the adapter was probed on an unsupported platform")
+	}
+	if len(r.Tools) != 6 {
+		t.Fatalf("rows %+v", r.Tools)
+	}
+}
+
+func TestClaudeAdapterWithoutBinaryReportsFoundOnPath(t *testing.T) {
+	look, _ := fakeLook("claude")
+	r := claudeCapabilityDetector("linux", nil, look).Detect(context.Background())
+	if got := r.Tools[1]; got.ID != "claude" || got.Kind != "agent_adapter" || got.Status != StatusNotConfigured || got.Reason != ReasonFoundOnPath {
+		t.Fatalf("claude row %+v", got)
+	}
+}

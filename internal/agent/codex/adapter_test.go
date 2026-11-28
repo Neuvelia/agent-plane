@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -275,16 +274,6 @@ func TestBadWorkspaceIsNodeScoped(t *testing.T) {
 		t.Fatalf("values=%v error=%v", values, e)
 	}
 }
-func TestCaptureLimitCannotBeBypassedByIOCopy(t *testing.T) {
-	b := limitedBuffer{limit: 3}
-	if _, e := io.Copy(&b, io.LimitReader(strings.NewReader("12345"), 5)); e != nil {
-		t.Fatal(e)
-	}
-	if b.Len() != 3 || !b.overflow {
-		t.Fatalf("capture length=%d overflow=%v", b.Len(), b.overflow)
-	}
-}
-
 func TestInvocationIgnoreTransitions(t *testing.T) {
 	for _, action := range []string{"unchanged", "modified", "deleted"} {
 		t.Run("newly ignored/"+action, func(t *testing.T) {

@@ -68,6 +68,14 @@ export interface RowText {
   still?: MessageKey
 }
 
+type AdapterMeaning = Record<'available' | 'notConfigured' | 'foundOnPath' | 'missing' | 'version' | 'platform', MessageKey>
+
+// Agent adapters the engine can be composed with; each id needs its cap.meaning.<id>.* copy.
+const ADAPTER_MEANING: Record<string, AdapterMeaning> = {
+  codex: { available: 'cap.meaning.codex.available', notConfigured: 'cap.meaning.codex.notConfigured', foundOnPath: 'cap.meaning.codex.foundOnPath', missing: 'cap.meaning.codex.missing', version: 'cap.meaning.codex.version', platform: 'cap.meaning.codex.platform' },
+  claude: { available: 'cap.meaning.claude.available', notConfigured: 'cap.meaning.claude.notConfigured', foundOnPath: 'cap.meaning.claude.foundOnPath', missing: 'cap.meaning.claude.missing', version: 'cap.meaning.claude.version', platform: 'cap.meaning.claude.platform' },
+}
+
 function meaningOf(t: CapabilityTool): { meaning: MessageKey; still?: MessageKey } {
   const s = t.status
   if (s === 'error') return { meaning: 'cap.meaning.error', still: t.id === 'git' ? 'cap.still.shell' : t.id === 'shell' ? 'cap.still.noShell' : t.id === 'docker' ? undefined : t.kind === 'agent_cli' ? 'cap.still.cli' : 'cap.still.noDesktopAgents' }
@@ -77,13 +85,14 @@ function meaningOf(t: CapabilityTool): { meaning: MessageKey; still?: MessageKey
     if (s === 'missing') return { meaning: 'cap.meaning.git.missing', still: 'cap.still.shell' }
     if (s === 'unsupported_platform') return { meaning: 'cap.meaning.git.platform', still: 'cap.still.shell' }
   }
-  if (t.id === 'codex' && t.kind === 'agent_adapter') {
-    if (s === 'available') return { meaning: 'cap.meaning.codex.available' }
-    if (s === 'not_configured' && t.reason === 'found_on_path') return { meaning: 'cap.meaning.codex.foundOnPath', still: 'cap.still.noDesktopAgents' }
-    if (s === 'not_configured') return { meaning: 'cap.meaning.codex.notConfigured', still: 'cap.still.noDesktopAgents' }
-    if (s === 'missing') return { meaning: 'cap.meaning.codex.missing', still: 'cap.still.noDesktopAgents' }
-    if (s === 'unsupported_version') return { meaning: 'cap.meaning.codex.version', still: 'cap.still.noDesktopAgents' }
-    if (s === 'unsupported_platform') return { meaning: 'cap.meaning.codex.platform', still: 'cap.still.noDesktopAgents' }
+  const adapter = t.kind === 'agent_adapter' ? ADAPTER_MEANING[t.id] : undefined
+  if (adapter) {
+    if (s === 'available') return { meaning: adapter.available }
+    if (s === 'not_configured' && t.reason === 'found_on_path') return { meaning: adapter.foundOnPath, still: 'cap.still.noDesktopAgents' }
+    if (s === 'not_configured') return { meaning: adapter.notConfigured, still: 'cap.still.noDesktopAgents' }
+    if (s === 'missing') return { meaning: adapter.missing, still: 'cap.still.noDesktopAgents' }
+    if (s === 'unsupported_version') return { meaning: adapter.version, still: 'cap.still.noDesktopAgents' }
+    if (s === 'unsupported_platform') return { meaning: adapter.platform, still: 'cap.still.noDesktopAgents' }
   }
   if (t.id === 'shell' && t.kind === 'tool') {
     if (s === 'available') return { meaning: 'cap.meaning.shell.available' }

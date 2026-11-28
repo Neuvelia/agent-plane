@@ -42,6 +42,8 @@ var legacyLayers = map[string]layer{
 	"internal/runtime":           layerApp,
 	"internal/agent":             layerAdapter,
 	"internal/agent/codex":       layerAdapter,
+	"internal/agent/claudecode":  layerAdapter,
+	"internal/agent/cliproc":     layerAdapter, // shared CLI process/JSON helpers; same family as agent and codex
 	"internal/shell":             layerAdapter,
 	"internal/gate":              layerAdapter,
 	"internal/gitstate":          layerAdapter,
@@ -334,6 +336,23 @@ func TestRootOnlyPackagesExist(t *testing.T) {
 		}
 		if !slices.Contains(rootImports, modulePath+"/"+pkg) {
 			t.Errorf("cmd/agentplane does not import root-only package %s; runs could not resolve secrets", pkg)
+		}
+	}
+}
+
+// roadmap: F1.2b-AC11
+// TestClaudeAndCodexAdaptersAreIndependent forbids production imports between
+// the two CLI adapters in either direction. Shared code belongs in
+// internal/agent/cliproc. It is checked separately from the baseline-driven
+// layer rules, which allow imports inside one family.
+func TestClaudeAndCodexAdaptersAreIndependent(t *testing.T) {
+	const claude, codex = "internal/agent/claudecode", "internal/agent/codex"
+	imports := productionImports(t, repoRoot(t))
+	for _, pair := range [][2]string{{claude, codex}, {codex, claude}} {
+		for _, imported := range imports[pair[0]] {
+			if imported == modulePath+"/"+pair[1] || strings.HasPrefix(imported, modulePath+"/"+pair[1]+"/") {
+				t.Errorf("%s must not import %s; move shared code to internal/agent/cliproc", pair[0], pair[1])
+			}
 		}
 	}
 }

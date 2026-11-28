@@ -25,6 +25,8 @@ durable contract.
 | `internal/runtime` | Run and node states, scheduling, bounded attempts, acceptance, observation, human decisions and opt-in value recording; `secret_grants.go` hands granted secrets only to the assigned node, never to a loop's embedded Gate (F3.8) | `scheduler.go`, `loop.go`, `unit.go`, `values.go`, `secret_grants.go` |
 | `internal/agent` | Provider-neutral Agent node execution contract and adapter selection | `contract.go`, `executor.go` |
 | `internal/agent/codex` | Installed Codex CLI process and result/progress translation | `adapter.go` |
+| `internal/agent/claudecode` | Installed Claude Code CLI (`claude -p`, `stream-json`) process, argv/env construction, Git evidence and progress translation; file tools only, no Bash in v1 (ADR-0050) | `adapter.go` |
+| `internal/agent/cliproc` | Shared CLI process launch, bounded capture buffer and strict JSON check used by the CLI adapters | `buffer.go`, `json.go` |
 | `internal/shell` | Shell node process execution and configuration; `Request`/`Run` carry the granted `secret_env` values and require a grant for every configured variable (F3.8) | `executor.go`, `request.go`, `secret_env.go` |
 | `internal/gate` | Deterministic, read-only checks | `executor.go`, `config.go` |
 | `internal/gitlocate` | Resolution of the Git binary shared by the engine and the capability report | `gitlocate.go` |
@@ -63,6 +65,8 @@ packages only):
 | `runtime` | `app/trace`, `domain/events`, `domain/graph`, `domain/run`, `domain/secrets`, `gitlocate`, `gitstate` |
 | `agent` | `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime` |
 | `agent/codex` | `agent`, `domain/events`, `gitstate` |
+| `agent/claudecode` | `agent`, `agent/cliproc`, `domain/events`, `proctree` (production imports only; tests also import `domain/graph`, `domain/run` and `gitstate`) |
+| `agent/cliproc` | `proctree` |
 | `shell` | `domain/graph`, `domain/secrets`, `fields` |
 | `gate` | `domain/events`, `domain/graph`, `fields`, `gitstate`, `runtime` |
 | `api` | `adapter/yamlgraph`, `adapter/yamlgraph/edit`, `capability`, `domain/events`, `domain/graph`, `domain/run`, `fields`, `runtime`, `store` |
