@@ -11,7 +11,7 @@ import { Arrow } from './setupIcons'
 import { AgentsStep, GraphStep, StepHead, WelcomeStep } from './setupSteps'
 import { SUGGESTED } from './templates'
 
-export { CapabilityPanel, ToolRow, type CapabilityView } from './setupCheck'
+export { CapabilityPanel, type CapabilityView } from './setupCheck'
 
 // F2.11 welcome screen as the four-step setup of the canvas "Setup, revised":
 // Welcome, Check this computer, Agent nodes, First graph. Skip is always in the
@@ -136,22 +136,21 @@ function appVersion(): string {
 function useCapabilities() {
   const { t, locale } = useI18n()
   const [view, setView] = useState<CheckState>({ state: 'loading' })
-  const [announce, setAnnounce] = useState('')
+  // The raw time of the last finished check; the announcement is built from it in render, so it follows
+  // the current language while a language change never re-reads the report.
+  const [checkedAt, setCheckedAt] = useState('')
   const seq = useRef(0)
   useConnectionReport('welcome', view.state === 'disconnected')
 
   // Only the latest request may settle the view, so a slow first read cannot overwrite a newer check.
-  const settle = useCallback(
-    (result: CapabilityResult, mine: number) => {
-      if (mine !== seq.current) return
-      if (result.kind === 'ok') {
-        setView({ state: 'loaded', report: result.report, refreshing: false })
-        setAnnounce(t('welcome.checkedAt', { time: formatDateTime(locale, result.report.checked_at) }))
-      } else if (result.kind === 'failed') setView({ state: 'failed', status: result.status })
-      else setView({ state: 'disconnected' })
-    },
-    [t, locale],
-  )
+  const settle = useCallback((result: CapabilityResult, mine: number) => {
+    if (mine !== seq.current) return
+    if (result.kind === 'ok') {
+      setView({ state: 'loaded', report: result.report, refreshing: false })
+      setCheckedAt(result.report.checked_at)
+    } else if (result.kind === 'failed') setView({ state: 'failed', status: result.status })
+    else setView({ state: 'disconnected' })
+  }, [])
 
   const load = useCallback(() => {
     const mine = ++seq.current
@@ -163,9 +162,10 @@ function useCapabilities() {
   const recheck = useCallback(() => {
     const mine = ++seq.current
     setView((v) => (v.state === 'loaded' ? { ...v, refreshing: true } : { state: 'loading' }))
-    setAnnounce('')
+    setCheckedAt('')
     void checkCapabilities().then((r) => settle(r, mine))
   }, [settle])
 
+  const announce = checkedAt ? t('welcome.checkedAt', { time: formatDateTime(locale, checkedAt) }) : ''
   return { view, announce, load, recheck }
 }
