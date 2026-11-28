@@ -71,13 +71,13 @@
 
 /* Step 1: the graph */
 .su-flow{position:relative;width:100%;display:flex;align-items:center;justify-content:center;padding:28px 0}
-.su-node{position:relative;z-index:1;width:150px;flex:none;border:1px solid var(--su-line);border-radius:var(--radius-12);background:var(--bg);padding:16px 14px;display:flex;flex-direction:column;align-items:center;gap:var(--space-8);box-shadow:var(--su-shadow)}
+.su-node{position:relative;z-index:2;width:150px;flex:none;border:1px solid var(--su-line);border-radius:var(--radius-12);background:var(--bg);padding:16px 14px;display:flex;flex-direction:column;align-items:center;gap:var(--space-8);box-shadow:var(--su-shadow)}
 .su-node .su-glyph{width:44px;height:44px;border-radius:12px;background:var(--fill-6);display:flex;align-items:center;justify-content:center}
 .su-node b{font-size:var(--type-lede-size);font-weight:600}
 .su-node .id{font:400 var(--type-small-size) var(--font-mono);color:var(--muted)}
 .su-link{flex:1 1 40px;max-width:72px;height:2px;position:relative}
 .su-link i{display:block;height:2px;background:var(--muted);transform-origin:left;animation:su-fill .4s ease-out both}
-.su-pulse{position:absolute;top:50%;margin-top:-6px;width:12px;height:12px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 6px var(--brand-soft);z-index:0;animation:su-run 4.8s linear 1.6s infinite both}
+.su-pulse{position:absolute;top:50%;margin-top:-6px;width:12px;height:12px;border-radius:50%;background:var(--brand);box-shadow:0 0 0 6px var(--brand-soft);z-index:1;animation:su-run 4.8s linear 1.6s infinite both}
 .su-chips{display:flex;gap:var(--space-12);flex-wrap:wrap;justify-content:center;list-style:none;margin:0;padding:0}
 .su-chip{display:inline-flex;align-items:center;gap:var(--space-8);height:36px;padding:0 14px;border-radius:18px;background:var(--fill-6);font-size:var(--type-body-size);font-weight:500}
 

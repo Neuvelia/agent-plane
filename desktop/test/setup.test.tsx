@@ -46,16 +46,16 @@ describe('setup row tone', () => {
 
 describe('setup motion', () => {
   it('lands rows in order and the verdict after the last row, in under 3 seconds for the recorded report', () => {
-    expect(scanDelay(1).settle).toBeGreaterThan(scanDelay(0).settle)
     const rows = report.tools.length + 1
-    expect(verdictDelay(rows)).toBeGreaterThan(scanDelay(rows - 1).settle)
+    expect(scanDelay(1, rows).settle).toBeGreaterThan(scanDelay(0, rows).settle)
+    expect(verdictDelay(rows)).toBeGreaterThan(scanDelay(rows - 1, rows).settle)
     expect(verdictDelay(rows)).toBeLessThan(3)
   })
   it('compresses the stagger so the last pop ends within 3 seconds however many rows there are (ADR-0048 section 4)', () => {
     for (const rows of [3, 9, 20, 60]) {
       const last = scanDelay(rows - 1, rows)
       expect(last.settle, `${rows} rows`).toBeLessThanOrEqual(verdictDelay(rows))
-      expect(verdictDelay(rows) + 0.5, `${rows} rows`).toBeLessThanOrEqual(3 + 1e-9)
+      expect(verdictDelay(rows) + 0.5, `${rows} rows`).toBeLessThan(3)
       expect(last.row).toBeLessThan(last.settle)
       expect(scanDelay(1, rows).settle).toBeGreaterThan(scanDelay(0, rows).settle)
     }
@@ -215,10 +215,12 @@ describe('setup screen', () => {
   it('shows what a template needs on its card before the report arrives', () => {
     expect(html('graph')).toContain('Needs Codex: not checked.')
   })
-  it('draws the pulses under the nodes and icons, which are opaque (#236)', () => {
+  it('stacks nodes above the pulse above the link lines, and the step icons above their pulse (#236)', () => {
     const css = readFileSync(join(__dirname, '..', 'src', 'setup.css'), 'utf8')
     const rule = (sel: string) => css.match(new RegExp(`(?:^|\n)${sel.replace(/\./g, '\\.')}\\{([^}]*)\\}`))?.[1] ?? ''
     const z = (sel: string) => Number(/z-index:(\d+)/.exec(rule(sel))?.[1] ?? 'NaN')
+    expect(rule('.su-link')).not.toContain('z-index') // an auto-z positioned box paints at 0, below the pulse
+    expect(z('.su-pulse')).toBeGreaterThan(0)
     expect(z('.su-pulse')).toBeLessThan(z('.su-node'))
     expect(rule('.su-node')).toContain('background:var(--bg)')
     expect(rule('.su-path .pulse')).not.toContain('z-index')

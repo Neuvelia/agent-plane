@@ -169,6 +169,20 @@ async function checkWelcomeMotion(browser, origin, ids, fail) {
   const page = await context.newPage()
   let current = ''
   const failStory = (msg) => fail(`${current}: ${msg}`)
+  page.on('request', (r) => {
+    if (!r.url().startsWith(origin) && !r.url().startsWith('data:') && !r.url().startsWith('blob:')) failStory(`external request ${r.url()}`)
+  })
+  // As the main pass: a play function that threw is only reported on the channel.
+  await page.addInitScript(() => {
+    const hook = setInterval(() => {
+      const channel = window.__STORYBOOK_ADDONS_CHANNEL__
+      if (!channel) return
+      clearInterval(hook)
+      channel.on('playFunctionThrewException', (e) => {
+        window.__apPlayError = String((e && e.message) || e)
+      })
+    }, 5)
+  })
   page.on('pageerror', (e) => failStory(`page error ${e.message}`))
   page.on('console', (m) => m.type() === 'error' && failStory(`console error ${m.text()}`))
   for (const id of ids) {

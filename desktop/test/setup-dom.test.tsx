@@ -81,14 +81,51 @@ describe('setup Create button', () => {
 })
 
 describe('setup accessibility', () => {
-  it('names each template radio by its name span, and describes it once by its meta text', async () => {
+  // The text a screen reader composes from aria-labelledby / aria-describedby (an img's aria-label counts as its text).
+  const compose = (ids: string | null) =>
+    (ids ?? '')
+      .split(' ')
+      .filter(Boolean)
+      .map((id) => {
+        const el = document.getElementById(id)
+        expect(el, id).not.toBeNull()
+        return (el!.getAttribute('aria-label') ?? el!.textContent ?? '').replace(/\s+/g, ' ').trim()
+      })
+  const radio = (id: string) => host.querySelector<HTMLInputElement>(`[data-testid="setup-template-${id}"]`)!
+  const idsUnique = () => {
+    const all = [...host.querySelectorAll('[id]')].map((e) => e.id)
+    expect(new Set(all).size).toBe(all.length)
+  }
+
+  it('names a recommended template by its file name and badge, and describes it by its steps and meta line', async () => {
     await renderWelcome()
     click('setup-progress-graph')
-    for (const input of host.querySelectorAll<HTMLInputElement>('input[name="setup-template"]')) {
-      const name = document.getElementById(input.getAttribute('aria-labelledby')!)
-      expect(name?.classList.contains('nm')).toBe(true)
-      expect(document.getElementById(input.getAttribute('aria-describedby')!)?.classList.contains('su-meta')).toBe(true)
-    }
+    const input = radio('parallel-shell')
+    const card = host.querySelector('[data-testid="setup-tpl-parallel-shell"]')!
+    expect(card.querySelector('.su-rec')).not.toBeNull()
+    expect(compose(input.getAttribute('aria-labelledby'))).toEqual(['parallel-shell', 'Recommended'])
+    const described = compose(input.getAttribute('aria-describedby'))
+    expect(described).toHaveLength(2)
+    expect(described[0]).toMatch(/^Steps: /)
+    expect(described[1]).toBe(card.querySelector('.su-meta')!.textContent!.replace(/\s+/g, ' ').trim())
+    idsUnique()
+  })
+
+  it('also describes a template that needs something by its warnings, and names it without a badge', async () => {
+    await renderWelcome()
+    click('setup-progress-graph')
+    const input = radio('dependency-update')
+    const card = host.querySelector('[data-testid="setup-tpl-dependency-update"]')!
+    const needs = card.querySelector('[data-testid="setup-needs"]')!
+    expect(needs.textContent).toMatch(/\S/)
+    expect(compose(input.getAttribute('aria-labelledby'))).toEqual(['dependency-update'])
+    const described = compose(input.getAttribute('aria-describedby'))
+    expect(described).toHaveLength(3)
+    expect(described[2]).toBe(needs.textContent!.replace(/\s+/g, ' ').trim())
+    // Blank: translated name, steps summary and meta, nothing else.
+    expect(compose(radio('blank').getAttribute('aria-labelledby'))).toEqual(['Blank graph'])
+    expect(compose(radio('blank').getAttribute('aria-describedby'))).toHaveLength(2)
+    idsUnique()
   })
   it('shows Check again without an entrance delay, so a keyboard user never lands on it invisible', async () => {
     await renderWelcome()
@@ -105,6 +142,11 @@ describe('setup capability read', () => {
     expect(request).toHaveBeenCalledTimes(1)
     await rerender('pl')
     expect(request).toHaveBeenCalledTimes(1)
-    expect(host.querySelector('[data-testid="cap-announce"]')!.textContent).toMatch(/\d/)
+    const announce = host.querySelector('[data-testid="cap-announce"]')!.textContent!
+    expect(announce).toMatch(/^Sprawdzanie zakończone o .*\d/)
+    expect(announce).not.toContain('Check finished')
+    await rerender('en')
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(host.querySelector('[data-testid="cap-announce"]')!.textContent).toMatch(/^Check finished at .*\d/)
   })
 })

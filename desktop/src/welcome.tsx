@@ -136,11 +136,10 @@ function appVersion(): string {
 function useCapabilities() {
   const { t, locale } = useI18n()
   const [view, setView] = useState<CheckState>({ state: 'loading' })
-  const [announce, setAnnounce] = useState('')
+  // The raw time of the last finished check; the announcement is built from it in render, so it follows
+  // the current language while a language change never re-reads the report.
+  const [checkedAt, setCheckedAt] = useState('')
   const seq = useRef(0)
-  // The announcement text follows the current language, but a language change must not re-read the report.
-  const text = useRef({ t, locale })
-  text.current = { t, locale }
   useConnectionReport('welcome', view.state === 'disconnected')
 
   // Only the latest request may settle the view, so a slow first read cannot overwrite a newer check.
@@ -148,7 +147,7 @@ function useCapabilities() {
     if (mine !== seq.current) return
     if (result.kind === 'ok') {
       setView({ state: 'loaded', report: result.report, refreshing: false })
-      setAnnounce(text.current.t('welcome.checkedAt', { time: formatDateTime(text.current.locale, result.report.checked_at) }))
+      setCheckedAt(result.report.checked_at)
     } else if (result.kind === 'failed') setView({ state: 'failed', status: result.status })
     else setView({ state: 'disconnected' })
   }, [])
@@ -163,9 +162,10 @@ function useCapabilities() {
   const recheck = useCallback(() => {
     const mine = ++seq.current
     setView((v) => (v.state === 'loaded' ? { ...v, refreshing: true } : { state: 'loading' }))
-    setAnnounce('')
+    setCheckedAt('')
     void checkCapabilities().then((r) => settle(r, mine))
   }, [settle])
 
+  const announce = checkedAt ? t('welcome.checkedAt', { time: formatDateTime(locale, checkedAt) }) : ''
   return { view, announce, load, recheck }
 }

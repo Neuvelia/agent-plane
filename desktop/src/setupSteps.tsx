@@ -126,7 +126,7 @@ export function AgentsStep({ headRef }: { headRef: HeadRef }) {
           <span className="su-caret" aria-hidden="true" />
         </pre>
       </div>
-      <p className="su-soon su-a" style={delay(2.4)}>
+      <p className="su-soon su-a" style={delay(2.8)}>
         {t('setup.agents.soon')}
         <span className="c">{t('cap.tool.claude')}</span>
         <span className="c">{t('cap.tool.cursor-agent')}</span>
@@ -185,17 +185,21 @@ function TemplateCard({ card, on, at, onPick }: { card: SetupCard; on: boolean; 
   const { t } = useI18n()
   const blank = card.flow.length === 0
   const warn = card.placeholders > 0 || card.agent || !card.platformOk
-  const metaId = `su-tpl-${card.id}-meta`
-  const nameId = `su-tpl-${card.id}-name`
+  const key = `su-tpl-${card.id}`
+  const [nameId, recId, pathId, metaId, needsId] = ['name', 'rec', 'path', 'meta', 'needs'].map((part) => `${key}-${part}`) as [string, string, string, string, string]
+  const hasNeeds = card.needs.length > 0
+  // The name is the file name plus the Recommended badge; the description is the steps, the meta line and any warnings.
+  const labelledBy = card.recommended ? `${nameId} ${recId}` : nameId
+  const describedBy = [pathId, metaId, ...(hasNeeds ? [needsId] : [])].join(' ')
   return (
     <label className={`su-tpl su-a${on ? ' on' : ''}`} style={delay(at)} data-testid={`setup-tpl-${card.id}`}>
       <span className="hd">
-        <input type="radio" name="setup-template" value={card.id} checked={on} onChange={onPick} aria-labelledby={nameId} aria-describedby={metaId} data-testid={`setup-template-${card.id}`} />
+        <input type="radio" name="setup-template" value={card.id} checked={on} onChange={onPick} aria-labelledby={labelledBy} aria-describedby={describedBy} data-testid={`setup-template-${card.id}`} />
         {/* Template ids are file names and stay verbatim; Blank has no file, so it gets a translated name. */}
         <span id={nameId} className={blank ? 'nm word' : 'nm'}>{blank ? t('picker.blank.title') : card.id}</span>
-        {card.recommended && <span className="su-rec">{t('setup.graph.recommended')}</span>}
+        {card.recommended && <span id={recId} className="su-rec">{t('setup.graph.recommended')}</span>}
       </span>
-      <span className="su-path" role="img" aria-label={blank ? t('setup.graph.emptyGraph') : t('setup.graph.steps', { types: card.flow.map((k) => t(`setup.kind.${k}` as MessageKey)).join(', ') })}>
+      <span id={pathId} className="su-path" role="img" aria-label={blank ? t('setup.graph.emptyGraph') : t('setup.graph.steps', { types: card.flow.map((k) => t(`setup.kind.${k}` as MessageKey)).join(', ') })}>
         {blank ? (
           <span className="blank">{t('setup.graph.empty')}</span>
         ) : (
@@ -219,8 +223,8 @@ function TemplateCard({ card, on, at, onPick }: { card: SetupCard; on: boolean; 
           {card.agent && ` · ${t('setup.graph.agentCli')}`}
         </span>
       </span>
-      {card.needs.length > 0 && (
-        <span className="su-needs" data-testid="setup-needs">
+      {hasNeeds && (
+        <span id={needsId} className="su-needs" data-testid="setup-needs">
           {card.needs.map((n) => (
             <span key={n.id}>
               <NoticeText n={n} />

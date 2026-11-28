@@ -51,7 +51,9 @@ check never blocking progress.
 4. Completion is recorded, as before, by creating, opening or skipping. Motion
    settles in under 3 seconds and is fully off under reduced motion, which shows
    the final frame. The Storybook smoke test judges every story with reduced
-   motion on, so axe checks settled frames.
+   motion on, so axe checks settled frames; it also runs one normal-motion axe
+   pass (English, dark) over the welcome stories, once their finite animations
+   have ended.
 5. Both themes follow the canvas: the dark artboards on the app's dark tokens,
    the light artboards on the F2.5c light tokens (ADR-0047), with setup's own
    primary button, card shadow and line colour taken from the light artboards.
