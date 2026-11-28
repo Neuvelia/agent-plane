@@ -51,9 +51,21 @@ export function verdictOf(view: CheckState): Verdict {
   return statusOf(view.report, 'shell')?.status === 'available' ? { tone: 'ok', key: 'setup.check.ready' } : { tone: 'warn', key: 'setup.check.noShell' }
 }
 
-/** Seconds after the rows mount at which row `i` lands; the verdict lands after the last one. */
-export const scanDelay = (i: number) => ({ row: 0.2 + i * 0.12, settle: 0.8 + i * 0.18 })
-export const verdictDelay = (rows: number) => scanDelay(Math.max(0, rows - 1)).settle + 0.3
+/** Everything in the check settles within this many seconds, the last 0.5 s pop included (ADR-0048 section 4). */
+const MOTION_BUDGET = 3
+const POP = 0.5
+const VERDICT_GAP = 0.3
+
+/**
+ * Seconds after the rows mount at which row `i` of `rows` lands; the verdict lands after the last one.
+ * The per-row stagger shrinks when there are many rows, so the whole scan still fits the budget.
+ */
+export function scanDelay(i: number, rows = i + 1) {
+  const room = MOTION_BUDGET - POP - VERDICT_GAP - 0.8
+  const k = Math.min(1, room / (0.18 * Math.max(1, rows - 1)))
+  return { row: 0.2 + i * 0.12 * k, settle: 0.8 + i * 0.18 * k }
+}
+export const verdictDelay = (rows: number) => scanDelay(Math.max(0, rows - 1), rows).settle + VERDICT_GAP
 
 /** Onboarding cards: the suggested graph, one agent graph, one human graph and Blank. */
 export const SETUP_TEMPLATES = [SUGGESTED, 'dependency-update', 'human-approval'] as const

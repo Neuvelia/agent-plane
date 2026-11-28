@@ -51,6 +51,15 @@ describe('setup motion', () => {
     expect(verdictDelay(rows)).toBeGreaterThan(scanDelay(rows - 1).settle)
     expect(verdictDelay(rows)).toBeLessThan(3)
   })
+  it('compresses the stagger so the last pop ends within 3 seconds however many rows there are (ADR-0048 section 4)', () => {
+    for (const rows of [3, 9, 20, 60]) {
+      const last = scanDelay(rows - 1, rows)
+      expect(last.settle, `${rows} rows`).toBeLessThanOrEqual(verdictDelay(rows))
+      expect(verdictDelay(rows) + 0.5, `${rows} rows`).toBeLessThanOrEqual(3 + 1e-9)
+      expect(last.row).toBeLessThan(last.settle)
+      expect(scanDelay(1, rows).settle).toBeGreaterThan(scanDelay(0, rows).settle)
+    }
+  })
   it('turns every animation off under reduced motion', () => {
     const css = readFileSync(join(__dirname, '..', 'src', 'setup.css'), 'utf8')
     expect(css).toMatch(/@media \(prefers-reduced-motion:reduce\)\{\s*\.su \*,\.su \*::before,\.su \*::after\{animation:none !important;transition:none !important\}/)
@@ -183,10 +192,10 @@ describe('setup screen', () => {
   })
   it('names the Blank card in words, while template cards keep their file ids', () => {
     const en = html('graph')
-    expect(en).toMatch(/<span class="nm word">Blank graph<\/span>/)
-    expect(en).toContain(`<span class="nm">${SUGGESTED}</span>`)
+    expect(en).toMatch(/<span id="su-tpl-blank-name" class="nm word">Blank graph<\/span>/)
+    expect(en).toContain(`<span id="su-tpl-${SUGGESTED}-name" class="nm">${SUGGESTED}</span>`)
     expect(en).not.toMatch(/>blank</)
-    expect(html('graph', 'pl')).toMatch(/<span class="nm word">Pusty graf<\/span>/)
+    expect(html('graph', 'pl')).toMatch(/<span id="su-tpl-blank-name" class="nm word">Pusty graf<\/span>/)
   })
   it('marks finished steps and the current step differently', () => {
     const out = html('agents')

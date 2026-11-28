@@ -80,12 +80,12 @@ function Report({ report, refreshing, appVersion, onCheck }: { report: Capabilit
       )}
       {/* A new report remounts the list, so a finished re-check scans again. */}
       <ul key={report.checked_at} className="su-scan" aria-busy={refreshing} aria-label={t('welcome.listTitle')} data-testid="cap-list">
-        <EngineRow report={report} appVersion={appVersion} />
+        <EngineRow report={report} appVersion={appVersion} rows={count} />
         {report.tools.map((tool, i) => (
-          <ToolRow key={`${tool.kind}:${tool.id}`} tool={tool} index={i + 1} />
+          <ToolRow key={`${tool.kind}:${tool.id}`} tool={tool} index={i + 1} rows={count} />
         ))}
       </ul>
-      <button type="button" className="su-btn ghost su-a" style={{ animationDelay: `${verdictDelay(count) + 0.2}s` }} onClick={onCheck} disabled={refreshing} data-testid="check-again">
+      <button type="button" className="su-btn ghost su-a" onClick={onCheck} disabled={refreshing} data-testid="check-again">
         {refreshing ? t('welcome.checking') : t('welcome.check')}
       </button>
     </>
@@ -93,8 +93,8 @@ function Report({ report, refreshing, appVersion, onCheck }: { report: Capabilit
 }
 
 /** Row timing: the row pops in, its spinner turns until the glyph and status word land. */
-function timing(index: number) {
-  const d = scanDelay(index)
+function timing(index: number, rows: number) {
+  const d = scanDelay(index, rows)
   return {
     row: { animationDelay: `${d.row}s` } as CSSProperties,
     spin: { animation: `su-rot .7s linear infinite, su-gone ${(d.settle - d.row).toFixed(2)}s ${d.row}s both` } as CSSProperties,
@@ -102,8 +102,8 @@ function timing(index: number) {
   }
 }
 
-function Row({ index, tone, testId, status, name, tag, tagTestId, statusWord, children }: { index: number; tone: RowTone; testId: string; status: string; name: string; tag?: string; tagTestId?: string; statusWord: string; children: ReactNode }) {
-  const at = timing(index)
+function Row({ index, rows, tone, testId, status, name, tag, tagTestId, statusWord, children }: { index: number; rows: number; tone: RowTone; testId: string; status: string; name: string; tag?: string; tagTestId?: string; statusWord: string; children: ReactNode }) {
+  const at = timing(index, rows)
   return (
     <li className="su-row cap-row su-a" style={at.row} data-testid={testId} data-status={status}>
       <span className="ic" aria-hidden="true">
@@ -128,23 +128,23 @@ function Row({ index, tone, testId, status, name, tag, tagTestId, statusWord, ch
   )
 }
 
-function EngineRow({ report, appVersion }: { report: CapabilityReport; appVersion: string }) {
+function EngineRow({ report, appVersion, rows }: { report: CapabilityReport; appVersion: string; rows: number }) {
   const { t } = useI18n()
   const tag = appVersion ? t('welcome.engineVersions', { engine: report.engine.version, app: appVersion }) : t('welcome.version', { version: report.engine.version })
   return (
-    <Row index={0} tone="ok" testId="cap-engine" status="running" name={t('cap.tool.engine')} tag={tag} tagTestId="cap-engine-version" statusWord={t('cap.engine.running')}>
+    <Row index={0} rows={rows} tone="ok" testId="cap-engine" status="running" name={t('cap.tool.engine')} tag={tag} tagTestId="cap-engine-version" statusWord={t('cap.engine.running')}>
       <span>{t('cap.meaning.engine', { os: report.engine.os, arch: report.engine.arch })}</span>
     </Row>
   )
 }
 
-function ToolRow({ tool, index = 0 }: { tool: CapabilityTool; index?: number }) {
+function ToolRow({ tool, index, rows }: { tool: CapabilityTool; index: number; rows: number }) {
   const { t } = useI18n()
   const r = rowText(tool)
   const reason = tool.reason ? reasonKey(tool.reason) : undefined
   const tag = tool.status === 'available' && tool.version ? tool.version : tool.reason ? t('welcome.reason', { reason: tool.reason }) : undefined
   return (
-    <Row index={index} tone={r.known ? rowTone(tool) : 'off'} testId={`cap-${tool.id}`} status={tool.status} name={word(t, r.name)} tag={tag} statusWord={word(t, r.status)}>
+    <Row index={index} rows={rows} tone={r.known ? rowTone(tool) : 'off'} testId={`cap-${tool.id}`} status={tool.status} name={word(t, r.name)} tag={tag} statusWord={word(t, r.status)}>
       <span>{t(r.meaning)}</span>
       {reason && <span>{t(reason)}</span>}
       {r.still && <span>{t(r.still)}</span>}

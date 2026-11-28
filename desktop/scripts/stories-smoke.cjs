@@ -7,7 +7,7 @@
 //   - a missing required story (screen states of F2.5a 6c, every primitive),
 //   - any request that is not served by the static Storybook itself,
 //   - a page error or console error, or a play function that fails or never finishes,
-//   - an axe-core accessibility violation,
+//   - an axe-core accessibility violation (reduced motion; the screens-welcome stories also once with motion on),
 //   - a broken profile menu interaction (keyboard, focus, theme switch, motion).
 // AP_STORIES_THEMES=dark,light limits the themes (default: both).
 const { chromium } = require('playwright')
@@ -109,6 +109,7 @@ const server = http.createServer((req, res) => {
     await Promise.all(Array.from({ length: workers }, worker))
     await context.close()
   }
+  await checkWelcomeMotion(browser, origin, ids.filter((id) => id.startsWith('screens-welcome--')), (msg) => failures.push(`[welcome, normal motion] ${msg}`))
   await checkProfileMenu(browser, origin, (msg) => failures.push(`[profile menu] ${msg}`))
   await browser.close()
   server.close()
@@ -156,6 +157,25 @@ async function checkStory(page, origin, id, globals, fail) {
   }
   if (!result) return fail('axe never became available')
   for (const v of result.violations) fail(`axe ${v.id}: ${v.help} (${v.nodes.length} nodes) e.g. ${v.nodes[0].html.slice(0, 160)} -> ${(v.nodes[0].any[0] || v.nodes[0].all[0] || {}).message}`)
+}
+
+/**
+ * The setup screens once with motion on (English, dark): the pass above runs with reduced motion, so
+ * axe never saw the normal-motion path (for example the checking-state row spinners). checkStory
+ * waits for the finite animations to end before axe runs, so axe judges the settled frame.
+ */
+async function checkWelcomeMotion(browser, origin, ids, fail) {
+  const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'no-preference' })
+  const page = await context.newPage()
+  let current = ''
+  const failStory = (msg) => fail(`${current}: ${msg}`)
+  page.on('pageerror', (e) => failStory(`page error ${e.message}`))
+  page.on('console', (m) => m.type() === 'error' && failStory(`console error ${m.text()}`))
+  for (const id of ids) {
+    current = id
+    await checkStory(page, origin, id, 'locale:en;theme:dark', failStory)
+  }
+  await context.close()
 }
 
 /** Waits for finite animations (menu and dialog entrances) so axe measures final colours, not a fade. */
