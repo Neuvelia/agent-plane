@@ -139,8 +139,10 @@ export function Inbox({ onOpenRun, onNewRun, onOpenGraph, onAllRuns, nowOverride
   const current = currentItem(visible, queue, picked, decisions, filter)
   // What is shown stays shown: a newer item arriving never swaps the detail under the person's cursor.
   // Not while the lists cannot be read: the queue is incomplete then and must not move the selection.
+  // The update only replaces the value this render saw: a click that lands between this render's commit and
+  // this effect has queued its own pick, and a plain set would overwrite it with the stale current item.
   useEffect(() => {
-    if (ready && current && picked !== current.key) setPicked(current.key)
+    if (ready && current && picked !== current.key) setPicked((now) => (now === picked ? current.key : now))
   }, [ready, current?.key, picked])
 
   if (!ready)
