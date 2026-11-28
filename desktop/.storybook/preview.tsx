@@ -28,6 +28,13 @@ const preview: Preview = {
       // Installed during render so children that read window.agentplane on mount find it.
       const data = ctx.parameters.bridge as BridgeData | undefined
       window.agentplane = createBridge(data ?? { runs: [] })
+      // Every story starts from the editor's default view and drawer, whatever an earlier story chose.
+      try {
+        localStorage.removeItem('agentplane.editor.view')
+        localStorage.removeItem('agentplane.editor.problems')
+      } catch {
+        // no storage: the defaults apply anyway
+      }
       const locale = ctx.globals.locale === 'pl' ? 'pl' : 'en'
       // A story may pin a theme (the light-theme stories); otherwise the toolbar decides.
       const theme = (ctx.parameters.theme ?? ctx.globals.theme) === 'light' ? 'light' : 'dark'
@@ -39,7 +46,8 @@ const preview: Preview = {
         <I18nProvider locale={locale}>
           {/* Keyed by theme: a toolbar change starts the provider from that choice. */}
           <ThemeProvider key={theme} initialChoice={theme}>
-            <div style={{ minHeight: '100vh', background: 'var(--bg)', padding: 8 }}>
+            {/* A full-bleed screen (the graph editor) fills the window, as it does in the app. */}
+            <div style={ctx.parameters.bleed ? { height: '100vh', display: 'flex', background: 'var(--bg)' } : { minHeight: '100vh', background: 'var(--bg)', padding: 8 }}>
               <Story />
             </div>
           </ThemeProvider>

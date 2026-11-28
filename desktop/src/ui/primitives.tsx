@@ -3,9 +3,9 @@ import { useI18n } from '../i18n/context'
 
 export type Tone = 'n' | 'b' | 'p' | 'x' | 'w'
 
-export function Card({ title, subtitle, action, children, testId }: { title?: ReactNode; subtitle?: ReactNode; action?: ReactNode; children?: ReactNode; testId?: string }) {
+export function Card({ title, subtitle, action, children, testId, className }: { title?: ReactNode; subtitle?: ReactNode; action?: ReactNode; children?: ReactNode; testId?: string; className?: string }) {
   return (
-    <section className="card" data-testid={testId}>
+    <section className={className ? `card ${className}` : 'card'} data-testid={testId}>
       {(title || action) && (
         <header className="card-head">
           <div className="card-titles">

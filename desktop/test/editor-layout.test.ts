@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoLayout, diagnosticCounts, freeSpot, parseRef, placements, readLayout, removalImpact, suggestId } from '../src/editor/layout'
+import { autoLayout, clearSpot, diagnosticCounts, parseRef, placements, readLayout, removalImpact, suggestId } from '../src/editor/layout'
 import type { Definition } from '../src/editor/types'
 
 const def = (metadata?: Record<string, unknown>): Definition => ({
@@ -61,8 +61,16 @@ describe('helpers', () => {
     ] as never)
     expect(c).toEqual({ a: { errors: 1, warnings: 1 } })
   })
-  it('steps past nodes already on the spot', () => {
-    const first = freeSpot({ x: 500, y: 300 }, [])
-    expect(freeSpot({ x: 500, y: 300 }, [first])).toEqual({ x: first.x + 32, y: first.y + 32 })
+})
+
+describe('a new step never covers another one (F2.5e)', () => {
+  it('takes the centre when it is free', () => {
+    expect(clearSpot({ x: 500, y: 300 }, [], { w: 200, h: 100 })).toEqual({ x: 400, y: 250 })
+  })
+  it('steps past every card it would overlap', () => {
+    const taken = [{ x: 380, y: 230, w: 264, h: 180 }]
+    const p = clearSpot({ x: 500, y: 300 }, taken, { w: 236, h: 160 })
+    const overlaps = (r: (typeof taken)[number]) => p.x < r.x + r.w && r.x < p.x + 236 && p.y < r.y + r.h && r.y < p.y + 160
+    expect(taken.some(overlaps)).toBe(false)
   })
 })

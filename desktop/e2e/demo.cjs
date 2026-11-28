@@ -236,6 +236,19 @@ async function startDemo(app, page) {
 
     // E2.1: the YAML editor. Open through the real dialog path, type, save with the keyboard.
     const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
+    // roadmap: F2.1b-AC6
+    // Graph editor v2 (F2.1b): while a graph is open, Open, New and Close live in the graph menu on the file name.
+    const inGraphMenu = async (id, how = 'click') => {
+      if (!(await page.isVisible(`[data-testid="${id}"]`))) await page.click('[data-testid="graph-menu"]')
+      if (how === 'key') {
+        await page.focus(`[data-testid="${id}"]`)
+        await page.keyboard.press('Enter')
+      } else await page.click(`[data-testid="${id}"]`)
+    }
+    // The problems list is a drawer above the status bar; once opened it stays open.
+    const showProblems = async () => {
+      if ((await page.getAttribute('[data-testid="problems-toggle"]', 'aria-expanded')) !== 'true') await page.click('[data-testid="problems-toggle"]')
+    }
     const typeInEditor = async (t) => {
       await page.click('[data-testid="yaml-content"]')
       await page.keyboard.press(`${mod}+End`)
@@ -245,8 +258,11 @@ async function startDemo(app, page) {
     fs.writeFileSync(doc2, original)
     await stubOpen(doc2)
     await page.click('[data-testid="nav-editor"]')
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
+    // The editor opens in the Visual view; Split shows the YAML too, and the choice is remembered.
+    await page.click('[data-testid="view-split"]')
     await page.waitForSelector('[data-testid="yaml-content"]')
+    await showProblems()
     assert.match(await page.textContent('[data-testid="doc-state"]'), /^Saved/i)
     await typeInEditor('\n# added in the editor\n')
     assert.match(await page.textContent('[data-testid="doc-state"]'), /Unsaved/i)
@@ -270,16 +286,16 @@ async function startDemo(app, page) {
     assert.match(await page.textContent('[data-testid="doc-state"]'), /^Saved/i)
     // Leaving with unsaved edits asks first.
     await typeInEditor('# draft\n')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.waitForSelector('[data-testid="leave-prompt"]')
     await page.click('[data-testid="leave-cancel"]')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="leave-discard"]')
     await page.waitForSelector('[data-testid="editor-empty"]')
     assert.equal(fs.readFileSync(doc2, 'utf8'), original + '# elsewhere\n', 'discard leaves the file alone')
     // A new graph is create-only and starts from a valid skeleton.
     await stubSave(path.join(graphDir, 'brand-new'))
-    await page.click('[data-testid="editor-new"]')
+    await inGraphMenu('editor-new')
     await page.click('[data-testid="picker-create"]') // F2.12: "Blank graph" is the default choice
     await page.waitForSelector('[data-testid="yaml-content"]')
     assert.equal(fs.existsSync(path.join(graphDir, 'brand-new.yaml')), false, 'nothing is written before the first save')
@@ -287,7 +303,7 @@ async function startDemo(app, page) {
     await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
     assert.match(fs.readFileSync(path.join(graphDir, 'brand-new.yaml'), 'utf8'), /schema_version: 0/)
     await shot(page, '8-editor')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="nav-inbox"]')
 
     // E2.2: the canvas. Layout is not semantics; every action works from the keyboard.
@@ -299,7 +315,7 @@ async function startDemo(app, page) {
     fs.writeFileSync(canvasGraph, original)
     await stubOpen(canvasGraph)
     await page.click('[data-testid="nav-editor"]')
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="node-fast"]')
     // Every edge of the demo is drawn (React Flow draws none when it loses handle measurements).
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 3)
@@ -323,34 +339,38 @@ async function startDemo(app, page) {
     await page.keyboard.press(`${mod}+End`)
     await page.keyboard.type('\nbroken: [\n')
     await page.waitForSelector('[data-testid="canvas-readonly"]')
-    assert.equal(await page.locator('[data-testid="add-shell"]').isDisabled(), true)
+    assert.equal(await page.locator('[data-testid="add-step"]').isDisabled(), true)
     assert.equal(await page.isVisible('[data-testid="node-fast"]'), true, 'the last good graph stays on screen')
     await page.click('[data-testid="editor-undo"]')
     await page.waitForFunction(() => !document.querySelector('[data-testid="canvas-readonly"]'))
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     // A file with anchors opens with a read-only canvas and an editable YAML view.
     const anchored = path.join(graphDir, 'anchors.yaml')
     fs.copyFileSync(path.join(__dirname, '..', '..', 'internal', 'adapter', 'yamlgraph', 'edit', 'testdata', 'hostile.yaml'), anchored)
     await stubOpen(anchored)
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="canvas-readonly"]')
-    assert.equal(await page.locator('[data-testid="add-shell"]').isDisabled(), true)
+    assert.equal(await page.locator('[data-testid="add-step"]').isDisabled(), true)
     assert.equal(await page.isVisible('[data-testid="yaml-content"]'), true)
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     // Keyboard only: connect two nodes through the engine-checked list, add a node, rename it, save.
     const keyed = path.join(graphDir, 'keyboard.yaml')
     fs.writeFileSync(keyed, 'schema_version: 0\nid: keyboard\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  b:\n    type: shell\n    config: {command: "true"}\n    inputs:\n      text: {type: string}\nedges: []\noutputs: {}\n')
     await stubOpen(keyed)
-    await key('editor-open')
+    await inGraphMenu('editor-open', 'key')
     await page.waitForSelector('[data-testid="node-a"]')
+    await key('find-step')
     await key('list-node-a')
+    await key('step-menu-a')
     await key('op-connect')
     await key('connect-out-stdout')
     await page.waitForSelector('[data-testid="connect-to-b.inputs.text"]:not([disabled])')
     await key('connect-to-b.inputs.text')
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1)
+    await key('add-step')
     await key('add-shell')
     await page.waitForSelector('[data-testid="node-shell_1"]')
+    await key('step-menu-shell_1')
     await key('op-rename')
     await page.fill('[data-testid="rename-input"]', 'extra')
     await page.keyboard.press('Enter')
@@ -361,7 +381,9 @@ async function startDemo(app, page) {
     assert.ok(keyedText.includes('from: a.outputs.stdout') && keyedText.includes('to: b.inputs.text'), keyedText)
     assert.ok(/^ {2}extra:/m.test(keyedText) && !keyedText.includes('shell_1'), 'the renamed node is in the file under its new id')
     // Deleting a connected node asks first and says what goes with it; undo restores the exact text.
+    await key('find-step')
     await key('list-node-b')
+    await key('step-menu-b')
     await key('op-delete')
     await page.waitForSelector('[data-testid="delete-confirm"]')
     assert.match(await page.textContent('[data-testid="delete-confirm"]'), /1 connection/)
@@ -371,13 +393,13 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="node-b"]')
     await shot(page, '9-canvas')
     assert.match(await page.textContent('[data-testid="doc-state"]'), /^Saved/i, 'undo after a delete restores the saved text exactly')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     // Pointer: dragging from an output handle to a compatible input handle connects them.
     const dragged = path.join(graphDir, 'drag.yaml')
     fs.copyFileSync(keyed, dragged)
     fs.writeFileSync(dragged, fs.readFileSync(keyed, 'utf8').replace(/edges:[\s\S]*?outputs: \{\}/, 'edges: []\noutputs: {}'))
     await stubOpen(dragged)
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="node-a"]')
     const from = await settledBox(page, '[data-testid="handle-a.outputs.stdout"]')
     const to = await settledBox(page, '[data-testid="handle-b.inputs.text"]')
@@ -387,7 +409,7 @@ async function startDemo(app, page) {
     await page.mouse.up()
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__edge').length === 1)
     assert.ok((await page.locator('[data-testid="yaml-content"]').textContent()).includes('a.outputs.stdout'), 'the YAML shows the new edge')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-inbox"]')
 
@@ -396,7 +418,7 @@ async function startDemo(app, page) {
     fs.writeFileSync(bound, 'schema_version: 0\nid: bindings\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  c:\n    type: shell\n    config: {command: "true"}\n    outputs:\n      stdout: {type: string}\n  b:\n    type: shell\n    config: {command: "true"}\n    inputs:\n      text: {type: string}\n      count: {type: number}\nedges: []\noutputs: {}\n')
     await stubOpen(bound)
     await page.click('[data-testid="nav-editor"]')
-    await key('editor-open')
+    await inGraphMenu('editor-open', 'key')
     await page.waitForSelector('[data-testid="bindings-empty"]')
     const rowCount = () => page.locator('[data-testid="binding-row"]').count()
     await key('add-binding-open')
@@ -440,8 +462,9 @@ async function startDemo(app, page) {
     assert.equal(await page.textContent('[data-testid="edge-source"]'), 'a.outputs.stdout')
     assert.equal(await page.textContent('[data-testid="edge-target"]'), 'b.inputs.text')
     assert.match(await page.textContent('[data-testid="edge-recording-hint"]'), /does not record run values/)
-    assert.match(await page.textContent('.react-flow__edge-text'), /string/, 'a selected edge is labelled with its type')
-    await page.click('.react-flow__pane')
+    assert.match(await page.textContent('[data-testid="edge-label"]'), /string/, 'a selected edge is labelled with its type')
+    // An empty corner of the canvas: the centre may hold a step card.
+    await page.click('.react-flow__pane', { position: { x: 12, y: 12 } })
     await page.waitForFunction(() => !document.querySelector('.react-flow__edge.ed-edge-sel'))
     assert.equal(await page.getAttribute('[data-testid="binding-select"]', 'aria-pressed'), 'false')
     await page.locator('.react-flow__edge').first().dispatchEvent('click')
@@ -450,7 +473,7 @@ async function startDemo(app, page) {
     await key('remove-binding')
     await page.waitForSelector('[data-testid="bindings-empty"]')
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'bindings-heading')
-    await page.click('[data-testid="editor-close"]') // the edit was undone by the removal: nothing unsaved
+    await inGraphMenu('editor-close') // the edit was undone by the removal: nothing unsaved
     await page.click('[data-testid="nav-inbox"]')
 
     // F2.3 E5a.3: hints. An unused output binds to a compatible unbound required input in two actions.
@@ -460,18 +483,18 @@ async function startDemo(app, page) {
     fs.writeFileSync(hinted, hintText(hintProducer))
     await stubOpen(hinted)
     await page.click('[data-testid="nav-editor"]')
-    await key('editor-open')
+    await inGraphMenu('editor-open', 'key')
     await page.waitForSelector('[data-testid="hint"][data-kind="unused-output"][data-ref="a.outputs.stdout"]')
     await page.click('[data-testid="hint"][data-ref="a.outputs.stdout"] [data-testid="hint-options"]')
     await page.click('[data-testid="hint-option-b.inputs.text"]')
     await page.waitForFunction(() => !document.querySelector('[data-testid="hint"]'))
     await page.waitForSelector('[data-testid="binding-row"][data-from="a.outputs.stdout"][data-to="b.inputs.text"]')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="leave-discard"]')
     // Adding a required graph input from an unbound-input hint: one click, one batch, the warning goes.
     fs.writeFileSync(hinted, hintText(''))
     await stubOpen(hinted)
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="hint"][data-kind="unbound-input"]')
     await page.click('[data-testid="hint-add-input"]')
     await page.waitForFunction(() => !document.querySelector('[data-testid="hint"]'))
@@ -487,7 +510,7 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="graph-inputs-empty"]')
     await page.waitForSelector('[data-testid="hint"][data-kind="unbound-input"]')
     await page.click('[data-testid="editor-undo"]')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-inbox"]')
 
@@ -497,7 +520,7 @@ async function startDemo(app, page) {
     fs.writeFileSync(watched, original)
     await stubOpen(watched)
     await page.click('[data-testid="nav-editor"]')
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="node-fast"]')
     // A clean draft follows the file silently.
     fs.writeFileSync(watched, original + '# changed outside\n')
@@ -520,15 +543,15 @@ async function startDemo(app, page) {
     await page.click('[data-testid="keep-mine"]')
     await page.waitForFunction(() => !document.querySelector('[data-testid="conflict-banner"]'))
     assert.ok(fs.readFileSync(watched, 'utf8').endsWith('# mine\n'))
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
 
     // Round trip: a graph made in the editor is saved, run from the app, and the CLI accepts the same file.
     const made2 = path.join(graphDir, 'roundtrip')
     await stubSave(made2)
-    await page.click('[data-testid="editor-new"]')
+    await inGraphMenu('editor-new')
     await page.click('[data-testid="picker-create"]')
     await page.waitForSelector('[data-testid="yaml-content"]')
-    await page.click('[data-testid="add-shell"]')
+    await page.click('[data-testid="empty-add-shell"]') // a blank graph offers its first step on the canvas
     await page.waitForSelector('[data-testid="node-shell_1"]')
     assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true, 'a starter shell has an empty command, so the engine blocks the run')
     await page.click('[data-testid="yaml-content"]')
@@ -544,7 +567,7 @@ async function startDemo(app, page) {
     exec(bin, ['graph', 'validate', path.join(graphDir, 'roundtrip.yaml')])
     exec(bin, ['run', path.join(graphDir, 'roundtrip.yaml'), '--store-dir', path.join(work, 'cli-runs')])
     await page.click('[data-testid="nav-editor"]')
-    await page.click('[data-testid="editor-close"]').catch(() => {})
+    await inGraphMenu('editor-close').catch(() => {})
     await page.click('[data-testid="nav-inbox"]')
 
     // ADR-0048: the last setup step creates the picked template directly.
@@ -574,7 +597,7 @@ async function startDemo(app, page) {
     await page.waitForFunction(() => /^Saved/i.test(document.querySelector('[data-testid="doc-state"]')?.textContent || ''))
     const dependencyUpdate = fs.readFileSync(path.join(__dirname, '..', '..', '.agents', 'templates', 'dependency-update.yaml'), 'utf8')
     assert.equal(fs.readFileSync(path.join(graphDir, 'from-setup.yaml'), 'utf8'), dependencyUpdate.replace(/^id: dependency-update$/m, 'id: from-setup'))
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.waitForSelector('[data-testid="editor-empty"]')
     await page.click('[data-testid="nav-inbox"]')
 
@@ -622,11 +645,11 @@ async function startDemo(app, page) {
     const cliRun = JSON.parse(exec(bin, ['run', path.join(graphDir, 'from-template.yaml'), '--store-dir', path.join(work, 'cli-runs'), '--json'], { encoding: 'utf8' }))
     assert.equal(cliRun.outputs[0].value, 'left branch done + right branch done\n')
     await page.click('[data-testid="nav-editor"]')
-    await page.click('[data-testid="editor-close"]').catch(() => {})
+    await inGraphMenu('editor-close').catch(() => {})
 
     // The agent template has one placeholder: one blocking issue on "implement", and Run stays disabled with the reason.
     await stubSave(path.join(graphDir, 'agent-draft'))
-    await page.click('[data-testid="editor-new"]')
+    await inGraphMenu('editor-new')
     await page.check('[data-testid="template-agent-scoped-approval"]')
     await page.click('[data-testid="picker-create"]')
     await page.waitForSelector('[data-testid="issue"]')
@@ -635,9 +658,10 @@ async function startDemo(app, page) {
     assert.equal(await page.getAttribute('[data-testid="issue"]', 'data-code'), 'E_NODE_CONFIG_INVALID')
     assert.match(await page.textContent('[data-testid="issue"]'), /implement/)
     assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
-    assert.match(await page.textContent('[data-testid="run-blocked"]'), /Cannot run: 1 error\./)
+    assert.match(await page.textContent('[data-testid="run-blocked"]'), /1 error blocks run/)
+    assert.match(await page.getAttribute('[data-testid="run-blocked-focus"]', 'title'), /Cannot run: 1 error\./)
     assert.equal(await page.locator('[data-testid="canvas-readonly"]').count(), 0, 'a template opens with an editable canvas')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="leave-discard"]')
     await page.click('[data-testid="nav-inbox"]')
 
@@ -648,7 +672,7 @@ async function startDemo(app, page) {
     fs.writeFileSync(issuesFile, mixedText)
     await stubOpen(issuesFile)
     await page.click('[data-testid="nav-editor"]')
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="issue"]')
     // roadmap: F2.4-AC1
     // Same diagnostics as the CLI, and the config error is there before any run.
@@ -669,7 +693,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="issues-filter-warning"]')
     assert.equal(await page.locator('[data-testid="issue"][data-severity="error"]').count(), 0)
     await page.click('[data-testid="issues-filter-all"]')
-    assert.ok((await page.textContent('[data-testid="node-a"]')).includes('✖'), 'a node with an error carries a glyph, not only colour')
+    assert.ok((await page.$('[data-testid="node-a"] .v2-bdg.e')) !== null, 'a node with an error carries a glyph and a count, not only colour')
     await page.click('[data-testid="issue"][data-code="E_BINDING_TYPE_MISMATCH"]')
     await page.waitForFunction(() => document.querySelector('[data-testid="selected-heading"]')?.textContent?.includes('a.outputs.out'))
     assert.match(await page.textContent('.cm-activeLine'), /from: a\.outputs\.out/)
@@ -695,26 +719,26 @@ async function startDemo(app, page) {
     assert.match(await page.textContent('[data-testid="issue"]'), /line \d+/)
     await page.click('[data-testid="editor-undo"]')
     await page.waitForFunction(() => document.querySelectorAll('[data-testid="issue"][data-code="YAML"]').length === 0)
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     // Graph-level issue focuses the graph header.
     const badId = path.join(graphDir, 'badid.yaml')
     fs.writeFileSync(badId, 'schema_version: 0\nid: Bad_ID\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\nedges: []\noutputs: {}\n')
     await stubOpen(badId)
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.click('[data-testid="issue"][data-code="E_GRAPH_ID_INVALID"]')
     await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'graph-heading')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     // Warnings never block a run.
     const warnOnly = path.join(graphDir, 'warn.yaml')
     fs.writeFileSync(warnOnly, 'schema_version: 0\nid: warn\ninputs: {}\nnodes:\n  a:\n    type: shell\n    config: {command: /usr/bin/true}\n    outputs:\n      o: {type: string}\nedges: []\noutputs: {}\n')
     await stubOpen(warnOnly)
-    await page.click('[data-testid="editor-open"]')
+    await inGraphMenu('editor-open')
     await page.waitForSelector('[data-testid="issue"][data-severity="warning"]')
     assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), false)
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     // Keyboard only: filter, move through the issues, focus one, and land on its inspector heading.
     await stubOpen(issuesFile)
-    await key('editor-open')
+    await inGraphMenu('editor-open', 'key')
     await page.waitForSelector('[data-testid="issue"]')
     await key('issues-filter-error')
     assert.equal(await page.locator('[data-testid="issue"][data-severity="warning"]').count(), 0)
@@ -723,7 +747,7 @@ async function startDemo(app, page) {
     assert.equal(await activeId(), 'issue')
     await page.keyboard.press('Enter')
     await page.waitForFunction(() => ['selected-heading', 'graph-heading'].includes(document.activeElement?.getAttribute('data-testid') || ''))
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="nav-inbox"]')
 
     // F2.2: the node inspector, keyboard only. Every change is an operation on the file.
@@ -731,8 +755,9 @@ async function startDemo(app, page) {
     fs.writeFileSync(inspected, 'schema_version: 0\nid: inspect\ninputs: {}\nnodes:\n  # the producer\n  build:\n    type: shell\n    config:\n      command: /usr/bin/true\n      retries: {max: 2, on: [timeout]}\n    outputs:\n      stdout: {type: string}\nedges: []\noutputs: {}\n')
     await stubOpen(inspected)
     await page.click('[data-testid="nav-editor"]')
-    await key('editor-open')
+    await inGraphMenu('editor-open', 'key')
     await page.waitForSelector('[data-testid="node-build"]')
+    await key('find-step')
     await key('list-node-build')
     await page.waitForSelector('[data-testid="inspector-node"]')
     const yamlText = () => page.locator('[data-testid="yaml-content"]').textContent()
@@ -792,7 +817,7 @@ async function startDemo(app, page) {
     assert.ok(fs.readFileSync(inspected, 'utf8').includes('command: ""'), 'the invalid value is in the file, not dropped')
     assert.equal(await page.locator('[data-testid="editor-save-run"]').isDisabled(), true)
     await shot(page, '10-inspector')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="nav-inbox"]')
 
     // F2.2: every gate kind the inspector offers is configured through the inspector, on a loop and on a standalone Gate,
@@ -852,8 +877,9 @@ async function startDemo(app, page) {
     const openKinds = async (file, text, node) => {
       fs.writeFileSync(file, text)
       await stubOpen(file)
-      await key('editor-open')
+      await inGraphMenu('editor-open', 'key')
       await page.waitForSelector(`[data-testid="node-${node}"]`)
+      await key('find-step')
       await key(`list-node-${node}`)
       await page.waitForSelector('[data-testid="inspector-node"]')
     }
@@ -882,7 +908,7 @@ async function startDemo(app, page) {
       await fillMissing(scope)
       await saveAndValidate(file, `a loop with a ${loopKinds[i]} Gate`)
       assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${loopKinds[i]}`))
-      await page.click('[data-testid="editor-close"]')
+      await inGraphMenu('editor-close')
     }
     let gateKinds = []
     for (let i = 0; i === 0 || i < gateKinds.length; i++) {
@@ -895,7 +921,7 @@ async function startDemo(app, page) {
       await fillMissing(scope)
       await saveAndValidate(file, `a standalone ${gateKinds[i]} Gate`)
       assert.ok(fs.readFileSync(file, 'utf8').includes(`kind: ${gateKinds[i]}`))
-      await page.click('[data-testid="editor-close"]')
+      await inGraphMenu('editor-close')
     }
     await page.click('[data-testid="nav-inbox"]')
 
@@ -1144,7 +1170,7 @@ async function startDemo(app, page) {
     const openForValues = async (file) => {
       await stubOpenDialog(app, file)
       await page.click('[data-testid="nav-editor"]')
-      await page.click('[data-testid="editor-open"]')
+      await inGraphMenu('editor-open')
       await page.waitForSelector('[data-testid="binding-row"]')
     }
     await openForValues(valuesGraph)
@@ -1182,7 +1208,7 @@ async function startDemo(app, page) {
     // A run of another graph version shows no value until it is confirmed, and then says whose it is.
     const changed = path.join(graphDir, 'values-changed.yaml')
     fs.writeFileSync(changed, original.replace('fast branch done', 'fast branch done again'))
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await openForValues(changed)
     await edgeKey('fast.outputs.stdout')
     await stateOf('different_version')
@@ -1193,7 +1219,7 @@ async function startDemo(app, page) {
     await stateOf('value')
     assert.equal(await textNow(), 'fast branch done')
     assert.match(await page.textContent('[data-testid="edge-value-heading"]'), /different version/)
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="nav-inbox"]')
     // Restart: the same values come back from the run store.
     await app.close()
@@ -1203,20 +1229,21 @@ async function startDemo(app, page) {
     await edgeKey('fast.outputs.stdout')
     await stateOf('value')
     assert.equal(await textNow(), 'fast branch done', 'replay equals live')
-    // Keyboard only: from an edge row, Tab reaches the value region, which is a labelled, bounded, scrollable stop.
+    // Keyboard only: from an edge row, the value region is a labelled, bounded, scrollable stop.
+    // In the editor v2 panel the edge inspector sits above the Bindings rows, so it is reached backwards.
     await page.focus('[data-testid="binding-select"][data-from="fast.outputs.stdout"]')
     let reached = false
     for (let i = 0; i < 40 && !reached; i++) {
-      await page.keyboard.press('Tab')
+      await page.keyboard.press('Shift+Tab')
       reached = await page.evaluate(() => document.activeElement?.getAttribute('data-testid') === 'edge-value-region')
     }
-    assert.ok(reached, 'the value region is reachable with Tab')
+    assert.ok(reached, 'the value region is reachable with the keyboard')
     assert.deepEqual(
       await page.evaluate(() => { const r = document.activeElement; const c = getComputedStyle(r); return [r.getAttribute('role'), r.tabIndex, c.overflowY, c.maxHeight !== 'none', !!r.getAttribute('aria-label')] }),
       ['region', 0, 'auto', true, true],
     )
     await page.keyboard.press('PageDown')
-    await page.click('[data-testid="editor-close"]')
+    await inGraphMenu('editor-close')
     await page.click('[data-testid="nav-inbox"]')
 
     // #56: New run chooses the graph in the native dialog and holds only a grant. It starts the run

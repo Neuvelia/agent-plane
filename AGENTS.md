@@ -66,7 +66,8 @@ Storybook; the API and event contracts are unchanged. F2.5b (ADR-0046, presentat
 Dashboard with the Inbox triage queue: approvals, stopped and running runs beside the
 selected item's evidence, with approvals decided in place. F2.5c (ADR-0047, presentation only) adds the
 profile menu at the foot of the sidebar, a System/Light/Dark theme with light
-values for every colour token, and the Keyboard shortcuts and About windows. Slice E6 of F2.3 adds
+values for every colour token, and the Keyboard shortcuts and About windows. F2.1b (ADR-0050, presentation only) adds the graph editor v2 layout:
+step cards, graph and step menus, a tool dock and a problems drawer. Slice E6 of F2.3 adds
 opt-in, bounded and redacted `value_recorded` events (event schema 10,
 ADR-0023 accepted, `--record-values`) and a desktop Settings switch that
 starts the sidecar with it; the E5b.1 values reducer and run picker and the E5b.2 edge inspector (the recorded value of a selected edge or graph input binding, shown as text only) are implemented in the renderer. The graph

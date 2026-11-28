@@ -37,7 +37,7 @@ const picker = async (root: Element) => {
 }
 
 const story = (capabilities: BridgeData['capabilities'], play?: (root: Element) => Promise<void>, validate?: GraphStory['validate']): S => ({
-  parameters: { bridge: { runs: [], capabilities, graph: { validate, recent: [] } } satisfies BridgeData },
+  parameters: { bleed: true, bridge: { runs: [], capabilities, graph: { validate, recent: [] } } satisfies BridgeData },
   render: () => <Harness />,
   play: async ({ canvasElement }) => {
     await (play ?? picker)(canvasElement)

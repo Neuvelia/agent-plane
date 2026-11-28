@@ -36,6 +36,16 @@ describe('stories', () => {
   })
 })
 
+describe('graph editor v2 stories (F2.1b)', () => {
+  const smoke = readFileSync(fileURLToPath(new URL('../scripts/stories-smoke.cjs', import.meta.url)), 'utf8')
+  it('the story smoke requires the graph editor v2 artboard stories, in every theme, with menus checked by axe [F2.1b-AC5]', () => {
+    for (const id of ['design-step-cards-light', 'design-step-cards', 'design-error-blocks-run', 'design-graph-menu', 'design-step-menu', 'design-empty-graph']) expect(smoke).toContain(`'screens-editor--${id}'`)
+    expect(smoke).toContain("'dark,light'")
+    expect(smoke).toMatch(/currentRender\?\.phase/)
+    expect(smoke).toContain(".v2-menu")
+  })
+})
+
 describe('Inbox stories (F2.5b)', () => {
   // The smoke renders each required story in EN and PL, waits for its play function (which
   // asserts the state it drives: decided rows, pinning, focus) and fails on a play error or axe.

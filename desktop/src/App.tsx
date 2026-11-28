@@ -155,7 +155,8 @@ function Shell({ lost }: { lost: boolean }) {
   // Setup is full-bleed: its own header, progress and footer replace the bar (canvas "Setup, revised").
   const setup = route.name === 'welcome'
   return (
-    <div className={setup ? 'app setup-mode' : 'app'}>
+    // The graph editor is full-bleed (graph editor v2, F2.1b): its own header row replaces the global bar.
+    <div className={setup ? 'app setup-mode' : route.name === 'editor' ? 'app bleed' : 'app'}>
       <a
         className="skip-link"
         href="#content"
@@ -175,7 +176,7 @@ function Shell({ lost }: { lost: boolean }) {
         profile={<ProfileMenu appVersion={appVersion} onSettings={go('settings')} onShortcuts={() => setDialog('shortcuts')} onAbout={() => setDialog('about')} />}
       />
       <div className="col">
-        {!setup && (
+        {!setup && route.name !== 'editor' && (
           <GlobalBar
             lost={lost}
             crumbs={[crumb, ...(route.name === 'run' ? [route.id.slice(0, 8)] : []), ...(route.name === 'settings' && settingsPane !== 'main' ? [t(settingsPane === 'agents' ? 'settings.nav.agents' : 'settings.nav.about')] : [])]}

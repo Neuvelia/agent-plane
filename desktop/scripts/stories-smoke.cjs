@@ -45,6 +45,7 @@ const REQUIRED = [
   'screens-welcome--all-available', 'screens-welcome--git-missing', 'screens-welcome--codex-not-configured', 'screens-welcome--codex-found-on-path', 'screens-welcome--agent-clis-found', 'screens-welcome--codex-unsupported-version', 'screens-welcome--windows', 'screens-welcome--detection-error', 'screens-welcome--checking', 'screens-welcome--rechecking', 'screens-welcome--request-failed', 'screens-welcome--engine-disconnected',
   'screens-welcome--step-welcome', 'screens-welcome--step-agents', 'screens-welcome--step-first-graph', 'screens-welcome--step-first-graph-blank-picked', 'screens-welcome--step-first-graph-windows', 'screens-welcome--in-app-first-launch-light', 'screens-welcome--step-check-light', 'screens-welcome--step-agents-light', 'screens-welcome--step-first-graph-light', 'screens-welcome--checking-light', 'screens-welcome--shell-missing', 'screens-welcome--in-app-first-launch', 'screens-welcome--in-app-engine-disconnected',
   'screens-edge-inspector--no-run', 'screens-edge-inspector--run-unavailable', 'screens-edge-inspector--different-version-none-chosen', 'screens-edge-inspector--different-version-needs-confirmation', 'screens-edge-inspector--different-version-confirmed', 'screens-edge-inspector--node-not-finished', 'screens-edge-inspector--node-waiting-for-person', 'screens-edge-inspector--node-failed', 'screens-edge-inspector--older-run', 'screens-edge-inspector--not-recorded', 'screens-edge-inspector--no-value-for-this-port', 'screens-edge-inspector--value-not-carried', 'screens-edge-inspector--value-string', 'screens-edge-inspector--value-json-formatted', 'screens-edge-inspector--value-json-raw', 'screens-edge-inspector--value-not-json', 'screens-edge-inspector--value-truncated', 'screens-edge-inspector--value-redacted', 'screens-edge-inspector--value-long', 'screens-edge-inspector--value-hidden-characters', 'screens-edge-inspector--value-empty', 'screens-edge-inspector--value-artifact-reference', 'screens-edge-inspector--live-run-value-arrived', 'screens-edge-inspector--connection-lost', 'screens-edge-inspector--connection-lost-before-value',
+  'screens-editor--design-step-cards-light', 'screens-editor--design-step-cards', 'screens-editor--design-error-blocks-run', 'screens-editor--design-graph-menu', 'screens-editor--design-step-menu', 'screens-editor--design-empty-graph', 'screens-editor--design-problems-open', 'screens-editor--design-split-view', 'screens-editor--design-edge-selected',
   'screens-template-picker--default', 'screens-template-picker--windows-report', 'screens-template-picker--no-report', 'screens-template-picker--codex-not-configured', 'screens-template-picker--agent-draft-shows-placeholder',
 ]
 
@@ -73,6 +74,7 @@ const server = http.createServer((req, res) => {
   const failures = []
   const workers = Math.max(1, Number(process.env.AP_STORIES_WORKERS) || Math.min(4, os.cpus().length))
   const themes = (process.env.AP_STORIES_THEMES || 'dark,light').split(',')
+  // roadmap: F2.1b-AC5
   for (const [locale, theme] of ['en', 'pl'].flatMap((l) => themes.map((t) => [l, t]))) {
     // Reduced motion: axe judges each story's settled frame, not a fade caught halfway.
     const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: 'reduce' })
@@ -148,7 +150,8 @@ async function checkStory(page, origin, id, globals, fail) {
   let result
   for (let tries = 0; tries < 20 && !result; tries++) {
     try {
-      result = await page.evaluate(() => axe.run('#storybook-root'))
+      // Menus are portalled to <body>: check them too when one is open (F2.1b).
+      result = await page.evaluate(() => axe.run(document.querySelector('.v2-menu') ? { include: [['#storybook-root'], ['.v2-menu']] } : '#storybook-root'))
     } catch (e) {
       if (!/already running/.test(String(e))) throw e
       await page.waitForTimeout(250)
@@ -322,6 +325,8 @@ async function checkProfileMenu(browser, origin, fail) {
   // Review m4: the YAML editor's CodeMirror base theme follows the app theme.
   const editorClasses = async (theme) => {
     await page.goto(`${origin}/iframe.html?id=screens-editor--opened&viewMode=story&globals=locale:en;theme:${theme}`)
+    // The editor opens in the Visual view (F2.1b); Split puts the YAML on screen.
+    await page.click('[data-testid="view-split"]')
     await page.waitForSelector('.cm-editor')
     return page.evaluate(() => [...document.querySelector('.cm-editor').classList].sort().join(' '))
   }

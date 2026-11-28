@@ -77,7 +77,7 @@ async function pick(root: Element, edge: Edge) {
 
 /** Opens the demo graph, selects an edge and waits for the state the inspector should reach. */
 const story = (runs: BridgeRun[], edge: Edge, state: string, more?: (root: Element) => Promise<void>, recording?: boolean): S => ({
-  parameters: { bridge: { runs, graph, recording: recording ? { enabled: true, redactEnv: [], active: true, missing: [] } : undefined } },
+  parameters: { bleed: true, bridge: { runs, graph, recording: recording ? { enabled: true, redactEnv: [], active: true, missing: [] } : undefined } },
   render: () => <Harness />,
   play: async ({ canvasElement }) => {
     await pick(canvasElement, edge)

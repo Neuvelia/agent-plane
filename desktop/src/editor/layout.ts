@@ -6,9 +6,12 @@ import type { Definition, NodeDef } from './types'
 // returned and decide where things are DRAWN. No graph rule lives here: whether
 // two ports may be connected is always answered by the engine (can_connect).
 
-export const NODE_W = 240
-const HEAD_H = 44
-const ROW_H = 22
+/** Step card widths (graph editor v2): wider when the card shows a prompt. Heights are estimates for layout; the canvas measures real cards. */
+export const NODE_W = 236
+const WIDE_W = 266
+const HEAD_H = 56
+const ROW_H = 28
+const PROMPT_H = 56
 
 export interface Point {
   x: number
@@ -17,13 +20,12 @@ export interface Point {
 
 export const NODE_TYPES = ['shell', 'agent', 'gate', 'human'] as const
 
+/** Estimated card size: one row per input, one per output, one for a loop, one for a key setting, and a prompt box. */
 export function nodeSize(n: NodeDef): { w: number; h: number } {
-  const rows = Math.max(Object.keys(n.inputs ?? {}).length, Object.keys(n.outputs ?? {}).length, 1)
-  return { w: NODE_W, h: HEAD_H + rows * ROW_H + 10 }
+  const rows = Object.keys(n.inputs ?? {}).length + Math.max(Object.keys(n.outputs ?? {}).length, 1) + (n.loop ? 1 : 0) + 1
+  const prompt = Object.values(n.config ?? {}).some((v) => typeof v === 'string' && v.length > 48) ? PROMPT_H : 0
+  return { w: prompt ? WIDE_W : NODE_W, h: HEAD_H + prompt + rows * ROW_H }
 }
-
-/** Vertical centre of port row `i`, for placing a handle. */
-export const rowY = (i: number) => HEAD_H + i * ROW_H + ROW_H / 2
 
 export interface Ref {
   node: string
@@ -62,7 +64,7 @@ export function readLayout(def: Definition): Record<string, Point> {
 /** Deterministic left-to-right placement of every node (top-left corners). */
 export function autoLayout(def: Definition): Record<string, Point> {
   const g = new dagre.graphlib.Graph()
-  g.setGraph({ rankdir: 'LR', ranksep: 80, nodesep: 30 })
+  g.setGraph({ rankdir: 'LR', ranksep: 56, nodesep: 56 })
   g.setDefaultEdgeLabel(() => ({}))
   const ids = Object.keys(def.nodes).sort()
   for (const id of ids) {
@@ -119,9 +121,22 @@ export function diagnosticCounts(diags: Diagnostic[]): Record<string, { errors: 
   return out
 }
 
-/** A free spot near `centre` (top-left corner), stepping diagonally past nodes already there. */
-export function freeSpot(centre: Point, taken: Point[], size = { w: NODE_W, h: HEAD_H + ROW_H + 10 }): Point {
+
+export interface Rect extends Point {
+  w: number
+  h: number
+}
+
+const GAP = 24
+
+/**
+ * A spot near `centre` (top-left corner) where a card of `size` covers no card in
+ * `taken` (with a small gap), stepping diagonally; gives up after a bounded search
+ * and returns the last spot tried.
+ */
+export function clearSpot(centre: Point, taken: Rect[], size: { w: number; h: number }): Point {
   let p = { x: Math.round(centre.x - size.w / 2), y: Math.round(centre.y - size.h / 2) }
-  while (taken.some((t) => Math.abs(t.x - p.x) < 24 && Math.abs(t.y - p.y) < 24)) p = { x: p.x + 32, y: p.y + 32 }
+  const hits = (q: Point) => taken.some((r) => q.x < r.x + r.w + GAP && r.x < q.x + size.w + GAP && q.y < r.y + r.h + GAP && r.y < q.y + size.h + GAP)
+  for (let i = 0; i < 200 && hits(p); i++) p = { x: p.x + 32, y: p.y + 32 }
   return p
 }

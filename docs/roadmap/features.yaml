@@ -1743,6 +1743,52 @@ features:
     decisions: ["ADR-0023"]
     divergences: []
     tasks: []
+  - id: F2.1b
+    name: "Graph editor v2 (desktop)"
+    kind: derived
+    parent: F2.1
+    phase: 2
+    priority: P1
+    status: done
+    owner_package: ui
+    spec: docs/features/F2.1b-graph-editor-v2.md
+    depends_on: ["F2.1", "F2.2", "F2.4", "F2.5a", "F2.5c"]
+    acceptance:
+      - id: F2.1b-AC1
+        text: "Jeden wiersz nagłówka z jedną akcją główną (Save and run); gdy silnik blokuje uruchomienie, powód stoi obok przycisku i prowadzi do problemu."
+        status: met
+        evidence:
+          - "desktop/test/editor-v2.test.tsx::F2.1b-AC1"
+      - id: F2.1b-AC2
+        text: "Karty kroków opisują krok z danych silnika: polecenie, kluczowe ustawienia, źródło każdego wejścia, wyjścia z ostrzeżeniami; bez reguł zależnych od typu węzła."
+        status: met
+        evidence:
+          - "desktop/test/card-model.test.ts::F2.1b-AC2"
+      - id: F2.1b-AC3
+        text: "Pasek stanu zawsze pokazuje liczniki problemów; lista otwiera się jako szuflada, błędy najpierw."
+        status: met
+        evidence:
+          - "desktop/test/editor-v2.test.tsx::F2.1b-AC3"
+      - id: F2.1b-AC4
+        text: "Nowe tokeny edytora mają wartości dla motywu ciemnego i jasnego; pary tekstowe osiągają 4.5:1 w obu."
+        status: met
+        evidence:
+          - "desktop/test/editor-v2-tokens.test.ts::F2.1b-AC4"
+      - id: F2.1b-AC5
+        text: "Stories artboardów edytora v2 przechodzą smoke Storybooka w obu językach i motywach, z axe także na otwartych menu."
+        status: met
+        evidence:
+          - "desktop/test/stories.test.ts::F2.1b-AC5"
+          - "desktop/scripts/stories-smoke.cjs"
+      - id: F2.1b-AC6
+        text: "Scenariusz e2e (prawdziwy Electron i silnik) przechodzi przez edytor v2: menu grafu, Find a step, menu kroku, Add step, szuflada problemów, przeciąganie połączeń."
+        status: met
+        evidence:
+          - "desktop/e2e/demo.cjs::F2.1b-AC6"
+    out_of_scope: ["Test this step, Run from this step, komentarze na płótnie, kopiowanie i duplikowanie kroku (pokazane jako Soon)", "Zmiana nazwy, duplikowanie, pokazanie w folderze, kopiowanie ścieżki i usuwanie pliku grafu (pokazane jako Soon; ADR-0021)"]
+    decisions: ["ADR-0050"]
+    divergences: []
+    tasks: []
   - id: F2.5a
     name: "Desktop redesign (Tarmind design system, PL/EN)"
     kind: derived

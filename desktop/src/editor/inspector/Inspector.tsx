@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { useI18n } from '../../i18n/context'
 import { Button, Card, Pill, StateMessage, Tag } from '../../ui/primitives'
 import type { DocState } from '../doc'
@@ -32,7 +32,7 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
   const def = a.definition
   const node = nodeId && def ? def.nodes[nodeId] : undefined
   const edits = useEdits(g, def, nodeId)
-  const [renaming, setRenaming] = useState(false)
+  const nameId = useId()
 
   if (!nodeId || !node || !def) {
     return (
@@ -70,6 +70,7 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
   return (
     <Card
       testId="inspector"
+      className="ins-card"
       title={
         <span className="row">
           <span className="mono" data-testid="inspector-node">
@@ -82,13 +83,29 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
       action={
         <span className="row">
           {errors > 0 ? <Pill tone="x" testId="inspector-status">{'✖ '}{t('editor.nodeErrors', { count: errors })}</Pill> : warnings > 0 ? <Pill tone="w" testId="inspector-status">{'⚠ '}{t('editor.nodeWarnings', { count: warnings })}</Pill> : <Pill tone="p" testId="inspector-status">{t('inspector.valid')}</Pill>}
-          <Button size="sm" disabled={ro} onClick={() => setRenaming((r) => !r)} aria-expanded={renaming} data-testid="inspector-rename">
-            {t('editor.rename')}
-          </Button>
         </span>
       }
     >
       <div className="ins" aria-busy={edits.busy || a.status === 'validating'}>
+        {/* The node's name: a field that commits on Enter or blur (graph editor v2). */}
+        <div className="er-f ins-name">
+          <label htmlFor={nameId}>{t('inspector.name')}</label>
+          <TextCommit
+            id={nameId}
+            value={nodeId}
+            className="mono"
+            disabled={ro}
+            onCommit={(s) => {
+              const next = s.trim()
+              if (!next) return false
+              return edits.apply([{ op: 'rename_node', id: nodeId, new_id: next }], 'rename').then((ok) => {
+                if (ok) onRenamed(next)
+                return ok
+              })
+            }}
+            testId="inspector-rename-input"
+          />
+        </div>
         {readOnly && (
           <p className="ins-note" role="status" data-testid="inspector-readonly">
             {a.parseError ? t('inspector.readonly.parse') : t('inspector.readonly.anchors')}
@@ -103,25 +120,6 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
           <p className="ins-note" role="status">
             {t('inspector.unreachable')}
           </p>
-        )}
-        {renaming && (
-          <div className="row ins-row">
-            <TextCommit
-              value={nodeId}
-              autoFocus
-              className="mono"
-              label={t('editor.rename.label', { node: nodeId })}
-              onCommit={(s) =>
-                void edits.apply([{ op: 'rename_node', id: nodeId, new_id: s.trim() }], 'rename').then((ok) => {
-                  if (ok) {
-                    setRenaming(false)
-                    onRenamed(s.trim())
-                  }
-                })
-              }
-              testId="inspector-rename-input"
-            />
-          </div>
         )}
         <DiagList diags={diags.filter((d) => !claimed(d))} refusal={edits.refusal('rename')} />
         {others.length > 0 && info && (
@@ -158,9 +156,7 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
           </p>
         ) : (
           <>
-            <Section title={t('inspector.section.inputs')}>
-              <PortsSection def={def} nodeId={nodeId} node={node} desc={desc} direction="input" sources={inputSources(def, nodeId, desc)} diags={a.diagnostics} readOnly={ro} edits={edits} />
-            </Section>
+            {/* Graph editor v2 order: what the step does, how it retries, then its connections. */}
             <Section title={t('inspector.section.execution')} testId="section-execution">
               <DiagList diags={diagnosticsExactly(a.diagnostics, `nodes.${nodeId}.config`)} />
               {activeFields(desc.config, config).map((f) => (
@@ -172,14 +168,17 @@ export function Inspector({ g, doc, nodeId, readOnly, onRenamed }: Props) {
                 <LoopSection g={g} nodeId={nodeId} node={node} desc={desc} info={info} diags={a.diagnostics} readOnly={ro} edits={edits} />
               </Section>
             )}
+            <Section title={t('inspector.section.inputs')}>
+              <PortsSection def={def} nodeId={nodeId} node={node} desc={desc} direction="input" sources={inputSources(def, nodeId, desc)} diags={a.diagnostics} readOnly={ro} edits={edits} />
+            </Section>
             <Section title={t('inspector.section.outputs')}>
               <PortsSection def={def} nodeId={nodeId} node={node} desc={desc} direction="output" diags={a.diagnostics} readOnly={ro} edits={edits} />
             </Section>
           </>
         )}
-        <Section title={t('inspector.section.advanced')} testId="section-advanced">
+        <Disclosure title={t('inspector.section.advanced')} testId="section-advanced" initiallyOpen={(info?.advanced ?? []).length > 0}>
           <AdvancedSection entries={info?.advanced ?? []} readOnly={ro} edits={edits} prefix="adv" onSet={(key, value) => [configOp(nodeId, key, value)]} />
-        </Section>
+        </Disclosure>
       </div>
     </Card>
   )
@@ -190,6 +189,27 @@ function Section({ title, children, testId }: { title: string; children: ReactNo
     <section className="ins-section" data-testid={testId}>
       <h3 className="ins-head">{title}</h3>
       {children}
+    </section>
+  )
+}
+
+/** A section that opens on demand (graph editor v2: "Advanced"); open from the start when it has something to show. */
+function Disclosure({ title, children, testId, initiallyOpen }: { title: string; children: ReactNode; testId?: string; initiallyOpen: boolean }) {
+  const [open, setOpen] = useState(initiallyOpen)
+  const id = useId()
+  return (
+    <section className={`ins-section ins-disc${open ? ' open' : ''}`} data-testid={testId}>
+      <h3 className="ins-head">
+        <button type="button" className="er-disc" aria-expanded={open} aria-controls={id} onClick={() => setOpen((o) => !o)} data-testid={testId ? `${testId}-toggle` : undefined}>
+          {title}
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m6 9 6 6 6-6" />
+          </svg>
+        </button>
+      </h3>
+      <div id={id} className="ins-disc-body" hidden={!open}>
+        {children}
+      </div>
     </section>
   )
 }

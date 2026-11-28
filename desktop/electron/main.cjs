@@ -1,5 +1,5 @@
 'use strict'
-const { app, BrowserWindow, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, nativeTheme } = require('electron')
 const { spawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -166,7 +166,9 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
-    backgroundColor: '#000000',
+    // The window paints before the renderer: match the system appearance, the
+    // renderer's default theme (F2.5b), so a light system shows no black flash.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#FFFFFF',
     title: 'Tarmind',
     // Linux and Windows window/taskbar icon; ignored on macOS (see app.dock below).
     ...(winIcon ? { icon: winIcon } : {}),
