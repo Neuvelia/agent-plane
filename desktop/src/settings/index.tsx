@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObje
 import type { MessageKey } from '../i18n'
 import { useI18n } from '../i18n/context'
 import { AboutPane } from './about'
+import { activeGroup, isAtEnd } from './activeGroup'
 import { AgentsPane } from './agents'
 import { EngineGroup, ExecutionGroup, GeneralGroup } from './groups'
 import { SoonTag } from './parts'
@@ -156,28 +157,49 @@ function useMarker(nav: RefObject<HTMLElement | null>, active: SectionId, locale
 
 /**
  * While the main pane shows, the visible group nearest the top of the view is
- * the active section. Positions are read when the observer reports, not when a
- * group first crossed, so they are current. Paused briefly after a click so a
- * smooth scroll does not flicker through the groups it passes. Without
- * IntersectionObserver it does nothing.
+ * the active section; at the end of the page, the last group in view (see
+ * `activeGroup`). Positions are read when the observer reports or the page
+ * scrolls, not when a group first crossed, so they are current. Paused briefly
+ * after a click so a smooth scroll does not flicker through the groups it
+ * passes. Without IntersectionObserver it does nothing.
  */
 function useScrollSpy(enabled: boolean, lock: RefObject<number>, setActive: (id: SectionId) => void) {
   useEffect(() => {
     if (!enabled || typeof IntersectionObserver === 'undefined') return
-    const visible = new Set<HTMLElement>()
+    const groups = [...document.querySelectorAll<HTMLElement>('.st [data-group]')]
+    const scroller = document.getElementById('content')
+    const inBand = new Set<HTMLElement>()
+    const update = () => {
+      if (performance.now() < (lock.current ?? 0)) return
+      const atEnd = scroller !== null && isAtEnd(scroller)
+      const shown = atEnd ? groups.filter((g) => inViewport(g, scroller)) : groups.filter((g) => inBand.has(g))
+      const id = activeGroup(
+        shown.map((g) => ({ id: (g.dataset.group ?? 'general') as SectionId, top: g.getBoundingClientRect().top })),
+        atEnd,
+      )
+      if (id) setActive(id)
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
-          if (e.isIntersecting) visible.add(e.target as HTMLElement)
-          else visible.delete(e.target as HTMLElement)
+          if (e.isIntersecting) inBand.add(e.target as HTMLElement)
+          else inBand.delete(e.target as HTMLElement)
         }
-        if (performance.now() < (lock.current ?? 0) || visible.size === 0) return
-        const top = [...visible].map((g) => ({ g, y: g.getBoundingClientRect().top })).sort((a, b) => a.y - b.y)[0]!.g
-        setActive((top.dataset.group ?? 'general') as SectionId)
+        update()
       },
       { rootMargin: '0px 0px -55% 0px' },
     )
-    document.querySelectorAll<HTMLElement>('.st [data-group]').forEach((g) => observer.observe(g))
-    return () => observer.disconnect()
+    groups.forEach((g) => observer.observe(g))
+    scroller?.addEventListener('scroll', update, { passive: true })
+    return () => {
+      observer.disconnect()
+      scroller?.removeEventListener('scroll', update)
+    }
   }, [enabled, lock, setActive])
+}
+
+function inViewport(group: HTMLElement, scroller: HTMLElement): boolean {
+  const g = group.getBoundingClientRect()
+  const view = scroller.getBoundingClientRect()
+  return g.bottom > view.top && g.top < view.bottom
 }

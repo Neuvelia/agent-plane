@@ -1086,6 +1086,16 @@ async function startDemo(app, page) {
     await page.click('[data-testid="settings-nav-engine"]')
     await page.waitForFunction(() => document.activeElement?.id === 'st-engine-h')
     assert.equal(await page.getAttribute('[data-testid="settings-nav-engine"]', 'aria-current'), 'true')
+    // Scrolled by hand to the end, the short last group is the active one, once the click's lock has expired.
+    await page.click('[data-testid="settings-nav-general"]')
+    await page.waitForFunction(() => document.querySelector('[data-testid="settings-nav-general"]')?.getAttribute('aria-current') === 'true')
+    // Each poll nudges the scroll position, so a scroll event arrives after the lock expires (no sleep).
+    await page.waitForFunction(() => {
+      const m = document.getElementById('content')
+      m.scrollTop = m.scrollTop > 0 ? 0 : m.scrollHeight
+      m.scrollTop = m.scrollHeight
+      return document.querySelector('[data-testid="settings-nav-engine"]')?.getAttribute('aria-current') === 'true'
+    })
     await page.fill('[data-testid="values-redact-env"]', '')
     await app.close()
 
