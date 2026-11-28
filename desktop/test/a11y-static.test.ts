@@ -38,6 +38,9 @@ describe('focus and motion', () => {
   it('removes all transitions and animations under prefers-reduced-motion', () => {
     expect(styles).toMatch(/@media \(prefers-reduced-motion:reduce\)\{\*\{transition:none!important;animation:none!important\}\}/)
   })
+  it('also removes transitions and animations of pseudo-elements, which `*` does not match', () => {
+    expect(styles).toMatch(/@media \(prefers-reduced-motion:reduce\)\{\*::before,\*::after\{transition:none!important;animation:none!important\}\}/)
+  })
   it('has no scroll-behavior smooth that the reduced-motion rule would not cover', () => {
     expect(styles).not.toMatch(/scroll-behavior:\s*smooth/)
   })

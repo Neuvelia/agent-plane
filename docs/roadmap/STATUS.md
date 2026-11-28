@@ -157,12 +157,13 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | [F1.4b](../../docs/features/F1.4b-test-command-loop-check.md) | Test command as a loop check | derived | F1.4 | done | ADR-0042 zaakceptowany przez właściciela 2026-11-27; nowy rodzaj check od schema 15 (ADR-0044). |
 | [F1.6a](../../docs/features/F1.6a-shell-loop.md) | Shell node correction loop | derived | F1.6 | done |  |
 | [F2.3-E6](../../docs/features/F2.3-E6-recorded-run-values.md) | Recorded run values (value_recorded) | derived | F2.3 | done |  |
+| [F2.1b](../../docs/features/F2.1b-graph-editor-v2.md) | Graph editor v2 (desktop) | derived | F2.1 | done |  |
 | [F2.5a](../../docs/features/F2.5a-desktop-redesign.md) | Desktop redesign (Tarmind design system, PL/EN) | derived | F2.5 | done | Scope creep względem roadmapy (prezentacja), patrz audyt II.2.2. |
 | [F2.5b](../../docs/features/F2.5b-inbox-redesign.md) | Inbox: triage queue (desktop redesign, step 1) | derived | F2.5 | done | Presentation only; the remaining screens of the Tarmind Dashboard UX canvas follow as separate steps. F2.10 is partial only for its own panel gaps (no blast radius or diff content, #187; on_reject continue limits); the Inbox uses the F2.10 decision rules and approval context that are met and inherits those gaps, it adds none. ADR-0046 awaits owner acceptance. |
 | [F2.5c](../../docs/features/F2.5c-profile-menu-and-light-theme.md) | Profile menu, light theme, Keyboard shortcuts and About (desktop) | derived | F2.5 | done | Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon. |
 | [F2.5d](../../docs/features/F2.5d-command-palette.md) | Command palette and global shortcuts (desktop) | derived | F2.5 | done | Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety. |
 | [F2.5e](../../docs/features/F2.5e-new-run-preflight.md) | New run with preflight (desktop redesign) | derived | F2.5 | done | Presentation only; Options are shown disabled until the API accepts them. |
-| [F2.5f](../../docs/features/F2.5f-graph-editor-v2.md) | Graph editor v2 (desktop) | derived | F2.5 | done |  |
+| [F2.5f](../../docs/features/F2.5f-settings-redesign.md) | Settings redesign (design canvas) | derived | F2.5 | done | Rows without a contract are visible but disabled; enabling them needs F2.8b (diffs), F2.14 (Codex path) and a desktop engine-options preference. |
 | F2.8a | Attempt compare (desktop) | derived | F2.8 | done |  |
 | F2.8b | Attempt diff capture and display | derived | F2.8 | in_progress | Silnik (--record-diffs, attempt_diff) gotowy; panel w desktopie nie. |
 | [F3.4a](../../docs/features/F3.4a-windows-process-tree-termination.md) | Windows process-tree termination | derived | F3.4 | in_progress | proctree_windows.go istnieje, nigdy nie uruchomiony na Windows. |

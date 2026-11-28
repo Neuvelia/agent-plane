@@ -2,7 +2,7 @@
 
 **Status:** proposed
 **Date:** 2026-11-27
-**Features:** F2.5f (graph editor v2). Builds on the light theme of F2.5c (ADR-0047).
+**Features:** F2.1b (graph editor v2). Builds on the light theme of F2.5c (ADR-0047).
 
 ## Context
 

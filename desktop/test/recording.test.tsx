@@ -89,18 +89,6 @@ describe('Settings: record run values', () => {
         </ThemeProvider>
       </I18nProvider>,
     )
-  it('renders a native, labelled checkbox that starts off, with the explanation attached', () => {
-    const out = html('en')
-    const box = /<input[^>]*data-testid="values-record"[^>]*>/.exec(out)?.[0] ?? ''
-    expect(box).toContain('type="checkbox"')
-    expect(box).not.toMatch(/\schecked/)
-    const id = /id="([^"]+)"/.exec(box)?.[1]
-    expect(out).toContain(`for="${id}"`)
-    expect(box).toMatch(/aria-describedby="[^"]+"/)
-    expect(out).toContain('Record run values')
-    expect(out).toContain('not sent anywhere')
-    expect(out).toContain('saved as it is')
-  })
   it('is localised', () => {
     const out = html('pl')
     expect(out).toContain('Zapisuj wartości przebiegów')

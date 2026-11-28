@@ -404,7 +404,7 @@ export const HintUnboundInputOptions: S = story(hinted(mixedOpen), async (root) 
   await wait(200)
 })
 
-// ---- Graph editor v2 (F2.5f): the artboards, on the recorded graph they show ----------
+// ---- Graph editor v2 (F2.1b): the artboards, on the recorded graph they show ----------
 const fixIssue: GraphStory = { ...base, opened: fixIssueOpen as unknown as OpenResponse, validate: () => fixIssueValidate as unknown as ValidateResponse, recent: [{ id: 'r1', label: 'fix-issue.yaml' }, { id: 'r2', label: 'code-review.yaml' }] }
 const fixIssueError: GraphStory = { ...fixIssue, opened: fixIssueErrorOpen as unknown as OpenResponse, validate: () => fixIssueErrorValidate as unknown as ValidateResponse }
 /** The artboards show the agent step selected and the graph unsaved. */

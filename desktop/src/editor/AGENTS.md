@@ -11,7 +11,7 @@ before changing a document, operation or save flow.
 | Pure draft, history, analysis and run gating state | `doc.ts` |
 | Async open/create/edit/validate/save/run orchestration | `useGraphDocument.ts` |
 | Typed bridge calls and response mapping | `api.ts`, `types.ts`, `hash.ts` |
-| Editor v2 layout: views, banners, inspector slot, drawer and status bar (F2.5f) | `EditorScreen.tsx`, `HeaderBar.tsx`, `SidePanel.tsx`, `IssuesPanel.tsx`, `editor-v2.css` |
+| Editor v2 layout: views, banners, inspector slot, drawer and status bar (F2.1b) | `EditorScreen.tsx`, `HeaderBar.tsx`, `SidePanel.tsx`, `IssuesPanel.tsx`, `editor-v2.css` |
 | Graph menu, step menu, dock and view controls; menu keyboard and motion | `GraphMenu.tsx`, `StepMenu.tsx`, `CanvasChrome.tsx`, `Menu.tsx` (presence and key model shared with the profile menu: `../ui/presence.ts`, `../ui/menuKeys.ts`) |
 | Step cards and edge labels: what a card says about a step | `StepCard.tsx`, `cardModel.ts`, `StepEdge.tsx` |
 | "New graph" picker (Blank or a bundled template, F2.12) | `TemplatePicker.tsx`, `../templates.ts` |
@@ -73,7 +73,7 @@ before changing a document, operation or save flow.
   read-only reasons and actionable conflict errors. Stories use recorded Go
   API responses alongside controlled failure cases through the in-memory
   bridge.
-- Editor v2 (F2.5f, ADR-0050) is presentation only. A step card is a summary read
+- Editor v2 (F2.1b, ADR-0050) is presentation only. A step card is a summary read
   from the definition, the descriptors and the diagnostics (`cardModel.ts`); it
   never branches on a node type to decide anything. Controls without engine or
   file-grant support (Test this step, Run from this step, comments, copy and
