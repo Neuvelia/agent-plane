@@ -162,13 +162,14 @@ ipcMain.on('ap:subscribe', (e, subId, runId) => void stream(e.sender, subId, Str
 ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.controller.abort())
 
 function createWindow() {
+  const winIcon = windowIcon(process.platform)
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
     backgroundColor: '#000000',
     title: 'Tarmind',
     // Linux and Windows window/taskbar icon; ignored on macOS (see app.dock below).
-    ...(windowIcon(process.platform) ? { icon: windowIcon(process.platform) } : {}),
+    ...(winIcon ? { icon: winIcon } : {}),
     // macOS: hide the native title bar so the window is black edge to edge. The
     // renderer's global bar becomes the drag area (class "mac" in styles.css).
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 16 } } : {}),
