@@ -107,26 +107,6 @@ export function Field({ label, htmlFor, children }: { label: ReactNode; htmlFor:
   )
 }
 
-/** A numbered step of a form: a card whose title carries its number. */
-export function Step({ n, title, action, children, testId }: { n: number; title: ReactNode; action?: ReactNode; children?: ReactNode; testId?: string }) {
-  return (
-    <Card
-      testId={testId}
-      title={
-        <span className="step-title">
-          <span className="step-no" aria-hidden="true">
-            {n}
-          </span>
-          {title}
-        </span>
-      }
-      action={action}
-    >
-      {children}
-    </Card>
-  )
-}
-
 /** Label/value rows. Values are machine output (ids, paths): shown literally, in mono. */
 export function KeyValue({ rows }: { rows: { name: string; value: ReactNode }[] }) {
   return (

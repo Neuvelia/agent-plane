@@ -1,8 +1,8 @@
-# ADR-0049 - Graph editor v2 layout
+# ADR-0050 - Graph editor v2 layout
 
 **Status:** proposed
 **Date:** 2026-11-27
-**Features:** F2.5e (graph editor v2). Builds on the light theme of F2.5c (ADR-0047).
+**Features:** F2.5f (graph editor v2). Builds on the light theme of F2.5c (ADR-0047).
 
 ## Context
 

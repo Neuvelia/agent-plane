@@ -11,7 +11,7 @@ const path = require('node:path')
 const root = path.resolve(__dirname, '..', '..')
 const out = path.resolve(__dirname, '..', 'test', 'fixtures')
 
-const FIX_ISSUE = `# Fix an issue: read it, let an agent fix it in a bounded loop, check the change, ask a person.
+const EDITOR_V2 = `# Fix an issue: read it, let an agent fix it in a bounded loop, check the change, ask a person.
 schema_version: 0
 id: fix-issue
 name: Fix an issue
@@ -190,10 +190,10 @@ edges:
   - {from: a.outputs.stdout, to: b.inputs.text}
 outputs: {}
 `,
-  // F2.5e: the graph of the "Graph editor v2" artboards: shell -> agent -> gate -> human.
-  'fix-issue': FIX_ISSUE,
+  // F2.5f: the graph of the "Graph editor v2" artboards: shell -> agent -> gate -> human.
+  'editor-v2': EDITOR_V2,
   // the same graph with fix's required input left unconnected (the "error blocks run" artboard)
-  'fix-issue-error': FIX_ISSUE.replace('  - {from: read-issue.outputs.issue, to: fix.inputs.issue}\n', ''),
+  'editor-v2-error': EDITOR_V2.replace('  - {from: read-issue.outputs.issue, to: fix.inputs.issue}\n', ''),
   // what a new graph starts as
   empty: 'schema_version: 0\nid: new-graph\ninputs: {}\nnodes: {}\nedges: []\noutputs: {}\n',
   // YAML the engine cannot read
@@ -223,11 +223,19 @@ outputs: {}
     const template = fs.readFileSync(path.join(root, '.agents', 'templates', 'agent-scoped-approval.yaml'), 'utf8').replace(/^id: agent-scoped-approval$/m, 'id: new-graph')
     if (process.env.AP_RECORD !== 'editor-v2') write('graph-validate-template-agent-scoped-approval.json', (await call('POST', '/graphs/validate', { text: template })).body)
     if (process.env.AP_RECORD === 'templates') return
+    // F2.5e: New run's answers for a saved graph with an Agent node and a required input
+    // (the fix-issue template with its workspace filled). AP_RECORD=newrun records only this.
+    const fixIssue = path.join(dir, 'fix-issue.yaml')
+    fs.writeFileSync(fixIssue, fs.readFileSync(path.join(root, '.agents', 'templates', 'fix-issue.yaml'), 'utf8').replace(/^(\s*workspace:) "".*$/m, '$1 /work/repo'))
+    const fixGrant = (await call('POST', '/graphs/grants', { path: fixIssue, mode: 'open' })).body.grant
+    write('graph-open-fix-issue.json', (await call('POST', '/graphs/open', { grant: fixGrant })).body)
+    write('graph-validate-fix-issue.json', (await call('POST', '/graphs/validate', { grant: fixGrant })).body)
+    if (process.env.AP_RECORD === 'newrun') return
     // F2.11: this machine's capability report; stories derive the other states from it.
     if (process.env.AP_RECORD !== 'editor-v2') fs.writeFileSync(path.join(out, 'capabilities-linux.json'), JSON.stringify((await call('GET', '/capabilities')).body, null, 2) + '\n')
     if (process.env.AP_RECORD === 'capabilities') return
-    // AP_RECORD=editor-v2 records only the graphs of the editor v2 artboards (F2.5e).
-    const only = process.env.AP_RECORD === 'editor-v2' ? ['fix-issue', 'fix-issue-error'] : null
+    // AP_RECORD=editor-v2 records only the graphs of the editor v2 artboards (F2.5f).
+    const only = process.env.AP_RECORD === 'editor-v2' ? ['editor-v2', 'editor-v2-error'] : null
     for (const [name, text] of Object.entries(GRAPHS).filter(([n]) => !only || only.includes(n))) {
       const file = path.join(dir, `${name}.yaml`)
       fs.writeFileSync(file, text)

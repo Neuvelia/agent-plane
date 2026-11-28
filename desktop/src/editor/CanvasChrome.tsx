@@ -3,7 +3,7 @@ import { useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import { Glyph, KindGlyph } from './glyphs'
 import { NODE_TYPES } from './layout'
-import { MOD, Menu, MenuItem } from './Menu'
+import { MOD, Menu, MenuItem, focusForClick, focusForKey, type MenuFocus } from './Menu'
 
 // The chrome floating over the canvas (graph editor v2): view controls at the
 // bottom left (zoom, fit, auto-layout, minimap) and tools in a dock at the bottom
@@ -58,6 +58,11 @@ export function Dock({ tool, onTool, nodes, selected, onPick, onAdd, readOnly }:
   const findRef = useRef<HTMLButtonElement>(null)
   const addRef = useRef<HTMLButtonElement>(null)
   const [open, setOpen] = useState<'find' | 'add' | null>(null)
+  const [addFocus, setAddFocus] = useState<MenuFocus>('container')
+  const openAdd = (focus: MenuFocus) => {
+    setAddFocus(focus)
+    setOpen('add')
+  }
   const [query, setQuery] = useState('')
   const close = (refocus?: boolean) => {
     const which = open
@@ -78,11 +83,26 @@ export function Dock({ tool, onTool, nodes, selected, onPick, onAdd, readOnly }:
         <Glyph name="comment" size={18} />
       </button>
       <span className="er-vr" />
-      <button ref={findRef} type="button" className={`btn ghost ib${open === 'find' ? ' on' : ''}`} aria-haspopup="menu" aria-expanded={open === 'find'} aria-label={t('editor.v2.find')} title={`${t('editor.v2.find')} (${MOD}F)`} onClick={() => (open === 'find' ? close() : setOpen('find'))} data-testid="find-step">
+      <button ref={findRef} type="button" className={`btn ghost ib${open === 'find' ? ' on' : ''}`} aria-haspopup="menu" aria-expanded={open === 'find'} aria-label={t('editor.v2.find')} title={`${t('editor.v2.find')} (${MOD}F)`} onClick={() => (open === 'find' ? close() : setOpen('find'))}
+        onKeyDown={(e) => {
+          if (open === 'find' || !focusForKey(e.key)) return
+          e.preventDefault()
+          setOpen('find')
+        }}
+        data-testid="find-step"
+      >
         <Glyph name="search" size={18} />
       </button>
       <span className="er-vr" />
-      <button ref={addRef} type="button" className={`btn${open === 'add' ? ' open' : ''}`} aria-haspopup="menu" aria-expanded={open === 'add'} disabled={readOnly} onClick={() => (open === 'add' ? close() : setOpen('add'))} data-testid="add-step">
+      <button ref={addRef} type="button" className={`btn${open === 'add' ? ' open' : ''}`} aria-haspopup="menu" aria-expanded={open === 'add'} disabled={readOnly} onClick={(e) => (open === 'add' ? close() : openAdd(focusForClick(e)))}
+        onKeyDown={(e) => {
+          const focus = open === 'add' ? null : focusForKey(e.key)
+          if (!focus) return
+          e.preventDefault()
+          openAdd(focus)
+        }}
+        data-testid="add-step"
+      >
         <Glyph name="plus" size={14} width={2.4} />
         {t('editor.v2.addStep')}
       </button>
@@ -125,7 +145,7 @@ export function Dock({ tool, onTool, nodes, selected, onPick, onAdd, readOnly }:
           ))}
         </div>
       </Menu>
-      <Menu open={open === 'add'} anchor={addRef.current ? { kind: 'element', el: addRef.current, align: 'end' } : null} onClose={(o) => close(o?.refocus)} label={t('editor.v2.addStep')} width={300} testId="add-menu">
+      <Menu open={open === 'add'} anchor={addRef.current ? { kind: 'element', el: addRef.current, align: 'end' } : null} onClose={(o) => close(o?.refocus)} label={t('editor.v2.addStep')} width={300} initialFocus={addFocus} testId="add-menu">
         {NODE_TYPES.map((type) => (
           <MenuItem
             key={type}

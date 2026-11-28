@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-// The colour tokens the graph editor v2 adds (F2.5e, ADR-0049): a value for every
+// The colour tokens the graph editor v2 adds (F2.5f, ADR-0050): a value for every
 // theme, and text pairs that reach 4.5:1 in both.
 
 const json = JSON.parse(readFileSync(new URL('../src/design/tokens.json', import.meta.url), 'utf8'))
@@ -19,10 +19,10 @@ const ratio = (a: string, b: string) => {
 }
 
 describe('graph editor v2 tokens', () => {
-  it('every new token has a dark and a light value [F2.5e-AC4]', () => {
+  it('every new token has a dark and a light value [F2.5f-AC4]', () => {
     for (const n of NEW) for (const theme of ['dark', 'light']) expect(value(n, theme), `${n}/${theme}`).toBeTruthy()
   })
-  it('primary text and brand text reach 4.5:1 in both themes [F2.5e-AC4]', () => {
+  it('primary text and brand text reach 4.5:1 in both themes [F2.5f-AC4]', () => {
     for (const theme of ['dark', 'light']) {
       expect(ratio(value('primary-fg', theme), value('primary-bg', theme)), theme).toBeGreaterThanOrEqual(4.5)
       expect(ratio(value('primary-fg', theme), value('primary-hover', theme)), theme).toBeGreaterThanOrEqual(4.5)

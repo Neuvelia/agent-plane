@@ -3,7 +3,7 @@ import type { NodeStatus } from '../reducer'
 
 // Small 12px status shapes for dense rows (F2.5b). Each shape differs, not only
 // its colour, and is decorative: the row always carries the status in words.
-export type GlyphKind = 'ok' | 'bad' | 'paused' | 'approval' | 'running' | 'idle'
+export type GlyphKind = 'ok' | 'bad' | 'warn' | 'paused' | 'approval' | 'running' | 'idle'
 
 const SHAPES: Record<GlyphKind, ReactNode> = {
   ok: <path d="M2 6.5 5 9.5 10 3" fill="none" stroke="var(--ok)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />,
@@ -14,6 +14,8 @@ const SHAPES: Record<GlyphKind, ReactNode> = {
       <rect x="7.1" y="2" width="2.4" height="8" rx=".8" fill="var(--warn)" />
     </>
   ),
+  // A warning that does not block (F2.5e preflight): a triangle, not the approval diamond.
+  warn: <path d="M6 1 11.2 10.5H.8z" fill="var(--warn)" />,
   approval: <path d="M6 1 11 6 6 11 1 6z" fill="var(--warn)" />,
   running: (
     <g className="glyph-spin">

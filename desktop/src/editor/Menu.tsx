@@ -1,30 +1,30 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { useI18n } from '../i18n/context'
+import { modifierLabel, moveFocus, openFromButton } from '../ui/menuKeys'
+import { usePresence } from '../ui/presence'
 import { Glyph, type GlyphName } from './glyphs'
 
 // Menus and popovers of the graph editor v2. A menu is anchored to its trigger
 // (or to a point, for a right-click), opens with a short scale-and-fade, closes
 // with the reverse, and owns its keyboard: arrows move, Home/End jump, Escape and
-// Tab close and return focus to the trigger. Nothing here decides an action.
+// Tab close and return focus to the trigger. Presence (exit animation, reduced
+// motion) and the WAI-ARIA key model are the shared ones of the profile menu
+// (`ui/presence.ts`, `ui/menuKeys.ts`). Nothing here decides an action.
 
-/** Keeps a closing element mounted for its exit animation; `phase` drives the CSS. */
-export function usePresence(open: boolean, exitMs = 120): { mounted: boolean; phase: 'enter' | 'exit' } {
-  const [mounted, setMounted] = useState(open)
-  useEffect(() => {
-    if (open) {
-      setMounted(true)
-      return
-    }
-    const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (reduce) {
-      setMounted(false)
-      return
-    }
-    const id = setTimeout(() => setMounted(false), exitMs)
-    return () => clearTimeout(id)
-  }, [open, exitMs])
-  return { mounted: open || mounted, phase: open ? 'enter' : 'exit' }
+/** The exit animation of `.v2-menu.closing` and `.v2-float.closing` (editor-v2.css). */
+export const MENU_EXIT_MS = 110
+
+/** Where focus lands when a menu opens. A keyboard opening focuses an item; a pointer
+ *  opening focuses the menu box, so no item shows a focus ring; a find menu its field. */
+export type MenuFocus = 'first' | 'last' | 'container' | 'input'
+
+/** The focus a trigger's click asks for: a keyboard activation (Enter, Space) reports `detail` 0. */
+export const focusForClick = (e: { detail: number }): MenuFocus => (e.detail === 0 ? 'first' : 'container')
+
+/** Arrow keys on a closed trigger open its menu on the first or last item (`openFromButton`). */
+export function focusForKey(key: string): MenuFocus | null {
+  return openFromButton(key)
 }
 
 export type Anchor = { kind: 'element'; el: HTMLElement; align?: 'start' | 'end' } | { kind: 'point'; x: number; y: number }
@@ -56,16 +56,6 @@ function place(anchor: Anchor, w: number, h: number): CSSProperties {
   return { left: x, top: y, transformOrigin: `${anchor.kind === 'element' && anchor.align === 'end' ? 'right' : 'left'} ${originY}` }
 }
 
-// Whether the person is using the keyboard: a menu opened by a click does not draw a focus ring on its first item.
-let modality: 'keyboard' | 'pointer' = 'pointer'
-let watching = false
-function watchModality() {
-  if (watching || typeof document === 'undefined') return
-  watching = true
-  document.addEventListener('keydown', () => (modality = 'keyboard'), true)
-  document.addEventListener('pointerdown', () => (modality = 'pointer'), true)
-}
-
 const items = (root: HTMLElement | null) => [...(root?.querySelectorAll<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"]),input') ?? [])]
 
 interface MenuProps {
@@ -77,15 +67,14 @@ interface MenuProps {
   id?: string
   testId?: string
   children: ReactNode
-  /** Where focus lands on open: the first item (keyboard opening) or the find field. */
-  initialFocus?: 'first' | 'input'
+  /** Where focus lands on open (see MenuFocus). */
+  initialFocus?: MenuFocus
   /** A find field (and its "no match" line) above the items; it is not a menu item. */
   search?: ReactNode
 }
 
-export function Menu({ open, anchor, onClose, label, width, id, testId, children, initialFocus = 'first', search }: MenuProps) {
-  const { mounted, phase } = usePresence(open)
-  watchModality()
+export function Menu({ open, anchor, onClose, label, width, id, testId, children, initialFocus = 'container', search }: MenuProps) {
+  const { mounted, phase } = usePresence(open, MENU_EXIT_MS)
   const ref = useRef<HTMLDivElement>(null)
   const [style, setStyle] = useState<CSSProperties>({ left: -9999, top: -9999 })
   const last = useRef<Anchor | null>(null)
@@ -95,7 +84,8 @@ export function Menu({ open, anchor, onClose, label, width, id, testId, children
     if (!open || !ref.current || !last.current) return
     const r = ref.current.getBoundingClientRect()
     setStyle(place(last.current, width, r.height))
-    const target = initialFocus === 'input' ? ref.current.querySelector<HTMLElement>('input') : modality === 'keyboard' ? items(ref.current)[0] : ref.current
+    const list = items(ref.current)
+    const target = initialFocus === 'input' ? ref.current.querySelector<HTMLElement>('input') : initialFocus === 'first' ? list[0] : initialFocus === 'last' ? list[list.length - 1] : ref.current
     target?.focus({ preventScroll: true })
   }, [open, width, initialFocus])
 
@@ -140,27 +130,18 @@ export function Menu({ open, anchor, onClose, label, width, id, testId, children
   function onKeyDown(e: KeyboardEvent) {
     const list = items(ref.current)
     const at = list.indexOf(document.activeElement as HTMLElement)
-    const move = (i: number) => list[(i + list.length) % list.length]?.focus()
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' || e.key === 'Tab') {
       e.preventDefault()
-      e.stopPropagation()
+      if (e.key === 'Escape') e.stopPropagation()
       onClose({ refocus: true })
-    } else if (e.key === 'Tab') {
-      e.preventDefault()
-      onClose({ refocus: true })
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      move(at + 1)
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      move(at < 0 ? list.length - 1 : at - 1)
-    } else if (e.key === 'Home' && (e.target as HTMLElement).tagName !== 'INPUT') {
-      e.preventDefault()
-      move(0)
-    } else if (e.key === 'End' && (e.target as HTMLElement).tagName !== 'INPUT') {
-      e.preventDefault()
-      move(list.length - 1)
+      return
     }
+    // Home and End belong to the find field while it has focus.
+    if ((e.key === 'Home' || e.key === 'End') && (e.target as HTMLElement).tagName === 'INPUT') return
+    const next = moveFocus(e.key, at, list.length)
+    if (next === null) return
+    e.preventDefault()
+    list[next]?.focus()
   }
 }
 
@@ -221,5 +202,5 @@ export const MenuHeading = ({ children }: { children: ReactNode }) => (
   </div>
 )
 
-/** Platform modifier for shortcut hints. */
-export const MOD = typeof navigator !== 'undefined' && /Mac/i.test(navigator.platform || navigator.userAgent) ? '⌘' : 'Ctrl'
+/** Platform modifier for shortcut hints, as a key cap: the ⌘ glyph on macOS, Ctrl elsewhere (`modifierLabel`). */
+export const MOD = modifierLabel(typeof navigator === 'undefined' ? '' : navigator.platform || navigator.userAgent) === 'Cmd' ? '⌘' : 'Ctrl'

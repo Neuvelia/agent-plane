@@ -8,7 +8,8 @@ import { Dock, ViewControls, type Tool } from './CanvasChrome'
 import { listConnections, verdictsOf } from './connections'
 import type { DocState } from './doc'
 import { EmptyGraph } from './EmptyGraph'
-import { usePresence } from './Menu'
+import { usePresence } from '../ui/presence'
+import { MENU_EXIT_MS, type MenuFocus } from './Menu'
 import { badgesOf, type FocusReq } from './issues'
 import { NODE_W, clearSpot, makeRef, parseRef, placements, removalImpact, suggestId, type Point } from './layout'
 import type { SelectionOwner } from './selection'
@@ -104,9 +105,9 @@ function Inner({ g, doc, focusReq, selection, onYaml }: CanvasProps) {
   const [focusPort, setFocusPort] = useState<string | null>(null)
   // A graph input binding has no edge to draw: its target node is the one outlined.
   const outlined = sel?.kind === 'node' ? sel.id : sel?.kind === 'binding' ? (parseRef(sel.to)?.node ?? null) : null
-  const openMenu = useCallback((id: string, el: HTMLElement) => {
+  const openMenu = useCallback((id: string, el: HTMLElement, focus: MenuFocus) => {
     setSel({ kind: 'node', id })
-    setMenu((m) => (m?.id === id && m.anchor.kind === 'element' ? null : { id, anchor: { kind: 'element', el, align: 'start' } }))
+    setMenu((m) => (m?.id === id && m.anchor.kind === 'element' ? null : { id, anchor: { kind: 'element', el, align: 'start' }, focus }))
   }, [setSel])
   const ctx = useMemo<CanvasState>(
     () => ({ def, nodeTypes: doc.analysis.nodeTypes, selectedNode: outlined, badges, focusPort, readOnly, reasons, menuFor: menu?.id ?? null, openMenu }),
@@ -276,7 +277,7 @@ function Inner({ g, doc, focusReq, selection, onYaml }: CanvasProps) {
 
   const empty = !!def && Object.keys(def.nodes).length === 0
   const floatOpen = (mode?.kind === 'rename' || mode?.kind === 'delete' || mode?.kind === 'connect') && !!selectedId
-  const float = usePresence(floatOpen)
+  const float = usePresence(floatOpen, MENU_EXIT_MS)
   const banner = notice ?? (block ? (block === 'parse' ? t('editor.readonly.parse', { message: doc.analysis.parseError ?? '' }) : t('editor.readonly.anchors')) : null)
 
   return (
@@ -306,7 +307,7 @@ function Inner({ g, doc, focusReq, selection, onYaml }: CanvasProps) {
             onNodeContextMenu={(e, n) => {
               e.preventDefault()
               setSel({ kind: 'node', id: n.id })
-              setMenu({ id: n.id, anchor: { kind: 'point', x: e.clientX, y: e.clientY } })
+              setMenu({ id: n.id, anchor: { kind: 'point', x: e.clientX, y: e.clientY }, focus: 'container' })
             }}
             onEdgeClick={(_, e) => {
               const a = e.sourceHandle?.startsWith('out:') ? makeRef(e.source, 'outputs', e.sourceHandle.slice(4)) : ''

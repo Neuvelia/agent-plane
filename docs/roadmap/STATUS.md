@@ -161,7 +161,8 @@ Note: Brak resume (F3.3), artifact store (F3.5), policy (F3.9); timeouty nieegze
 | [F2.5b](../../docs/features/F2.5b-inbox-redesign.md) | Inbox: triage queue (desktop redesign, step 1) | derived | F2.5 | done | Presentation only; the remaining screens of the Tarmind Dashboard UX canvas follow as separate steps. F2.10 is partial only for its own panel gaps (no blast radius or diff content, #187; on_reject continue limits); the Inbox uses the F2.10 decision rules and approval context that are met and inherits those gaps, it adds none. ADR-0046 awaits owner acceptance. |
 | [F2.5c](../../docs/features/F2.5c-profile-menu-and-light-theme.md) | Profile menu, light theme, Keyboard shortcuts and About (desktop) | derived | F2.5 | done | Design canvas: Profile menu, Profile menu · light, Shortcuts, About and Soon. |
 | [F2.5d](../../docs/features/F2.5d-command-palette.md) | Command palette and global shortcuts (desktop) | derived | F2.5 | done | Prezentacja (jak F2.5a): bez zmian API, zdarzeń i store; dodaje dev-zależność jsdom do testów DOM palety. |
-| [F2.5e](../../docs/features/F2.5e-graph-editor-v2.md) | Graph editor v2 (desktop) | derived | F2.5 | done |  |
+| [F2.5e](../../docs/features/F2.5e-new-run-preflight.md) | New run with preflight (desktop redesign) | derived | F2.5 | done | Presentation only; Options are shown disabled until the API accepts them. |
+| [F2.5f](../../docs/features/F2.5f-graph-editor-v2.md) | Graph editor v2 (desktop) | derived | F2.5 | done |  |
 | F2.8a | Attempt compare (desktop) | derived | F2.8 | done |  |
 | F2.8b | Attempt diff capture and display | derived | F2.8 | in_progress | Silnik (--record-diffs, attempt_diff) gotowy; panel w desktopie nie. |
 | [F3.4a](../../docs/features/F3.4a-windows-process-tree-termination.md) | Windows process-tree termination | derived | F3.4 | in_progress | proctree_windows.go istnieje, nigdy nie uruchomiony na Windows. |
@@ -219,4 +220,3 @@ Open acceptance criteria of features that are not `not_started` or `deferred`.
 | F3.2 | Testy Windows nie były uruchamiane; run w CLI kontynuuje po błędzie zapisu (poprawka A1 w specu). | ADR-0027 |  |  |
 | F3.4 | Brak flag --run-timeout/--cancel-grace, user_cancel z API/desktopu, Windows (F3.4a) i kryteriów trwałych (D) ze speca. |  | #190 |  |
 | F3.8 | Tylko provider env i Shell nodes; keychain i Agent secret_env odroczone. | ADR-0029 |  |  |
-| F2.5d | Prefiks # dopasowuje też nazwę grafu (wymaganie 4 speca: tylko początek id uruchomienia); decyzja w issue. |  | #218 |  |

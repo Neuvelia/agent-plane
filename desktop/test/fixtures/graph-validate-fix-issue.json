@@ -6,27 +6,78 @@
   "metadata": {
    "layout": {
     "nodes": {
-     "fix": {
-      "x": 286,
+     "approve_fix": {
+      "x": 640,
       "y": 0
      },
-     "read-issue": {
+     "confirm_start": {
       "x": 0,
       "y": 0
      },
-     "review": {
-      "x": 598,
-      "y": 260
+     "fix": {
+      "x": 320,
+      "y": 0
      },
-     "tests": {
-      "x": 598,
+     "record": {
+      "x": 960,
       "y": 0
      }
     }
    }
   },
-  "inputs": {},
+  "inputs": {
+   "issue": {
+    "type": "string",
+    "required": true
+   }
+  },
   "nodes": {
+   "approve_fix": {
+    "type": "human",
+    "inputs": {
+     "changed_files": {
+      "type": "json",
+      "required": true
+     },
+     "summary": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "context_inputs": [
+      "summary"
+     ],
+     "prompt": "Review the summary and changed files. Accept the fix? Run your own tests before merging."
+    },
+    "outputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    }
+   },
+   "confirm_start": {
+    "type": "human",
+    "inputs": {
+     "issue": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "context_inputs": [
+      "issue"
+     ],
+     "prompt": "Start the coding agent on this issue? This may use a paid model."
+    },
+    "outputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    }
+   },
    "fix": {
     "type": "agent",
     "loop": {
@@ -40,9 +91,10 @@
       },
       "config": {
        "allowed_paths": [
-        "src/"
+        "src/",
+        "tests/"
        ],
-       "check_id": "scope",
+       "check_id": "reported-scope",
        "input": "candidate",
        "kind": "reported_file_scope"
       }
@@ -55,7 +107,11 @@
      ]
     },
     "inputs": {
-     "issue": {
+     "start": {
+      "type": "string",
+      "required": true
+     },
+     "task": {
       "type": "string",
       "required": true
      }
@@ -63,156 +119,84 @@
     "config": {
      "adapter": "codex",
      "allowed_paths": [
-      "src/"
+      "src/",
+      "tests/"
      ],
-     "task": "Fix the issue below. Change only files under src/. Run the tests before you finish.",
      "workspace": "/work/repo"
     },
     "outputs": {
      "changed_files": {
-      "type": "json",
-      "required": true
+      "type": "json"
      },
      "summary": {
-      "type": "string",
-      "required": true
-     }
-    }
-   },
-   "read-issue": {
-    "type": "shell",
-    "config": {
-     "args": [
-      "ISSUE.md"
-     ],
-     "command": "/usr/bin/cat"
-    },
-    "outputs": {
-     "issue": {
-      "type": "string",
-      "required": true
-     },
-     "log": {
       "type": "string"
      }
     }
    },
-   "review": {
-    "type": "human",
+   "record": {
+    "type": "shell",
     "inputs": {
-     "summary": {
-      "type": "string",
-      "required": true
-     },
-     "verdict": {
-      "type": "string",
-      "required": true
-     }
-    },
-    "config": {
-     "context_inputs": [
-      "summary"
-     ],
-     "prompt": "Review the summary and the check. Accept the fix?"
-    },
-    "outputs": {
      "decision": {
       "type": "string",
       "required": true
      }
-    }
-   },
-   "tests": {
-    "type": "gate",
-    "inputs": {
-     "files": {
-      "type": "json",
-      "required": true
-     }
     },
     "config": {
-     "allowed_paths": [
-      "src/"
+     "args": [
+      "fix accepted\n"
      ],
-     "check_id": "tests",
-     "input": "files",
-     "kind": "reported_file_scope"
-    },
-    "outputs": {
-     "verdict": {
-      "type": "string",
-      "required": true
-     }
+     "command": "/usr/bin/printf"
     }
    }
   },
   "edges": [
    {
-    "from": "read-issue.outputs.issue",
-    "to": "fix.inputs.issue"
-   },
-   {
-    "from": "fix.outputs.changed_files",
-    "to": "tests.inputs.files"
+    "from": "confirm_start.outputs.decision",
+    "to": "fix.inputs.start"
    },
    {
     "from": "fix.outputs.summary",
-    "to": "review.inputs.summary"
+    "to": "approve_fix.inputs.summary"
    },
    {
-    "from": "tests.outputs.verdict",
-    "to": "review.inputs.verdict"
+    "from": "fix.outputs.changed_files",
+    "to": "approve_fix.inputs.changed_files"
+   },
+   {
+    "from": "approve_fix.outputs.decision",
+    "to": "record.inputs.decision"
    }
   ],
-  "outputs": {
-   "decision": {
-    "from": "review.outputs.decision"
+  "graph_input_bindings": [
+   {
+    "from": "inputs.issue",
+    "to": "confirm_start.inputs.issue"
+   },
+   {
+    "from": "inputs.issue",
+    "to": "fix.inputs.task"
    }
-  }
+  ],
+  "outputs": {}
  },
- "diagnostics": [
-  {
-   "severity": "warning",
-   "code": "W_DECLARED_OUTPUT_UNUSED",
-   "message": "output \"log\" on node \"read-issue\" is not consumed",
-   "graph_id": "fix-issue",
-   "location": {
-    "node_id": "read-issue",
-    "path": "nodes.read-issue.outputs.log"
-   },
-   "suggestion": "remove the output or bind it to an edge or graph output",
-   "line": 14
-  },
-  {
-   "severity": "warning",
-   "code": "W_EDGE_INPUT_UNUSED",
-   "message": "node \"fix\" does not use input \"issue\", which edge 0 delivers",
-   "graph_id": "fix-issue",
-   "location": {
-    "edge_index": 0,
-    "path": "edges[0].to"
-   },
-   "suggestion": "this node type reads only input \"task\"; deliver the value there; removing the edge would also remove the node's dependency on its source",
-   "line": 57
-  }
- ],
+ "diagnostics": [],
  "node_info": {
+  "approve_fix": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
+  "confirm_start": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
   "fix": {
    "known_type": true,
    "advanced": [],
    "independent_of": []
   },
-  "read-issue": {
-   "known_type": true,
-   "advanced": [],
-   "independent_of": []
-  },
-  "review": {
-   "known_type": true,
-   "advanced": [],
-   "independent_of": []
-  },
-  "tests": {
+  "record": {
    "known_type": true,
    "advanced": [],
    "independent_of": []
@@ -625,184 +609,6 @@
     ]
    }
   },
-  "gate": {
-   "config": [
-    {
-     "id": "gate.config.check_id",
-     "key": "check_id",
-     "kind": "string",
-     "required": true,
-     "max_bytes": 256,
-     "format": "not_blank"
-    },
-    {
-     "id": "gate.config.kind",
-     "key": "kind",
-     "kind": "enum",
-     "required": true,
-     "enum": [
-      "command",
-      "json_predicate",
-      "reported_file_scope"
-     ]
-    },
-    {
-     "id": "gate.config.command",
-     "kind": "group",
-     "fields": [
-      {
-       "id": "gate.config.command.command",
-       "key": "command",
-       "kind": "string",
-       "required": true,
-       "locked": {
-        "value": "/usr/bin/diff",
-        "reason": "a command Gate compares two inputs with /usr/bin/diff only"
-       }
-      },
-      {
-       "id": "gate.config.command.cwd",
-       "key": "cwd",
-       "kind": "string",
-       "required": true,
-       "format": "clean_absolute_path"
-      },
-      {
-       "id": "gate.config.command.left_input",
-       "key": "left_input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "string"
-       ],
-       "input_required": true
-      },
-      {
-       "id": "gate.config.command.right_input",
-       "key": "right_input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "string"
-       ],
-       "input_required": true
-      }
-     ],
-     "requires": [
-      {
-       "key": "kind",
-       "equals": "command"
-      }
-     ]
-    },
-    {
-     "id": "gate.config.json_predicate",
-     "kind": "group",
-     "fields": [
-      {
-       "id": "gate.config.json_predicate.input",
-       "key": "input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "json"
-       ],
-       "input_required": true
-      },
-      {
-       "id": "gate.config.json_predicate.field",
-       "key": "field",
-       "kind": "list",
-       "required": true,
-       "item": {
-        "id": "gate.config.json_predicate.field.item",
-        "kind": "string",
-        "format": "nonempty"
-       }
-      },
-      {
-       "id": "gate.config.json_predicate.operator",
-       "key": "operator",
-       "kind": "enum",
-       "required": true,
-       "enum": [
-        "eq",
-        "ne"
-       ]
-      },
-      {
-       "id": "gate.config.json_predicate.expected",
-       "key": "expected",
-       "kind": "scalar",
-       "required": true,
-       "excludes": [
-        {
-         "key": "expected_json"
-        }
-       ]
-      },
-      {
-       "id": "gate.config.json_predicate.expected_json",
-       "key": "expected_json",
-       "kind": "string",
-       "required": true,
-       "format": "json_scalar",
-       "excludes": [
-        {
-         "key": "expected"
-        }
-       ]
-      }
-     ],
-     "requires": [
-      {
-       "key": "kind",
-       "equals": "json_predicate"
-      }
-     ]
-    },
-    {
-     "id": "gate.config.reported_file_scope",
-     "kind": "group",
-     "fields": [
-      {
-       "id": "gate.config.reported_file_scope.input",
-       "key": "input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "json"
-       ],
-       "input_required": true
-      },
-      {
-       "id": "gate.config.reported_file_scope.allowed_paths",
-       "key": "allowed_paths",
-       "kind": "path_list",
-       "required": true,
-       "item": {
-        "id": "gate.config.reported_file_scope.allowed_paths.item",
-        "kind": "string",
-        "format": "relative_path"
-       }
-      }
-     ],
-     "requires": [
-      {
-       "key": "kind",
-       "equals": "reported_file_scope"
-      }
-     ]
-    }
-   ],
-   "outputs": [
-    {
-     "name": "verdict",
-     "type": "string"
-    }
-   ],
-   "outputs_locked": false
-  },
   "human": {
    "config": [
     {
@@ -1199,5 +1005,5 @@
   }
  },
  "status": "valid",
- "version": "sha256-v0:aae7496904902adc1d7eb98d19b217fe7ea19aea1528d1ebb7fbd5932c63b71b"
+ "version": "sha256-v0:07aad8f7574a0d9d021eccaf0e3fca6a5afd1123ddd094721bbf7e9ede58c115"
 }

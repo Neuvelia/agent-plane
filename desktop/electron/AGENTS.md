@@ -13,6 +13,7 @@ spec before changing an IPC or API boundary.
 | The narrow `window.agentplane` bridge and subscriptions | `preload.cjs` |
 | Native graph dialogs, grant registration and revocation | `graphs.cjs` |
 | Recent graph paths held in main-process user data | `recents.cjs` |
+| Runtime window and dock icon paths per platform (assets in `desktop/build/`) | `appIcon.cjs` |
 | "Record run values" preference and `serve` flags (ADR-0023) | `recording.cjs` |
 | `serve --codex-bin` from an absolute `AGENTPLANE_CODEX_BIN` (F2.11) | `capabilities.cjs` |
 | Renderer bridge types and API wrappers | `desktop/src/types.ts`, `desktop/src/api.ts`, `desktop/src/editor/api.ts` |

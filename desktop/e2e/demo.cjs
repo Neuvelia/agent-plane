@@ -106,8 +106,8 @@ async function startDemo(app, page) {
   await stubOpenDialog(app, graph)
   await page.click('[data-testid="nav-new"]')
   await page.click('[data-testid="choose"]')
-  await page.waitForSelector('[data-testid="preflight-status"]')
-  assert.equal(await page.textContent('[data-testid="preflight-status"]'), 'Ready')
+  // F2.5e: the preflight headline is always shown; choosing the graph checks it.
+  await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run', null, { timeout: 15000 })
   await page.click('[data-testid="run"]')
   await page.waitForSelector('[data-testid="graph-map"]')
 }
@@ -165,7 +165,7 @@ async function startDemo(app, page) {
     await page.waitForSelector('[data-testid="inbox-empty"]')
     await stubOpenDialog(app, graph)
     await page.click('[data-testid="quick-open"]')
-    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run')
     assert.equal(await page.textContent('[data-testid="graph-label"]'), path.basename(graph), 'Open graph on the Inbox lands on New run with the file chosen')
 
     // E1.3: graph files reach the renderer only as grants; the route allowlist is exact.
@@ -236,8 +236,8 @@ async function startDemo(app, page) {
 
     // E2.1: the YAML editor. Open through the real dialog path, type, save with the keyboard.
     const mod = process.platform === 'darwin' ? 'Meta' : 'Control'
-    // roadmap: F2.5e-AC6
-    // Graph editor v2 (F2.5e): while a graph is open, Open, New and Close live in the graph menu on the file name.
+    // roadmap: F2.5f-AC6
+    // Graph editor v2 (F2.5f): while a graph is open, Open, New and Close live in the graph menu on the file name.
     const inGraphMenu = async (id, how = 'click') => {
       if (!(await page.isVisible(`[data-testid="${id}"]`))) await page.click('[data-testid="graph-menu"]')
       if (how === 'key') {
@@ -1221,7 +1221,7 @@ async function startDemo(app, page) {
     await page.click('[data-testid="nav-new"]')
     assert.equal(await page.locator('[data-testid="graph-path"]').count(), 0, 'New run has no field for a path')
     await page.click('[data-testid="choose"]')
-    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready')
+    await page.waitForFunction(() => document.querySelector('[data-testid="preflight-status"]')?.textContent === 'Ready to run')
     assert.equal(await page.textContent('[data-testid="graph-label"]'), 'new-run.yaml')
     assert.equal((await page.content()).includes(work), false, 'the page never shows the path')
     // The file is saved again after it was chosen and checked: the run reads the saved bytes.

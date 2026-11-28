@@ -23,10 +23,10 @@ import editDelete from '../../test/fixtures/graph-edit-delete-demo.json'
 import editMove from '../../test/fixtures/graph-edit-move.json'
 import editRefused from '../../test/fixtures/graph-edit-refused.json'
 import editRename from '../../test/fixtures/graph-edit-rename-demo.json'
-import fixIssueOpen from '../../test/fixtures/graph-open-fix-issue.json'
-import fixIssueValidate from '../../test/fixtures/graph-validate-fix-issue.json'
-import fixIssueErrorOpen from '../../test/fixtures/graph-open-fix-issue-error.json'
-import fixIssueErrorValidate from '../../test/fixtures/graph-validate-fix-issue-error.json'
+import fixIssueOpen from '../../test/fixtures/graph-open-editor-v2.json'
+import fixIssueValidate from '../../test/fixtures/graph-validate-editor-v2.json'
+import fixIssueErrorOpen from '../../test/fixtures/graph-open-editor-v2-error.json'
+import fixIssueErrorValidate from '../../test/fixtures/graph-validate-editor-v2-error.json'
 import type { GraphStory } from '../storybook/bridge'
 import { EditorScreen } from './EditorScreen'
 import type { OpenResponse, ValidateResponse } from './types'
@@ -404,7 +404,7 @@ export const HintUnboundInputOptions: S = story(hinted(mixedOpen), async (root) 
   await wait(200)
 })
 
-// ---- Graph editor v2 (F2.5e): the artboards, on the recorded graph they show ----------
+// ---- Graph editor v2 (F2.5f): the artboards, on the recorded graph they show ----------
 const fixIssue: GraphStory = { ...base, opened: fixIssueOpen as unknown as OpenResponse, validate: () => fixIssueValidate as unknown as ValidateResponse, recent: [{ id: 'r1', label: 'fix-issue.yaml' }, { id: 'r2', label: 'code-review.yaml' }] }
 const fixIssueError: GraphStory = { ...fixIssue, opened: fixIssueErrorOpen as unknown as OpenResponse, validate: () => fixIssueErrorValidate as unknown as ValidateResponse }
 /** The artboards show the agent step selected and the graph unsaved. */

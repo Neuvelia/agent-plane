@@ -1,5 +1,5 @@
 import { useI18n } from '../i18n/context'
-import { MOD, Menu, MenuItem, MenuSep, type Anchor } from './Menu'
+import { MOD, Menu, MenuItem, MenuSep, type Anchor, type MenuFocus } from './Menu'
 
 // The step menu (graph editor v2), on a card's "…" button and on right-click: run
 // actions first, then edit actions with their shortcuts, Delete last. Running one
@@ -9,6 +9,7 @@ import { MOD, Menu, MenuItem, MenuSep, type Anchor } from './Menu'
 export interface StepMenuAnchor {
   id: string
   anchor: Anchor
+  focus: MenuFocus
 }
 
 interface Props {
@@ -32,7 +33,7 @@ export function StepMenu({ open, onClose, readOnly, hasOutputs, onConnect, onRen
     onClose()
   }
   return (
-    <Menu open={open !== null} anchor={open?.anchor ?? null} onClose={close} label={t('editor.v2.stepMenu', { id: open?.id ?? '' })} width={272} id="v2-stepmenu" testId="step-menu">
+    <Menu open={open !== null} anchor={open?.anchor ?? null} onClose={close} label={t('editor.v2.stepMenu', { id: open?.id ?? '' })} width={272} initialFocus={open?.focus} id="v2-stepmenu" testId="step-menu">
       <MenuItem icon="play" label={t('editor.v2.testStep')} soon testId="op-test" />
       <MenuItem icon="runFrom" label={t('editor.v2.runFrom')} soon testId="op-run-from" />
       <MenuSep />

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useI18n } from '../i18n/context'
 import type { DocState } from './doc'
 import { Glyph } from './glyphs'
-import { MOD, Menu, MenuHeading, MenuItem, MenuSep } from './Menu'
+import { MOD, Menu, MenuHeading, MenuItem, MenuSep, focusForKey } from './Menu'
 import type { GraphDocument } from './useGraphDocument'
 
 // The graph menu on the file name (graph editor v2): the button names the current
@@ -49,6 +49,11 @@ export function GraphMenu({ g, doc, onNew }: { g: GraphDocument; doc: DocState; 
         aria-controls="v2-filemenu"
         aria-label={t('editor.v2.graphMenuLabel', { name: doc.label })}
         onClick={() => (open ? close() : setOpen(true))}
+        onKeyDown={(e) => {
+          if (open || !focusForKey(e.key)) return
+          e.preventDefault()
+          setOpen(true)
+        }}
         data-testid="graph-menu"
       >
         {dir && <span className="path">{dir}</span>}

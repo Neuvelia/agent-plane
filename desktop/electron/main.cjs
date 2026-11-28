@@ -7,6 +7,7 @@ const { isAllowed, isBodyAllowed } = require('./allowlist.cjs')
 const { createGraphHandlers } = require('./graphs.cjs')
 const { createRecents } = require('./recents.cjs')
 const { createRecordingSettings, serveFlags } = require('./recording.cjs')
+const { ICON_FILES, windowIcon } = require('./appIcon.cjs')
 const { codexBinFlags } = require('./capabilities.cjs')
 const { resolveSidecar } = require('./sidecar.cjs')
 
@@ -161,6 +162,7 @@ ipcMain.on('ap:subscribe', (e, subId, runId) => void stream(e.sender, subId, Str
 ipcMain.on('ap:unsubscribe', (_e, subId) => streams.get(subId)?.controller.abort())
 
 function createWindow() {
+  const winIcon = windowIcon(process.platform)
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -168,6 +170,8 @@ function createWindow() {
     // renderer's default theme (F2.5b), so a light system shows no black flash.
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#000000' : '#FFFFFF',
     title: 'Tarmind',
+    // Linux and Windows window/taskbar icon; ignored on macOS (see app.dock below).
+    ...(winIcon ? { icon: winIcon } : {}),
     // macOS: hide the native title bar so the window is black edge to edge. The
     // renderer's global bar becomes the drag area (class "mac" in styles.css).
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden', trafficLightPosition: { x: 16, y: 16 } } : {}),
@@ -199,6 +203,8 @@ app.whenReady().then(() => {
     dialog.showErrorBox('AgentPlane engine unavailable', String(err.message || err))
     app.quit()
   })
+  // macOS shows the Dock icon from the app bundle; running from source needs it set.
+  if (process.platform === 'darwin' && app.dock) app.dock.setIcon(ICON_FILES.png)
   createWindow()
 })
 app.on('window-all-closed', () => app.quit())

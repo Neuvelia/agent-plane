@@ -1,7 +1,7 @@
 {
- "text": "# Fix an issue: read it, let an agent fix it in a bounded loop, check the change, ask a person.\nschema_version: 0\nid: fix-issue\nname: Fix an issue\ninputs: {}\nnodes:\n  read-issue:\n    type: shell\n    config:\n      command: /usr/bin/cat\n      args: [ISSUE.md]\n    outputs:\n      issue: {type: string, required: true}\n      log: {type: string}\n  fix:\n    type: agent\n    inputs:\n      issue: {type: string, required: true}\n    config:\n      adapter: codex\n      workspace: /work/repo\n      task: Fix the issue below. Change only files under src/. Run the tests before you finish.\n      allowed_paths: [src/]\n    outputs:\n      summary: {type: string, required: true}\n      changed_files: {type: json, required: true}\n    loop:\n      max_attempts: 3\n      gate:\n        inputs:\n          candidate: {type: json, required: true}\n        config:\n          check_id: scope\n          kind: reported_file_scope\n          input: candidate\n          allowed_paths: [src/]\n      bindings:\n        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}\n  tests:\n    type: gate\n    inputs:\n      files: {type: json, required: true}\n    config: {check_id: tests, kind: reported_file_scope, input: files, allowed_paths: [src/]}\n    outputs:\n      verdict: {type: string, required: true}\n  review:\n    type: human\n    inputs:\n      summary: {type: string, required: true}\n      verdict: {type: string, required: true}\n    config:\n      prompt: Review the summary and the check. Accept the fix?\n      context_inputs: [summary]\n    outputs:\n      decision: {type: string, required: true}\nedges:\n  - {from: read-issue.outputs.issue, to: fix.inputs.issue}\n  - {from: fix.outputs.changed_files, to: tests.inputs.files}\n  - {from: fix.outputs.summary, to: review.inputs.summary}\n  - {from: tests.outputs.verdict, to: review.inputs.verdict}\noutputs:\n  decision: {from: review.outputs.decision}\nmetadata:\n  layout:\n    nodes:\n      read-issue: {x: 0, y: 0}\n      fix: {x: 286, y: 0}\n      tests: {x: 598, y: 0}\n      review: {x: 598, y: 260}\n",
- "hash": "c5fb4d634e97ebd9176d80c801a9b8db3027d8f92689fafcb8dfdafb77d7a8fa",
- "version": "sha256-v0:aae7496904902adc1d7eb98d19b217fe7ea19aea1528d1ebb7fbd5932c63b71b",
+ "text": "# Template: fix an issue with a coding agent. A person approves before any agent\n# call; \"fix\" runs Codex in a bounded loop whose reported_file_scope gate rejects\n# changes outside allowed_paths; a person approves the result before it is recorded.\n# Fill the workspace before running. Agent nodes run through\n#   agentplane run FILE --adapter codex --codex-bin /absolute/path/to/codex --input issue=...\n# Codex authentication needs a named environment reference (for example\n# CODEX_HOME) under config.environment_refs; add it deliberately, it is left out here.\n# The shell node only prints text. Nothing is staged, committed, pushed or sent.\nschema_version: 0\nid: fix-issue\nname: Fix an issue\ninputs:\n  issue: {type: string, required: true}\nnodes:\n  confirm_start:\n    type: human\n    config:\n      prompt: Start the coding agent on this issue? This may use a paid model.\n      context_inputs: [issue]\n    inputs:\n      issue: {type: string, required: true}\n    outputs:\n      decision: {type: string, required: true}\n  fix:\n    type: agent\n    inputs:\n      task: {type: string, required: true}\n      start: {type: string, required: true}\n    config:\n      adapter: codex\n      workspace: /work/repo\n      allowed_paths: [\"src/\", \"tests/\"] # REVIEW: the paths the fix is meant to change\n    outputs:\n      summary: {type: string}\n      changed_files: {type: json}\n    loop:\n      max_attempts: 3\n      gate:\n        inputs:\n          candidate: {type: json, required: true}\n        config:\n          check_id: reported-scope\n          kind: reported_file_scope\n          input: candidate\n          allowed_paths: [\"src/\", \"tests/\"] # REVIEW: keep equal to config.allowed_paths\n      bindings:\n        - {from: candidate.outputs.changed_files, to: gate.inputs.candidate}\n  approve_fix:\n    type: human\n    config:\n      prompt: Review the summary and changed files. Accept the fix? Run your own tests before merging.\n      context_inputs: [summary]\n    inputs:\n      summary: {type: string, required: true}\n      changed_files: {type: json, required: true}\n    outputs:\n      decision: {type: string, required: true}\n  record:\n    type: shell\n    config:\n      command: /usr/bin/printf\n      args: [\"fix accepted\\n\"]\n    inputs:\n      decision: {type: string, required: true}\ngraph_input_bindings:\n  - {from: inputs.issue, to: confirm_start.inputs.issue}\n  - {from: inputs.issue, to: fix.inputs.task}\nedges:\n  - {from: confirm_start.outputs.decision, to: fix.inputs.start}\n  - {from: fix.outputs.summary, to: approve_fix.inputs.summary}\n  - {from: fix.outputs.changed_files, to: approve_fix.inputs.changed_files}\n  - {from: approve_fix.outputs.decision, to: record.inputs.decision}\noutputs: {}\nmetadata:\n  layout:\n    nodes:\n      confirm_start: {x: 0, y: 0}\n      fix: {x: 320, y: 0}\n      approve_fix: {x: 640, y: 0}\n      record: {x: 960, y: 0}\n",
+ "hash": "1ad0ea5d9a84c5930e9902faecde634f7f94b494c39a7c0a7cd2b952442459c9",
+ "version": "sha256-v0:07aad8f7574a0d9d021eccaf0e3fca6a5afd1123ddd094721bbf7e9ede58c115",
  "definition": {
   "schema_version": 0,
   "id": "fix-issue",
@@ -9,27 +9,78 @@
   "metadata": {
    "layout": {
     "nodes": {
-     "fix": {
-      "x": 286,
+     "approve_fix": {
+      "x": 640,
       "y": 0
      },
-     "read-issue": {
+     "confirm_start": {
       "x": 0,
       "y": 0
      },
-     "review": {
-      "x": 598,
-      "y": 260
+     "fix": {
+      "x": 320,
+      "y": 0
      },
-     "tests": {
-      "x": 598,
+     "record": {
+      "x": 960,
       "y": 0
      }
     }
    }
   },
-  "inputs": {},
+  "inputs": {
+   "issue": {
+    "type": "string",
+    "required": true
+   }
+  },
   "nodes": {
+   "approve_fix": {
+    "type": "human",
+    "inputs": {
+     "changed_files": {
+      "type": "json",
+      "required": true
+     },
+     "summary": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "context_inputs": [
+      "summary"
+     ],
+     "prompt": "Review the summary and changed files. Accept the fix? Run your own tests before merging."
+    },
+    "outputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    }
+   },
+   "confirm_start": {
+    "type": "human",
+    "inputs": {
+     "issue": {
+      "type": "string",
+      "required": true
+     }
+    },
+    "config": {
+     "context_inputs": [
+      "issue"
+     ],
+     "prompt": "Start the coding agent on this issue? This may use a paid model."
+    },
+    "outputs": {
+     "decision": {
+      "type": "string",
+      "required": true
+     }
+    }
+   },
    "fix": {
     "type": "agent",
     "loop": {
@@ -43,9 +94,10 @@
       },
       "config": {
        "allowed_paths": [
-        "src/"
+        "src/",
+        "tests/"
        ],
-       "check_id": "scope",
+       "check_id": "reported-scope",
        "input": "candidate",
        "kind": "reported_file_scope"
       }
@@ -58,7 +110,11 @@
      ]
     },
     "inputs": {
-     "issue": {
+     "start": {
+      "type": "string",
+      "required": true
+     },
+     "task": {
       "type": "string",
       "required": true
      }
@@ -66,139 +122,67 @@
     "config": {
      "adapter": "codex",
      "allowed_paths": [
-      "src/"
+      "src/",
+      "tests/"
      ],
-     "task": "Fix the issue below. Change only files under src/. Run the tests before you finish.",
      "workspace": "/work/repo"
     },
     "outputs": {
      "changed_files": {
-      "type": "json",
-      "required": true
+      "type": "json"
      },
      "summary": {
-      "type": "string",
-      "required": true
-     }
-    }
-   },
-   "read-issue": {
-    "type": "shell",
-    "config": {
-     "args": [
-      "ISSUE.md"
-     ],
-     "command": "/usr/bin/cat"
-    },
-    "outputs": {
-     "issue": {
-      "type": "string",
-      "required": true
-     },
-     "log": {
       "type": "string"
      }
     }
    },
-   "review": {
-    "type": "human",
+   "record": {
+    "type": "shell",
     "inputs": {
-     "summary": {
-      "type": "string",
-      "required": true
-     },
-     "verdict": {
-      "type": "string",
-      "required": true
-     }
-    },
-    "config": {
-     "context_inputs": [
-      "summary"
-     ],
-     "prompt": "Review the summary and the check. Accept the fix?"
-    },
-    "outputs": {
      "decision": {
       "type": "string",
       "required": true
      }
-    }
-   },
-   "tests": {
-    "type": "gate",
-    "inputs": {
-     "files": {
-      "type": "json",
-      "required": true
-     }
     },
     "config": {
-     "allowed_paths": [
-      "src/"
+     "args": [
+      "fix accepted\n"
      ],
-     "check_id": "tests",
-     "input": "files",
-     "kind": "reported_file_scope"
-    },
-    "outputs": {
-     "verdict": {
-      "type": "string",
-      "required": true
-     }
+     "command": "/usr/bin/printf"
     }
    }
   },
   "edges": [
    {
-    "from": "read-issue.outputs.issue",
-    "to": "fix.inputs.issue"
-   },
-   {
-    "from": "fix.outputs.changed_files",
-    "to": "tests.inputs.files"
+    "from": "confirm_start.outputs.decision",
+    "to": "fix.inputs.start"
    },
    {
     "from": "fix.outputs.summary",
-    "to": "review.inputs.summary"
+    "to": "approve_fix.inputs.summary"
    },
    {
-    "from": "tests.outputs.verdict",
-    "to": "review.inputs.verdict"
+    "from": "fix.outputs.changed_files",
+    "to": "approve_fix.inputs.changed_files"
+   },
+   {
+    "from": "approve_fix.outputs.decision",
+    "to": "record.inputs.decision"
    }
   ],
-  "outputs": {
-   "decision": {
-    "from": "review.outputs.decision"
+  "graph_input_bindings": [
+   {
+    "from": "inputs.issue",
+    "to": "confirm_start.inputs.issue"
+   },
+   {
+    "from": "inputs.issue",
+    "to": "fix.inputs.task"
    }
-  }
+  ],
+  "outputs": {}
  },
- "diagnostics": [
-  {
-   "severity": "warning",
-   "code": "W_DECLARED_OUTPUT_UNUSED",
-   "message": "output \"log\" on node \"read-issue\" is not consumed",
-   "graph_id": "fix-issue",
-   "location": {
-    "node_id": "read-issue",
-    "path": "nodes.read-issue.outputs.log"
-   },
-   "suggestion": "remove the output or bind it to an edge or graph output",
-   "line": 14
-  },
-  {
-   "severity": "warning",
-   "code": "W_EDGE_INPUT_UNUSED",
-   "message": "node \"fix\" does not use input \"issue\", which edge 0 delivers",
-   "graph_id": "fix-issue",
-   "location": {
-    "edge_index": 0,
-    "path": "edges[0].to"
-   },
-   "suggestion": "this node type reads only input \"task\"; deliver the value there; removing the edge would also remove the node's dependency on its source",
-   "line": 57
-  }
- ],
+ "diagnostics": [],
  "readonly_canvas": false,
  "line_ending": "lf",
  "label": "fix-issue.yaml",
@@ -609,184 +593,6 @@
     ]
    }
   },
-  "gate": {
-   "config": [
-    {
-     "id": "gate.config.check_id",
-     "key": "check_id",
-     "kind": "string",
-     "required": true,
-     "max_bytes": 256,
-     "format": "not_blank"
-    },
-    {
-     "id": "gate.config.kind",
-     "key": "kind",
-     "kind": "enum",
-     "required": true,
-     "enum": [
-      "command",
-      "json_predicate",
-      "reported_file_scope"
-     ]
-    },
-    {
-     "id": "gate.config.command",
-     "kind": "group",
-     "fields": [
-      {
-       "id": "gate.config.command.command",
-       "key": "command",
-       "kind": "string",
-       "required": true,
-       "locked": {
-        "value": "/usr/bin/diff",
-        "reason": "a command Gate compares two inputs with /usr/bin/diff only"
-       }
-      },
-      {
-       "id": "gate.config.command.cwd",
-       "key": "cwd",
-       "kind": "string",
-       "required": true,
-       "format": "clean_absolute_path"
-      },
-      {
-       "id": "gate.config.command.left_input",
-       "key": "left_input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "string"
-       ],
-       "input_required": true
-      },
-      {
-       "id": "gate.config.command.right_input",
-       "key": "right_input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "string"
-       ],
-       "input_required": true
-      }
-     ],
-     "requires": [
-      {
-       "key": "kind",
-       "equals": "command"
-      }
-     ]
-    },
-    {
-     "id": "gate.config.json_predicate",
-     "kind": "group",
-     "fields": [
-      {
-       "id": "gate.config.json_predicate.input",
-       "key": "input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "json"
-       ],
-       "input_required": true
-      },
-      {
-       "id": "gate.config.json_predicate.field",
-       "key": "field",
-       "kind": "list",
-       "required": true,
-       "item": {
-        "id": "gate.config.json_predicate.field.item",
-        "kind": "string",
-        "format": "nonempty"
-       }
-      },
-      {
-       "id": "gate.config.json_predicate.operator",
-       "key": "operator",
-       "kind": "enum",
-       "required": true,
-       "enum": [
-        "eq",
-        "ne"
-       ]
-      },
-      {
-       "id": "gate.config.json_predicate.expected",
-       "key": "expected",
-       "kind": "scalar",
-       "required": true,
-       "excludes": [
-        {
-         "key": "expected_json"
-        }
-       ]
-      },
-      {
-       "id": "gate.config.json_predicate.expected_json",
-       "key": "expected_json",
-       "kind": "string",
-       "required": true,
-       "format": "json_scalar",
-       "excludes": [
-        {
-         "key": "expected"
-        }
-       ]
-      }
-     ],
-     "requires": [
-      {
-       "key": "kind",
-       "equals": "json_predicate"
-      }
-     ]
-    },
-    {
-     "id": "gate.config.reported_file_scope",
-     "kind": "group",
-     "fields": [
-      {
-       "id": "gate.config.reported_file_scope.input",
-       "key": "input",
-       "kind": "input_name",
-       "required": true,
-       "input_types": [
-        "json"
-       ],
-       "input_required": true
-      },
-      {
-       "id": "gate.config.reported_file_scope.allowed_paths",
-       "key": "allowed_paths",
-       "kind": "path_list",
-       "required": true,
-       "item": {
-        "id": "gate.config.reported_file_scope.allowed_paths.item",
-        "kind": "string",
-        "format": "relative_path"
-       }
-      }
-     ],
-     "requires": [
-      {
-       "key": "kind",
-       "equals": "reported_file_scope"
-      }
-     ]
-    }
-   ],
-   "outputs": [
-    {
-     "name": "verdict",
-     "type": "string"
-    }
-   ],
-   "outputs_locked": false
-  },
   "human": {
    "config": [
     {
@@ -1183,22 +989,22 @@
   }
  },
  "node_info": {
+  "approve_fix": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
+  "confirm_start": {
+   "known_type": true,
+   "advanced": [],
+   "independent_of": []
+  },
   "fix": {
    "known_type": true,
    "advanced": [],
    "independent_of": []
   },
-  "read-issue": {
-   "known_type": true,
-   "advanced": [],
-   "independent_of": []
-  },
-  "review": {
-   "known_type": true,
-   "advanced": [],
-   "independent_of": []
-  },
-  "tests": {
+  "record": {
    "known_type": true,
    "advanced": [],
    "independent_of": []

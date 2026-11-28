@@ -7,6 +7,7 @@ import type { Badges } from './issues'
 import { NODE_TYPES, makeRef } from './layout'
 import type { Definition, NodeTypeDescriptor, QueryResult } from './types'
 import { fieldText } from './inspector/fieldText'
+import { focusForClick, focusForKey, type MenuFocus } from './Menu'
 
 // A step card (graph editor v2): the kind above the card, the name in it, and a
 // self-describing body (prompt, key settings, where each input comes from, what
@@ -26,7 +27,7 @@ export interface CanvasState {
   reasons: Record<string, QueryResult>
   /** The step whose menu is open, for the trigger's pressed look. */
   menuFor: string | null
-  openMenu: (id: string, el: HTMLElement) => void
+  openMenu: (id: string, el: HTMLElement, focus: MenuFocus) => void
 }
 
 export const CanvasCtx = createContext<CanvasState>({ selectedNode: null, badges: { nodes: {}, edges: {}, ports: {} }, focusPort: null, readOnly: true, reasons: {}, menuFor: null, openMenu: () => undefined })
@@ -77,7 +78,14 @@ function StepCardView({ data }: NodeProps<Node<StepData>>) {
           aria-label={t('editor.v2.stepMenu', { id: data.id })}
           onClick={(e) => {
             e.stopPropagation()
-            c.openMenu(data.id, e.currentTarget)
+            c.openMenu(data.id, e.currentTarget, focusForClick(e))
+          }}
+          onKeyDown={(e) => {
+            const focus = focusForKey(e.key)
+            if (!focus) return
+            e.preventDefault()
+            e.stopPropagation()
+            c.openMenu(data.id, e.currentTarget, focus)
           }}
           data-testid={`step-menu-${data.id}`}
         >

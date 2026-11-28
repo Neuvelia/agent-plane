@@ -15,6 +15,7 @@ changing behavior; verify older roadmap statements against current code.
 | Sidecar lifecycle, IPC and grants | `electron/AGENTS.md` |
 | Event-derived views, design and localisation | `src/AGENTS.md` |
 | Graph draft, canvas and validation UI | `src/editor/AGENTS.md` |
+| Runtime app icon assets (`build/`; packaging is not set up yet, issue #242) | `build/`, `electron/appIcon.cjs` |
 | Design-token generation and bundle scan | `scripts/sync-tokens.mjs`, `scripts/check-bundle.mjs` |
 | Storybook configuration and browser smoke | `.storybook/`, `scripts/stories-smoke.cjs` |
 | Recorded API fixtures and screenshots | `scripts/record-graph-fixtures.cjs`, `scripts/screenshots.cjs` |
