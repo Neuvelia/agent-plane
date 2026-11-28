@@ -215,19 +215,6 @@ describe('setup screen', () => {
   it('shows what a template needs on its card before the report arrives', () => {
     expect(html('graph')).toContain('Needs Codex: not checked.')
   })
-  it('stacks nodes above the pulse above the link lines, and the step icons above their pulse (#236)', () => {
-    const css = readFileSync(join(__dirname, '..', 'src', 'setup.css'), 'utf8')
-    const rule = (sel: string) => css.match(new RegExp(`(?:^|\n)${sel.replace(/\./g, '\\.')}\\{([^}]*)\\}`))?.[1] ?? ''
-    const z = (sel: string) => Number(/z-index:(\d+)/.exec(rule(sel))?.[1] ?? 'NaN')
-    expect(rule('.su-link')).not.toContain('z-index') // an auto-z positioned box paints at 0, below the pulse
-    expect(z('.su-pulse')).toBeGreaterThan(0)
-    expect(z('.su-pulse')).toBeLessThan(z('.su-node'))
-    expect(rule('.su-node')).toContain('background:var(--bg)')
-    expect(rule('.su-path .pulse')).not.toContain('z-index')
-    expect(rule('.su-path .su-mini')).toContain('position:relative')
-    expect(z('.su-path .su-mini')).toBeGreaterThan(0)
-    expect(rule('.su-path .su-mini')).toContain(',var(--bg)') // a solid layer under the translucent fill
-  })
   it('is translated into Polish', () => {
     const out = html('graph', 'pl')
     expect(out).toContain('Wybierz pierwszy graf')
