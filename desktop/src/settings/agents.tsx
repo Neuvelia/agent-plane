@@ -21,6 +21,7 @@ export function agentRows(report: CapabilityReport): CapabilityTool[] {
 
 export function AgentsPane({ view, onCheck, onRetry }: { view: CapabilityView; onCheck: () => void; onRetry: () => void }) {
   const { t } = useI18n()
+  const checkAllId = useId()
   const busy = view.state === 'loading' || (view.state === 'loaded' && view.refreshing)
   const rows = view.state === 'loaded' ? agentRows(view.report) : []
   return (
@@ -48,12 +49,15 @@ export function AgentsPane({ view, onCheck, onRetry }: { view: CapabilityView; o
             </p>
           )}
           {rows.map((tool) => (
-            <AgentCard key={`${tool.kind}:${tool.id}`} tool={tool} checkedAt={view.report.checked_at} busy={busy} onCheck={onCheck} />
+            <AgentCard key={`${tool.kind}:${tool.id}`} tool={tool} checkAllId={checkAllId} checkedAt={view.report.checked_at} busy={busy} onCheck={onCheck} />
           ))}
           {rows.length === 0 && <p className="mu">{t('settings.agents.none')}</p>}
         </div>
       )}
       <p className="st-note">{t('settings.agents.order')}</p>
+      <p className="st-note" id={checkAllId}>
+        {t('settings.agents.checkAll')}
+      </p>
     </div>
   )
 }
@@ -62,7 +66,7 @@ function word(t: ReturnType<typeof useI18n>['t'], x: RowText['name'] | RowText['
   return 'key' in x ? t(x.key) : x.raw
 }
 
-function AgentCard({ tool, checkedAt, busy, onCheck }: { tool: CapabilityTool; checkedAt: string; busy: boolean; onCheck: () => void }) {
+function AgentCard({ tool, checkAllId, checkedAt, busy, onCheck }: { tool: CapabilityTool; checkAllId: string; checkedAt: string; busy: boolean; onCheck: () => void }) {
   const { t, locale } = useI18n()
   const r = rowText(tool)
   const reason = tool.reason ? reasonKey(tool.reason) : undefined
@@ -81,7 +85,7 @@ function AgentCard({ tool, checkedAt, busy, onCheck }: { tool: CapabilityTool; c
         {tool.reason && <span className="st-tg">{t('welcome.reason', { reason: tool.reason })}</span>}
         <span className="st-sp" />
         {/* aria-disabled, not disabled, while checking: keyboard focus stays on the button. */}
-        <Button size="sm" onClick={() => !busy && onCheck()} aria-disabled={busy || undefined} aria-describedby={headId} data-testid={`agent-check-${tool.id}`}>
+        <Button size="sm" onClick={() => !busy && onCheck()} aria-disabled={busy || undefined} aria-describedby={`${headId} ${checkAllId}`} data-testid={`agent-check-${tool.id}`}>
           {busy ? t('welcome.checking') : t('welcome.check')}
         </Button>
       </div>

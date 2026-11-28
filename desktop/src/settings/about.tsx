@@ -26,7 +26,11 @@ export function AboutPane({ view }: { view: CapabilityView }) {
   const report = view.state === 'loaded' ? view.report : null
   const runs = useRunCount()
   const [copy, setCopy] = useState<Copy>('idle')
-  const doCopy = () => void copyDisplayed(diagnosticsText(appVersion, report)).then((ok) => setCopy(ok ? 'copied' : 'failed'))
+  // Clear first, then set: a repeated identical result is a change the live region announces again.
+  const doCopy = () => {
+    setCopy('idle')
+    void copyDisplayed(diagnosticsText(appVersion, report)).then((ok) => setCopy(ok ? 'copied' : 'failed'))
+  }
   const engine = report ? `${report.engine.version} · ${report.engine.os}/${report.engine.arch}` : view.state === 'loading' ? t('welcome.checking') : '—'
   return (
     <div className="st-body" data-testid="settings-about">
@@ -56,7 +60,7 @@ export function AboutPane({ view }: { view: CapabilityView }) {
         <Button size="sm" onClick={doCopy} data-testid="about-copy">
           {t('settings.about.copy')}
         </Button>
-        <span className={copy === 'failed' ? 'st-notice err' : 'st-notice mu'} role="status" data-testid="about-copy-result">
+        <span className={copy === 'failed' ? 'st-notice err' : 'st-notice mu'} role="status" aria-atomic="true" data-testid="about-copy-result">
           {copy === 'copied' ? t('settings.about.copied') : copy === 'failed' ? t('settings.about.copyFailed') : ''}
         </span>
       </div>
