@@ -66,8 +66,11 @@ export function HelpTip({ children }: { children: ReactNode }) {
   const id = useId()
   const [dismissed, setDismissed] = useState(false)
   return (
-    <span className={`tip${dismissed ? ' off' : ''}`} onMouseEnter={() => setDismissed(false)} onKeyDown={(e) => e.key === 'Escape' && setDismissed(true)}>
-      <button type="button" aria-label={t('help.label')} aria-describedby={id} onFocus={() => setDismissed(false)}>
+    <span className={`tip${dismissed ? ' off' : ''}`} onMouseEnter={() => setDismissed(false)}>
+      <button type="button" aria-label={t('help.label')} aria-describedby={id}
+        onFocus={() => setDismissed(false)}
+        onKeyDown={(e) => e.key === 'Escape' && setDismissed(true)}
+      >
         ?
       </button>
       <span role="tooltip" id={id}>
