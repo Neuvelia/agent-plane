@@ -11,7 +11,7 @@ import { Arrow } from './setupIcons'
 import { AgentsStep, GraphStep, StepHead, WelcomeStep } from './setupSteps'
 import { SUGGESTED } from './templates'
 
-export { CapabilityPanel, ToolRow, type CapabilityView } from './setupCheck'
+export { CapabilityPanel, type CapabilityView } from './setupCheck'
 
 // F2.11 welcome screen as the four-step setup of the canvas "Setup, revised":
 // Welcome, Check this computer, Agent nodes, First graph. Skip is always in the
@@ -138,20 +138,20 @@ function useCapabilities() {
   const [view, setView] = useState<CheckState>({ state: 'loading' })
   const [announce, setAnnounce] = useState('')
   const seq = useRef(0)
+  // The announcement text follows the current language, but a language change must not re-read the report.
+  const text = useRef({ t, locale })
+  text.current = { t, locale }
   useConnectionReport('welcome', view.state === 'disconnected')
 
   // Only the latest request may settle the view, so a slow first read cannot overwrite a newer check.
-  const settle = useCallback(
-    (result: CapabilityResult, mine: number) => {
-      if (mine !== seq.current) return
-      if (result.kind === 'ok') {
-        setView({ state: 'loaded', report: result.report, refreshing: false })
-        setAnnounce(t('welcome.checkedAt', { time: formatDateTime(locale, result.report.checked_at) }))
-      } else if (result.kind === 'failed') setView({ state: 'failed', status: result.status })
-      else setView({ state: 'disconnected' })
-    },
-    [t, locale],
-  )
+  const settle = useCallback((result: CapabilityResult, mine: number) => {
+    if (mine !== seq.current) return
+    if (result.kind === 'ok') {
+      setView({ state: 'loaded', report: result.report, refreshing: false })
+      setAnnounce(text.current.t('welcome.checkedAt', { time: formatDateTime(text.current.locale, result.report.checked_at) }))
+    } else if (result.kind === 'failed') setView({ state: 'failed', status: result.status })
+    else setView({ state: 'disconnected' })
+  }, [])
 
   const load = useCallback(() => {
     const mine = ++seq.current

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { getCapabilities, rowText, toolName, type CapabilityReport } from '../capabilities'
 import { useI18n } from '../i18n/context'
 import type { MessageKey } from '../i18n'
+import { BLANK } from '../setup'
 import { noticesFor, SUGGESTED, TEMPLATES, templateDraft, type Notice, type TemplateEntry } from '../templates'
 import { Button } from '../ui/primitives'
 
@@ -13,7 +14,6 @@ import { Button } from '../ui/primitives'
 /** Builds the draft text for the file name the person chose; null when the template is unusable. */
 export type DraftMaker = (label: string) => string | null
 
-const BLANK = 'blank'
 const usable = (e: TemplateEntry) => templateDraft(e, 'probe.yaml') !== null
 
 export function TemplatePicker({ onChoose, onCancel }: { onChoose: (make: DraftMaker | undefined) => void; onCancel: () => void }) {

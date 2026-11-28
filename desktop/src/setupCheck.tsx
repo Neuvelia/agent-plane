@@ -138,7 +138,7 @@ function EngineRow({ report, appVersion }: { report: CapabilityReport; appVersio
   )
 }
 
-export function ToolRow({ tool, index = 0 }: { tool: CapabilityTool; index?: number }) {
+function ToolRow({ tool, index = 0 }: { tool: CapabilityTool; index?: number }) {
   const { t } = useI18n()
   const r = rowText(tool)
   const reason = tool.reason ? reasonKey(tool.reason) : undefined
