@@ -206,6 +206,17 @@ describe('setup screen', () => {
   it('shows what a template needs on its card before the report arrives', () => {
     expect(html('graph')).toContain('Needs Codex: not checked.')
   })
+  it('draws the pulses under the nodes and icons, which are opaque (#236)', () => {
+    const css = readFileSync(join(__dirname, '..', 'src', 'setup.css'), 'utf8')
+    const rule = (sel: string) => css.match(new RegExp(`(?:^|\n)${sel.replace(/\./g, '\\.')}\\{([^}]*)\\}`))?.[1] ?? ''
+    const z = (sel: string) => Number(/z-index:(\d+)/.exec(rule(sel))?.[1] ?? 'NaN')
+    expect(z('.su-pulse')).toBeLessThan(z('.su-node'))
+    expect(rule('.su-node')).toContain('background:var(--bg)')
+    expect(rule('.su-path .pulse')).not.toContain('z-index')
+    expect(rule('.su-path .su-mini')).toContain('position:relative')
+    expect(z('.su-path .su-mini')).toBeGreaterThan(0)
+    expect(rule('.su-path .su-mini')).toContain(',var(--bg)') // a solid layer under the translucent fill
+  })
   it('is translated into Polish', () => {
     const out = html('graph', 'pl')
     expect(out).toContain('Wybierz pierwszy graf')
