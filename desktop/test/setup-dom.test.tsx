@@ -10,11 +10,8 @@ import recorded from './fixtures/capabilities-linux.json'
 // The four-step setup in a DOM (jsdom, as palette-dom.test.tsx): the Create button (F2.11) and
 // the capability read, which must not repeat when only the language changes.
 
-vi.mock('../src/templates', async (importOriginal) => {
-  const real = await importOriginal<typeof import('../src/templates')>()
-  return { ...real, templateDraft: vi.fn(real.templateDraft) }
-})
-
+// templateDraft is spied on, not replaced through vi.mock with importOriginal: that path loads the
+// ../../.agents/templates/*.yaml?raw imports outside this package root and vite denies them on CI.
 declare global {
   // eslint-disable-next-line no-var
   var IS_REACT_ACT_ENVIRONMENT: boolean
@@ -34,7 +31,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount())
   host.remove()
-  vi.mocked(templates.templateDraft).mockRestore?.()
+  vi.restoreAllMocks()
 })
 
 const click = (testId: string) => act(() => void host.querySelector<HTMLElement>(`[data-testid="${testId}"]`)!.click())
@@ -71,7 +68,7 @@ describe('setup Create button', () => {
   it('does nothing while the picked template has no usable draft', async () => {
     const { onCreate } = await renderWelcome()
     click('setup-progress-graph')
-    vi.mocked(templates.templateDraft).mockReturnValue(null)
+    vi.spyOn(templates, 'templateDraft').mockReturnValue(null)
     await act(async () => root.render(<I18nProvider locale="en"><Welcome onCreate={onCreate} onOpen={() => undefined} onSkip={() => undefined} initialStep="graph" /></I18nProvider>))
     const button = host.querySelector<HTMLButtonElement>('[data-testid="welcome-template"]')!
     expect(button.disabled).toBe(true)
